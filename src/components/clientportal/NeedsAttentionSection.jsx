@@ -44,6 +44,7 @@ const AttentionBadge = ({ type, size = 'sm' }) => {
  */
 const RequestCard = ({ item, isDeemphasized = false, onUpdateDueDate }) => {
   const { request, project, type, isOverdue } = item;
+  const requestUrl = createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=attention`;
   
   return (
     <div className={`relative rounded-lg border transition-all group min-h-[44px] ${
@@ -53,74 +54,70 @@ const RequestCard = ({ item, isDeemphasized = false, onUpdateDueDate }) => {
           ? 'bg-black/20 border-gray-800 hover:border-green-500/30 hover:bg-gray-900/50 opacity-80' 
           : 'bg-black/40 border-gray-700 hover:border-red-500/50 hover:bg-gray-900/80'
     }`}>
-      <Link
-        to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=attention`}
-        className="block p-2 md:p-3 hover:bg-gray-800/30 rounded-lg transition-colors"
-      >
-        <div className="flex items-start justify-between gap-2 mb-1.5 md:mb-2">
-          <div className="flex items-center gap-2">
-            <AttentionBadge type={type} size="md" />
-            {isOverdue && type !== 'overdue' && (
-              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 text-[10px] font-semibold uppercase tracking-wide">
-                Overdue
-              </span>
-            )}
+      <div className="p-2 md:p-3">
+        {/* Navigable content zone */}
+        <Link to={requestUrl} className="block hover:opacity-90 transition-opacity">
+          <div className="flex items-start justify-between gap-2 mb-1.5 md:mb-2">
+            <div className="flex items-center gap-2">
+              <AttentionBadge type={type} size="md" />
+              {isOverdue && type !== 'overdue' && (
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 text-[10px] font-semibold uppercase tracking-wide">
+                  Overdue
+                </span>
+              )}
+            </div>
           </div>
-        </div>
-        
-        <h4 className={`font-medium text-sm mb-1 line-clamp-1 md:line-clamp-2 transition-colors ${
-          isDeemphasized 
-            ? 'text-gray-300 group-hover:text-green-400' 
-            : 'text-white group-hover:text-red-400'
-        }`}>
-          {request.title}
-        </h4>
-        
-        <div className="flex items-center gap-2 text-xs text-gray-400 mb-1 md:mb-2">
-          <FolderKanban className="w-3 h-3 shrink-0" />
-          <span className="truncate">{project?.name || 'Unknown Project'}</span>
-        </div>
+          
+          <h4 className={`font-medium text-sm mb-1 line-clamp-1 md:line-clamp-2 transition-colors ${
+            isDeemphasized 
+              ? 'text-gray-300 group-hover:text-green-400' 
+              : 'text-white group-hover:text-red-400'
+          }`}>
+            {request.title}
+          </h4>
+          
+          <div className="flex items-center gap-2 text-xs text-gray-400 mb-1 md:mb-2">
+            <FolderKanban className="w-3 h-3 shrink-0" />
+            <span className="truncate">{project?.name || 'Unknown Project'}</span>
+          </div>
 
-        <div className="flex items-center justify-between text-xs">
-          <div className="flex flex-col gap-0.5">
+          <div className="flex flex-col gap-0.5 text-xs">
             {type === 'approved_recent' && (
               <span className="text-green-400/70 italic hidden md:block">
                 Approved — confirm closure
               </span>
             )}
-            {type === 'client_replied' && (
+            {type === 'client_replied' && request.updated_date && (
               <span className="text-blue-400 truncate">
-                {request.updated_date && (
-                  <>Client activity {formatDistanceToNow(new Date(request.updated_date), { addSuffix: true })}</>
-                )}
+                Client activity {formatDistanceToNow(new Date(request.updated_date), { addSuffix: true })}
               </span>
             )}
-            {type === 'overdue' && (
+            {type === 'overdue' && request.due_date && (
               <span className="text-red-400 truncate">
-                {request.due_date && (
-                  <>Due {formatDistanceToNow(new Date(request.due_date), { addSuffix: true })}</>
-                )}
+                Due {formatDistanceToNow(new Date(request.due_date), { addSuffix: true })}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1" onClick={e => { e.preventDefault(); e.stopPropagation(); }} onMouseDown={e => e.stopPropagation()}>
-            {onUpdateDueDate && (
-              <div onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
-                <InlineDueDatePicker
-                  dueDate={request.due_date}
-                  isOverdue={isOverdue}
-                  onDateChange={(date) => onUpdateDueDate(request.id, date)}
-                />
-              </div>
-            )}
-            <ChevronRight className={`w-4 h-4 transition-colors shrink-0 ${
+        </Link>
+
+        {/* Action zone — outside Link, no navigation conflict */}
+        <div className="flex items-center justify-end gap-1 mt-1.5">
+          {onUpdateDueDate && (
+            <InlineDueDatePicker
+              dueDate={request.due_date}
+              isOverdue={isOverdue}
+              onDateChange={(date) => onUpdateDueDate(request.id, date)}
+            />
+          )}
+          <Link to={requestUrl} className="shrink-0">
+            <ChevronRight className={`w-4 h-4 transition-colors ${
               isDeemphasized 
                 ? 'text-gray-600 group-hover:text-green-400' 
                 : 'text-gray-500 group-hover:text-red-400'
             }`} />
-          </div>
+          </Link>
         </div>
-      </Link>
+      </div>
     </div>
   );
 };
