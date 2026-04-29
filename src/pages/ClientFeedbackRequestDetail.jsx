@@ -391,7 +391,7 @@ export default function ClientFeedbackRequestDetail() {
             </div>
             <div>
               <p className="text-sm font-medium text-blue-300">In Review</p>
-              <p className="text-xs text-blue-400/70">We are currently reviewing your request</p>
+              <p className="text-xs text-blue-400/70">We are currently reviewing your request and will update you shortly.</p>
             </div>
           </div>
         )}

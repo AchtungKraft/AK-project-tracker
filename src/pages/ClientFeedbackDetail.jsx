@@ -550,7 +550,8 @@ export default function ClientFeedbackDetail() {
                 <p className="text-xs text-gray-400 italic">Select images below to review</p>
               )}
 
-              {/* Start Review button — workflow overlay, not state change */}
+              {/* Start Review button — workflow overlay, not state change.
+                  Hidden when client acted last (ball is in team's court already). */}
               {request.review_state !== 'in_review' && canonicalState?.key !== 'draft' && canonicalState?.key !== 'archived' && canonicalState?.key !== 'approved' && (
                 <Button
                   size="sm"

@@ -227,13 +227,8 @@ function classifyRequest(request, project, canonicalState) {
 
   let type;
 
-  // Workflow overlay: if team marked "in_review", classify as needs_review
-  // This is a non-destructive overlay — does NOT change canonical state
-  if (request.review_state === 'in_review' && canonicalKey !== 'approved' && canonicalKey !== 'archived') {
-    type = 'needs_review';
-  }
   // Handle archived-with-client-response first (exception case)
-  else if (request.isArchivedWithClientResponse) {
+  if (request.isArchivedWithClientResponse) {
     type = 'needs_response';
   }
   // Priority 1: Client acted last → team needs to respond
@@ -250,8 +245,12 @@ function classifyRequest(request, project, canonicalState) {
   }
   // Active states: awaiting_review or changes_requested
   else if (canonicalKey === 'awaiting_review' || canonicalKey === 'changes_requested') {
+    // Workflow overlay: team marked "in_review" AND client hasn't responded since
+    if (request.review_state === 'in_review' && lastActor !== 'client') {
+      type = 'needs_review';
+    }
     // Team acted last — ball is in client's court → follow_up
-    if (lastActor === 'team') {
+    else if (lastActor === 'team') {
       type = 'follow_up';
     } else {
       // Fallback: treat as needs_review
@@ -314,6 +313,10 @@ function classifyRequest(request, project, canonicalState) {
   // Stalled: client waiting but no activity for 72h+
   const isStalled = type === 'needs_response' && hoursSinceLastActivity > 72;
 
+  // Stale review indicator: in_review for >48h
+  const isReviewStale = request.review_state === 'in_review' && request.review_started_at &&
+    ((Date.now() - new Date(request.review_started_at).getTime()) / (1000 * 60 * 60)) > 48;
+
   return {
     request,
     requestId: request.id,
@@ -329,6 +332,7 @@ function classifyRequest(request, project, canonicalState) {
     isOverdue: !!isOverdue,
     needsResponse,
     isStalled,
+    isReviewStale,
   };
 }
 
