@@ -103,7 +103,7 @@ const RequestCard = ({ item, isDeemphasized = false, onUpdateDueDate }) => {
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1" onClick={e => e.preventDefault()}>
+          <div className="flex items-center gap-1" onClick={e => { e.preventDefault(); e.stopPropagation(); }}>
             {onUpdateDueDate && (
               <InlineDueDatePicker
                 dueDate={request.due_date}
