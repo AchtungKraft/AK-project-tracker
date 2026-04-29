@@ -346,6 +346,35 @@ export const filterByLifecycleQuickFilter = (groupedProjectData, lifecycleQuickF
 };
 
 /**
+ * Overdue-first sort: overdue first, then by earliest due date, then no-date last.
+ * Applied inside each lifecycle bucket for time-priority display.
+ */
+export const sortOverdueFirst = (requests, bucket) => {
+  return [...requests].sort((a, b) => {
+    const aOverdue = isRequestOverdue(a, bucket);
+    const bOverdue = isRequestOverdue(b, bucket);
+    // Overdue first
+    if (aOverdue && !bOverdue) return -1;
+    if (!aOverdue && bOverdue) return 1;
+    // Then has due date before no due date
+    if (a.due_date && !b.due_date) return -1;
+    if (!a.due_date && b.due_date) return 1;
+    // Then earliest date first
+    if (a.due_date && b.due_date) {
+      return new Date(a.due_date) - new Date(b.due_date);
+    }
+    return 0;
+  });
+};
+
+/**
+ * Count overdue requests in a bucket
+ */
+export const countOverdue = (requests, bucket) => {
+  return requests.filter(r => isRequestOverdue(r, bucket)).length;
+};
+
+/**
  * Flatten grouped project data into a flat list with lifecycle bucket info
  */
 export const flattenGroupedRequests = (groupedProjectData) => {

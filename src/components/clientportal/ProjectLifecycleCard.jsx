@@ -21,6 +21,7 @@ export default function ProjectLifecycleCard({
   getProjectClientSlug,
   onSendBulkEmail,
   sendingEmailForProject,
+  onUpdateDueDate,
   initialCollapsed = false
 }) {
   const [isCollapsed, setIsCollapsed] = useState(initialCollapsed);
@@ -154,6 +155,7 @@ export default function ProjectLifecycleCard({
             bucket="draft"
             requests={buckets.draft || []}
             getProjectClientSlug={getProjectClientSlug}
+            onUpdateDueDate={onUpdateDueDate}
           />
           
           {/* Client Replied Section - Priority position */}
@@ -161,6 +163,7 @@ export default function ProjectLifecycleCard({
             bucket="client_replied"
             requests={buckets.client_replied || []}
             getProjectClientSlug={getProjectClientSlug}
+            onUpdateDueDate={onUpdateDueDate}
           />
           
           {/* Awaiting Client Section */}
@@ -168,6 +171,7 @@ export default function ProjectLifecycleCard({
             bucket="awaiting_client"
             requests={buckets.awaiting_client || []}
             getProjectClientSlug={getProjectClientSlug}
+            onUpdateDueDate={onUpdateDueDate}
           />
           
           {/* Approved Section */}
@@ -175,6 +179,7 @@ export default function ProjectLifecycleCard({
             bucket="approved"
             requests={buckets.approved || []}
             getProjectClientSlug={getProjectClientSlug}
+            onUpdateDueDate={onUpdateDueDate}
           />
           
           {/* Empty State */}

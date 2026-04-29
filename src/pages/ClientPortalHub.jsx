@@ -727,6 +727,7 @@ export default function ClientPortalHub() {
                       getProjectClientSlug={getProjectClientSlug}
                       onSendBulkEmail={handleSendBulkEmail}
                       sendingEmailForProject={sendingEmailForProject}
+                      onUpdateDueDate={handleUpdateRequestDueDate}
                       initialCollapsed={false}
                     />
                   ))
