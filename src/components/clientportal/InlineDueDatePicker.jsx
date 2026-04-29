@@ -29,8 +29,8 @@ export default function InlineDueDatePicker({ dueDate, isOverdue, onDateChange, 
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onClick={(e) => { e.stopPropagation(); }}
+          onMouseDown={(e) => { e.stopPropagation(); }}
           className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs transition-colors ${
             dueDate
               ? isOverdue
