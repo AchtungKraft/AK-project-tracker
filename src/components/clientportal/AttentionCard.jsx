@@ -42,12 +42,12 @@ export default function AttentionCard({ item, onUpdateDueDate, muted = false }) 
   const onEnter = () => {
     const rect = cardRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const tooltipH = 140;
-    const top = rect.bottom + tooltipH > window.innerHeight
-      ? rect.top - tooltipH - 8
-      : rect.bottom + 8;
-    const left = Math.min(rect.left, window.innerWidth - 360);
-    setHoverPosition({ top, left: Math.max(8, left) });
+    const TOOLTIP_H = 160;
+    const OFFSET = 12;
+    const above = rect.bottom + TOOLTIP_H > window.innerHeight;
+    const top = above ? rect.top - TOOLTIP_H - OFFSET : rect.bottom + OFFSET;
+    const left = Math.max(12, Math.min(rect.left + rect.width / 2 - 170, window.innerWidth - 360));
+    setHoverPosition({ top, left, above });
     setIsHovered(true);
   };
 
@@ -192,11 +192,14 @@ export default function AttentionCard({ item, onUpdateDueDate, muted = false }) 
             zIndex: 99999,
             width: 340,
             maxWidth: '90vw',
+            pointerEvents: 'none',
+            transform: hoverPosition.above ? 'translateY(-4px)' : 'translateY(4px)',
+            background: 'linear-gradient(to bottom, rgba(0,0,0,0.95), rgba(0,0,0,0.98))',
           }}
-          className="pointer-events-none rounded-lg border border-gray-700 bg-black/95 p-3 shadow-2xl backdrop-blur-md"
+          className="rounded-lg border border-gray-700 p-3 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-150"
         >
           <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Latest Message</div>
-          <div className="text-xs text-gray-200 leading-relaxed line-clamp-4">{hoverSnippet}</div>
+          <div className="text-xs text-gray-200 leading-relaxed max-h-[180px] overflow-y-auto">{hoverSnippet}</div>
         </div>,
         document.body
       )}
