@@ -158,9 +158,18 @@ Deno.serve(async (req) => {
 
         const comment = await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackComment.create(commentData));
 
-        // ── SECONDARY WRITES: Attachment records (non-fatal) ─────────────
-        // Core comment already saved above. Attachment failures are warnings,
-        // not errors — the comment is already persisted.
+        // Guard: comment MUST have an id before creating attachments
+        if (!comment || !comment.id) {
+            console.error('COMMENT_CREATE_FAILED: No comment.id returned', { requestId });
+            return Response.json({ success: false, error: { type: 'COMMENT_CREATE_FAILED', message: 'Comment creation did not return an id' } }, { status: 500 });
+        }
+
+        console.log('[addInternalComment] Comment created:', { commentId: comment.id, requestId, photoCount: photos?.length || 0, fileCount: files?.length || 0, linkCount: links?.length || 0 });
+
+        // ── SECONDARY WRITES: Attachment records ─────────────────────────
+        // Attachments are the SINGLE SOURCE OF TRUTH for images/files.
+        // They MUST be linked via comment_id. Failures are promoted to errors
+        // so the caller knows images may be missing.
         const attachments = [];
         const warnings = [];
 
@@ -212,13 +221,14 @@ Deno.serve(async (req) => {
             }
         }
 
-        // Run attachment writes in batches of 2 — non-fatal
+        // Run attachment writes in batches of 2
         if (attachmentTasks.length > 0) {
             try {
                 const results = await runBatched(attachmentTasks, 2, 150);
                 attachments.push(...results);
+                console.log('[addInternalComment] Attachments created:', { commentId: comment.id, count: results.length, ids: results.map(a => a.id) });
             } catch (attErr) {
-                console.warn('ATTACHMENT_WRITE_PARTIAL_FAILURE', { commentId: comment.id, error: attErr?.message });
+                console.error('ATTACHMENT_WRITE_FAILURE', { commentId: comment.id, error: attErr?.message });
                 warnings.push({ type: 'ATTACHMENT_WRITE_FAILED', message: attErr?.message });
             }
         }
