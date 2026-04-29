@@ -60,7 +60,6 @@ export const BOARD_COLUMNS = [
     label: 'Client Waiting',
     subtitle: 'Waiting on your response',
     color: 'red',
-    types: ['needs_response'],
     headerBg: 'bg-red-500/10',
     headerBorder: 'border-red-500/30',
     headerText: 'text-red-400',
@@ -69,11 +68,10 @@ export const BOARD_COLUMNS = [
     emptyText: 'No clients waiting',
   },
   {
-    key: 'needs_review',
-    label: 'Needs Review',
-    subtitle: 'Requires internal action',
+    key: 'review_active',
+    label: 'Active Review',
+    subtitle: 'Recent activity, needs action',
     color: 'amber',
-    types: ['needs_review', 'overdue'],
     headerBg: 'bg-amber-500/10',
     headerBorder: 'border-amber-500/30',
     headerText: 'text-amber-400',
@@ -82,19 +80,31 @@ export const BOARD_COLUMNS = [
     emptyText: 'Nothing to review',
   },
   {
-    key: 'completed',
-    label: 'Completed',
-    subtitle: 'Recently resolved',
-    color: 'green',
-    types: ['approved_recent'],
-    headerBg: 'bg-green-500/10',
-    headerBorder: 'border-green-500/30',
-    headerText: 'text-green-400',
-    countBg: 'bg-green-500/20',
-    countText: 'text-green-300',
-    emptyText: 'No recent completions',
+    key: 'review_backlog',
+    label: 'Backlog',
+    subtitle: 'Stale — needs follow-up',
+    color: 'gray',
+    headerBg: 'bg-gray-500/10',
+    headerBorder: 'border-gray-600/30',
+    headerText: 'text-gray-400',
+    countBg: 'bg-gray-500/20',
+    countText: 'text-gray-400',
+    emptyText: 'No backlog items',
   },
 ];
+
+export const RESOLVED_COLUMN = {
+  key: 'resolved',
+  label: 'Resolved',
+  subtitle: 'Recently completed',
+  color: 'green',
+  headerBg: 'bg-green-500/10',
+  headerBorder: 'border-green-500/30',
+  headerText: 'text-green-400',
+  countBg: 'bg-green-500/20',
+  countText: 'text-green-300',
+  emptyText: 'No recent completions',
+};
 
 /**
  * Format a relative time label for display
@@ -221,11 +231,18 @@ function classifyRequest(request, project) {
     type = 'needs_response';
   }
 
+  // Compute review tier for needs_review and overdue items (both live in review columns)
+  const isReviewType = type === 'needs_review' || type === 'overdue';
+  const reviewTier = isReviewType
+    ? (Date.now() - new Date(lastActivityAt).getTime() < 48 * 60 * 60 * 1000 ? 'active' : 'backlog')
+    : null;
+
   return {
     request,
     requestId: request.id,
     project,
     type,
+    reviewTier,
     priority: PRIORITY[type],
     lastActor,
     lastActivityAt,
@@ -236,12 +253,13 @@ function classifyRequest(request, project) {
 }
 
 /**
- * Group attention items by board column
+ * Group attention items by the new board structure
  */
 export function groupByColumn(attentionItems) {
-  const columns = {};
-  BOARD_COLUMNS.forEach(col => {
-    columns[col.key] = attentionItems.filter(item => col.types.includes(item.type));
-  });
-  return columns;
+  return {
+    client_waiting: attentionItems.filter(i => i.type === 'needs_response'),
+    review_active: attentionItems.filter(i => (i.type === 'needs_review' || i.type === 'overdue') && i.reviewTier === 'active'),
+    review_backlog: attentionItems.filter(i => (i.type === 'needs_review' || i.type === 'overdue') && i.reviewTier !== 'active'),
+    resolved: attentionItems.filter(i => i.type === 'approved_recent'),
+  };
 }
