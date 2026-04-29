@@ -168,10 +168,13 @@ Deno.serve(async (req) => {
         }
 
         // AUTO-REOPEN IF ARCHIVED
+        // Must bump posted_at to reset the review cycle so old decisions
+        // are excluded from state derivation.
         if (request.status === 'archived') {
             await base44.asServiceRole.entities.ClientFeedbackRequest.update(request.id, {
                 status: 'posted',
-                archived_at: null
+                archived_at: null,
+                posted_at: currentTimestamp
             });
         }
 

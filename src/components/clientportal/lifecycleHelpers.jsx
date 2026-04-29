@@ -8,67 +8,26 @@
  * - approved: Request is approved/closed
  */
 
-import { isStructuredReview } from "./reviewBehavior";
+import { getRequestStateCanonical } from "./stateHelpers";
 
 /**
- * Determine the request state based on status and decisions
+ * Determine the request state based on posted_at + decisions (canonical).
+ * Returns a string key for lifecycle bucketing.
  */
 export const getRequestState = (request, decisions, attachments) => {
-  if (request.status === 'draft') return 'draft';
-  if (request.status === 'archived') return 'archived';
-  
-  // For status-based states, trust the status field if explicitly set
-  // BUT only if there's no posted_at (hasn't been sent to client yet)
-  if (request.status === 'approved' && !request.posted_at) return 'approved';
-  if (request.status === 'changes_requested' && !request.posted_at) return 'changes_requested';
-  
-  // Only consider decisions made AFTER the request was last posted
-  const postedAt = request.posted_at ? new Date(request.posted_at) : null;
-  const requestDecisions = decisions.filter(d => {
-    if (d.request_id !== request.id) return false;
-    if (postedAt && d.decided_at) {
-      return new Date(d.decided_at) > postedAt;
-    }
-    if (postedAt && d.created_date) {
-      return new Date(d.created_date) > postedAt;
-    }
-    return true;
-  });
-  
-  const hasApproval = requestDecisions.some(d => d.decision === 'approved' && d.target_type === 'request');
-  const hasChangesRequested = requestDecisions.some(d => d.decision === 'changes_requested');
-  
-  if (hasApproval) return 'approved';
-  if (hasChangesRequested) return 'changes_requested';
-  
-  // For structured reviews (design_review, budget_review, deliverable_review), check if all images are decided
-  if (isStructuredReview(request.request_type)) {
-    const imageAttachments = attachments.filter(a => a.request_id === request.id && a.attachment_type === 'image');
-    const imageDecisions = requestDecisions.filter(d => d.target_type === 'attachment_image');
-    if (imageAttachments.length > 0 && imageDecisions.length >= imageAttachments.length) {
-      const allApproved = imageAttachments.every(img => 
-        imageDecisions.some(d => d.target_image_url === img.file_url && d.decision === 'approved')
-      );
-      if (allApproved) return 'approved';
-      return 'changes_requested';
-    }
-  }
-  
-  return 'awaiting_review';
+  const canonical = getRequestStateCanonical(request, decisions, attachments);
+  return canonical.key;
 };
 
 /**
  * Determine which lifecycle bucket a request belongs to
  */
 export const getLifecycleBucket = (request, decisions, attachments, comments) => {
-  // Draft is always draft
-  if (request.status === 'draft') return 'draft';
-  
-  // Archived requests are excluded
-  if (request.status === 'archived') return null;
-  
-  // Get the base state
+  // Use canonical state for draft/archived detection
   const state = getRequestState(request, decisions, attachments);
+  
+  if (state === 'draft') return 'draft';
+  if (state === 'archived') return null;
   
   // Approved goes to approved bucket
   if (state === 'approved') return 'approved';
@@ -188,9 +147,12 @@ export const enrichRequest = (request, comments, decisions, attachments) => {
     isOverdue = due < new Date();
   }
 
+  // Derive canonical state for enrichment
+  const canonicalKey = getRequestStateCanonical(request, requestDecisions, []).key;
+
   // Check if archived request has new client activity
   const isArchivedWithClientResponse =
-    request.status === 'archived' &&
+    canonicalKey === 'archived' &&
     latestActivityActor === 'client';
 
   // CANONICAL RULE: Request requires team action if:
@@ -201,11 +163,11 @@ export const enrichRequest = (request, comments, decisions, attachments) => {
   // - OR request is archived but client responded (exception case)
   const requiresTeamAction =
     (
-      request.status !== 'archived' &&
+      canonicalKey !== 'archived' &&
       (
         isOverdue ||
         latestActivityActor === 'client' ||
-        request.status === 'approved'
+        canonicalKey === 'approved'
       )
     ) ||
     isArchivedWithClientResponse;
@@ -256,9 +218,6 @@ export const groupRequestsByProjectAndLifecycle = (
   const comparator = getSortComparator(sortMode);
   
   requests.forEach(request => {
-    // Skip archived
-    if (request.status === 'archived') return;
-    
     const projectId = request.project_id || 'unknown';
     const bucket = getLifecycleBucket(request, decisions, attachments, comments);
     

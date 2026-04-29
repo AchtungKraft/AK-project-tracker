@@ -17,6 +17,7 @@ import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThrea
 import ToDoListDisplay from "../components/clientportal/ToDoListDisplay.jsx";
 import { cn } from "@/lib/utils";
 import { getRequestState, getRequestTypeInfo } from "@/components/clientportal/utils";
+import { getRequestStateCanonical } from "@/components/clientportal/stateHelpers";
 import { isStructuredReview } from "@/components/clientportal/reviewBehavior";
 import ImageModal from "../components/ui/ImageModal";
 
@@ -286,7 +287,13 @@ export default function ClientFeedbackRequestDetail() {
   // Memoize expensive state calculation
   const requestState = useMemo(() => {
     return request ? getRequestState(request, decisions, attachments) : null;
-  }, [request?.id, request?.status, decisions, attachments]);
+  }, [request?.id, request?.posted_at, decisions, attachments]);
+
+  // Canonical state key for button logic (not dependent on request.status)
+  const canonicalState = useMemo(() => {
+    return request ? getRequestStateCanonical(request, decisions, attachments) : null;
+  }, [request?.id, request?.posted_at, decisions, attachments]);
+  const canAct = canonicalState?.key === 'awaiting_review' || canonicalState?.key === 'changes_requested';
   
   const approveLabel = isStructuredReview(request?.request_type) ? 'Approve' : 'Confirm';
   
@@ -350,7 +357,7 @@ export default function ClientFeedbackRequestDetail() {
               )}
             </div>
 
-            {clientAccess?.access_role === 'approver' && request.status === 'posted' && !isStructuredReview(request.request_type) && (
+            {clientAccess?.access_role === 'approver' && canAct && !isStructuredReview(request.request_type) && (
               <div className="flex gap-2 mt-4">
                 <Button
                   size="sm"
@@ -371,7 +378,7 @@ export default function ClientFeedbackRequestDetail() {
               </div>
             )}
             
-            {clientAccess?.access_role === 'approver' && request.status === 'posted' && isStructuredReview(request.request_type) && (
+            {clientAccess?.access_role === 'approver' && canAct && isStructuredReview(request.request_type) && (
               <p className="text-sm text-gray-400 italic mt-4">Select images below to approve or request changes</p>
             )}
           </div>

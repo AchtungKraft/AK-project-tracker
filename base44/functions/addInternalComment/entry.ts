@@ -224,13 +224,16 @@ Deno.serve(async (req) => {
         }
 
         // AUTO-REOPEN IF ARCHIVED (non-fatal)
+        // Must bump posted_at to reset the review cycle so old decisions
+        // are excluded from state derivation.
         try {
             const requests = await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId }));
             const request = requests[0];
             if (request && request.status === 'archived') {
                 await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, {
                     status: 'posted',
-                    archived_at: null
+                    archived_at: null,
+                    posted_at: currentTimestamp
                 }));
             }
         } catch (reopenErr) {

@@ -18,6 +18,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getRequestState, getRequestTypeInfo } from "@/components/clientportal/utils";
+import { getRequestStateCanonical } from "@/components/clientportal/stateHelpers";
 import { isStructuredReview } from "@/components/clientportal/reviewBehavior";
 import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThread.jsx";
 import ToDoListDisplay from "../components/clientportal/ToDoListDisplay.jsx";
@@ -104,7 +105,8 @@ export default function ClientFeedbackDetail() {
     if (!requestId || !feedbackDetail?.request || viewTrackedRef.current) return;
     
     const request = feedbackDetail.request;
-    if (request.status !== 'posted' && request.status !== 'changes_requested') return;
+    // Track views for active requests (has been posted, not draft or archived)
+    if (!request.posted_at || request.status === 'archived') return;
     
     const lastView = request.last_viewed_by_internal_at;
     if (lastView) {
@@ -309,7 +311,13 @@ export default function ClientFeedbackDetail() {
   // Memoize expensive calculations to prevent re-computation on every render
   const requestState = useMemo(() => {
     return request ? getRequestState(request, decisions, attachments) : null;
-  }, [request?.id, request?.status, decisions, attachments]);
+  }, [request?.id, request?.posted_at, decisions, attachments]);
+
+  // Canonical state key for button logic (not dependent on request.status)
+  const canonicalState = useMemo(() => {
+    return request ? getRequestStateCanonical(request, decisions, attachments) : null;
+  }, [request?.id, request?.posted_at, decisions, attachments]);
+  const canAct = canonicalState?.key === 'awaiting_review' || canonicalState?.key === 'changes_requested';
 
   // Determine button labels based on request type
   const approveLabel = isStructuredReview(request?.request_type) ? 'Approve' : 'Confirm';
@@ -408,7 +416,7 @@ export default function ClientFeedbackDetail() {
                       "font-bold text-white",
                       isMobile ? "text-lg leading-tight line-clamp-2" : "text-2xl"
                     )}>{request?.title}</h1>
-                    {request?.status !== 'archived' && (
+                    {canonicalState?.key !== 'archived' && (
                       <Button
                         size="icon"
                         variant="ghost"
@@ -425,7 +433,7 @@ export default function ClientFeedbackDetail() {
             </div>
 
             {/* Action buttons - only show when data is loaded, hidden on mobile (shown in metadata card) */}
-            {!isMobile && !isInitialLoad && request?.status === 'posted' && !isStructuredReview(request?.request_type) && (
+            {!isMobile && !isInitialLoad && canAct && !isStructuredReview(request?.request_type) && (
               <div className="flex gap-2">
                 <Button
                   size="sm"
@@ -452,7 +460,7 @@ export default function ClientFeedbackDetail() {
               </div>
             )}
 
-            {!isMobile && !isInitialLoad && request?.status === 'posted' && isStructuredReview(request?.request_type) && (
+            {!isMobile && !isInitialLoad && canAct && isStructuredReview(request?.request_type) && (
               <p className="text-sm text-gray-400 italic">Select images below to approve or request changes</p>
             )}
           </div>
@@ -504,7 +512,7 @@ export default function ClientFeedbackDetail() {
               </div>
 
               {/* Mobile: Approve/Changes buttons for non-structured-review */}
-              {isMobile && request?.status === 'posted' && !isStructuredReview(request?.request_type) && (
+              {isMobile && canAct && !isStructuredReview(request?.request_type) && (
                 <div className="flex gap-2">
                   <Button
                     size="sm"
@@ -531,7 +539,7 @@ export default function ClientFeedbackDetail() {
                 </div>
               )}
 
-              {isMobile && request?.status === 'posted' && isStructuredReview(request?.request_type) && (
+              {isMobile && canAct && isStructuredReview(request?.request_type) && (
                 <p className="text-xs text-gray-400 italic">Select images below to review</p>
               )}
 
@@ -539,21 +547,21 @@ export default function ClientFeedbackDetail() {
               {isMobile ? (
                 <div className="space-y-2">
                   {/* Primary action row */}
-                  {request.status === 'draft' && (
+                  {canonicalState?.key === 'draft' && (
                     <Button size="sm" onClick={handlePostToClient} className="w-full h-10 bg-blue-600 hover:bg-blue-700">
                       Post to Client
                     </Button>
                   )}
-                  {['posted', 'changes_requested', 'approved'].includes(request.status) && (
+                  {['awaiting_review', 'changes_requested', 'approved'].includes(canonicalState?.key) && (
                     <Button size="sm" onClick={handleResendForApproval} className="w-full h-10 bg-purple-600 hover:bg-purple-700 text-white">
                       <RotateCw className="w-4 h-4 mr-1" />
                       Resend for Review
                     </Button>
                   )}
-                  {request.status === 'archived' && (
+                  {canonicalState?.key === 'archived' && (
                     <Button size="sm" onClick={() => {
                       if (confirm('Move this request back to draft?')) {
-                        updateRequestMutation.mutate({ id: requestId, data: { status: 'draft' } });
+                        updateRequestMutation.mutate({ id: requestId, data: { status: 'draft', posted_at: null } });
                         toast.success('Moved to Drafts');
                       }
                     }} className="w-full h-10 bg-gray-700 hover:bg-gray-600 text-white">
@@ -564,7 +572,7 @@ export default function ClientFeedbackDetail() {
                   
                   {/* Secondary inline row */}
                   <div className="flex gap-2">
-                    {['posted', 'changes_requested', 'approved'].includes(request.status) && (
+                    {['awaiting_review', 'changes_requested', 'approved'].includes(canonicalState?.key) && (
                       <Button 
                         size="sm" 
                         onClick={handleArchive} 
@@ -593,12 +601,12 @@ export default function ClientFeedbackDetail() {
               ) : (
                 /* Desktop action buttons */
                 <div className="flex gap-2 flex-wrap">
-                  {request.status === 'draft' && (
+                  {canonicalState?.key === 'draft' && (
                     <Button size="sm" onClick={handlePostToClient} className="bg-blue-600 hover:bg-blue-700">
                       Post to Client
                     </Button>
                   )}
-                  {['posted', 'changes_requested', 'approved'].includes(request.status) && (
+                  {['awaiting_review', 'changes_requested', 'approved'].includes(canonicalState?.key) && (
                     <>
                       <Button size="sm" onClick={handleResendForApproval} variant="outline" className="bg-blue-600 text-white border-blue-600 hover:bg-blue-700 hover:text-white px-3 text-xs font-medium rounded-md h-8">
                         <RotateCw className="w-4 h-4 mr-1" />
@@ -610,10 +618,10 @@ export default function ClientFeedbackDetail() {
                       </Button>
                     </>
                   )}
-                  {request.status === 'archived' && (
+                  {canonicalState?.key === 'archived' && (
                     <Button size="sm" onClick={() => {
                       if (confirm('Move this request back to draft?')) {
-                        updateRequestMutation.mutate({ id: requestId, data: { status: 'draft' } });
+                        updateRequestMutation.mutate({ id: requestId, data: { status: 'draft', posted_at: null } });
                         toast.success('Moved to Drafts');
                       }
                     }} variant="outline" className="bg-gray-100 text-gray-900 border-gray-200 hover:bg-gray-200 px-3 text-xs font-medium rounded-md h-8">
