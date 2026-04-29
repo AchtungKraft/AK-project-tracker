@@ -31,19 +31,19 @@ export function getRequestStateCanonical(request, decisions = [], attachments = 
     return { key: 'archived', label: 'Archived' };
   }
 
-  const postedAt = new Date(request.posted_at);
+  const postedAtMs = new Date(request.posted_at).getTime();
 
-  // Filter decisions to only those AFTER posted_at
+  // Filter decisions to only those AFTER posted_at (numeric UTC comparison)
   const validDecisions = decisions.filter(d => {
     if (d.request_id && d.request_id !== request.id) return false;
-    const decisionDate = new Date(d.decided_at || d.created_date);
-    return decisionDate > postedAt;
+    const decisionMs = new Date(d.decided_at || d.created_date).getTime();
+    return decisionMs > postedAtMs;
   });
 
-  // Check request-level decisions first
+  // Check request-level decisions first (sorted by UTC timestamp descending)
   const requestDecisions = validDecisions
     .filter(d => d.target_type === 'request')
-    .sort((a, b) => new Date(b.decided_at || b.created_date) - new Date(a.decided_at || a.created_date));
+    .sort((a, b) => new Date(b.decided_at || b.created_date).getTime() - new Date(a.decided_at || a.created_date).getTime());
 
   if (requestDecisions.length > 0) {
     const latest = requestDecisions[0];

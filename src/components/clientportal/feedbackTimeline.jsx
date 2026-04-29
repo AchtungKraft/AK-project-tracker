@@ -7,14 +7,45 @@
  *   - stateEvents: only events AFTER the latest posted_at boundary.
  *                  Used for canonical state derivation and classification.
  *
+ * TIMESTAMP INVARIANT:
+ * All dates are stored and compared as ISO-8601 UTC strings.
+ * All parsing uses getTime() for numeric comparison — never locale-based.
+ *
  * IMPORTANT:
  * Do NOT filter timeline (allEvents) by posted_at.
  * Only state logic (stateEvents) should use time boundaries.
  */
 
 /**
- * Normalize a decision timestamp for consistent sorting.
- * Always prefers decided_at, falls back to created_date.
+ * Parse any date value into a UTC millisecond timestamp.
+ * Returns 0 for null/undefined/invalid — sorts to the bottom.
+ */
+function getTime(d) {
+  if (!d) return 0;
+  const ms = new Date(d).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+/**
+ * Normalize a date to ISO-8601 UTC string, or null.
+ */
+function normalizeDate(d) {
+  if (!d) return null;
+  const date = new Date(d);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
+/**
+ * Resolve the authoritative timestamp for a comment.
+ * Prefers the server-assigned posted_at, falls back to created_date.
+ */
+function commentTime(c) {
+  return c.posted_at || c.created_date;
+}
+
+/**
+ * Resolve the authoritative timestamp for a decision.
+ * Prefers decided_at, falls back to created_date.
  */
 function decisionTime(d) {
   return d.decided_at || d.created_date;
@@ -34,55 +65,57 @@ export function buildFeedbackTimeline(request, comments = [], decisions = []) {
   allEvents.push({
     kind: 'request_created',
     actor: 'team',
-    date: request.created_date,
+    date: normalizeDate(request.created_date),
   });
 
   if (request.posted_at) {
     allEvents.push({
       kind: 'request_posted',
       actor: 'team',
-      date: request.posted_at,
+      date: normalizeDate(request.posted_at),
     });
   }
 
   comments.forEach(c => {
+    const date = normalizeDate(commentTime(c));
     allEvents.push({
       kind: 'comment',
       actor: c.author_type === 'client_contact' ? 'client' : 'team',
-      date: c.created_date,
+      date,
       comment: c,
     });
   });
 
   // Sort decisions by decided_at before processing to guarantee stable ordering
   const sortedDecisions = [...decisions].sort(
-    (a, b) => new Date(decisionTime(b)) - new Date(decisionTime(a))
+    (a, b) => getTime(decisionTime(b)) - getTime(decisionTime(a))
   );
 
   sortedDecisions.forEach(d => {
+    const date = normalizeDate(decisionTime(d));
     allEvents.push({
       kind: 'decision',
       actor: d.decided_by_type === 'client_contact' ? 'client' : 'team',
-      date: decisionTime(d),
+      date,
       decision: d,
     });
   });
 
-  // Sort ALL events descending (most recent first)
-  allEvents.sort((a, b) => new Date(b.date) - new Date(a.date));
+  // Sort ALL events descending (most recent first) using numeric comparison
+  allEvents.sort((a, b) => getTime(b.date) - getTime(a.date));
 
   // ── Build STATE events (only after posted_at boundary) ──
-  const postedAt = request.posted_at ? new Date(request.posted_at) : null;
+  const postedAtMs = getTime(request.posted_at);
 
-  const stateEvents = postedAt
-    ? allEvents.filter(e => new Date(e.date) > postedAt)
+  const stateEvents = postedAtMs
+    ? allEvents.filter(e => getTime(e.date) > postedAtMs)
     : [];
 
   // ── Derive convenience accessors ──
   const latestDisplayEvent = allEvents[0] || null;
   const latestStateEvent = stateEvents[0] || null;
 
-  // DEV INTEGRITY ASSERTION (Part 5) — warn if posted request has no display events
+  // DEV INTEGRITY ASSERTION — warn if posted request has no display events
   if (!latestDisplayEvent && request.posted_at) {
     console.warn('[buildFeedbackTimeline] No display events for posted request', request.id);
   }

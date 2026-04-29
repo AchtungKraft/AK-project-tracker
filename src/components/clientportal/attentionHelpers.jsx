@@ -202,10 +202,10 @@ export function buildAttentionList(projectGroups) {
     });
   });
 
-  // Sort: priority asc, then most recent activity first
+  // Sort: priority asc, then most recent activity first (UTC numeric)
   return items.sort((a, b) => {
     if (a.priority !== b.priority) return a.priority - b.priority;
-    return new Date(b.lastActivityAt) - new Date(a.lastActivityAt);
+    return new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime();
   });
 }
 
@@ -223,7 +223,10 @@ function classifyRequest(request, project, canonicalState) {
   const lastActivityAt = request.latestActivityAt || request.updated_date;
   const isOverdue = request.isOverdue;
   const needsResponse = lastActor === 'client' && canonicalKey !== 'approved';
-  const hoursSinceLastActivity = (Date.now() - new Date(lastActivityAt).getTime()) / (1000 * 60 * 60);
+  const lastActivityMs = new Date(lastActivityAt).getTime();
+  const hoursSinceLastActivity = Number.isFinite(lastActivityMs)
+    ? (Date.now() - lastActivityMs) / (1000 * 60 * 60)
+    : 0;
 
   let type;
 
@@ -343,10 +346,10 @@ function classifyRequest(request, project, canonicalState) {
  * Group attention items by the new board structure
  */
 export function groupByColumn(attentionItems) {
-  // Follow-up sorted oldest-first (longest silence at top)
+  // Follow-up sorted oldest-first (longest silence at top, UTC numeric)
   const followUp = attentionItems
     .filter(i => i.type === 'follow_up')
-    .sort((a, b) => new Date(a.lastActivityAt) - new Date(b.lastActivityAt));
+    .sort((a, b) => new Date(a.lastActivityAt).getTime() - new Date(b.lastActivityAt).getTime());
 
   return {
     client_waiting: attentionItems.filter(i => i.type === 'needs_response'),

@@ -65,28 +65,31 @@ export const getSortComparator = (mode) => {
         if (!a.due_date && !b.due_date) return 0;
         if (!a.due_date) return 1;
         if (!b.due_date) return -1;
-        return new Date(a.due_date) - new Date(b.due_date);
+        return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
         
-      case 'last_client_activity':
-        const aClientDate = a.lastClientComment?.created_date;
-        const bClientDate = b.lastClientComment?.created_date;
+      case 'last_client_activity': {
+        const aClientDate = a.lastClientComment?.posted_at || a.lastClientComment?.created_date;
+        const bClientDate = b.lastClientComment?.posted_at || b.lastClientComment?.created_date;
         if (!aClientDate && !bClientDate) return 0;
         if (!aClientDate) return 1;
         if (!bClientDate) return -1;
-        return new Date(bClientDate) - new Date(aClientDate);
+        return new Date(bClientDate).getTime() - new Date(aClientDate).getTime();
+      }
         
-      case 'last_internal_activity':
+      case 'last_internal_activity': {
         const aInternalDate = a.last_viewed_by_internal_at || a.updated_date;
         const bInternalDate = b.last_viewed_by_internal_at || b.updated_date;
         if (!aInternalDate && !bInternalDate) return 0;
         if (!aInternalDate) return 1;
         if (!bInternalDate) return -1;
-        return new Date(bInternalDate) - new Date(aInternalDate);
+        return new Date(bInternalDate).getTime() - new Date(aInternalDate).getTime();
+      }
         
-      case 'oldest_waiting':
+      case 'oldest_waiting': {
         const aDate = a.posted_at || a.created_date;
         const bDate = b.posted_at || b.created_date;
-        return new Date(aDate) - new Date(bDate);
+        return new Date(aDate).getTime() - new Date(bDate).getTime();
+      }
         
       default:
         return 0;
@@ -330,7 +333,7 @@ export const sortOverdueFirst = (requests, bucket) => {
     if (!a.due_date && b.due_date) return 1;
     // Then earliest date first
     if (a.due_date && b.due_date) {
-      return new Date(a.due_date) - new Date(b.due_date);
+      return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
     }
     return 0;
   });
