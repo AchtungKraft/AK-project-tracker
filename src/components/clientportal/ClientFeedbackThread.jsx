@@ -12,6 +12,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 
 import { isStructuredReview } from "./reviewBehavior";
+import { CycleHeader, CycleDivider } from "./CycleHeader";
 import { JournalProseStyles } from "@/components/journal/JournalContentRenderer";
 import { normalizeFeedbackComment } from "./normalizeFeedbackComment";
 import HtmlContent from "@/components/shared/HtmlContent";
@@ -702,24 +703,55 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
   const canReview = accessRole === 'approver' && isClientView || !isClientView && userId;
 
+  // Split timeline into current cycle (after posted_at) and previous activity — UI-only grouping
+  const { currentCycle, previousCycle } = useMemo(() => {
+    if (!request?.posted_at) {
+      return { currentCycle: timeline, previousCycle: [] };
+    }
+    const boundary = new Date(request.posted_at).getTime();
+    return {
+      currentCycle: timeline.filter(e => e.timestamp.getTime() >= boundary),
+      previousCycle: timeline.filter(e => e.timestamp.getTime() < boundary),
+    };
+  }, [timeline, request?.posted_at]);
+
+  const renderEvent = (event, idx) => (
+    <TimelineEventCard
+      key={`${event.type}-${event.timestamp.getTime()}-${idx}`}
+      event={event}
+      canReview={canReview}
+      requestType={requestType}
+      isClientView={isClientView}
+      selectedImageIds={selectedImageIds}
+      onImageSelect={handleImageSelect}
+      onImageClick={handleImageClick}
+      onDeleteComment={onDeleteComment}
+      onDeleteDecision={onDeleteDecision}
+      decisions={decisions}
+    />
+  );
+
   return (
     <>
       <JournalProseStyles />
       <div className="space-y-6 pb-20">
-        {timeline.map((event, idx) =>
-        <TimelineEventCard
-          key={`${event.type}-${event.timestamp.getTime()}-${idx}`}
-          event={event}
-          canReview={canReview}
-          requestType={requestType}
-          isClientView={isClientView}
-          selectedImageIds={selectedImageIds}
-          onImageSelect={handleImageSelect}
-          onImageClick={handleImageClick}
-          onDeleteComment={onDeleteComment}
-          onDeleteDecision={onDeleteDecision}
-          decisions={decisions} />
+        {/* Current Review Cycle */}
+        {request?.posted_at && previousCycle.length > 0 && (
+          <CycleHeader label="Current Review Cycle" date={request.posted_at} />
+        )}
+        <div className={request?.posted_at && previousCycle.length > 0 ? "space-y-6 rounded-lg bg-white/[0.02] p-2 -m-2" : "space-y-6"}>
+          {currentCycle.map(renderEvent)}
+        </div>
 
+        {/* Previous Activity */}
+        {previousCycle.length > 0 && (
+          <>
+            <CycleDivider />
+            <CycleHeader label="Previous Activity" />
+            <div className="space-y-6 opacity-80">
+              {previousCycle.map(renderEvent)}
+            </div>
+          </>
         )}
       </div>
 
