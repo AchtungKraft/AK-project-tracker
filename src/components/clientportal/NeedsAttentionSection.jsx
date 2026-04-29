@@ -13,6 +13,7 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { formatDistanceToNow } from "date-fns";
 import { groupAttentionByType, ATTENTION_BADGE_CONFIG } from "./attentionHelpers";
+import InlineDueDatePicker from "./InlineDueDatePicker";
 
 /**
  * Attention Badge Component
@@ -39,72 +40,86 @@ const AttentionBadge = ({ type, size = 'sm' }) => {
 };
 
 /**
- * Individual Request Card
+ * Individual Request Card — with overdue visual treatment + inline due date picker
  */
-const RequestCard = ({ item, isDeemphasized = false }) => {
+const RequestCard = ({ item, isDeemphasized = false, onUpdateDueDate }) => {
   const { request, project, type, isOverdue } = item;
   
   return (
-    <Link
-      to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=attention`}
-      className={`block p-2 md:p-3 rounded-lg border transition-all group min-h-[44px] ${
-        isDeemphasized 
+    <div className={`relative rounded-lg border transition-all group min-h-[44px] ${
+      isOverdue
+        ? 'bg-red-950/20 border-red-500/40 border-l-[3px] border-l-red-500'
+        : isDeemphasized 
           ? 'bg-black/20 border-gray-800 hover:border-green-500/30 hover:bg-gray-900/50 opacity-80' 
           : 'bg-black/40 border-gray-700 hover:border-red-500/50 hover:bg-gray-900/80'
-      }`}
-    >
-      <div className="flex items-start justify-between gap-2 mb-1.5 md:mb-2">
-        <AttentionBadge type={type} size="md" />
-        {isOverdue && type !== 'overdue' && (
-          <Badge variant="outline" className="text-xs border-red-600/50 text-red-400">
-            <Clock className="w-3 h-3 mr-1" />
-            Overdue
-          </Badge>
-        )}
-      </div>
-      
-      <h4 className={`font-medium text-sm mb-1 line-clamp-1 md:line-clamp-2 transition-colors ${
-        isDeemphasized 
-          ? 'text-gray-300 group-hover:text-green-400' 
-          : 'text-white group-hover:text-red-400'
-      }`}>
-        {request.title}
-      </h4>
-      
-      <div className="flex items-center gap-2 text-xs text-gray-400 mb-1 md:mb-2">
-        <FolderKanban className="w-3 h-3 shrink-0" />
-        <span className="truncate">{project?.name || 'Unknown Project'}</span>
-      </div>
-
-      <div className="flex items-center justify-between text-xs">
-        <div className="flex flex-col gap-0.5">
-          {type === 'approved_recent' && (
-            <span className="text-green-400/70 italic hidden md:block">
-              Approved — confirm closure
-            </span>
-          )}
-          {type === 'client_replied' && (
-            <span className="text-blue-400 truncate">
-              {request.updated_date && (
-                <>Client activity {formatDistanceToNow(new Date(request.updated_date), { addSuffix: true })}</>
-              )}
-            </span>
-          )}
-          {type === 'overdue' && (
-            <span className="text-red-400 truncate">
-              {request.due_date && (
-                <>Due {formatDistanceToNow(new Date(request.due_date), { addSuffix: true })}</>
-              )}
-            </span>
-          )}
+    }`}>
+      <Link
+        to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=attention`}
+        className="block p-2 md:p-3 hover:bg-gray-800/30 rounded-lg transition-colors"
+      >
+        <div className="flex items-start justify-between gap-2 mb-1.5 md:mb-2">
+          <div className="flex items-center gap-2">
+            <AttentionBadge type={type} size="md" />
+            {isOverdue && type !== 'overdue' && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 text-[10px] font-semibold uppercase tracking-wide">
+                Overdue
+              </span>
+            )}
+          </div>
         </div>
-        <ChevronRight className={`w-4 h-4 transition-colors shrink-0 ${
+        
+        <h4 className={`font-medium text-sm mb-1 line-clamp-1 md:line-clamp-2 transition-colors ${
           isDeemphasized 
-            ? 'text-gray-600 group-hover:text-green-400' 
-            : 'text-gray-500 group-hover:text-red-400'
-        }`} />
-      </div>
-    </Link>
+            ? 'text-gray-300 group-hover:text-green-400' 
+            : 'text-white group-hover:text-red-400'
+        }`}>
+          {request.title}
+        </h4>
+        
+        <div className="flex items-center gap-2 text-xs text-gray-400 mb-1 md:mb-2">
+          <FolderKanban className="w-3 h-3 shrink-0" />
+          <span className="truncate">{project?.name || 'Unknown Project'}</span>
+        </div>
+
+        <div className="flex items-center justify-between text-xs">
+          <div className="flex flex-col gap-0.5">
+            {type === 'approved_recent' && (
+              <span className="text-green-400/70 italic hidden md:block">
+                Approved — confirm closure
+              </span>
+            )}
+            {type === 'client_replied' && (
+              <span className="text-blue-400 truncate">
+                {request.updated_date && (
+                  <>Client activity {formatDistanceToNow(new Date(request.updated_date), { addSuffix: true })}</>
+                )}
+              </span>
+            )}
+            {type === 'overdue' && (
+              <span className="text-red-400 truncate">
+                {request.due_date && (
+                  <>Due {formatDistanceToNow(new Date(request.due_date), { addSuffix: true })}</>
+                )}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1" onClick={e => e.preventDefault()}>
+            {onUpdateDueDate && (
+              <InlineDueDatePicker
+                dueDate={request.due_date}
+                isOverdue={isOverdue}
+                onDateChange={(date) => onUpdateDueDate(request.id, date)}
+              />
+            )}
+            <ChevronRight className={`w-4 h-4 transition-colors shrink-0 ${
+              isDeemphasized 
+                ? 'text-gray-600 group-hover:text-green-400' 
+                : 'text-gray-500 group-hover:text-red-400'
+            }`} />
+          </div>
+        </div>
+      </Link>
+    </div>
   );
 };
 
@@ -127,7 +142,8 @@ const SectionHeader = ({ label, count, colorClass }) => (
  */
 const NeedsAttentionSection = ({ 
   projectGroups,
-  lifecycleQuickFilter = 'all'
+  lifecycleQuickFilter = 'all',
+  onUpdateDueDate
 }) => {
   // Build attention list from requiresTeamAction flag (actor-driven, not lifecycle-driven)
   const attentionItems = useMemo(() => {
@@ -210,7 +226,7 @@ const NeedsAttentionSection = ({
             />
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
               {client_replied.map(item => (
-                <RequestCard key={item.request.id} item={item} />
+                <RequestCard key={item.request.id} item={item} onUpdateDueDate={onUpdateDueDate} />
               ))}
             </div>
           </div>
@@ -226,7 +242,7 @@ const NeedsAttentionSection = ({
             />
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
               {overdue.map(item => (
-                <RequestCard key={item.request.id} item={item} />
+                <RequestCard key={item.request.id} item={item} onUpdateDueDate={onUpdateDueDate} />
               ))}
             </div>
           </div>
@@ -242,7 +258,7 @@ const NeedsAttentionSection = ({
             />
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
               {archived_response.map(item => (
-                <RequestCard key={item.request.id} item={item} />
+                <RequestCard key={item.request.id} item={item} onUpdateDueDate={onUpdateDueDate} />
               ))}
             </div>
           </div>
@@ -258,7 +274,7 @@ const NeedsAttentionSection = ({
             />
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
               {approved_recent.map(item => (
-                <RequestCard key={item.request.id} item={item} isDeemphasized />
+                <RequestCard key={item.request.id} item={item} isDeemphasized onUpdateDueDate={onUpdateDueDate} />
               ))}
             </div>
           </div>

@@ -614,6 +614,7 @@ export default function ClientPortalHub() {
         <NeedsAttentionSection
           projectGroups={attentionProjectGroups}
           lifecycleQuickFilter={lifecycleQuickFilter}
+          onUpdateDueDate={handleUpdateRequestDueDate}
         />
 
         {/* Main Tabs */}
