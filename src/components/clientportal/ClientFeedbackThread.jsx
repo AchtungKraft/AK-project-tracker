@@ -459,7 +459,7 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
 
 });
 
-export default function ClientFeedbackThread({ requestId, clientContactId, isClientView, userId, accessRole, requestType, token, slug, request, onDecisionSubmit, onDeleteComment, onDeleteDecision, onImageClick: onImageClickProp }) {
+export default function ClientFeedbackThread({ requestId, clientContactId, isClientView, userId, accessRole, requestType, token, slug, request, onDecisionSubmit, onDeleteComment, onDeleteDecision, onImageClick: onImageClickProp, onSelectionChange }) {
   const queryClient = useQueryClient();
   const [selectedImageIds, setSelectedImageIds] = useState([]);
   const [isReviewing, setIsReviewing] = useState(false);
@@ -539,14 +539,29 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
       // Only add comment if it doesn't have a matching decision (avoid duplicates)
       if (!hasMatchingDecision) {
-        const commentAttachments = attachments.filter((a) => a.comment_id === comment.id);
+        // Uploaded images: linked via comment_id
+        const uploadedAttachments = attachments.filter((a) => a.comment_id === comment.id);
+        // Selected existing images: referenced by ID on the comment record
+        const selectedIds = comment.selected_attachment_ids || [];
+        const selectedAttachments = selectedIds.length > 0
+          ? attachments.filter((a) => selectedIds.includes(a.id))
+          : [];
+        // Merge, deduplicating by id
+        const seenIds = new Set(uploadedAttachments.map(a => a.id));
+        const mergedAttachments = [...uploadedAttachments];
+        selectedAttachments.forEach(a => {
+          if (!seenIds.has(a.id)) {
+            mergedAttachments.push(a);
+            seenIds.add(a.id);
+          }
+        });
 
         events.push({
           type: 'comment',
           timestamp: new Date(comment.posted_at || comment.created_date),
           comment,
           author: comment.author,
-          attachments: commentAttachments
+          attachments: mergedAttachments
         });
       }
     });
@@ -643,12 +658,13 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
   const handleImageSelect = useCallback((imageId) => {
     setSelectedImageIds((prev) => {
-      if (prev.includes(imageId)) {
-        return prev.filter((id) => id !== imageId);
-      }
-      return [...prev, imageId];
+      const next = prev.includes(imageId)
+        ? prev.filter((id) => id !== imageId)
+        : [...prev, imageId];
+      onSelectionChange?.(next);
+      return next;
     });
-  }, []);
+  }, [onSelectionChange]);
 
   const handleImageClick = useCallback((url, allImages, idx) => {
     if (onImageClickProp) {
@@ -720,6 +736,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
       toast.success('Review submitted');
       setSelectedImageIds([]);
+      onSelectionChange?.([]);
       setReviewNewImages([]);
       setReviewNote("");
       setIsReviewing(false);

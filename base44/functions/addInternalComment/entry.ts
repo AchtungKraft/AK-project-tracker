@@ -106,6 +106,8 @@ Deno.serve(async (req) => {
             visibility,
             photos,
             files,
+            // Design Review: IDs of existing attachments selected with this comment
+            selected_attachment_ids,
         } = payload;
 
         if (!requestId) {
@@ -154,6 +156,11 @@ Deno.serve(async (req) => {
         }
         if (files && Array.isArray(files) && files.length > 0) {
             commentData.files = files;
+        }
+
+        // Selected existing attachment IDs (Design Review reference)
+        if (selected_attachment_ids && Array.isArray(selected_attachment_ids) && selected_attachment_ids.length > 0) {
+            commentData.selected_attachment_ids = selected_attachment_ids;
         }
 
         const comment = await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackComment.create(commentData));

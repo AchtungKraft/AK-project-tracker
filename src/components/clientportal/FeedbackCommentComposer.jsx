@@ -18,6 +18,7 @@ export default function FeedbackCommentComposer({
   projectId,
   onCommentAdded,
   isMobile = false,
+  selectedAttachmentIds = [],
 }) {
   const [expanded, setExpanded] = useState(false);
   const [contentHtml, setContentHtml] = useState("");
@@ -60,8 +61,9 @@ export default function FeedbackCommentComposer({
     const hasContent = plainText.length > 0;
     const hasLinks = links.some(l => l.url?.trim());
     const hasMedia = imageUploader.uploadedUrls.length > 0 || fileUploader.uploadedFileObjects.length > 0;
+    const hasSelectedImages = selectedAttachmentIds.length > 0;
 
-    if (!hasContent && !hasLinks && !hasMedia) {
+    if (!hasContent && !hasLinks && !hasMedia && !hasSelectedImages) {
       toast.error("Please enter a comment, add a link, or attach a file");
       return;
     }
@@ -82,7 +84,7 @@ export default function FeedbackCommentComposer({
     setIsSubmitting(true);
     try {
       const sanitizedHtml = hasContent ? sanitizeJournalHtml(contentHtml) : null;
-      const response = await base44.functions.invoke("addInternalComment", {
+      const payload = {
         requestId,
         content_html: sanitizedHtml,
         content_fallback: plainText,
@@ -90,7 +92,11 @@ export default function FeedbackCommentComposer({
         photos: imageUploader.uploadedUrls,
         files: fileUploader.uploadedFileObjects,
         visibility,
-      });
+      };
+      if (selectedAttachmentIds.length > 0) {
+        payload.selected_attachment_ids = selectedAttachmentIds;
+      }
+      const response = await base44.functions.invoke("addInternalComment", payload);
 
       if (response.data?.success) {
         resetForm();
@@ -199,6 +205,15 @@ export default function FeedbackCommentComposer({
               onRetry={fileUploader.retryFailed}
               mode="file"
             />
+          </div>
+        )}
+
+        {/* Selected Images Indicator */}
+        {selectedAttachmentIds.length > 0 && (
+          <div className="bg-blue-900/30 border border-blue-500/30 rounded-lg px-3 py-2">
+            <p className="text-xs text-blue-400 font-medium">
+              {selectedAttachmentIds.length} image{selectedAttachmentIds.length > 1 ? 's' : ''} selected from gallery — will be attached to this comment
+            </p>
           </div>
         )}
 

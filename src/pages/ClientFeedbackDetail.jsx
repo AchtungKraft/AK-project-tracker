@@ -55,6 +55,7 @@ export default function ClientFeedbackDetail() {
   const [galleryImages, setGalleryImages] = useState([]);
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [threadSelectedImageIds, setThreadSelectedImageIds] = useState([]);
 
   // Track if view has been logged this session to prevent duplicate tracking
   const viewTrackedRef = useRef(false);
@@ -686,8 +687,12 @@ export default function ClientFeedbackDetail() {
           <FeedbackCommentComposer
             requestId={requestId}
             projectId={projectId}
-            onCommentAdded={handleCommentAdded}
+            onCommentAdded={() => {
+              setThreadSelectedImageIds([]);
+              handleCommentAdded();
+            }}
             isMobile={isMobile}
+            selectedAttachmentIds={threadSelectedImageIds}
           />
 
           {request.request_type === 'todo_list' ? (
@@ -712,6 +717,7 @@ export default function ClientFeedbackDetail() {
                   userId={user.id}
                   requestType={request.request_type}
                   onDecisionSubmit={handleSubmitRequestDecision}
+                  onSelectionChange={setThreadSelectedImageIds}
                   onDeleteComment={async (commentId) => {
                     try {
                       const commentAttachments = attachments.filter(a => a.comment_id === commentId);
@@ -753,6 +759,7 @@ export default function ClientFeedbackDetail() {
                 setShowCreateTaskModal(true);
               }}
               onDecisionSubmit={handleSubmitRequestDecision}
+              onSelectionChange={setThreadSelectedImageIds}
               onDeleteComment={async (commentId) => {
                 try {
                   const commentAttachments = attachments.filter(a => a.comment_id === commentId);
