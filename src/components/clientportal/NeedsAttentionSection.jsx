@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, ChevronDown, ChevronRight, CheckCircle2 } from "lucide-react";
-import { buildAttentionList, groupByColumn, BOARD_COLUMNS, RESOLVED_COLUMN } from "./attentionHelpers";
+import { buildAttentionList, groupByColumn, BOARD_COLUMNS } from "./attentionHelpers";
 import AttentionCard from "./AttentionCard";
 import AttentionColumnHeader from "./AttentionColumnHeader";
 
@@ -119,7 +119,7 @@ const NeedsAttentionSection = ({
               col={col}
               items={columnData[col.key] || []}
               onUpdateDueDate={onUpdateDueDate}
-              muted={col.key === 'review_backlog'}
+              muted={col.key === 'follow_up'}
             />
           ))}
         </div>

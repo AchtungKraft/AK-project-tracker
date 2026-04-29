@@ -10,11 +10,14 @@ import { isRequestOverdue } from './lifecycleHelpers';
 /**
  * Priority levels (lower = higher priority)
  */
+const FOLLOW_UP_THRESHOLD_HOURS = 48;
+
 const PRIORITY = {
   needs_response: 1,
   overdue: 2,
   needs_review: 3,
-  approved_recent: 4,
+  follow_up: 4,
+  approved_recent: 5,
 };
 
 /**
@@ -41,6 +44,13 @@ export const ATTENTION_BADGE_CONFIG = {
     bgClass: "bg-amber-600/20",
     borderClass: "border-amber-600/50",
     textClass: "text-amber-400",
+  },
+  follow_up: {
+    label: "Follow-Up",
+    color: "orange",
+    bgClass: "bg-orange-600/20",
+    borderClass: "border-orange-600/50",
+    textClass: "text-orange-400",
   },
   approved_recent: {
     label: "Completed",
@@ -80,16 +90,16 @@ export const BOARD_COLUMNS = [
     emptyText: 'Nothing to review',
   },
   {
-    key: 'review_backlog',
-    label: 'Backlog',
-    subtitle: 'Stale — needs follow-up',
-    color: 'gray',
-    headerBg: 'bg-gray-500/10',
-    headerBorder: 'border-gray-600/30',
-    headerText: 'text-gray-400',
-    countBg: 'bg-gray-500/20',
-    countText: 'text-gray-400',
-    emptyText: 'No backlog items',
+    key: 'follow_up',
+    label: 'Follow-Up',
+    subtitle: 'No client response — consider follow-up',
+    color: 'orange',
+    headerBg: 'bg-orange-500/10',
+    headerBorder: 'border-orange-500/30',
+    headerText: 'text-orange-400',
+    countBg: 'bg-orange-500/20',
+    countText: 'text-orange-300',
+    emptyText: 'No follow-ups needed',
   },
 ];
 
@@ -231,10 +241,23 @@ function classifyRequest(request, project) {
     type = 'needs_response';
   }
 
-  // Compute review tier for needs_review and overdue items (both live in review columns)
-  const isReviewType = type === 'needs_review' || type === 'overdue';
-  const reviewTier = isReviewType
-    ? (Date.now() - new Date(lastActivityAt).getTime() < 48 * 60 * 60 * 1000 ? 'active' : 'backlog')
+  // Detect follow-up: team sent last message, client hasn't responded, and it's been > threshold
+  const hoursSinceLastActivity = (Date.now() - new Date(lastActivityAt).getTime()) / (1000 * 60 * 60);
+  if (
+    type === 'needs_review' &&
+    lastActor === 'team' &&
+    !needsResponse &&
+    !isOverdue &&
+    hoursSinceLastActivity > FOLLOW_UP_THRESHOLD_HOURS
+  ) {
+    type = 'follow_up';
+  }
+
+  // Build follow-up silence label
+  const followUpLabel = type === 'follow_up'
+    ? (hoursSinceLastActivity < 24
+        ? `No response • ${Math.floor(hoursSinceLastActivity)}h`
+        : `No response • ${Math.floor(hoursSinceLastActivity / 24)}d`)
     : null;
 
   return {
@@ -242,11 +265,11 @@ function classifyRequest(request, project) {
     requestId: request.id,
     project,
     type,
-    reviewTier,
     priority: PRIORITY[type],
     lastActor,
     lastActivityAt,
     lastActivityLabel: formatActivityLabel(lastActor, lastActivityAt),
+    followUpLabel,
     isOverdue: !!isOverdue,
     needsResponse,
   };
@@ -256,10 +279,15 @@ function classifyRequest(request, project) {
  * Group attention items by the new board structure
  */
 export function groupByColumn(attentionItems) {
+  // Follow-up sorted oldest-first (longest silence at top)
+  const followUp = attentionItems
+    .filter(i => i.type === 'follow_up')
+    .sort((a, b) => new Date(a.lastActivityAt) - new Date(b.lastActivityAt));
+
   return {
     client_waiting: attentionItems.filter(i => i.type === 'needs_response'),
-    review_active: attentionItems.filter(i => (i.type === 'needs_review' || i.type === 'overdue') && i.reviewTier === 'active'),
-    review_backlog: attentionItems.filter(i => (i.type === 'needs_review' || i.type === 'overdue') && i.reviewTier !== 'active'),
+    review_active: attentionItems.filter(i => i.type === 'needs_review' || i.type === 'overdue'),
+    follow_up: followUp,
     resolved: attentionItems.filter(i => i.type === 'approved_recent'),
   };
 }

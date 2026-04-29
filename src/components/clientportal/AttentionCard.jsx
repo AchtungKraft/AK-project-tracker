@@ -11,6 +11,7 @@ const BORDER_COLORS = {
   needs_response: 'border-l-red-500',
   overdue: 'border-l-red-600',
   needs_review: 'border-l-amber-500',
+  follow_up: 'border-l-orange-500',
   approved_recent: 'border-l-green-500',
 };
 
@@ -78,9 +79,11 @@ export default function AttentionCard({ item, onUpdateDueDate, muted = false }) 
             {truncatedSnippet ? `"${truncatedSnippet}"` : 'No recent message'}
           </p>
 
-          {/* Activity / Waiting label */}
+          {/* Activity / Waiting / Follow-up label */}
           {waitingLabel ? (
             <p className="text-[11px] text-red-400 font-medium">{waitingLabel}</p>
+          ) : item.followUpLabel ? (
+            <p className="text-[11px] text-orange-400 font-medium">{item.followUpLabel}</p>
           ) : item.lastActivityLabel ? (
             <p className="text-[11px] text-gray-500">{item.lastActivityLabel}</p>
           ) : null}
