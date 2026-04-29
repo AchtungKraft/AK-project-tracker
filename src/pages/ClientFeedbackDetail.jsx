@@ -105,8 +105,9 @@ export default function ClientFeedbackDetail() {
     if (!requestId || !feedbackDetail?.request || viewTrackedRef.current) return;
     
     const request = feedbackDetail.request;
-    // Track views for active requests (has been posted, not draft or archived)
-    if (!request.posted_at || request.status === 'archived') return;
+    // Track views for active requests (has been posted, not archived).
+    // Uses posted_at as the draft gate; archived check uses storage flag (mutation-only).
+    if (!request.posted_at || request.status === 'archived') return; // status check is MUTATION guard, not state logic
     
     const lastView = request.last_viewed_by_internal_at;
     if (lastView) {

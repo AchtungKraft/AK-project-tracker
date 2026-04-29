@@ -9,6 +9,7 @@
  */
 
 import { getRequestStateCanonical } from "./stateHelpers";
+import { buildFeedbackTimeline } from "./feedbackTimeline";
 
 /**
  * Determine the request state based on posted_at + decisions (canonical).
@@ -97,7 +98,12 @@ export const getSortComparator = (mode) => {
 };
 
 /**
- * Enrich a request with computed fields including actor-driven attention logic
+ * Enrich a request with computed fields including actor-driven attention logic.
+ *
+ * IMPORTANT:
+ * - Timeline (allEvents) is NEVER filtered by posted_at — full history preserved.
+ * - State logic uses canonical state from getRequestStateCanonical.
+ * - Do NOT use request.status for state decisions here.
  */
 export const enrichRequest = (request, comments, decisions, attachments) => {
   const requestComments = comments.filter(c => c.request_id === request.id);
@@ -107,37 +113,18 @@ export const enrichRequest = (request, comments, decisions, attachments) => {
     c => c.author_type === 'client_contact'
   );
 
-  // Build timeline of all events to determine latest activity actor
-  const events = [
-    {
-      type: 'request_created',
-      actor: 'team',
-      date: request.created_date
-    },
-    ...(request.posted_at ? [{
-      type: 'request_posted',
-      actor: 'team',
-      date: request.posted_at
-    }] : []),
-    ...requestComments.map(c => ({
-      type: 'comment',
-      actor: c.author_type === 'client_contact' ? 'client' : 'team',
-      date: c.created_date
-    })),
-    ...requestDecisions.map(d => ({
-      type: 'decision',
-      actor: d.decided_by_type === 'client_contact' ? 'client' : 'team',
-      date: d.decided_at || d.created_date,
-      decision: d.decision
-    }))
-  ].filter(e => e.date);
+  // IMPORTANT:
+  // Do NOT filter timeline by posted_at.
+  // Only state logic should use time boundaries.
+  // buildFeedbackTimeline returns allEvents (display) and stateEvents (logic).
+  const { allEvents, latestDisplayEvent, latestStateEvent } = buildFeedbackTimeline(
+    request,
+    requestComments,
+    requestDecisions
+  );
 
-  // Sort descending by date (most recent first)
-  events.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-  const latestEvent = events[0];
-  const latestActivityActor = latestEvent?.actor || 'team';
-  const latestActivityAt = latestEvent?.date || request.updated_date;
+  const latestActivityActor = latestDisplayEvent?.actor || 'team';
+  const latestActivityAt = latestDisplayEvent?.date || request.updated_date;
 
   // Check for overdue — use consistent end-of-day logic
   let isOverdue = false;
@@ -147,7 +134,7 @@ export const enrichRequest = (request, comments, decisions, attachments) => {
     isOverdue = due < new Date();
   }
 
-  // Derive canonical state for enrichment
+  // Derive canonical state for enrichment (single source of truth)
   const canonicalKey = getRequestStateCanonical(request, requestDecisions, []).key;
 
   // Check if archived request has new client activity
@@ -176,7 +163,7 @@ export const enrichRequest = (request, comments, decisions, attachments) => {
     c => c.author_type === 'internal_user'
   );
 
-  // Latest comment snippet for hover previews (from any author)
+  // Latest comment snippet for hover previews — uses allEvents (NOT filtered by posted_at)
   const latestComment = requestComments.sort(
     (a, b) => new Date(b.created_date) - new Date(a.created_date)
   )[0];
@@ -187,6 +174,7 @@ export const enrichRequest = (request, comments, decisions, attachments) => {
 
   return {
     ...request,
+    decisions: requestDecisions,
     lastClientComment: clientComments.sort(
       (a, b) => new Date(b.created_date) - new Date(a.created_date)
     )[0],

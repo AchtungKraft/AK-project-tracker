@@ -6,6 +6,7 @@
  */
 
 import { isRequestOverdue } from './lifecycleHelpers';
+import { getRequestStateCanonical } from './stateHelpers';
 
 /**
  * Priority levels (lower = higher priority)
@@ -160,10 +161,11 @@ export function isRecentActivity(item) {
 }
 
 /**
- * Check if a request was approved recently (within last 48 hours)
+ * Check if a request was approved recently (within last 48 hours).
+ * Uses canonical state — does NOT read request.status.
  */
-function isRecentlyApproved(request) {
-  if (request.status !== 'approved') return false;
+function isRecentlyApproved(request, canonicalKey) {
+  if (canonicalKey !== 'approved') return false;
   const approvalDate = request.approved_at || request.updated_date;
   if (!approvalDate) return false;
   const diffHours = (Date.now() - new Date(approvalDate)) / 3600000;
@@ -188,10 +190,14 @@ export function buildAttentionList(projectGroups) {
     ];
 
     allRequests.forEach(request => {
-      // Skip drafts — they're not actionable yet
-      if (request.status === 'draft') return;
+      // Derive canonical state — single source of truth (NOT request.status)
+      const decisions = request.decisions || [];
+      const canonicalState = getRequestStateCanonical(request, decisions, []);
 
-      const item = classifyRequest(request, group.project);
+      // Skip drafts — they're not actionable yet
+      if (canonicalState.key === 'draft') return;
+
+      const item = classifyRequest(request, group.project, canonicalState);
       if (item) items.push(item);
     });
   });
@@ -207,15 +213,16 @@ export function buildAttentionList(projectGroups) {
  * Classify a single enriched request into an attention item.
  * Returns null if the request doesn't need attention.
  * 
- * ACTIVITY-DRIVEN: Classification is based on who acted last,
- * not on request status. This ensures cards move between columns
- * as soon as a new comment or decision is made.
+ * ACTIVITY-DRIVEN: Classification is based on who acted last
+ * combined with canonical state. Does NOT use request.status
+ * for state decisions — canonicalState.key is the single source.
  */
-function classifyRequest(request, project) {
+function classifyRequest(request, project, canonicalState) {
+  const canonicalKey = canonicalState.key;
   const lastActor = request.latestActivityActor || 'team';
   const lastActivityAt = request.latestActivityAt || request.updated_date;
   const isOverdue = request.isOverdue;
-  const needsResponse = lastActor === 'client' && request.status !== 'approved';
+  const needsResponse = lastActor === 'client' && canonicalKey !== 'approved';
   const hoursSinceLastActivity = (Date.now() - new Date(lastActivityAt).getTime()) / (1000 * 60 * 60);
 
   let type;
@@ -229,22 +236,30 @@ function classifyRequest(request, project) {
     type = 'needs_response';
   }
   // Priority 2: Recently approved (48h window)
-  else if (isRecentlyApproved(request)) {
+  else if (isRecentlyApproved(request, canonicalKey)) {
     type = 'approved_recent';
   }
-  // Skip drafts and non-active statuses
-  else if (request.status !== 'posted' && request.status !== 'changes_requested') {
+  // Skip archived and any non-active canonical states
+  else if (canonicalKey === 'archived') {
     return null;
   }
-  // Priority 3: Team acted last — ball is in client's court
-  // If team commented or re-posted, we're waiting for client. Always follow_up.
-  // "Active Review" is only for items where the team has NOT yet responded.
-  else if (lastActor === 'team') {
-    type = 'follow_up';
+  // Active states: awaiting_review or changes_requested
+  else if (canonicalKey === 'awaiting_review' || canonicalKey === 'changes_requested') {
+    // Team acted last — ball is in client's court → follow_up
+    if (lastActor === 'team') {
+      type = 'follow_up';
+    } else {
+      // Fallback: treat as needs_review
+      type = 'needs_review';
+    }
   }
-  // Fallback: treat as needs_review
+  // Approved but not recently → skip (already handled by lifecycle buckets)
+  else if (canonicalKey === 'approved') {
+    return null;
+  }
+  // Safety fallback
   else {
-    type = 'needs_review';
+    return null;
   }
 
   // Overlay: overdue items that aren't already client-waiting get overdue flag
