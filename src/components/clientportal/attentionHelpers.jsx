@@ -236,13 +236,11 @@ function classifyRequest(request, project) {
   else if (request.status !== 'posted' && request.status !== 'changes_requested') {
     return null;
   }
-  // Priority 3: Team acted last — determine review vs follow-up based on time
+  // Priority 3: Team acted last — ball is in client's court
+  // If team commented or re-posted, we're waiting for client. Always follow_up.
+  // "Active Review" is only for items where the team has NOT yet responded.
   else if (lastActor === 'team') {
-    if (hoursSinceLastActivity > FOLLOW_UP_THRESHOLD_HOURS) {
-      type = 'follow_up';
-    } else {
-      type = 'needs_review';
-    }
+    type = 'follow_up';
   }
   // Fallback: treat as needs_review
   else {
@@ -262,9 +260,13 @@ function classifyRequest(request, project) {
 
   if (type === 'follow_up') {
     const h = hoursSinceLastActivity;
-    followUpLabel = h < 24
-      ? `Client silent • ${Math.floor(h)}h`
-      : `Client silent • ${Math.floor(h / 24)}d`;
+    if (h < 1) {
+      followUpLabel = 'Just sent';
+    } else if (h < 24) {
+      followUpLabel = `Sent • ${Math.floor(h)}h ago`;
+    } else {
+      followUpLabel = `Client silent • ${Math.floor(h / 24)}d`;
+    }
 
     let riskTier = 'low';
     let actionLabel = 'Monitor';
