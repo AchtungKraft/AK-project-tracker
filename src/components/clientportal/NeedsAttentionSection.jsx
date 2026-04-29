@@ -6,27 +6,13 @@ import { AlertCircle, ChevronDown, ChevronRight, CheckCircle2 } from "lucide-rea
 import { buildAttentionList, groupByColumn, BOARD_COLUMNS } from "./attentionHelpers";
 import AttentionCard from "./AttentionCard";
 import AttentionColumnHeader from "./AttentionColumnHeader";
-
-/**
- * Risk-tier group headers for follow-up column
- */
-const RISK_GROUP_CONFIG = {
-  high: { label: 'High Risk', textClass: 'text-orange-400' },
-  medium: { label: 'Needs Follow-Up', textClass: 'text-amber-400' },
-  low: { label: 'Monitoring', textClass: 'text-gray-500' },
-};
+import FollowUpClientGroups from "./FollowUpClientGroups";
 
 /**
  * A single scrollable board column.
  */
 function BoardColumn({ col, items, onUpdateDueDate, muted = false }) {
-  // Group follow-up items by risk tier
   const isFollowUp = col.key === 'follow_up';
-  const groupedByRisk = isFollowUp ? {
-    high: items.filter(i => i.followUpMeta?.riskTier === 'high'),
-    medium: items.filter(i => i.followUpMeta?.riskTier === 'medium'),
-    low: items.filter(i => !i.followUpMeta?.riskTier || i.followUpMeta.riskTier === 'low'),
-  } : null;
 
   return (
     <div className="space-y-2">
@@ -36,27 +22,11 @@ function BoardColumn({ col, items, onUpdateDueDate, muted = false }) {
           <div className="text-center py-4 text-xs text-gray-600 italic">
             {col.emptyText}
           </div>
-        ) : isFollowUp && groupedByRisk ? (
-          ['high', 'medium', 'low'].map(tier => {
-            const tierItems = groupedByRisk[tier];
-            if (tierItems.length === 0) return null;
-            const cfg = RISK_GROUP_CONFIG[tier];
-            return (
-              <div key={tier} className="space-y-1.5">
-                <div className={`text-[10px] uppercase tracking-wide font-semibold px-1 pt-1 ${cfg.textClass}`}>
-                  {cfg.label}
-                </div>
-                {tierItems.map(item => (
-                  <AttentionCard
-                    key={item.requestId}
-                    item={item}
-                    onUpdateDueDate={onUpdateDueDate}
-                    muted={tier === 'low'}
-                  />
-                ))}
-              </div>
-            );
-          })
+        ) : isFollowUp ? (
+          <FollowUpClientGroups
+            items={items}
+            onUpdateDueDate={onUpdateDueDate}
+          />
         ) : (
           items.map(item => (
             <AttentionCard
