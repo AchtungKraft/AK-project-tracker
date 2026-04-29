@@ -18,8 +18,21 @@ import HtmlContent from "@/components/shared/HtmlContent";
 import LinkPreviewGrid from "@/components/shared/LinkPreviewGrid";
 import { extractLinks, convertStructuredLinks } from "@/utils/extractLinks";
 
+// ── Dedup helper: merge comment.photos + attachment images into one list ──
+function getCommentImages(comment, eventAttachments = []) {
+  const urls = new Set();
+  const commentPhotos = Array.isArray(comment?.photos) ? comment.photos : [];
+  commentPhotos.forEach(url => {
+    if (typeof url === 'string' && url.trim()) urls.add(url.trim());
+  });
+  eventAttachments
+    .filter(a => a.attachment_type === 'image' && a.file_url)
+    .forEach(a => urls.add(a.file_url.trim()));
+  return Array.from(urls);
+}
+
 // ── CommentContentBlock: unified rendering with proper priority chain ──
-function CommentContentBlock({ comment, attachmentUrls = [] }) {
+function CommentContentBlock({ comment, commentImages = [] }) {
   if (!comment) return null;
   const c = normalizeFeedbackComment(comment);
   if (!c) return null;
@@ -48,11 +61,11 @@ function CommentContentBlock({ comment, attachmentUrls = [] }) {
       <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-0 md:pl-10 text-sm md:text-base">{c.body}</p> :
       null}
 
-      {/* Photos */}
-      {c.photos.length > 0 && (
+      {/* Deduped comment images */}
+      {commentImages.length > 0 && (
         <div className="pl-0 md:pl-10 mb-3">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {c.photos.map((url, idx) => (
+            {commentImages.map((url, idx) => (
               <div key={idx} className="relative rounded-lg overflow-hidden border border-gray-700 bg-gray-800">
                 <img src={url} alt="" loading="lazy" className="w-full h-auto max-h-[50vh] object-contain cursor-pointer" />
               </div>
@@ -243,7 +256,7 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
         {/* Render comment content — priority: content_html → content_fallback → body */}
         <CommentContentBlock
           comment={event.comment}
-          attachmentUrls={(event.attachments || []).map(a => a.file_url || a.link_url).filter(Boolean)}
+          commentImages={event.type === 'comment' ? getCommentImages(event.comment, event.attachments || []) : []}
         />
         {event.decision?.note &&
         <div className="mb-3 pl-0 md:pl-10 text-sm md:text-base">
@@ -345,7 +358,8 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
           </div>
         }
 
-        {event.type !== 'decision' && event.attachments?.length > 0 &&
+        {/* Non-comment event attachments (request_post): full rendering with review checkboxes */}
+        {event.type !== 'decision' && event.type !== 'comment' && event.attachments?.length > 0 &&
         <div className="pl-0 md:pl-10 space-y-3 border-t border-gray-700/50 mt-4 pt-4">
             {canReview && isStructuredReview(requestType) && event.attachments.filter((a) => a.attachment_type === 'image').length > 0 &&
           <p className="text-sm text-purple-400 font-medium">
@@ -406,15 +420,13 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
             </div>
           }
 
-            {/* Link attachments: skip for comment events (CommentContentBlock already renders links with descriptions) */}
-            {event.type !== 'comment' && (() => {
+            {(() => {
               const linkAtts = event.attachments.filter((a) => a.attachment_type === 'link');
               if (linkAtts.length === 0) return null;
               const previewLinks = convertStructuredLinks(linkAtts.map(a => ({ url: a.link_url, name: a.label })));
               return <LinkPreviewGrid links={previewLinks} />;
             })()}
 
-            {/* File attachments as chips */}
             {event.attachments.filter((a) => a.attachment_type !== 'image' && a.attachment_type !== 'link').length > 0 && (
             <div className="flex flex-wrap gap-2">
               {event.attachments.filter((a) => a.attachment_type !== 'image' && a.attachment_type !== 'link').map((att) =>
@@ -433,6 +445,32 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
             )}
           </div>
         }
+
+        {/* Comment event: only non-image attachments (images handled by CommentContentBlock via dedup) */}
+        {event.type === 'comment' && event.attachments?.length > 0 && (() => {
+          const nonImageAtts = event.attachments.filter(a => a.attachment_type !== 'image');
+          if (nonImageAtts.length === 0) return null;
+          return (
+            <div className="pl-0 md:pl-10 space-y-3 border-t border-gray-700/50 mt-4 pt-4">
+              {nonImageAtts.filter(a => a.attachment_type !== 'link').length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {nonImageAtts.filter(a => a.attachment_type !== 'link').map(att => (
+                    <a
+                      key={att.id}
+                      href={att.file_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 bg-gray-800/50 hover:bg-gray-800 px-3 py-2 rounded-lg border border-gray-700 transition-colors text-sm text-blue-400"
+                    >
+                      <FileText className="w-4 h-4" />
+                      {att.label || 'Attached File'}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </CardContent>
     </Card>);
 
