@@ -251,11 +251,15 @@ export default function ClientFeedbackDetail() {
   const handleArchive = () => {
     if (confirm('Archive this request?')) {
       // Archive is an internal-only action - NO email is sent to clients
-      updateRequestMutation.mutate({
-        id: requestId,
-        data: { status: 'archived' }
-      });
-      toast.success('Request archived');
+      updateRequestMutation.mutate(
+        { id: requestId, data: { status: 'archived' } },
+        {
+          onSuccess: () => {
+            toast.success('Request archived');
+            navigate(createPageUrl("ClientPortalHub"));
+          }
+        }
+      );
     }
   };
 
