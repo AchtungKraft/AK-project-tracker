@@ -180,8 +180,13 @@ export const enrichRequest = (request, comments, decisions, attachments) => {
   const latestActivityActor = latestEvent?.actor || 'team';
   const latestActivityAt = latestEvent?.date || request.updated_date;
 
-  // Check for overdue
-  const isOverdue = request.due_date && new Date(request.due_date) < new Date();
+  // Check for overdue — use consistent end-of-day logic
+  let isOverdue = false;
+  if (request.due_date) {
+    const due = new Date(request.due_date);
+    due.setHours(23, 59, 59, 999);
+    isOverdue = due < new Date();
+  }
 
   // Check if archived request has new client activity
   const isArchivedWithClientResponse =
@@ -205,11 +210,17 @@ export const enrichRequest = (request, comments, decisions, attachments) => {
     ) ||
     isArchivedWithClientResponse;
 
+  const internalComments = requestComments.filter(
+    c => c.author_type === 'internal_user'
+  );
+
   return {
     ...request,
     lastClientComment: clientComments.sort(
       (a, b) => new Date(b.created_date) - new Date(a.created_date)
     )[0],
+    clientCommentCount: clientComments.length,
+    internalCommentCount: internalComments.length,
     totalCommentCount: clientComments.length,
     isOverdue,
     latestActivityActor,

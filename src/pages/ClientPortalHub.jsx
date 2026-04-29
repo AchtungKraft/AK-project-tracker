@@ -613,7 +613,6 @@ export default function ClientPortalHub() {
         {/* Needs Attention Section - Uses lifecycle bucket data */}
         <NeedsAttentionSection
           projectGroups={attentionProjectGroups}
-          lifecycleQuickFilter={lifecycleQuickFilter}
           onUpdateDueDate={handleUpdateRequestDueDate}
         />
 
