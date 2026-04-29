@@ -1,0 +1,87 @@
+{
+  "name": "ClientFeedbackRequest",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project"
+    },
+    "title": {
+      "type": "string",
+      "description": "Request title"
+    },
+    "body": {
+      "type": "string",
+      "description": "Request body/description"
+    },
+    "request_type": {
+      "type": "string",
+      "enum": [
+        "question",
+        "feedback_needed",
+        "design_review",
+        "client_need",
+        "todo_list",
+        "update",
+        "budget_review",
+        "deliverable_review"
+      ],
+      "description": "Type of feedback request"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "posted",
+        "approved",
+        "changes_requested",
+        "archived"
+      ],
+      "default": "draft",
+      "description": "Request status"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Due date for response"
+    },
+    "posted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When request was posted to client"
+    },
+    "created_by_user_id": {
+      "type": "string",
+      "description": "User who created the request"
+    },
+    "last_email_sent_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the last review email was sent"
+    },
+    "client_last_viewed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When a client last viewed this request"
+    },
+    "review_state": {
+      "type": "string",
+      "enum": [
+        "none",
+        "in_review"
+      ],
+      "default": "none",
+      "description": "Workflow overlay: whether the team is actively reviewing this request. Does NOT affect canonical state."
+    },
+    "review_started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the team started reviewing this request"
+    }
+  },
+  "required": [
+    "project_id",
+    "title",
+    "request_type"
+  ]
+}

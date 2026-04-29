@@ -227,8 +227,13 @@ function classifyRequest(request, project, canonicalState) {
 
   let type;
 
+  // Workflow overlay: if team marked "in_review", classify as needs_review
+  // This is a non-destructive overlay — does NOT change canonical state
+  if (request.review_state === 'in_review' && canonicalKey !== 'approved' && canonicalKey !== 'archived') {
+    type = 'needs_review';
+  }
   // Handle archived-with-client-response first (exception case)
-  if (request.isArchivedWithClientResponse) {
+  else if (request.isArchivedWithClientResponse) {
     type = 'needs_response';
   }
   // Priority 1: Client acted last → team needs to respond

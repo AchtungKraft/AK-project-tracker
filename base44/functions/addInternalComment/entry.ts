@@ -226,15 +226,26 @@ Deno.serve(async (req) => {
         // AUTO-REOPEN IF ARCHIVED (non-fatal)
         // Must bump posted_at to reset the review cycle so old decisions
         // are excluded from state derivation.
+        // Also clear review_state overlay if comment is client-visible.
         try {
             const requests = await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId }));
             const request = requests[0];
+            const updateData = {};
+
             if (request && request.status === 'archived') {
-                await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, {
-                    status: 'posted',
-                    archived_at: null,
-                    posted_at: currentTimestamp
-                }));
+                updateData.status = 'posted';
+                updateData.archived_at = null;
+                updateData.posted_at = currentTimestamp;
+            }
+
+            // Clear review_state when a client-visible comment is posted
+            const effectiveVisibility = visibility || 'client_visible';
+            if (effectiveVisibility === 'client_visible' && request && request.review_state === 'in_review') {
+                updateData.review_state = 'none';
+            }
+
+            if (Object.keys(updateData).length > 0) {
+                await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, updateData));
             }
         } catch (reopenErr) {
             console.warn('AUTO_REOPEN_FAILED', { requestId, error: reopenErr?.message });

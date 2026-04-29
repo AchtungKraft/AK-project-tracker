@@ -384,6 +384,18 @@ export default function ClientFeedbackRequestDetail() {
           </div>
         </div>
 
+        {request.review_state === 'in_review' && (
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+            <div className="p-1.5 bg-blue-500/20 rounded-full">
+              <CheckCircle2 className="w-4 h-4 text-blue-400" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-blue-300">In Review</p>
+              <p className="text-xs text-blue-400/70">We are currently reviewing your request</p>
+            </div>
+          </div>
+        )}
+
         {request.body && (
           <Card className="bg-black/60 backdrop-blur-xl border border-gray-700">
             <CardContent className="p-4">

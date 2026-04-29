@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Loader2, Archive, CheckCircle2, AlertCircle, Plus, ExternalLink, X, Trash2, RotateCw, FileText, Pencil, Upload } from "lucide-react";
+import { ArrowLeft, Loader2, Archive, CheckCircle2, AlertCircle, Plus, ExternalLink, X, Trash2, RotateCw, FileText, Pencil, Upload, Eye } from "lucide-react";
 import useFileUploader from "../components/clientportal/useFileUploader";
 import FileUploadStatusList from "../components/clientportal/FileUploadStatusList";
 import { NotFoundState, RateLimitState, UnknownErrorState } from "@/components/feedback/FeedbackErrorStates";
@@ -505,6 +505,12 @@ export default function ClientFeedbackDetail() {
                     {requestState.label}
                   </Badge>
                 )}
+                {request.review_state === 'in_review' && (
+                  <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/40 text-xs shrink-0">
+                    <Eye className="w-3 h-3 mr-1" />
+                    In Review
+                  </Badge>
+                )}
                 {request.due_date && (
                   <Badge variant="outline" className="border-gray-600 text-gray-200 shrink-0">
                     Due: {format(new Date(request.due_date), 'MMM d')}
@@ -542,6 +548,25 @@ export default function ClientFeedbackDetail() {
 
               {isMobile && canAct && isStructuredReview(request?.request_type) && (
                 <p className="text-xs text-gray-400 italic">Select images below to review</p>
+              )}
+
+              {/* Start Review button — workflow overlay, not state change */}
+              {request.review_state !== 'in_review' && canonicalState?.key !== 'draft' && canonicalState?.key !== 'archived' && canonicalState?.key !== 'approved' && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => updateRequestMutation.mutate({
+                    id: requestId,
+                    data: { review_state: 'in_review', review_started_at: new Date().toISOString() }
+                  }, { onSuccess: () => toast.success('Marked as In Review') })}
+                  className={cn(
+                    "border-blue-500/50 text-blue-400 hover:bg-blue-500/10",
+                    isMobile ? "w-full h-10" : "h-8 text-xs"
+                  )}
+                >
+                  <Eye className="w-4 h-4 mr-1" />
+                  Start Review
+                </Button>
               )}
 
               {/* Action buttons - restructured for mobile */}

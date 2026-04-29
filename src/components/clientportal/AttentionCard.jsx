@@ -109,6 +109,11 @@ export default function AttentionCard({ item, onUpdateDueDate, muted = false }) 
                 OVERDUE
               </Badge>
             )}
+            {request.review_state === 'in_review' && (
+              <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/40 text-[10px] px-1.5 py-0">
+                IN REVIEW
+              </Badge>
+            )}
             {isNewClientActivity && (
               <span className="inline-flex items-center gap-1 text-[10px] text-red-400 font-semibold">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
