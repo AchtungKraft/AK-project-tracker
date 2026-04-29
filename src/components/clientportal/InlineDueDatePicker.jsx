@@ -30,6 +30,7 @@ export default function InlineDueDatePicker({ dueDate, isOverdue, onDateChange, 
       <PopoverTrigger asChild>
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
           className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs transition-colors ${
             dueDate
               ? isOverdue
@@ -46,6 +47,7 @@ export default function InlineDueDatePicker({ dueDate, isOverdue, onDateChange, 
         className="w-auto p-0 bg-gray-900 border-gray-700"
         align="end"
         onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
       >
         <Calendar
           mode="single"
@@ -105,6 +107,7 @@ export function BulkDueDatePicker({ requestCount, onBulkDateChange }) {
         className="w-auto p-0 bg-gray-900 border-gray-700"
         align="end"
         onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="px-3 pt-3 pb-1">
           <p className="text-xs text-gray-400 mb-1">

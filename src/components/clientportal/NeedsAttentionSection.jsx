@@ -103,13 +103,15 @@ const RequestCard = ({ item, isDeemphasized = false, onUpdateDueDate }) => {
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1" onClick={e => { e.preventDefault(); e.stopPropagation(); }}>
+          <div className="flex items-center gap-1" onClick={e => { e.preventDefault(); e.stopPropagation(); }} onMouseDown={e => e.stopPropagation()}>
             {onUpdateDueDate && (
-              <InlineDueDatePicker
-                dueDate={request.due_date}
-                isOverdue={isOverdue}
-                onDateChange={(date) => onUpdateDueDate(request.id, date)}
-              />
+              <div onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
+                <InlineDueDatePicker
+                  dueDate={request.due_date}
+                  isOverdue={isOverdue}
+                  onDateChange={(date) => onUpdateDueDate(request.id, date)}
+                />
+              </div>
             )}
             <ChevronRight className={`w-4 h-4 transition-colors shrink-0 ${
               isDeemphasized 
