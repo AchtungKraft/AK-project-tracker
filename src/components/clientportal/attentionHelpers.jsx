@@ -245,8 +245,8 @@ function classifyRequest(request, project, canonicalState) {
   }
   // Active states: awaiting_review or changes_requested
   else if (canonicalKey === 'awaiting_review' || canonicalKey === 'changes_requested') {
-    // Workflow overlay: team marked "in_review" AND client hasn't responded since
-    if (request.review_state === 'in_review' && lastActor !== 'client') {
+    // Workflow overlay: team marked "in_review" → always show in review column
+    if (request.review_state === 'in_review') {
       type = 'needs_review';
     }
     // Team acted last — ball is in client's court → follow_up
@@ -261,7 +261,10 @@ function classifyRequest(request, project, canonicalState) {
   else if (canonicalKey === 'approved') {
     return null;
   }
-  // Safety fallback
+  // Safety fallback — if in_review, never silently drop
+  else if (request.review_state === 'in_review') {
+    type = 'needs_review';
+  }
   else {
     return null;
   }

@@ -146,8 +146,9 @@ export default function ClientFeedbackDetail() {
   const updateRequestMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.ClientFeedbackRequest.update(id, data),
     onSuccess: () => {
-      // Only invalidate the current request detail - not global lists
       queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
+      // Also invalidate hub queries so attention board reflects review_state changes
+      queryClient.invalidateQueries({ queryKey: ['allFeedbackRequests'] });
     }
   });
 
