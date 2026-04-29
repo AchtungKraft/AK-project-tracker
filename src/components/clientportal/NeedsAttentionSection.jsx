@@ -119,7 +119,7 @@ const NeedsAttentionSection = ({
               col={col}
               items={columnData[col.key] || []}
               onUpdateDueDate={onUpdateDueDate}
-              muted={col.key === 'waiting'}
+              muted={col.key === 'review_backlog'}
             />
           ))}
         </div>

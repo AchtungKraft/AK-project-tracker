@@ -14,8 +14,7 @@ const PRIORITY = {
   needs_response: 1,
   overdue: 2,
   needs_review: 3,
-  waiting: 4,
-  approved_recent: 5,
+  approved_recent: 4,
 };
 
 /**
@@ -42,13 +41,6 @@ export const ATTENTION_BADGE_CONFIG = {
     bgClass: "bg-amber-600/20",
     borderClass: "border-amber-600/50",
     textClass: "text-amber-400",
-  },
-  waiting: {
-    label: "Waiting",
-    color: "gray",
-    bgClass: "bg-gray-600/20",
-    borderClass: "border-gray-600/50",
-    textClass: "text-gray-400",
   },
   approved_recent: {
     label: "Completed",
@@ -88,16 +80,16 @@ export const BOARD_COLUMNS = [
     emptyText: 'Nothing to review',
   },
   {
-    key: 'waiting',
-    label: 'Waiting',
-    subtitle: 'Awaiting client / no action needed',
+    key: 'review_backlog',
+    label: 'Backlog',
+    subtitle: 'Stale — needs follow-up',
     color: 'gray',
     headerBg: 'bg-gray-500/10',
     headerBorder: 'border-gray-600/30',
     headerText: 'text-gray-400',
     countBg: 'bg-gray-500/20',
     countText: 'text-gray-400',
-    emptyText: 'Nothing waiting',
+    emptyText: 'No backlog items',
   },
 ];
 
@@ -225,14 +217,9 @@ function classifyRequest(request, project) {
   else if (isRecentlyApproved(request)) {
     type = 'approved_recent';
   }
-  // Priority 3/4: Awaiting client — active review or passive waiting
+  // Priority 3: Awaiting client but no response yet — needs internal review/follow-up
   else if (request.status === 'posted' || request.status === 'changes_requested') {
-    // If team was the last actor and nothing is overdue, it's just waiting
-    if (lastActor === 'team' && !isOverdue) {
-      type = 'waiting';
-    } else {
-      type = 'needs_review';
-    }
+    type = 'needs_review';
   }
   // Not actionable
   else {
@@ -244,8 +231,11 @@ function classifyRequest(request, project) {
     type = 'needs_response';
   }
 
-  // Review tier no longer needed — waiting is its own type now
-  const reviewTier = null;
+  // Compute review tier for needs_review and overdue items (both live in review columns)
+  const isReviewType = type === 'needs_review' || type === 'overdue';
+  const reviewTier = isReviewType
+    ? (Date.now() - new Date(lastActivityAt).getTime() < 48 * 60 * 60 * 1000 ? 'active' : 'backlog')
+    : null;
 
   return {
     request,
@@ -268,8 +258,8 @@ function classifyRequest(request, project) {
 export function groupByColumn(attentionItems) {
   return {
     client_waiting: attentionItems.filter(i => i.type === 'needs_response'),
-    review_active: attentionItems.filter(i => i.type === 'needs_review' || i.type === 'overdue'),
-    waiting: attentionItems.filter(i => i.type === 'waiting'),
+    review_active: attentionItems.filter(i => (i.type === 'needs_review' || i.type === 'overdue') && i.reviewTier === 'active'),
+    review_backlog: attentionItems.filter(i => (i.type === 'needs_review' || i.type === 'overdue') && i.reviewTier !== 'active'),
     resolved: attentionItems.filter(i => i.type === 'approved_recent'),
   };
 }

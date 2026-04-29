@@ -11,7 +11,6 @@ const BORDER_COLORS = {
   needs_response: 'border-l-red-500',
   overdue: 'border-l-red-600',
   needs_review: 'border-l-amber-500',
-  waiting: 'border-l-gray-600',
   approved_recent: 'border-l-green-500',
 };
 
