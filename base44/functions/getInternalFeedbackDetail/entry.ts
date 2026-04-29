@@ -86,34 +86,18 @@ function normalizeComment(comment, attachments) {
             }));
     }
 
-    const isSafeImage = (a) => {
-        if (a.mime_type && a.mime_type.toLowerCase() === 'image/svg+xml') return false;
-        return a.attachment_type === 'image';
-    };
-    let photos = [];
-    if (Array.isArray(comment.photos) && comment.photos.length > 0) {
-        photos = comment.photos.filter(Boolean);
-    } else {
-        photos = commentAttachments
-            .filter(isSafeImage)
-            .map(a => a.file_url)
-            .filter(Boolean);
-    }
+    // Photos and files ALWAYS sourced from attachments — single source of truth
+    const photos = commentAttachments
+        .filter(a => a.attachment_type === 'image')
+        .map(a => a.file_url)
+        .filter(Boolean);
 
-    let files = [];
-    if (Array.isArray(comment.files) && comment.files.length > 0) {
-        files = comment.files.map(f => ({
-            name: f.name || 'File',
-            url: f.url || '',
+    const files = commentAttachments
+        .filter(a => a.attachment_type === 'file')
+        .map(a => ({
+            name: a.label || 'File',
+            url: a.file_url || '',
         }));
-    } else {
-        files = commentAttachments
-            .filter(a => a.attachment_type === 'file')
-            .map(a => ({
-                name: a.label || 'File',
-                url: a.file_url || '',
-            }));
-    }
 
     return {
         id: comment.id,

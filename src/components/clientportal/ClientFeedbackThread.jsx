@@ -18,21 +18,9 @@ import HtmlContent from "@/components/shared/HtmlContent";
 import LinkPreviewGrid from "@/components/shared/LinkPreviewGrid";
 import { extractLinks, convertStructuredLinks } from "@/utils/extractLinks";
 
-// ── Dedup helper: merge comment.photos + attachment images into one list ──
-function getCommentImages(comment, eventAttachments = []) {
-  const urls = new Set();
-  const commentPhotos = Array.isArray(comment?.photos) ? comment.photos : [];
-  commentPhotos.forEach(url => {
-    if (typeof url === 'string' && url.trim()) urls.add(url.trim());
-  });
-  eventAttachments
-    .filter(a => a.attachment_type === 'image' && a.file_url)
-    .forEach(a => urls.add(a.file_url.trim()));
-  return Array.from(urls);
-}
-
 // ── CommentContentBlock: unified rendering with proper priority chain ──
-function CommentContentBlock({ comment, commentImages = [] }) {
+// Images are rendered separately via event.attachments — NOT inside this block.
+function CommentContentBlock({ comment }) {
   if (!comment) return null;
   const c = normalizeFeedbackComment(comment);
   if (!c) return null;
@@ -60,19 +48,6 @@ function CommentContentBlock({ comment, commentImages = [] }) {
       hasBody ?
       <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-0 md:pl-10 text-sm md:text-base">{c.body}</p> :
       null}
-
-      {/* Deduped comment images */}
-      {commentImages.length > 0 && (
-        <div className="pl-0 md:pl-10 mb-3">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {commentImages.map((url, idx) => (
-              <div key={idx} className="relative rounded-lg overflow-hidden border border-gray-700 bg-gray-800">
-                <img src={url} alt="" loading="lazy" className="w-full h-auto max-h-[50vh] object-contain cursor-pointer" />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Attachments divider + sections */}
       {(c.files.length > 0 || commentLinks.length > 0) && (
@@ -254,10 +229,7 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
         </div>
 
         {/* Render comment content — priority: content_html → content_fallback → body */}
-        <CommentContentBlock
-          comment={event.comment}
-          commentImages={event.type === 'comment' ? getCommentImages(event.comment, event.attachments || []) : []}
-        />
+        <CommentContentBlock comment={event.comment} />
         {event.decision?.note &&
         <div className="mb-3 pl-0 md:pl-10 text-sm md:text-base">
             <HtmlContent
@@ -446,15 +418,26 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
           </div>
         }
 
-        {/* Comment event: only non-image attachments (images handled by CommentContentBlock via dedup) */}
+        {/* Comment event attachments: images + files from attachment records */}
         {event.type === 'comment' && event.attachments?.length > 0 && (() => {
-          const nonImageAtts = event.attachments.filter(a => a.attachment_type !== 'image');
-          if (nonImageAtts.length === 0) return null;
+          const imageAtts = event.attachments.filter(a => a.attachment_type === 'image' && a.file_url);
+          const fileAtts = event.attachments.filter(a => a.attachment_type === 'file');
+          if (imageAtts.length === 0 && fileAtts.length === 0) return null;
           return (
-            <div className="pl-0 md:pl-10 space-y-3 border-t border-gray-700/50 mt-4 pt-4">
-              {nonImageAtts.filter(a => a.attachment_type !== 'link').length > 0 && (
+            <div className="pl-0 md:pl-10 space-y-3 mt-3">
+              {imageAtts.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {imageAtts.map((att) => (
+                    <div key={att.id} className="relative rounded-lg overflow-hidden border border-gray-700 bg-gray-800 cursor-pointer"
+                      onClick={() => onImageClick(att.file_url, imageAtts.map(a => a.file_url), imageAtts.indexOf(att))}>
+                      <img src={att.file_url} alt="" loading="lazy" className="w-full h-auto max-h-[50vh] object-contain" />
+                    </div>
+                  ))}
+                </div>
+              )}
+              {fileAtts.length > 0 && (
                 <div className="flex flex-wrap gap-2">
-                  {nonImageAtts.filter(a => a.attachment_type !== 'link').map(att => (
+                  {fileAtts.map(att => (
                     <a
                       key={att.id}
                       href={att.file_url}
