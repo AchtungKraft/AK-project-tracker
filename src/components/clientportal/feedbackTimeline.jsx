@@ -82,6 +82,11 @@ export function buildFeedbackTimeline(request, comments = [], decisions = []) {
   const latestDisplayEvent = allEvents[0] || null;
   const latestStateEvent = stateEvents[0] || null;
 
+  // DEV INTEGRITY ASSERTION (Part 5) — warn if posted request has no display events
+  if (!latestDisplayEvent && request.posted_at) {
+    console.warn('[buildFeedbackTimeline] No display events for posted request', request.id);
+  }
+
   return {
     allEvents,
     stateEvents,

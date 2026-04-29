@@ -33,22 +33,19 @@ export const getLifecycleBucket = (request, decisions, attachments, comments) =>
   // Approved goes to approved bucket
   if (state === 'approved') return 'approved';
   
-  // Check if client has replied since last post
+  // Check if client has replied since last post — use timeline stateEvents (SINGLE SOURCE)
   if (request.posted_at) {
-    const postedAt = new Date(request.posted_at);
-    const clientCommentsSincePost = comments.filter(c => {
-      if (c.request_id !== request.id) return false;
-      if (c.author_type !== 'client_contact') return false;
-      const commentDate = c.posted_at ? new Date(c.posted_at) : new Date(c.created_date);
-      return commentDate > postedAt;
-    });
+    const requestComments = comments.filter(c => c.request_id === request.id);
+    const requestDecisions = decisions.filter(d => d.request_id === request.id);
+    const { stateEvents } = buildFeedbackTimeline(request, requestComments, requestDecisions);
     
-    if (clientCommentsSincePost.length > 0) {
+    const hasClientReply = stateEvents.some(e => e.kind === 'comment' && e.actor === 'client');
+    if (hasClientReply) {
       return 'client_replied';
     }
   }
   
-  // Changes requested = client replied
+  // Changes requested = client replied (client made a decision)
   if (state === 'changes_requested') {
     return 'client_replied';
   }
@@ -113,15 +110,18 @@ export const enrichRequest = (request, comments, decisions, attachments) => {
     c => c.author_type === 'client_contact'
   );
 
-  // IMPORTANT:
-  // Do NOT filter timeline by posted_at.
-  // Only state logic should use time boundaries.
-  // buildFeedbackTimeline returns allEvents (display) and stateEvents (logic).
+  // SINGLE EVENT SOURCE: buildFeedbackTimeline is the ONLY event builder.
+  // Do NOT sort comments/decisions manually outside this call.
   const { allEvents, latestDisplayEvent, latestStateEvent } = buildFeedbackTimeline(
     request,
     requestComments,
     requestDecisions
   );
+
+  // DEV INTEGRITY ASSERTION (Part 5)
+  if (!latestDisplayEvent && request.posted_at) {
+    console.warn('[enrichRequest] Missing latestDisplayEvent for posted request', request.id);
+  }
 
   const latestActivityActor = latestDisplayEvent?.actor || 'team';
   const latestActivityAt = latestDisplayEvent?.date || request.updated_date;
@@ -163,21 +163,21 @@ export const enrichRequest = (request, comments, decisions, attachments) => {
     c => c.author_type === 'internal_user'
   );
 
-  // Latest comment snippet for hover previews — uses allEvents (NOT filtered by posted_at)
-  const latestComment = requestComments.sort(
-    (a, b) => new Date(b.created_date) - new Date(a.created_date)
-  )[0];
-  const latestCommentContent = latestComment?.content_fallback || latestComment?.body || null;
-  const latestCommentActor = latestComment
-    ? (latestComment.author_type === 'client_contact' ? 'client' : 'team')
-    : null;
+  // Derive latest comment from allEvents (SINGLE SOURCE — no manual sort)
+  const latestCommentEvent = allEvents.find(e => e.kind === 'comment');
+  const latestCommentContent = latestCommentEvent?.comment?.content_fallback
+    || latestCommentEvent?.comment?.body || null;
+  const latestCommentActor = latestCommentEvent?.actor || null;
+
+  // Derive last client comment from allEvents (SINGLE SOURCE — no manual sort)
+  const lastClientCommentEvent = allEvents.find(
+    e => e.kind === 'comment' && e.actor === 'client'
+  );
 
   return {
     ...request,
     decisions: requestDecisions,
-    lastClientComment: clientComments.sort(
-      (a, b) => new Date(b.created_date) - new Date(a.created_date)
-    )[0],
+    lastClientComment: lastClientCommentEvent?.comment || null,
     clientCommentCount: clientComments.length,
     internalCommentCount: internalComments.length,
     totalCommentCount: clientComments.length,

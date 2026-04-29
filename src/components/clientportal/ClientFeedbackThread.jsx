@@ -346,7 +346,8 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
                 {event.attachments.filter((a) => a.attachment_type === 'image').map((att, idx) => {
               const isSelected = selectedImageIds.includes(att.id);
               const imageDecisions = decisions.filter((d) => d.target_attachment_id === att.id);
-              const latestDecision = imageDecisions.sort((a, b) => new Date(b.created_date) - new Date(a.created_date))[0];
+              // Use decided_at || created_date for consistent timestamp resolution (Part 4)
+              const latestDecision = [...imageDecisions].sort((a, b) => new Date(b.decided_at || b.created_date) - new Date(a.decided_at || a.created_date))[0];
               const allImages = event.attachments.filter((a) => a.attachment_type === 'image').map((a) => a.file_url);
 
               return (
