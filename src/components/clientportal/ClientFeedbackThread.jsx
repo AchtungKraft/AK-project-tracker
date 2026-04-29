@@ -803,7 +803,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                 <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => setSelectedImageIds([])}
+                onClick={() => { setSelectedImageIds([]); onSelectionChange?.([]); }}
                 className="text-gray-400 hover:text-white">
                 
                   <X className="w-4 h-4" />
