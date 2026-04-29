@@ -206,51 +206,54 @@ export function buildAttentionList(projectGroups) {
 /**
  * Classify a single enriched request into an attention item.
  * Returns null if the request doesn't need attention.
+ * 
+ * ACTIVITY-DRIVEN: Classification is based on who acted last,
+ * not on request status. This ensures cards move between columns
+ * as soon as a new comment or decision is made.
  */
 function classifyRequest(request, project) {
   const lastActor = request.latestActivityActor || 'team';
   const lastActivityAt = request.latestActivityAt || request.updated_date;
   const isOverdue = request.isOverdue;
   const needsResponse = lastActor === 'client' && request.status !== 'approved';
+  const hoursSinceLastActivity = (Date.now() - new Date(lastActivityAt).getTime()) / (1000 * 60 * 60);
 
   let type;
 
-  // Priority 1: Client is waiting for our response
-  if (needsResponse) {
-    type = 'needs_response';
-  }
-  // Priority 2: Overdue (and not already client-waiting)
-  else if (isOverdue && request.status !== 'approved') {
-    type = 'overdue';
-  }
-  // Priority 4: Recently approved (48h window)
-  else if (isRecentlyApproved(request)) {
-    type = 'approved_recent';
-  }
-  // Priority 3: Awaiting client but no response yet — needs internal review/follow-up
-  else if (request.status === 'posted' || request.status === 'changes_requested') {
-    type = 'needs_review';
-  }
-  // Not actionable
-  else {
-    return null;
-  }
-
-  // Also handle archived-with-client-response
+  // Handle archived-with-client-response first (exception case)
   if (request.isArchivedWithClientResponse) {
     type = 'needs_response';
   }
+  // Priority 1: Client acted last → team needs to respond
+  else if (needsResponse) {
+    type = 'needs_response';
+  }
+  // Priority 2: Recently approved (48h window)
+  else if (isRecentlyApproved(request)) {
+    type = 'approved_recent';
+  }
+  // Skip drafts and non-active statuses
+  else if (request.status !== 'posted' && request.status !== 'changes_requested') {
+    return null;
+  }
+  // Priority 3: Team acted last — determine review vs follow-up based on time
+  else if (lastActor === 'team') {
+    if (hoursSinceLastActivity > FOLLOW_UP_THRESHOLD_HOURS) {
+      type = 'follow_up';
+    } else {
+      type = 'needs_review';
+    }
+  }
+  // Fallback: treat as needs_review
+  else {
+    type = 'needs_review';
+  }
 
-  // Detect follow-up: team sent last message, client hasn't responded, and it's been > threshold
-  const hoursSinceLastActivity = (Date.now() - new Date(lastActivityAt).getTime()) / (1000 * 60 * 60);
-  if (
-    type === 'needs_review' &&
-    lastActor === 'team' &&
-    !needsResponse &&
-    !isOverdue &&
-    hoursSinceLastActivity > FOLLOW_UP_THRESHOLD_HOURS
-  ) {
-    type = 'follow_up';
+  // Overlay: overdue items that aren't already client-waiting get overdue flag
+  // but keep their column (overdue is shown as badge, not a separate column reclassification
+  // UNLESS they're in needs_review — then promote to overdue type)
+  if (isOverdue && type === 'needs_review') {
+    type = 'overdue';
   }
 
   // Build follow-up metadata with risk tiers and action guidance
@@ -276,12 +279,15 @@ function classifyRequest(request, project) {
     followUpMeta = { hoursSince: h, riskTier, actionLabel };
   }
 
-  // Extract last comment snippet for hover preview
+  // Extract last comment snippet for hover preview — prefer the actual latest comment
   const lastCommentSnippet = request.latestCommentContent
     || request.lastClientComment?.content_fallback
     || request.lastClientComment?.body
     || request.title
     || null;
+
+  // Use the comment-level actor if available (more accurate than event-level)
+  const commentActor = request.latestCommentActor || lastActor;
 
   // Stalled: client waiting but no activity for 72h+
   const isStalled = type === 'needs_response' && hoursSinceLastActivity > 72;
@@ -292,7 +298,7 @@ function classifyRequest(request, project) {
     project,
     type,
     priority: PRIORITY[type],
-    lastActor,
+    lastActor: commentActor,
     lastActivityAt,
     lastActivityLabel: formatActivityLabel(lastActor, lastActivityAt),
     followUpLabel,

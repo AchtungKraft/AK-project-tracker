@@ -214,6 +214,15 @@ export const enrichRequest = (request, comments, decisions, attachments) => {
     c => c.author_type === 'internal_user'
   );
 
+  // Latest comment snippet for hover previews (from any author)
+  const latestComment = requestComments.sort(
+    (a, b) => new Date(b.created_date) - new Date(a.created_date)
+  )[0];
+  const latestCommentContent = latestComment?.content || null;
+  const latestCommentActor = latestComment
+    ? (latestComment.author_type === 'client_contact' ? 'client' : 'team')
+    : null;
+
   return {
     ...request,
     lastClientComment: clientComments.sort(
@@ -225,6 +234,8 @@ export const enrichRequest = (request, comments, decisions, attachments) => {
     isOverdue,
     latestActivityActor,
     latestActivityAt,
+    latestCommentContent,
+    latestCommentActor,
     isArchivedWithClientResponse,
     requiresTeamAction
   };
