@@ -231,30 +231,32 @@ function classifyRequest(request, project, canonicalState) {
 
   let type;
 
-  // Handle archived-with-client-response first (exception case)
-  if (request.isArchivedWithClientResponse) {
+  // HIGHEST PRIORITY: Team explicitly marked "in_review" → ALWAYS show in Active Review.
+  // This override beats all other classification (client-waiting, approved, follow-up).
+  // The team's deliberate action to flag something for review must never be silently dropped.
+  if (request.review_state === 'in_review') {
+    type = 'needs_review';
+  }
+  // Handle archived-with-client-response (exception case)
+  else if (request.isArchivedWithClientResponse) {
     type = 'needs_response';
   }
-  // Priority 1: Client acted last → team needs to respond
+  // Client acted last → team needs to respond
   else if (needsResponse) {
     type = 'needs_response';
   }
-  // Priority 2: Recently approved (48h window)
+  // Recently approved (48h window)
   else if (isRecentlyApproved(request, canonicalKey)) {
     type = 'approved_recent';
   }
-  // Skip archived and any non-active canonical states
+  // Skip archived
   else if (canonicalKey === 'archived') {
     return null;
   }
   // Active states: awaiting_review or changes_requested
   else if (canonicalKey === 'awaiting_review' || canonicalKey === 'changes_requested') {
-    // Workflow overlay: team marked "in_review" → always show in review column
-    if (request.review_state === 'in_review') {
-      type = 'needs_review';
-    }
     // Team acted last — ball is in client's court → follow_up
-    else if (lastActor === 'team') {
+    if (lastActor === 'team') {
       type = 'follow_up';
     } else {
       // Fallback: treat as needs_review
@@ -264,10 +266,6 @@ function classifyRequest(request, project, canonicalState) {
   // Approved but not recently → skip (already handled by lifecycle buckets)
   else if (canonicalKey === 'approved') {
     return null;
-  }
-  // Safety fallback — if in_review, never silently drop
-  else if (request.review_state === 'in_review') {
-    type = 'needs_review';
   }
   else {
     return null;
