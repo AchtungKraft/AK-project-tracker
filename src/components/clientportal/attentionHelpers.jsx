@@ -253,12 +253,35 @@ function classifyRequest(request, project) {
     type = 'follow_up';
   }
 
-  // Build follow-up silence label
-  const followUpLabel = type === 'follow_up'
-    ? (hoursSinceLastActivity < 24
-        ? `No response • ${Math.floor(hoursSinceLastActivity)}h`
-        : `No response • ${Math.floor(hoursSinceLastActivity / 24)}d`)
-    : null;
+  // Build follow-up metadata with risk tiers and action guidance
+  let followUpLabel = null;
+  let followUpMeta = null;
+
+  if (type === 'follow_up') {
+    const h = hoursSinceLastActivity;
+    followUpLabel = h < 24
+      ? `Client silent • ${Math.floor(h)}h`
+      : `Client silent • ${Math.floor(h / 24)}d`;
+
+    let riskTier = 'low';
+    let actionLabel = 'Monitor';
+    if (h > 120) {
+      riskTier = 'high';
+      actionLabel = 'Escalate / re-engage';
+    } else if (h > 48) {
+      riskTier = 'medium';
+      actionLabel = 'Send follow-up';
+    }
+
+    followUpMeta = { hoursSince: h, riskTier, actionLabel };
+  }
+
+  // Extract last comment snippet for hover preview
+  const lastCommentSnippet = request.latestCommentContent
+    || request.lastClientComment?.content_fallback
+    || request.lastClientComment?.body
+    || request.title
+    || null;
 
   return {
     request,
@@ -270,6 +293,8 @@ function classifyRequest(request, project) {
     lastActivityAt,
     lastActivityLabel: formatActivityLabel(lastActor, lastActivityAt),
     followUpLabel,
+    followUpMeta,
+    lastCommentSnippet,
     isOverdue: !!isOverdue,
     needsResponse,
   };
