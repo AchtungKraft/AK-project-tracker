@@ -45,12 +45,12 @@ export default function TaskQuickPreview({
   }, []);
 
   return (
-    <div ref={rowRef} className="relative flex items-start gap-1 py-px" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
+    <div ref={rowRef} className="relative flex items-start gap-1 py-px w-full max-w-full overflow-hidden mb-1" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
       {/* Task content — click opens detail */}
-      <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onTaskClick(task)}>
+      <div className="flex-1 min-w-0 cursor-pointer overflow-hidden" onClick={() => onTaskClick(task)}>
         {children}
         {(projectName || latestComment) && (
-          <div className="pl-[22px] -mt-px space-y-0">
+          <div className="pl-[22px] -mt-px space-y-0 overflow-hidden">
             {projectName && (
               <div className="text-[10px] text-gray-500 truncate leading-tight">{projectName}</div>
             )}

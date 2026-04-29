@@ -116,7 +116,7 @@ function BucketColumn({ bucketName, tasks, sp, teamMembers }) {
   const overdueCount = tasks.filter(t => getSubBucket(t) === "overdue").length;
 
   return (
-    <div className="min-w-[280px] w-[280px] shrink-0 flex flex-col">
+    <div className="flex-1 shrink-0 flex flex-col min-w-0 max-w-full overflow-hidden">
       {/* Bucket header */}
       <div className="flex items-center gap-1.5 px-1.5 py-1 border-b border-gray-700/40">
         <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">{bucketName}</span>
@@ -221,7 +221,7 @@ function ProjectBlock({ project, tasks, sp, teamMembers, buckets }) {
             {/* Horizontal bucket lanes */}
             {hasBucketColumns && (
               <div className="overflow-x-auto -mx-1">
-                <div className="flex gap-3 min-w-max px-1 pb-1">
+                <div className="grid gap-3 px-1 pb-1" style={{ gridAutoFlow: 'column', gridAutoColumns: 'minmax(280px, 1fr)' }}>
                   {bucketColumns.filter(c => c.tasks.length > 0).map(({ bucket, tasks: bTasks }) => (
                     <BucketColumn
                       key={bucket.id}

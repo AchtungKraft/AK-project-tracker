@@ -224,7 +224,7 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
   return (
     <div
       className={cn(
-        "rounded transition-all cursor-pointer group",
+        "rounded transition-all cursor-pointer group w-full max-w-full overflow-hidden",
         isCompact
           ? task.is_priority
             ? "border-l-2 border-l-red-500 py-0.5 px-1"

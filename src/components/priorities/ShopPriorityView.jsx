@@ -189,7 +189,7 @@ function ProjectGroup({ project, tasks, sp, memberId }) {
             {collapsed
               ? <ChevronRight className="w-3 h-3 text-gray-500 shrink-0" />
               : <ChevronDown className="w-3 h-3 text-gray-500 shrink-0" />}
-            <span className="text-xs font-bold text-gray-200 truncate">{project.name}</span>
+            <span className="text-xs font-bold text-gray-200 truncate break-words">{project.name}</span>
           </button>
           <span className="text-[9px] text-gray-600 shrink-0">
             {tasks.length} task{tasks.length !== 1 ? 's' : ''}
@@ -249,7 +249,7 @@ function PersonColumn({ name, initials, tasks, projects, sp, memberId }) {
   const overdueCount = tasks.filter(t => getSubBucket(t) === "overdue").length;
 
   return (
-    <div className="min-w-[320px] w-[calc((100%-2rem)/3)] shrink-0 flex flex-col">
+    <div className="min-w-0 max-w-full flex flex-col overflow-hidden">
       {/* Person header */}
       <div className="flex items-center gap-1.5 px-1.5 py-1 border-b border-gray-700/40">
         <div className="w-5 h-5 rounded-full bg-blue-600/20 flex items-center justify-center text-[9px] font-bold text-blue-400">
@@ -443,10 +443,19 @@ export default function ShopPriorityView({
           {/* Unassigned queue — full width */}
           <UnassignedQueue tasks={unassignedTasks} sp={sp} />
 
-          {/* People board — horizontal scroll, 3 columns visible */}
+          {/* People board — horizontal scroll, min 3 columns visible */}
           {peopleColumns.length > 0 && (
-            <div className="overflow-x-auto">
-              <div className="flex gap-3 min-w-max">
+            <div className="overflow-x-auto overflow-y-hidden">
+              <div
+                className="grid gap-3"
+                style={{
+                  gridAutoFlow: 'column',
+                  gridAutoColumns: `minmax(300px, 1fr)`,
+                  gridTemplateColumns: peopleColumns.length <= 3
+                    ? `repeat(${peopleColumns.length}, minmax(0, 1fr))`
+                    : undefined,
+                }}
+              >
                 {peopleColumns.map(col => (
                   <PersonColumn
                     key={col.id}
