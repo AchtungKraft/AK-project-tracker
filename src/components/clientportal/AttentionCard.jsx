@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useState, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { FolderKanban, ChevronRight } from "lucide-react";
@@ -15,17 +16,47 @@ const BORDER_COLORS = {
   approved_recent: 'border-l-green-500',
 };
 
+const RISK_BORDER = {
+  high: 'border-l-orange-600',
+  medium: 'border-l-amber-400',
+  low: 'border-l-gray-500',
+};
+
+const RISK_BG = {
+  high: 'bg-orange-950/30 border-orange-500/40',
+  medium: 'bg-black/40 border-gray-700',
+  low: 'bg-black/30 border-gray-800',
+};
+
 export default function AttentionCard({ item, onUpdateDueDate, muted = false }) {
   const { request, project, type, isOverdue, lastActor, lastActivityAt } = item;
   const config = ATTENTION_BADGE_CONFIG[type];
-  const borderColor = BORDER_COLORS[type] || 'border-l-gray-500';
+  const risk = item.followUpMeta?.riskTier;
   const requestUrl = createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=attention`;
 
-  // Comment snippet — always show something
+  // Portal hover preview state
+  const cardRef = useRef(null);
+  const [hoverPos, setHoverPos] = useState(null);
+
+  const handleMouseEnter = useCallback(() => {
+    if (!cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    const left = Math.min(rect.left, window.innerWidth - 330);
+    setHoverPos({ top: rect.bottom + 6, left: Math.max(8, left) });
+  }, []);
+
+  const handleMouseLeave = useCallback(() => setHoverPos(null), []);
+
+  // Comment snippet for inline display
   const snippet = request.lastClientComment?.content_fallback
     || request.lastClientComment?.body
     || null;
   const truncatedSnippet = snippet ? (snippet.length > 80 ? snippet.slice(0, 80) + '…' : snippet) : null;
+
+  // Hover preview snippet (longer, from unified field)
+  const hoverSnippet = item.lastCommentSnippet
+    ? (item.lastCommentSnippet.length > 200 ? item.lastCommentSnippet.slice(0, 200) + '…' : item.lastCommentSnippet)
+    : null;
 
   // Waiting time label for needs_response
   const waitingLabel = type === 'needs_response' && lastActivityAt
@@ -34,12 +65,28 @@ export default function AttentionCard({ item, onUpdateDueDate, muted = false }) 
 
   const isNewClientActivity = lastActor === 'client' && type !== 'approved_recent';
 
+  // Resolve border color — risk tier overrides for follow-up
+  const borderColor = type === 'follow_up' && risk
+    ? RISK_BORDER[risk]
+    : (BORDER_COLORS[type] || 'border-l-gray-500');
+
+  // Card background
+  let cardClasses;
+  if (isOverdue) {
+    cardClasses = 'bg-red-950/30 border-red-500/50 border-l-4 border-l-red-500';
+  } else if (type === 'follow_up' && risk) {
+    cardClasses = `border-l-[3px] ${borderColor} ${RISK_BG[risk]} hover:border-gray-500 hover:bg-gray-900/80`;
+  } else {
+    cardClasses = `border-l-[3px] ${borderColor} ${muted ? 'bg-black/20 border-gray-800 opacity-70' : 'bg-black/40 border-gray-700 hover:border-gray-500 hover:bg-gray-900/80'}`;
+  }
+
   return (
-    <div className={`relative rounded-lg border transition-all group min-h-[44px] ${
-      isOverdue
-        ? 'bg-red-950/30 border-red-500/50 border-l-4 border-l-red-500'
-        : `border-l-[3px] ${borderColor} ${muted ? 'bg-black/20 border-gray-800 opacity-70' : 'bg-black/40 border-gray-700 hover:border-gray-500 hover:bg-gray-900/80'}`
-    }`}>
+    <div
+      ref={cardRef}
+      onMouseEnter={hoverSnippet ? handleMouseEnter : undefined}
+      onMouseLeave={hoverSnippet ? handleMouseLeave : undefined}
+      className={`relative rounded-lg border transition-all duration-200 group/card min-h-[44px] hover:shadow-lg hover:scale-[1.01] ${cardClasses}`}
+    >
       <div className="p-2.5 md:p-3">
         {/* Navigable content zone */}
         <Link to={requestUrl} className="block hover:opacity-90 transition-opacity">
@@ -64,7 +111,7 @@ export default function AttentionCard({ item, onUpdateDueDate, muted = false }) 
           </div>
 
           {/* Title */}
-          <h4 className="font-medium text-sm text-white group-hover:text-red-400 transition-colors line-clamp-1 mb-1">
+          <h4 className="font-medium text-sm text-white group-hover/card:text-red-400 transition-colors line-clamp-1 mb-1">
             {request.title}
           </h4>
 
@@ -74,7 +121,7 @@ export default function AttentionCard({ item, onUpdateDueDate, muted = false }) 
             <span className="truncate">{project?.name || 'Unknown Project'}</span>
           </div>
 
-          {/* Comment snippet — always present */}
+          {/* Comment snippet */}
           <p className="text-xs text-gray-500 italic line-clamp-1 mb-1">
             {truncatedSnippet ? `"${truncatedSnippet}"` : 'No recent message'}
           </p>
@@ -83,10 +130,22 @@ export default function AttentionCard({ item, onUpdateDueDate, muted = false }) 
           {waitingLabel ? (
             <p className="text-[11px] text-red-400 font-medium">{waitingLabel}</p>
           ) : item.followUpLabel ? (
-            <p className="text-[11px] text-orange-400 font-medium">{item.followUpLabel}</p>
+            <div>
+              <p className="text-[11px] text-orange-400 font-medium">{item.followUpLabel}</p>
+              <p className="text-[10px] text-gray-500">Last message: Team</p>
+            </div>
           ) : item.lastActivityLabel ? (
             <p className="text-[11px] text-gray-500">{item.lastActivityLabel}</p>
           ) : null}
+
+          {/* Follow-up action guidance */}
+          {type === 'follow_up' && item.followUpMeta && (
+            <p className={`text-xs mt-1 font-medium ${
+              risk === 'high' ? 'text-orange-400' : risk === 'medium' ? 'text-amber-400' : 'text-gray-400'
+            }`}>
+              → {item.followUpMeta.actionLabel}
+            </p>
+          )}
         </Link>
 
         {/* Action zone — outside Link */}
@@ -110,12 +169,26 @@ export default function AttentionCard({ item, onUpdateDueDate, muted = false }) 
               />
             )}
             <Link to={requestUrl} className="shrink-0 flex items-center gap-1">
-              <span className="text-xs text-gray-600 hidden group-hover:inline transition-opacity">Open</span>
-              <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-red-400 transition-colors" />
+              <span className="text-xs text-gray-600 hidden group-hover/card:inline transition-opacity">Open</span>
+              <ChevronRight className="w-4 h-4 text-gray-500 group-hover/card:text-red-400 transition-colors" />
             </Link>
           </div>
         </div>
       </div>
+
+      {/* Hover comment preview — portalled to body, never clipped */}
+      {hoverPos && hoverSnippet && createPortal(
+        <div
+          style={{ top: hoverPos.top, left: hoverPos.left }}
+          className="fixed z-[9999] w-80 max-w-[90vw] p-3 rounded-lg bg-black/95 backdrop-blur-md border border-gray-600 shadow-2xl pointer-events-none"
+        >
+          <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Latest message</p>
+          <p className="text-xs text-gray-300 leading-relaxed line-clamp-3">
+            {hoverSnippet}
+          </p>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
