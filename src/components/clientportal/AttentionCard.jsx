@@ -36,16 +36,22 @@ export default function AttentionCard({ item, onUpdateDueDate, muted = false }) 
 
   // Portal hover preview state
   const cardRef = useRef(null);
-  const [hoverPos, setHoverPos] = useState(null);
+  const [isHovered, setIsHovered] = useState(false);
+  const [hoverPosition, setHoverPosition] = useState(null);
 
-  const handleMouseEnter = useCallback(() => {
-    if (!cardRef.current) return;
-    const rect = cardRef.current.getBoundingClientRect();
-    const left = Math.min(rect.left, window.innerWidth - 330);
-    setHoverPos({ top: rect.bottom + 6, left: Math.max(8, left) });
-  }, []);
+  const onEnter = () => {
+    const rect = cardRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const tooltipH = 140;
+    const top = rect.bottom + tooltipH > window.innerHeight
+      ? rect.top - tooltipH - 8
+      : rect.bottom + 8;
+    const left = Math.min(rect.left, window.innerWidth - 360);
+    setHoverPosition({ top, left: Math.max(8, left) });
+    setIsHovered(true);
+  };
 
-  const handleMouseLeave = useCallback(() => setHoverPos(null), []);
+  const onLeave = () => setIsHovered(false);
 
   // Comment snippet for inline display
   const snippet = request.lastClientComment?.content_fallback
@@ -83,8 +89,8 @@ export default function AttentionCard({ item, onUpdateDueDate, muted = false }) 
   return (
     <div
       ref={cardRef}
-      onMouseEnter={hoverSnippet ? handleMouseEnter : undefined}
-      onMouseLeave={hoverSnippet ? handleMouseLeave : undefined}
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
       className={`relative rounded-lg border transition-all duration-200 group/card min-h-[44px] hover:shadow-lg hover:scale-[1.01] ${cardClasses}`}
     >
       <div className="p-2.5 md:p-3">
@@ -177,15 +183,20 @@ export default function AttentionCard({ item, onUpdateDueDate, muted = false }) 
       </div>
 
       {/* Hover comment preview — portalled to body, never clipped */}
-      {hoverPos && hoverSnippet && createPortal(
+      {isHovered && hoverSnippet && hoverPosition && createPortal(
         <div
-          style={{ top: hoverPos.top, left: hoverPos.left }}
-          className="fixed z-[9999] w-80 max-w-[90vw] p-3 rounded-lg bg-black/95 backdrop-blur-md border border-gray-600 shadow-2xl pointer-events-none"
+          style={{
+            position: 'fixed',
+            top: hoverPosition.top,
+            left: hoverPosition.left,
+            zIndex: 99999,
+            width: 340,
+            maxWidth: '90vw',
+          }}
+          className="pointer-events-none rounded-lg border border-gray-700 bg-black/95 p-3 shadow-2xl backdrop-blur-md"
         >
-          <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Latest message</p>
-          <p className="text-xs text-gray-300 leading-relaxed line-clamp-3">
-            {hoverSnippet}
-          </p>
+          <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Latest Message</div>
+          <div className="text-xs text-gray-200 leading-relaxed line-clamp-4">{hoverSnippet}</div>
         </div>,
         document.body
       )}
