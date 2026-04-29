@@ -218,7 +218,7 @@ export const enrichRequest = (request, comments, decisions, attachments) => {
   const latestComment = requestComments.sort(
     (a, b) => new Date(b.created_date) - new Date(a.created_date)
   )[0];
-  const latestCommentContent = latestComment?.content || null;
+  const latestCommentContent = latestComment?.content_fallback || latestComment?.body || null;
   const latestCommentActor = latestComment
     ? (latestComment.author_type === 'client_contact' ? 'client' : 'team')
     : null;
