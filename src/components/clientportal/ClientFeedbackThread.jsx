@@ -48,6 +48,19 @@ function CommentContentBlock({ comment, attachmentUrls = [] }) {
       <p className="text-gray-300 whitespace-pre-wrap mb-3 pl-0 md:pl-10 text-sm md:text-base">{c.body}</p> :
       null}
 
+      {/* Photos */}
+      {c.photos.length > 0 && (
+        <div className="pl-0 md:pl-10 mb-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {c.photos.map((url, idx) => (
+              <div key={idx} className="relative rounded-lg overflow-hidden border border-gray-700 bg-gray-800">
+                <img src={url} alt="" loading="lazy" className="w-full h-auto max-h-[50vh] object-contain cursor-pointer" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Attachments divider + sections */}
       {(c.files.length > 0 || commentLinks.length > 0) && (
         <div className="pl-0 md:pl-10 mb-3 border-t border-gray-700/50 mt-4 pt-4 space-y-3">
