@@ -33,57 +33,19 @@ Deno.serve(async (req) => {
             updateData.posted_at = currentTimestamp;
         }
 
-        // 🔁 RESEND DIAGNOSTIC - Check if this is a resend (status changing TO posted)
-        const structuredTypes = ['design_review', 'budget_review', 'deliverable_review'];
-        const isStructuredReview = structuredTypes.includes(request.request_type);
+        // 🔁 RESEND - Decisions are preserved in the timeline as historical records.
+        // The getRequestState() function in lifecycleHelpers already filters decisions
+        // to only consider those made AFTER posted_at, so bumping posted_at effectively
+        // resets the review state without destroying the conversation history.
         const isResend = status === 'posted' && request.status !== 'draft';
         
-        let clearedAttachmentDecisions = 0;
-        let clearedRequestDecisions = 0;
-        
-        // If resending for approval on a structured review, clear attachment-level decisions
-        if (isResend && isStructuredReview) {
-            const decisions = await base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: requestId });
-            const attachmentDecisions = decisions.filter(d => d.target_type === 'attachment_image');
-            const requestDecisions = decisions.filter(d => d.target_type === 'request');
-            
-            // Delete attachment-level decisions to reset image review state
-            for (const decision of attachmentDecisions) {
-                await base44.asServiceRole.entities.ClientFeedbackDecision.delete(decision.id);
-                clearedAttachmentDecisions++;
-            }
-            
-            // Also clear request-level decisions for clean slate
-            for (const decision of requestDecisions) {
-                await base44.asServiceRole.entities.ClientFeedbackDecision.delete(decision.id);
-                clearedRequestDecisions++;
-            }
-            
-            console.log("🔁 RESEND TRACE - STRUCTURED REVIEW", {
+        if (isResend) {
+            console.log("🔁 RESEND TRACE", {
                 request_id: requestId,
                 type: request.request_type,
                 previous_status: request.status,
                 new_status: status,
-                cleared_attachment_decisions: clearedAttachmentDecisions,
-                cleared_request_decisions: clearedRequestDecisions,
-                total_decisions_before: decisions.length
-            });
-        } else if (isResend) {
-            // For non-structured reviews, also clear decisions on resend
-            const decisions = await base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: requestId });
-            
-            for (const decision of decisions) {
-                await base44.asServiceRole.entities.ClientFeedbackDecision.delete(decision.id);
-                if (decision.target_type === 'attachment_image') clearedAttachmentDecisions++;
-                else clearedRequestDecisions++;
-            }
-            
-            console.log("🔁 RESEND TRACE - NON-STRUCTURED", {
-                request_id: requestId,
-                type: request.request_type,
-                previous_status: request.status,
-                new_status: status,
-                cleared_decisions: decisions.length
+                note: "Decisions preserved. posted_at bump resets state via getRequestState filter."
             });
         }
 
@@ -91,9 +53,7 @@ Deno.serve(async (req) => {
 
         return Response.json({
             success: true,
-            timestamp: currentTimestamp,
-            clearedAttachmentDecisions,
-            clearedRequestDecisions
+            timestamp: currentTimestamp
         });
 
     } catch (error) {
