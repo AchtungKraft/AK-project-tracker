@@ -267,7 +267,7 @@ function classifyRequest(request, project) {
     let actionLabel = 'Monitor';
     if (h > 120) {
       riskTier = 'high';
-      actionLabel = 'Escalate / re-engage';
+      actionLabel = 'Call / escalate';
     } else if (h > 48) {
       riskTier = 'medium';
       actionLabel = 'Send follow-up';
@@ -283,6 +283,9 @@ function classifyRequest(request, project) {
     || request.title
     || null;
 
+  // Stalled: client waiting but no activity for 72h+
+  const isStalled = type === 'needs_response' && hoursSinceLastActivity > 72;
+
   return {
     request,
     requestId: request.id,
@@ -297,6 +300,7 @@ function classifyRequest(request, project) {
     lastCommentSnippet,
     isOverdue: !!isOverdue,
     needsResponse,
+    isStalled,
   };
 }
 

@@ -23,7 +23,7 @@ const RISK_BORDER = {
 };
 
 const RISK_BG = {
-  high: 'bg-orange-950/30 border-orange-500/40',
+  high: 'bg-orange-950/40 border-orange-500/50',
   medium: 'bg-black/40 border-gray-700',
   low: 'bg-black/30 border-gray-800',
 };
@@ -81,7 +81,8 @@ export default function AttentionCard({ item, onUpdateDueDate, muted = false }) 
   if (isOverdue) {
     cardClasses = 'bg-red-950/30 border-red-500/50 border-l-4 border-l-red-500';
   } else if (type === 'follow_up' && risk) {
-    cardClasses = `border-l-[3px] ${borderColor} ${RISK_BG[risk]} hover:border-gray-500 hover:bg-gray-900/80`;
+    const borderWidth = risk === 'high' ? 'border-l-[4px] border-2' : 'border-l-[3px]';
+    cardClasses = `${borderWidth} ${borderColor} ${RISK_BG[risk]} hover:border-gray-500 hover:bg-gray-900/80`;
   } else {
     cardClasses = `border-l-[3px] ${borderColor} ${muted ? 'bg-black/20 border-gray-800 opacity-70' : 'bg-black/40 border-gray-700 hover:border-gray-500 hover:bg-gray-900/80'}`;
   }
@@ -113,6 +114,9 @@ export default function AttentionCard({ item, onUpdateDueDate, muted = false }) 
                 <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
                 NEW
               </span>
+            )}
+            {item.isStalled && (
+              <span className="text-[10px] text-yellow-400 font-semibold">⚠ Stalled</span>
             )}
           </div>
 
@@ -195,7 +199,9 @@ export default function AttentionCard({ item, onUpdateDueDate, muted = false }) 
           }}
           className="rounded-lg border border-gray-600 bg-black/95 backdrop-blur-md p-3 shadow-2xl"
         >
-          <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Latest Message</div>
+          <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">
+            {item.lastActor === 'client' ? 'Client' : 'Team'} · Latest Message
+          </div>
           <div className="text-xs text-gray-200 leading-relaxed line-clamp-4">{hoverSnippet}</div>
         </div>,
         document.body

@@ -8,9 +8,26 @@ import AttentionCard from "./AttentionCard";
 import AttentionColumnHeader from "./AttentionColumnHeader";
 
 /**
+ * Risk-tier group headers for follow-up column
+ */
+const RISK_GROUP_CONFIG = {
+  high: { label: 'High Risk', textClass: 'text-orange-400' },
+  medium: { label: 'Needs Follow-Up', textClass: 'text-amber-400' },
+  low: { label: 'Monitoring', textClass: 'text-gray-500' },
+};
+
+/**
  * A single scrollable board column.
  */
 function BoardColumn({ col, items, onUpdateDueDate, muted = false }) {
+  // Group follow-up items by risk tier
+  const isFollowUp = col.key === 'follow_up';
+  const groupedByRisk = isFollowUp ? {
+    high: items.filter(i => i.followUpMeta?.riskTier === 'high'),
+    medium: items.filter(i => i.followUpMeta?.riskTier === 'medium'),
+    low: items.filter(i => !i.followUpMeta?.riskTier || i.followUpMeta.riskTier === 'low'),
+  } : null;
+
   return (
     <div className="space-y-2">
       <AttentionColumnHeader {...col} count={items.length} />
@@ -19,6 +36,27 @@ function BoardColumn({ col, items, onUpdateDueDate, muted = false }) {
           <div className="text-center py-4 text-xs text-gray-600 italic">
             {col.emptyText}
           </div>
+        ) : isFollowUp && groupedByRisk ? (
+          ['high', 'medium', 'low'].map(tier => {
+            const tierItems = groupedByRisk[tier];
+            if (tierItems.length === 0) return null;
+            const cfg = RISK_GROUP_CONFIG[tier];
+            return (
+              <div key={tier} className="space-y-1.5">
+                <div className={`text-[10px] uppercase tracking-wide font-semibold px-1 pt-1 ${cfg.textClass}`}>
+                  {cfg.label}
+                </div>
+                {tierItems.map(item => (
+                  <AttentionCard
+                    key={item.requestId}
+                    item={item}
+                    onUpdateDueDate={onUpdateDueDate}
+                    muted={tier === 'low'}
+                  />
+                ))}
+              </div>
+            );
+          })
         ) : (
           items.map(item => (
             <AttentionCard
@@ -95,19 +133,26 @@ const NeedsAttentionSection = ({
 
   return (
     <Card className="bg-gradient-to-r from-red-950/40 to-orange-950/40 backdrop-blur-xl border-2 border-red-500/50 shadow-lg shadow-red-900/20">
-      <CardHeader className="border-b border-red-500/30 px-3 py-2 md:p-4">
+      <CardHeader className="border-b border-red-500/30 px-3 py-2 md:px-4 md:py-3">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="p-1 md:p-2 bg-red-500/20 rounded-lg">
-              <AlertCircle className="w-4 h-4 md:w-5 md:h-5 text-red-400" />
-            </div>
+        <div className="flex items-center gap-2">
+          <div className="p-1 md:p-2 bg-red-500/20 rounded-lg">
+            <AlertCircle className="w-4 h-4 md:w-5 md:h-5 text-red-400" />
+          </div>
+          <div>
             <CardTitle className="text-sm md:text-lg text-red-400">
               Action Queue
             </CardTitle>
+            <div className="hidden md:flex gap-3 text-[11px] text-gray-500 mt-0.5">
+              <span>{(columnData.client_waiting || []).length} waiting</span>
+              <span>{(columnData.review_active || []).length} review</span>
+              <span>{(columnData.follow_up || []).length} follow-up</span>
+            </div>
           </div>
-          <Badge className="bg-red-500/20 text-red-400 border-red-500/50 text-sm md:text-lg px-2 py-0.5 md:py-1">
-            {actionableCount}
-          </Badge>
+        </div>
+        <Badge className="bg-red-500/20 text-red-400 border-red-500/50 text-sm md:text-lg px-2 py-0.5 md:py-1">
+          {actionableCount}
+        </Badge>
         </div>
       </CardHeader>
       <CardContent className="p-2 md:p-4">
