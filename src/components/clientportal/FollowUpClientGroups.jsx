@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
-import { ChevronDown, ChevronRight, ChevronsUpDown, Users } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronsUpDown, FolderKanban } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { getTime } from "./feedbackTimeline";
 import AttentionCard from "./AttentionCard";
@@ -7,14 +7,14 @@ import AttentionCard from "./AttentionCard";
 const STORAGE_KEY = "followup_collapsed_clients";
 
 /**
- * Group follow-up items by client name (from project.client_name).
+ * Group follow-up items by project name.
  * Returns sorted array of { clientKey, clientName, items, overdueCount, latestActivityAt }.
  */
 function groupByClient(items) {
   const map = {};
   items.forEach(item => {
-    const clientName = item.project?.client_name || "Unknown Client";
-    const key = clientName.toLowerCase().trim();
+    const clientName = item.project?.name || "Unknown Project";
+    const key = (item.project?.id || clientName).toLowerCase().trim();
     if (!map[key]) {
       map[key] = { clientKey: key, clientName, items: [], overdueCount: 0, latestActivityAt: 0 };
     }
@@ -142,7 +142,7 @@ export default function FollowUpClientGroups({ items, onUpdateDueDate, mineFilte
               ) : (
                 <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
               )}
-              <Users className="w-3.5 h-3.5 text-orange-400/60 shrink-0" />
+              <FolderKanban className="w-3.5 h-3.5 text-orange-400/60 shrink-0" />
               <span className="text-xs font-semibold text-gray-200 truncate flex-1 min-w-0">
                 {group.clientName}
               </span>
