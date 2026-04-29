@@ -106,8 +106,6 @@ Deno.serve(async (req) => {
             visibility,
             photos,
             files,
-            // Design Review: IDs of existing attachments selected with this comment
-            selected_attachment_ids,
         } = payload;
 
         if (!requestId) {
@@ -158,25 +156,11 @@ Deno.serve(async (req) => {
             commentData.files = files;
         }
 
-        // Selected existing attachment IDs (Design Review reference)
-        if (selected_attachment_ids && Array.isArray(selected_attachment_ids) && selected_attachment_ids.length > 0) {
-            commentData.selected_attachment_ids = selected_attachment_ids;
-        }
-
         const comment = await fetchWithRetry(() => base44.asServiceRole.entities.ClientFeedbackComment.create(commentData));
 
-        // Guard: comment MUST have an id before creating attachments
-        if (!comment || !comment.id) {
-            console.error('COMMENT_CREATE_FAILED: No comment.id returned', { requestId });
-            return Response.json({ success: false, error: { type: 'COMMENT_CREATE_FAILED', message: 'Comment creation did not return an id' } }, { status: 500 });
-        }
-
-        console.log('[addInternalComment] Comment created:', { commentId: comment.id, requestId, photoCount: photos?.length || 0, fileCount: files?.length || 0, linkCount: links?.length || 0 });
-
-        // ── SECONDARY WRITES: Attachment records ─────────────────────────
-        // Attachments are the SINGLE SOURCE OF TRUTH for images/files.
-        // They MUST be linked via comment_id. Failures are promoted to errors
-        // so the caller knows images may be missing.
+        // ── SECONDARY WRITES: Attachment records (non-fatal) ─────────────
+        // Core comment already saved above. Attachment failures are warnings,
+        // not errors — the comment is already persisted.
         const attachments = [];
         const warnings = [];
 
@@ -228,14 +212,13 @@ Deno.serve(async (req) => {
             }
         }
 
-        // Run attachment writes in batches of 2
+        // Run attachment writes in batches of 2 — non-fatal
         if (attachmentTasks.length > 0) {
             try {
                 const results = await runBatched(attachmentTasks, 2, 150);
                 attachments.push(...results);
-                console.log('[addInternalComment] Attachments created:', { commentId: comment.id, count: results.length, ids: results.map(a => a.id) });
             } catch (attErr) {
-                console.error('ATTACHMENT_WRITE_FAILURE', { commentId: comment.id, error: attErr?.message });
+                console.warn('ATTACHMENT_WRITE_PARTIAL_FAILURE', { commentId: comment.id, error: attErr?.message });
                 warnings.push({ type: 'ATTACHMENT_WRITE_FAILED', message: attErr?.message });
             }
         }

@@ -43,10 +43,10 @@ export function normalizeFeedbackComment(raw) {
     });
   }
 
-  // --- photos: from normalized backend (attachment-sourced), fallback empty ---
+  // --- photos: always array of URL strings ---
   const photos = Array.isArray(raw.photos) ? raw.photos.filter(Boolean) : [];
 
-  // --- files: from normalized backend (attachment-sourced), fallback empty ---
+  // --- files: always array of { name, url } ---
   let files = [];
   if (Array.isArray(raw.files)) {
     files = raw.files.map((f, idx) => {

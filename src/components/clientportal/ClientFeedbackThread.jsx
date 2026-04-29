@@ -19,8 +19,7 @@ import LinkPreviewGrid from "@/components/shared/LinkPreviewGrid";
 import { extractLinks, convertStructuredLinks } from "@/utils/extractLinks";
 
 // ── CommentContentBlock: unified rendering with proper priority chain ──
-// Images are rendered separately via event.attachments — NOT inside this block.
-function CommentContentBlock({ comment }) {
+function CommentContentBlock({ comment, attachmentUrls = [] }) {
   if (!comment) return null;
   const c = normalizeFeedbackComment(comment);
   if (!c) return null;
@@ -229,7 +228,10 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
         </div>
 
         {/* Render comment content — priority: content_html → content_fallback → body */}
-        <CommentContentBlock comment={event.comment} />
+        <CommentContentBlock
+          comment={event.comment}
+          attachmentUrls={(event.attachments || []).map(a => a.file_url || a.link_url).filter(Boolean)}
+        />
         {event.decision?.note &&
         <div className="mb-3 pl-0 md:pl-10 text-sm md:text-base">
             <HtmlContent
@@ -330,8 +332,7 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
           </div>
         }
 
-        {/* Non-comment event attachments (request_post): full rendering with review checkboxes */}
-        {event.type !== 'decision' && event.type !== 'comment' && event.attachments?.length > 0 &&
+        {event.type !== 'decision' && event.attachments?.length > 0 &&
         <div className="pl-0 md:pl-10 space-y-3 border-t border-gray-700/50 mt-4 pt-4">
             {canReview && isStructuredReview(requestType) && event.attachments.filter((a) => a.attachment_type === 'image').length > 0 &&
           <p className="text-sm text-purple-400 font-medium">
@@ -392,13 +393,15 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
             </div>
           }
 
-            {(() => {
+            {/* Link attachments: skip for comment events (CommentContentBlock already renders links with descriptions) */}
+            {event.type !== 'comment' && (() => {
               const linkAtts = event.attachments.filter((a) => a.attachment_type === 'link');
               if (linkAtts.length === 0) return null;
               const previewLinks = convertStructuredLinks(linkAtts.map(a => ({ url: a.link_url, name: a.label })));
               return <LinkPreviewGrid links={previewLinks} />;
             })()}
 
+            {/* File attachments as chips */}
             {event.attachments.filter((a) => a.attachment_type !== 'image' && a.attachment_type !== 'link').length > 0 && (
             <div className="flex flex-wrap gap-2">
               {event.attachments.filter((a) => a.attachment_type !== 'image' && a.attachment_type !== 'link').map((att) =>
@@ -417,49 +420,12 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
             )}
           </div>
         }
-
-        {/* Comment event attachments: images + files from attachment records */}
-        {event.type === 'comment' && event.attachments?.length > 0 && (() => {
-          const imageAtts = event.attachments.filter(a => a.attachment_type === 'image' && a.file_url);
-          const fileAtts = event.attachments.filter(a => a.attachment_type === 'file');
-          if (imageAtts.length === 0 && fileAtts.length === 0) return null;
-          return (
-            <div className="pl-0 md:pl-10 space-y-3 mt-3">
-              {imageAtts.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {imageAtts.map((att) => (
-                    <div key={att.id} className="relative rounded-lg overflow-hidden border border-gray-700 bg-gray-800 cursor-pointer"
-                      onClick={() => onImageClick(att.file_url, imageAtts.map(a => a.file_url), imageAtts.indexOf(att))}>
-                      <img src={att.file_url} alt="" loading="lazy" className="w-full h-auto max-h-[50vh] object-contain" />
-                    </div>
-                  ))}
-                </div>
-              )}
-              {fileAtts.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {fileAtts.map(att => (
-                    <a
-                      key={att.id}
-                      href={att.file_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 bg-gray-800/50 hover:bg-gray-800 px-3 py-2 rounded-lg border border-gray-700 transition-colors text-sm text-blue-400"
-                    >
-                      <FileText className="w-4 h-4" />
-                      {att.label || 'Attached File'}
-                    </a>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })()}
       </CardContent>
     </Card>);
 
 });
 
-export default function ClientFeedbackThread({ requestId, clientContactId, isClientView, userId, accessRole, requestType, token, slug, request, onDecisionSubmit, onDeleteComment, onDeleteDecision, onImageClick: onImageClickProp, onSelectionChange }) {
+export default function ClientFeedbackThread({ requestId, clientContactId, isClientView, userId, accessRole, requestType, token, slug, request, onDecisionSubmit, onDeleteComment, onDeleteDecision, onImageClick: onImageClickProp }) {
   const queryClient = useQueryClient();
   const [selectedImageIds, setSelectedImageIds] = useState([]);
   const [isReviewing, setIsReviewing] = useState(false);
@@ -539,29 +505,14 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
       // Only add comment if it doesn't have a matching decision (avoid duplicates)
       if (!hasMatchingDecision) {
-        // Uploaded images: linked via comment_id
-        const uploadedAttachments = attachments.filter((a) => a.comment_id === comment.id);
-        // Selected existing images: referenced by ID on the comment record
-        const selectedIds = comment.selected_attachment_ids || [];
-        const selectedAttachments = selectedIds.length > 0
-          ? attachments.filter((a) => selectedIds.includes(a.id))
-          : [];
-        // Merge, deduplicating by id
-        const seenIds = new Set(uploadedAttachments.map(a => a.id));
-        const mergedAttachments = [...uploadedAttachments];
-        selectedAttachments.forEach(a => {
-          if (!seenIds.has(a.id)) {
-            mergedAttachments.push(a);
-            seenIds.add(a.id);
-          }
-        });
+        const commentAttachments = attachments.filter((a) => a.comment_id === comment.id);
 
         events.push({
           type: 'comment',
           timestamp: new Date(comment.posted_at || comment.created_date),
           comment,
           author: comment.author,
-          attachments: mergedAttachments
+          attachments: commentAttachments
         });
       }
     });
@@ -658,13 +609,12 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
   const handleImageSelect = useCallback((imageId) => {
     setSelectedImageIds((prev) => {
-      const next = prev.includes(imageId)
-        ? prev.filter((id) => id !== imageId)
-        : [...prev, imageId];
-      onSelectionChange?.(next);
-      return next;
+      if (prev.includes(imageId)) {
+        return prev.filter((id) => id !== imageId);
+      }
+      return [...prev, imageId];
     });
-  }, [onSelectionChange]);
+  }, []);
 
   const handleImageClick = useCallback((url, allImages, idx) => {
     if (onImageClickProp) {
@@ -736,7 +686,6 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
 
       toast.success('Review submitted');
       setSelectedImageIds([]);
-      onSelectionChange?.([]);
       setReviewNewImages([]);
       setReviewNote("");
       setIsReviewing(false);
@@ -803,7 +752,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
                 <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => { setSelectedImageIds([]); onSelectionChange?.([]); }}
+                onClick={() => setSelectedImageIds([])}
                 className="text-gray-400 hover:text-white">
                 
                   <X className="w-4 h-4" />
