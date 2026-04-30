@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import TaskGroupHeader from "./TaskGroupHeader";
 import ToDoTaskItem from "./ToDoTaskItem";
+import TodoDetailModal from "./TodoDetailModal";
 
 export default function ToDoListDisplay({
   requestId,
@@ -36,8 +37,18 @@ export default function ToDoListDisplay({
   const [newGroupName, setNewGroupName] = useState("");
   const [showNewGroup, setShowNewGroup] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState({});
+  const [detailTask, setDetailTask] = useState(null);
 
   const isReadOnly = !!(token || slug);
+
+  // Keep detail modal in sync with latest task data
+  useEffect(() => {
+    if (detailTask) {
+      const fresh = tasks.find((t) => t.id === detailTask.id);
+      if (fresh && fresh !== detailTask) setDetailTask(fresh);
+      if (!fresh) setDetailTask(null);
+    }
+  }, [tasks, detailTask]);
 
   // Single source of truth: taskGroups comes from backend via props
   const groups = taskGroups;
@@ -262,6 +273,7 @@ export default function ToDoListDisplay({
                     token={token}
                     slug={slug}
                     onImageClick={onImageClick}
+                    onOpenDetail={(t) => setDetailTask(t)}
                   />
                 </div>
               )}
@@ -541,6 +553,24 @@ export default function ToDoListDisplay({
             )}
           </Droppable>
         </DragDropContext>
+        {/* Detail Modal */}
+        <TodoDetailModal
+          task={detailTask}
+          open={!!detailTask}
+          onClose={() => setDetailTask(null)}
+          groups={groups}
+          assignableUsers={assignableUsers}
+          assignableContacts={assignableContacts}
+          queryKey={queryKey}
+          requestId={requestId}
+          readOnly={isReadOnly}
+          onImageClick={onImageClick}
+          onEdit={(t) => {
+            setDetailTask(null);
+            // Find the task item and trigger its edit — handled by setting detailTask to null
+            // The user can click the edit button directly
+          }}
+        />
       </CardContent>
     </Card>
   );

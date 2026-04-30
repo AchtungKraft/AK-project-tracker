@@ -24,6 +24,7 @@ export default function ToDoTaskItem({
   token,
   slug,
   onImageClick,
+  onOpenDetail,
 }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
@@ -261,23 +262,35 @@ export default function ToDoTaskItem({
   }
 
   // ── VIEW MODE ──
+  const handleCardClick = (e) => {
+    // Don't open detail if clicking interactive elements
+    if (e.defaultPrevented) return;
+    onOpenDetail?.(task);
+  };
+
   return (
-    <div className={cn(
-      "rounded-lg border transition-all duration-150 group",
-      task.is_complete
-        ? "bg-gray-900/40 border-gray-800/60"
-        : "bg-gray-800/60 border-gray-700/50 hover:border-gray-500/50 hover:bg-gray-800/80 hover:shadow-md hover:shadow-black/20"
-    )}>
+    <div
+      className={cn(
+        "rounded-lg border transition-all duration-150 group",
+        task.is_complete
+          ? "bg-gray-900/40 border-gray-800/60"
+          : "bg-gray-800/60 border-gray-700/50 hover:border-gray-500/50 hover:bg-gray-800/80 hover:shadow-md hover:shadow-black/20",
+        onOpenDetail && "cursor-pointer"
+      )}
+      onClick={handleCardClick}
+    >
       <div className="flex items-start gap-3 p-3">
         {!readOnly && (
           <GripVertical className="w-4 h-4 mt-1 text-gray-600 opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity cursor-grab shrink-0" />
         )}
-        <Checkbox
-          checked={task.is_complete}
-          onCheckedChange={handleToggleComplete}
-          disabled={readOnly && !token && !slug}
-          className="mt-0.5 border-gray-600 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
-        />
+        <div onClick={(e) => e.preventDefault()}>
+          <Checkbox
+            checked={task.is_complete}
+            onCheckedChange={handleToggleComplete}
+            disabled={readOnly && !token && !slug}
+            className="mt-0.5 border-gray-600 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
+          />
+        </div>
         <div className="flex-1 min-w-0 space-y-1.5">
           {/* Title */}
           <p className={cn(
@@ -297,21 +310,25 @@ export default function ToDoTaskItem({
             </p>
           )}
 
-          {/* Image thumbnails */}
+          {/* Image thumbnails — max 2 with +N overflow */}
           {hasImages && (
-            <div className="flex gap-1.5 overflow-x-auto pb-0.5 -mb-0.5 scrollbar-hide">
-              {task.images.map((url, idx) => (
+            <div className="flex gap-1.5 pt-0.5">
+              {task.images.slice(0, 2).map((url, idx) => (
                 <img
                   key={idx}
                   src={url}
                   alt=""
-                  onClick={() => onImageClick?.(task.images, idx)}
                   className={cn(
-                    "w-12 h-12 rounded border object-cover cursor-pointer shrink-0 transition-opacity hover:opacity-80",
-                    task.is_complete ? "border-gray-800 opacity-50" : "border-gray-700"
+                    "w-16 h-16 rounded-md object-cover shrink-0",
+                    task.is_complete ? "opacity-50" : ""
                   )}
                 />
               ))}
+              {task.images.length > 2 && (
+                <div className="w-16 h-16 rounded-md bg-gray-700/60 flex items-center justify-center text-xs text-gray-400 font-medium shrink-0">
+                  +{task.images.length - 2}
+                </div>
+              )}
             </div>
           )}
 
@@ -341,7 +358,7 @@ export default function ToDoTaskItem({
 
         {/* Action buttons */}
         {!readOnly && (
-          <div className="flex items-center gap-0.5 shrink-0">
+          <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.preventDefault()}>
             {groups.length > 0 && (
               <MoveToGroupPopover
                 task={task}
@@ -353,7 +370,7 @@ export default function ToDoTaskItem({
             <Button
               size="icon"
               variant="ghost"
-              onClick={startEditing}
+              onClick={(e) => { e.preventDefault(); startEditing(); }}
               className="h-7 w-7 text-gray-500 hover:text-white"
             >
               <Pencil className="w-3 h-3" />
