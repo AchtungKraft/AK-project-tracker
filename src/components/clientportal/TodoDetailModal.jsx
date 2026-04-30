@@ -74,8 +74,7 @@ export default function TodoDetailModal({
             <img
               src={images[activeIndex]}
               alt=""
-              className="w-full h-full object-contain max-h-[320px] cursor-pointer"
-              onClick={() => onImageClick?.(images, activeIndex)}
+              className="w-full h-full object-contain max-h-[320px]"
             />
             {images.length > 1 && (
               <>
