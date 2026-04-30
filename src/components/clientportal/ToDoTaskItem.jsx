@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Trash2, User, Calendar, FolderOpen, Pencil, Save, X, Upload, Loader2, GripVertical } from "lucide-react";
+import MoveToGroupPopover from "./MoveToGroupPopover";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
@@ -18,6 +19,7 @@ export default function ToDoTaskItem({
   assignableUsers = [],
   assignableContacts = [],
   queryKey,
+  requestId,
   readOnly = false,
   token,
   slug,
@@ -332,16 +334,26 @@ export default function ToDoTaskItem({
           )}
         </div>
 
-        {/* Edit toggle */}
+        {/* Action buttons */}
         {!readOnly && (
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={startEditing}
-            className="h-7 w-7 shrink-0 text-gray-500 hover:text-white"
-          >
-            <Pencil className="w-3 h-3" />
-          </Button>
+          <div className="flex items-center gap-0.5 shrink-0">
+            {groups.length > 0 && (
+              <MoveToGroupPopover
+                task={task}
+                groups={groups}
+                requestId={requestId}
+                queryKey={queryKey}
+              />
+            )}
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={startEditing}
+              className="h-7 w-7 text-gray-500 hover:text-white"
+            >
+              <Pencil className="w-3 h-3" />
+            </Button>
+          </div>
         )}
       </div>
     </div>
