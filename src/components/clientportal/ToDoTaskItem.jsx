@@ -94,9 +94,14 @@ export default function ToDoTaskItem({
 
   const handleDelete = async () => {
     if (!confirm("Delete this task?")) return;
-    await base44.entities.ToDoListTask.delete(task.id);
+    try {
+      await base44.entities.ToDoListTask.delete(task.id);
+      toast.success("Task deleted");
+    } catch (e) {
+      // Task already deleted — just refresh
+      toast.info("Task was already removed");
+    }
     queryClient.invalidateQueries({ queryKey });
-    toast.success("Task deleted");
   };
 
   const handleImageUpload = async (e) => {
