@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Printer } from "lucide-react";
 import { filterActiveTasks } from "@/utils/getActivePriorityTasks";
 import PrintTaskChecklistItems from "@/components/print/PrintTaskChecklistItems";
+import PrintTaskPartsProgress from "@/components/print/PrintTaskPartsProgress";
 import { groupIncompleteByTaskId } from "@/components/tasks/checklistHelpers";
 
 export default function ProjectPrintView() {
@@ -52,6 +53,23 @@ export default function ProjectPrintView() {
   const checklistItemsByTaskId = useMemo(() => {
     return groupIncompleteByTaskId(allChecklistItems, new Set(taskIds));
   }, [allChecklistItems, taskIds]);
+
+  const { data: allTaskPartLinks = [] } = useQuery({
+    queryKey: ['taskPartLinks', 'print', projectId],
+    queryFn: () => base44.entities.TaskPartLink.filter({ project_id: projectId }),
+    enabled: taskIds.length > 0,
+  });
+
+  const taskPartLinksByTaskId = useMemo(() => {
+    const map = {};
+    const taskIdSet = new Set(taskIds);
+    allTaskPartLinks.forEach(link => {
+      if (!taskIdSet.has(link.task_id)) return;
+      if (!map[link.task_id]) map[link.task_id] = [];
+      map[link.task_id].push(link);
+    });
+    return map;
+  }, [allTaskPartLinks, taskIds]);
 
   // Sort buckets by order, group tasks
   const sections = useMemo(() => {
@@ -184,6 +202,7 @@ export default function ProjectPrintView() {
                       {formatDate(task.due_date) || "—"}
                     </div>
                   </div>
+                  <PrintTaskPartsProgress taskId={task.id} taskPartLinksByTaskId={taskPartLinksByTaskId} />
                   <PrintTaskChecklistItems taskId={task.id} checklistItemsByTaskId={checklistItemsByTaskId} />
                 </div>
               ))}
