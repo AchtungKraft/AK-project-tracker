@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Printer } from "lucide-react";
 import { filterActiveTasks } from "@/utils/getActivePriorityTasks";
 import PrintTaskChecklistItems from "@/components/print/PrintTaskChecklistItems";
+import { groupIncompleteByTaskId } from "@/components/tasks/checklistHelpers";
 
 export default function ProjectPrintView() {
   const projectId = new URLSearchParams(window.location.search).get("id");
@@ -43,22 +44,13 @@ export default function ProjectPrintView() {
   const taskIds = useMemo(() => activeTasks.map(t => t.id), [activeTasks]);
 
   const { data: allChecklistItems = [] } = useQuery({
-    queryKey: ["printChecklist", projectId],
+    queryKey: ['taskChecklistItems', 'print', projectId],
     queryFn: () => base44.entities.TaskChecklistItem.list(),
     enabled: taskIds.length > 0,
   });
 
   const checklistItemsByTaskId = useMemo(() => {
-    const taskIdSet = new Set(taskIds);
-    const map = {};
-    allChecklistItems
-      .filter(i => !i.is_complete && taskIdSet.has(i.task_id))
-      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
-      .forEach(i => {
-        if (!map[i.task_id]) map[i.task_id] = [];
-        map[i.task_id].push(i);
-      });
-    return map;
+    return groupIncompleteByTaskId(allChecklistItems, new Set(taskIds));
   }, [allChecklistItems, taskIds]);
 
   // Sort buckets by order, group tasks

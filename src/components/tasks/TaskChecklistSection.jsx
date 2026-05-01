@@ -17,7 +17,7 @@ export default function TaskChecklistSection({ taskId }) {
   const [manualCollapse, setManualCollapse] = useState(null);
 
   const { data: items = [], isLoading } = useQuery({
-    queryKey: ['taskChecklistItems', taskId],
+    queryKey: ['taskChecklistItems', 'task', taskId],
     queryFn: () => base44.entities.TaskChecklistItem.filter({ task_id: taskId }),
     enabled: !!taskId,
     staleTime: 30000,
@@ -37,21 +37,23 @@ export default function TaskChecklistSection({ taskId }) {
     return [...incomplete, ...complete];
   }, [items]);
 
+  // Invalidate entire taskChecklistItems tree — covers task, shop, and print scopes
   const invalidateChecklist = () => {
-    queryClient.invalidateQueries({ queryKey: ['taskChecklistItems', taskId] });
-    queryClient.invalidateQueries({ queryKey: ['shopChecklistItems'] });
-    queryClient.invalidateQueries({ queryKey: ['printChecklist'] });
+    queryClient.invalidateQueries({ queryKey: ['taskChecklistItems'] });
   };
 
   const createMutation = useMutation({
-    mutationFn: (title) => base44.entities.TaskChecklistItem.create({
-      task_id: taskId,
-      title,
-      is_complete: false,
-      completed_at: null,
-      sort_order: items.length,
-      visibility: "internal",
-    }),
+    mutationFn: (title) => {
+      const maxOrder = items.reduce((max, i) => Math.max(max, i.sort_order || 0), -1);
+      return base44.entities.TaskChecklistItem.create({
+        task_id: taskId,
+        title,
+        is_complete: false,
+        completed_at: null,
+        sort_order: maxOrder + 1,
+        visibility: "internal",
+      });
+    },
     onSuccess: () => {
       invalidateChecklist();
       setNewItemTitle("");

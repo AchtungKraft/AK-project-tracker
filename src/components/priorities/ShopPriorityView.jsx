@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import TaskCard from "@/components/project/TaskCard";
 import TaskQuickPreview from "./TaskQuickPreview";
+import { computeChecklistProgress } from "@/components/tasks/checklistHelpers";
 import ShopTeamSummaryBar from "./ShopTeamSummaryBar";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 import ProjectFirstView from "./ProjectFirstView";
@@ -297,19 +298,13 @@ export default function ShopPriorityView({
   // Load checklist items for progress indicators
   const taskIds = useMemo(() => tasks.map(t => t.id), [tasks]);
   const { data: allChecklistItems = [] } = useQuery({
-    queryKey: ['shopChecklistItems', taskIds],
+    queryKey: ['taskChecklistItems', 'shop'],
     queryFn: () => base44.entities.TaskChecklistItem.list(),
     enabled: taskIds.length > 0,
   });
   const checklistProgressByTaskId = useMemo(() => {
     const taskIdSet = new Set(taskIds);
-    const m = {};
-    allChecklistItems.filter(i => taskIdSet.has(i.task_id)).forEach(i => {
-      if (!m[i.task_id]) m[i.task_id] = { completed: 0, total: 0 };
-      m[i.task_id].total++;
-      if (i.is_complete) m[i.task_id].completed++;
-    });
-    return m;
+    return computeChecklistProgress(allChecklistItems, taskIdSet);
   }, [allChecklistItems, taskIds]);
 
   // Load all buckets for projects that have tasks
