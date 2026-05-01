@@ -19,6 +19,26 @@ import { toast } from "sonner";
 import FinancialStatusBadge from "@/components/financial/FinancialStatusBadge";
 import { useFinancialStatusBatch } from "@/components/financial/useFinancialStatus";
 import InstallPartModal from "@/components/project/InstallPartModal";
+import { resolveLifecycleState, getLifecycleLabel } from "@/components/supply/resolveCommitmentStateLocal";
+
+const LIFECYCLE_BADGE_STYLES = {
+  INSTALL_READY: "border-emerald-600 text-emerald-400",
+  INSTALLED:     "border-gray-600 text-gray-400",
+  COVERED:       "border-blue-600 text-blue-400",
+  NEEDS_ORDER:   "border-amber-600 text-amber-400",
+  PLANNED:       "border-gray-600 text-gray-300",
+  CANCELLED:     "border-gray-700 text-gray-500",
+  CLOSED:        "border-gray-700 text-gray-500",
+};
+
+function LifecycleStateBadge({ state, label }) {
+  const style = LIFECYCLE_BADGE_STYLES[state] || "border-gray-600 text-gray-400";
+  return (
+    <Badge variant="outline" className={cn("text-xs", style)}>
+      {label}
+    </Badge>
+  );
+}
 
 /**
  * TaskPartsSection
@@ -59,6 +79,7 @@ export default function TaskPartsSection({
   });
 
   const partsMap = Object.fromEntries(parts.map((p) => [p.id, p]));
+  const commitmentsMap = Object.fromEntries(commitments.map((c) => [c.id, c]));
 
   // Batch resolve financial status for linked parts
   const financialContexts = useMemo(() => {
@@ -156,14 +177,18 @@ export default function TaskPartsSection({
               const part = partsMap[link.part_id];
               if (!part) return null;
 
-              const isComplete = link.install_status === "complete";
+              const commitment = commitmentsMap[link.commitment_id];
+              const lifecycleState = resolveLifecycleState(commitment);
+              const lifecycleLabel = getLifecycleLabel(commitment);
+              const isInstalled = lifecycleState === 'INSTALLED';
+              const isTerminal = lifecycleState === 'CANCELLED' || lifecycleState === 'CLOSED';
 
               return (
                 <div
                   key={link.id}
                   className={cn(
                     "bg-gray-900/50 rounded-lg p-3 flex items-center justify-between gap-3",
-                    isComplete && "opacity-70"
+                    (isInstalled || isTerminal) && "opacity-70"
                   )}
                 >
                   <div className="flex-1 min-w-0">
@@ -173,15 +198,7 @@ export default function TaskPartsSection({
                     </div>
                     <div className="flex items-center gap-2 text-xs text-gray-400">
                       <span>Qty: {link.qty_allocated}</span>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "text-xs",
-                          isComplete ? "border-green-600 text-green-400" : "border-gray-600"
-                        )}
-                      >
-                        {link.install_status}
-                      </Badge>
+                      <LifecycleStateBadge state={lifecycleState} label={lifecycleLabel} />
                     </div>
                     <div className="mt-1">
                       <FinancialStatusBadge 
@@ -192,7 +209,7 @@ export default function TaskPartsSection({
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {!isComplete && (
+                    {lifecycleState === 'INSTALL_READY' && (
                       <Button
                         size="sm"
                         variant="ghost"
@@ -202,10 +219,10 @@ export default function TaskPartsSection({
                         <Wrench className="w-4 h-4" />
                       </Button>
                     )}
-                    {isComplete && (
+                    {isInstalled && (
                       <CheckCircle className="w-5 h-5 text-green-500" />
                     )}
-                    {!isComplete && (
+                    {!isInstalled && !isTerminal && (
                       <Button
                         size="sm"
                         variant="ghost"
