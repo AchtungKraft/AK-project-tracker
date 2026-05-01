@@ -3,7 +3,7 @@ import { useTaskInteraction } from './useTaskInteraction';
 import PriorityRemoveConfirm from './PriorityRemoveConfirm';
 import DeleteTaskConfirm from './DeleteTaskConfirm';
 import CompleteTaskConfirm from './CompleteTaskConfirm';
-import InstallPartsOnCompleteModal from './InstallPartsOnCompleteModal';
+import UninstalledPartsWarning from './UninstalledPartsWarning';
 
 /**
  * TaskInteractionContext - Provider for task interaction state
@@ -92,15 +92,14 @@ export function TaskInteractionProvider({
         isLoading={interaction.isUpdating}
       />
 
-      {/* Commitment Install on Completion - Global */}
-      <InstallPartsOnCompleteModal
-        isOpen={!!interaction.pendingInstallCommitments}
-        onClose={interaction.cancelInstallCommitments}
-        onInstallAndComplete={interaction.confirmInstallAndComplete}
-        onSkipAndComplete={interaction.skipInstallAndComplete}
-        taskName={interaction.pendingInstallCommitments?.task?.name}
-        commitments={interaction.pendingInstallCommitments?.commitments || []}
-        isProcessing={interaction.isProcessingInstall}
+      {/* Uninstalled Parts Warning on Completion */}
+      <UninstalledPartsWarning
+        isOpen={!!interaction.pendingUninstalledPartsCompletion}
+        onClose={interaction.cancelUninstalledPartsCompletion}
+        onConfirm={interaction.confirmUninstalledPartsCompletion}
+        taskName={interaction.pendingUninstalledPartsCompletion?.task?.name}
+        uninstalledCount={interaction.pendingUninstalledPartsCompletion?.uninstalledCount || 0}
+        isLoading={interaction.isUpdating}
       />
     </TaskInteractionContext.Provider>
   );

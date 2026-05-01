@@ -39,8 +39,7 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
   const [isEditing, setIsEditing] = useState(false);
   const [pendingPriorityRemoval, setPendingPriorityRemoval] = useState(null);
   const [pendingChecklistCompletion, setPendingChecklistCompletion] = useState(null);
-  const [pendingInstallCommitments, setPendingInstallCommitments] = useState(null);
-  const [isProcessingInstall, setIsProcessingInstall] = useState(false);
+  const [pendingUninstalledPartsCompletion, setPendingUninstalledPartsCompletion] = useState(null);
 
   // ═══════════════════════════════════════════════════════════════
   // DATA FETCHING
@@ -271,62 +270,35 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
   }, [completedStatus, updateTask]);
 
   /**
-   * resolveInstallableCommitments
+   * countUninstalledCommitments
    * 
-   * TaskPartLink → PartCommitment → filter to installable only.
-   * Installable = commitment has remaining_qty > 0 and is not cancelled/installed.
-   * Returns ONLY commitments — TaskPartLinks are a lookup mechanism, not the install unit.
+   * TaskPartLink → PartCommitment → count installable.
+   * Used to show a warning when completing a task that still has uninstalled parts.
    */
-  const resolveInstallableCommitments = useCallback(async (task) => {
+  const countUninstalledCommitments = useCallback(async (task) => {
     const links = await base44.entities.TaskPartLink.filter({ task_id: task.id });
-    if (links.length === 0) return [];
+    if (links.length === 0) return 0;
 
-    // Deduplicate commitment IDs from links (multiple links can reference same commitment)
     const commitmentIds = [...new Set(links.map(l => l.commitment_id).filter(Boolean))];
-    if (commitmentIds.length === 0) return [];
+    if (commitmentIds.length === 0) return 0;
 
-    // Fetch canonical commitment state and parts in parallel
-    const partIds = [...new Set(links.map(l => l.part_id).filter(Boolean))];
-    const [commitments, parts] = await Promise.all([
-      base44.entities.PartCommitment.filter({ id: commitmentIds }),
-      partIds.length > 0
-        ? base44.entities.Part.filter({ id: partIds })
-        : Promise.resolve([]),
-    ]);
+    const commitments = await base44.entities.PartCommitment.filter({ id: commitmentIds });
 
-    const partMap = new Map(parts.map(p => [p.id, p]));
-
-    // Resolve to installable commitments only
-    return commitments
-      .map(c => {
-        const reserved = c.reserved_from_stock ?? 0;
-        const installed = c.qty_installed ?? 0;
-        const remainingQty = Math.max(0, reserved - installed);
-        const part = partMap.get(c.part_id);
-        const status = (c.commitment_status || '').toLowerCase();
-
-        return {
-          commitmentId: c.id,
-          partId: c.part_id,
-          partName: part?.part_name || 'Unknown Part',
-          partNumber: part?.vendor_part_number || '',
-          remainingQty,
-          isCancelled: status === 'cancelled',
-          isInstalled: status === 'installed',
-        };
-      })
-      .filter(c => !c.isCancelled && !c.isInstalled && c.remainingQty > 0);
+    return commitments.filter(c => {
+      const remaining = Math.max(0, (c.reserved_from_stock ?? 0) - (c.qty_installed ?? 0));
+      const status = (c.commitment_status || '').toLowerCase();
+      return remaining > 0 && status !== 'cancelled' && status !== 'installed';
+    }).length;
   }, []);
 
-  const proceedToCommitmentCheck = useCallback(async (task) => {
-    const installable = await resolveInstallableCommitments(task);
-    if (installable.length > 0) {
-      setPendingInstallCommitments({ task, commitments: installable });
+  const proceedToUninstalledCheck = useCallback(async (task) => {
+    const count = await countUninstalledCommitments(task);
+    if (count > 0) {
+      setPendingUninstalledPartsCompletion({ task, uninstalledCount: count });
       return { requiresConfirmation: true };
     }
-    // No installable commitments — complete immediately
     await executeCompletion(task);
-  }, [resolveInstallableCommitments, executeCompletion]);
+  }, [countUninstalledCommitments, executeCompletion]);
 
   const toggleComplete = useCallback(async (task, skipChecklistCheck = false) => {
     const isCurrentlyComplete = task.status_id === completedStatus?.id;
@@ -350,84 +322,37 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
           return { requiresConfirmation: true };
         }
       }
-      // Checklist passed — now check for installable commitments
-      await proceedToCommitmentCheck(task);
+      // Checklist passed — now check for uninstalled parts warning
+      await proceedToUninstalledCheck(task);
     }
-  }, [completedStatus, taskStatuses, updateTask, proceedToCommitmentCheck]);
+  }, [completedStatus, taskStatuses, updateTask, proceedToUninstalledCheck]);
 
   const confirmChecklistCompletion = useCallback(async () => {
     if (!pendingChecklistCompletion) return;
     const { task } = pendingChecklistCompletion;
     setPendingChecklistCompletion(null);
-    // After checklist confirm, proceed to commitment check
-    await proceedToCommitmentCheck(task);
-  }, [pendingChecklistCompletion, proceedToCommitmentCheck]);
+    // After checklist confirm, proceed to uninstalled parts check
+    await proceedToUninstalledCheck(task);
+  }, [pendingChecklistCompletion, proceedToUninstalledCheck]);
 
   const cancelChecklistCompletion = useCallback(() => {
     setPendingChecklistCompletion(null);
   }, []);
 
   // ═══════════════════════════════════════════════════════════════
-  // PUBLIC API - Commitment Install on Completion (HARDENED)
+  // PUBLIC API - Uninstalled Parts Warning on Completion
   // ═══════════════════════════════════════════════════════════════
 
-  const confirmInstallAndComplete = useCallback(async (selectedCommitmentIds) => {
-    if (!pendingInstallCommitments || isProcessingInstall) return;
-    const { task, commitments } = pendingInstallCommitments;
-
-    setIsProcessingInstall(true);
-
-    try {
-      // REVALIDATION: Re-fetch each selected commitment to get fresh remaining_qty
-      // Prevents double-installs from stale UI or concurrent updates
-      for (const commitmentId of selectedCommitmentIds) {
-        const cached = commitments.find(c => c.commitmentId === commitmentId);
-        if (!cached) continue;
-
-        // Fresh read from DB
-        const [fresh] = await base44.entities.PartCommitment.filter({ id: [commitmentId] });
-        if (!fresh) continue;
-
-        const freshRemaining = Math.max(0, (fresh.reserved_from_stock ?? 0) - (fresh.qty_installed ?? 0));
-        const freshStatus = (fresh.commitment_status || '').toLowerCase();
-
-        // SKIP if no longer installable
-        if (freshRemaining <= 0 || freshStatus === 'cancelled' || freshStatus === 'installed') {
-          console.warn(`[INSTALL GUARD] Commitment ${commitmentId} no longer installable (remaining=${freshRemaining}, status=${freshStatus})`);
-          continue;
-        }
-
-        // Execute via canonical supply dispatcher — ONLY source of install mutations
-        await base44.functions.invoke('executeSupplyAction', {
-          action_type: 'INSTALL',
-          commitment_ids: [commitmentId],
-          payload: {
-            qty_to_install: freshRemaining,
-            notes: `Installed on task completion: ${task.name}`,
-          },
-          dry_run: false,
-        });
-      }
-
-      // ALL installs complete — NOW complete the task
-      await executeCompletion(task);
-    } finally {
-      setIsProcessingInstall(false);
-      setPendingInstallCommitments(null);
-    }
-  }, [pendingInstallCommitments, isProcessingInstall, executeCompletion]);
-
-  const skipInstallAndComplete = useCallback(async () => {
-    if (!pendingInstallCommitments || isProcessingInstall) return;
-    const { task } = pendingInstallCommitments;
-    setPendingInstallCommitments(null);
+  const confirmUninstalledPartsCompletion = useCallback(async () => {
+    if (!pendingUninstalledPartsCompletion) return;
+    const { task } = pendingUninstalledPartsCompletion;
+    setPendingUninstalledPartsCompletion(null);
     await executeCompletion(task);
-  }, [pendingInstallCommitments, isProcessingInstall, executeCompletion]);
+  }, [pendingUninstalledPartsCompletion, executeCompletion]);
 
-  const cancelInstallCommitments = useCallback(() => {
-    if (isProcessingInstall) return; // Cannot cancel mid-execution
-    setPendingInstallCommitments(null);
-  }, [isProcessingInstall]);
+  const cancelUninstalledPartsCompletion = useCallback(() => {
+    setPendingUninstalledPartsCompletion(null);
+  }, []);
 
   // ═══════════════════════════════════════════════════════════════
   // PUBLIC API - Date Updates
@@ -497,12 +422,10 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
     confirmChecklistCompletion,
     cancelChecklistCompletion,
 
-    // Commitment Install on Completion State
-    pendingInstallCommitments,
-    isProcessingInstall,
-    confirmInstallAndComplete,
-    skipInstallAndComplete,
-    cancelInstallCommitments,
+    // Uninstalled Parts Warning State
+    pendingUninstalledPartsCompletion,
+    confirmUninstalledPartsCompletion,
+    cancelUninstalledPartsCompletion,
 
     // Drawer State
     activeTask,

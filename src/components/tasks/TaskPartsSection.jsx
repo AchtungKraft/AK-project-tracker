@@ -12,14 +12,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { Package, Plus, Wrench, Trash2, CheckCircle, MapPin, AlertTriangle } from "lucide-react";
+import { Package, Plus, Wrench, Trash2, CheckCircle } from "lucide-react";
 import { PartTypeBadge } from "@/components/parts/PartTypeSelector";
-import ConfirmInventoryActionModal from "@/components/inventory/ConfirmInventoryActionModal";
 import { toast } from "sonner";
 import FinancialStatusBadge from "@/components/financial/FinancialStatusBadge";
-import { useFinancialStatusBatch, buildFinancialContexts } from "@/components/financial/useFinancialStatus";
+import { useFinancialStatusBatch } from "@/components/financial/useFinancialStatus";
+import InstallPartModal from "@/components/project/InstallPartModal";
 
 /**
  * TaskPartsSection
@@ -35,8 +34,7 @@ export default function TaskPartsSection({
   const [showAddPart, setShowAddPart] = useState(false);
   const [selectedPartId, setSelectedPartId] = useState("");
   const [allocateQty, setAllocateQty] = useState(1);
-  const [installConfirm, setInstallConfirm] = useState(null);
-  const [selectedLocationId, setSelectedLocationId] = useState("");
+  const [installTarget, setInstallTarget] = useState(null);
 
   // Fetch task-part links
   const { data: taskPartLinks = [], isLoading: linksLoading } = useQuery({
@@ -60,24 +58,7 @@ export default function TaskPartsSection({
     staleTime: 30000,
   });
 
-  // Fetch inventory items for availability check — only when we have a project
-  const { data: inventoryItems = [] } = useQuery({
-    queryKey: ["inventoryItems"],
-    queryFn: () => base44.entities.InventoryItem.list(),
-    enabled: !!project?.id,
-    staleTime: 30000,
-  });
-
-  // Fetch locations for install source selection — only when we have a project
-  const { data: locations = [] } = useQuery({
-    queryKey: ["locations"],
-    queryFn: () => base44.entities.Location.list(),
-    enabled: !!project?.id,
-    staleTime: 30000,
-  });
-
   const partsMap = Object.fromEntries(parts.map((p) => [p.id, p]));
-  const activeLocations = locations.filter(l => l.active);
 
   // Batch resolve financial status for linked parts
   const financialContexts = useMemo(() => {
@@ -99,20 +80,6 @@ export default function TaskPartsSection({
     });
     return map;
   }, [financialStatuses]);
-
-  // Get inventory availability for a part
-  const getPartInventory = (partId) => {
-    const items = inventoryItems.filter(i => i.part_id === partId);
-    return items.map(item => {
-      const location = locations.find(l => l.id === item.location_id);
-      const available = (item.quantity_on_hand || 0) - (item.quantity_reserved || 0);
-      return {
-        ...item,
-        location,
-        available,
-      };
-    }).filter(i => i.available > 0);
-  };
 
   // Available parts for this project (from commitments, not yet fully linked)
   // Filter out archived parts from new linkages
@@ -158,71 +125,13 @@ export default function TaskPartsSection({
     },
   });
 
-  // Mark as installed mutation using centralized service
-  const installMutation = useMutation({
-    mutationFn: async ({ link, locationId }) => {
-      const part = partsMap[link.part_id];
-      const commitment = commitments.find((c) => c.id === link.commitment_id);
-      
-      // Check if part type affects inventory
-      const affectsInventory = part?.affects_inventory !== false;
-      
-      // Validate inventory availability if needed
-      if (affectsInventory && !locationId) {
-        // Find any available inventory
-        const availableInventory = getPartInventory(link.part_id);
-        if (availableInventory.length === 0) {
-          throw new Error('No inventory available for this part');
-        }
-      }
-      
-      const response = await base44.functions.invoke('mutateInventory', {
-        mutation_type: 'install',
-        part_id: link.part_id,
-        qty: link.qty_allocated,
-        project_id: project?.id,
-        task_part_link_id: link.id,
-        commitment_id: link.commitment_id,
-        from_location_id: locationId || null,
-        unit_cost: commitment?.unit_cost_snapshot || part?.default_cost || 0,
-        notes: `Installed for task: ${task.name}`,
-      });
-      
-      if (response.data?.error) {
-        throw new Error(response.data.error);
-      }
-      
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["taskPartLinks", task?.id] });
-      queryClient.invalidateQueries({ queryKey: ["commitments"] });
-      queryClient.invalidateQueries({ queryKey: ["partCommitments"] });
-      queryClient.invalidateQueries({ queryKey: ["installedParts"] });
-      queryClient.invalidateQueries({ queryKey: ["inventoryItems"] });
-      queryClient.invalidateQueries({ queryKey: ["inventoryAuditLogs"] });
-      setInstallConfirm(null);
-      setSelectedLocationId("");
-      toast.success("Part installed successfully");
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to install part");
-    },
-  });
-
   const handleInstallClick = (link) => {
-    const part = partsMap[link.part_id];
     const commitment = commitments.find((c) => c.id === link.commitment_id);
-    const availableInventory = getPartInventory(link.part_id);
-    
-    // Pre-select first available location
-    if (availableInventory.length > 0) {
-      setSelectedLocationId(availableInventory[0].location_id);
-    } else {
-      setSelectedLocationId("");
+    if (!commitment) {
+      toast.error("No commitment found for this part link");
+      return;
     }
-    
-    setInstallConfirm({ link, part, commitment, availableInventory });
+    setInstallTarget(commitment);
   };
 
   if (!task) return null;
@@ -376,57 +285,16 @@ export default function TaskPartsSection({
           </Button>
         )}
 
-        {/* Install Confirmation Modal */}
-        {installConfirm && (
-          <ConfirmInventoryActionModal
-            isOpen={!!installConfirm}
+        {/* Canonical Install Part Modal */}
+        {installTarget && (
+          <InstallPartModal
+            commitment={installTarget}
             onClose={() => {
-              setInstallConfirm(null);
-              setSelectedLocationId("");
+              setInstallTarget(null);
+              queryClient.invalidateQueries({ queryKey: ["taskPartLinks", task?.id] });
+              queryClient.invalidateQueries({ queryKey: ["commitments", project?.id] });
             }}
-            onConfirm={() => installMutation.mutate({ 
-              link: installConfirm.link, 
-              locationId: selectedLocationId 
-            })}
-            actionType="install"
-            part={installConfirm.part}
-            quantity={installConfirm.link.qty_allocated}
-            project={project}
-            task={task}
-            commitment={installConfirm.commitment}
-            fromLocation={activeLocations.find(l => l.id === selectedLocationId)}
-            isLoading={installMutation.isPending}
-          >
-            {/* Location Selection for Install */}
-            {installConfirm.part?.affects_inventory !== false && (
-              <div className="space-y-2 mb-4">
-                <Label className="text-gray-300 flex items-center gap-2">
-                  <MapPin className="w-4 h-4" />
-                  Source Location *
-                </Label>
-                {installConfirm.availableInventory?.length === 0 ? (
-                  <div className="bg-red-900/30 border border-red-600 rounded-lg p-3 flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 text-red-500" />
-                    <span className="text-red-200 text-sm">No inventory available for this part</span>
-                  </div>
-                ) : (
-                  <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
-                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                      <SelectValue placeholder="Select inventory location..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {installConfirm.availableInventory?.map((inv) => (
-                        <SelectItem key={inv.id} value={inv.location_id}>
-                          {inv.location?.name || inv.location?.location_area || 'Unknown'} 
-                          {' '}({inv.available} available)
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-            )}
-          </ConfirmInventoryActionModal>
+          />
         )}
       </CardContent>
     </Card>
