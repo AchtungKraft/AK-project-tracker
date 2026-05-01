@@ -137,10 +137,10 @@ export default function PartModal({ part, partId, onClose }) {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: (failureCount, error) => {
-      // Stop retrying on rate limit or not found
-      if (error?.status === 429 || error?.status === 404) return false;
-      return failureCount < 1;
+      if (error?.status === 404) return false;
+      return failureCount < 3;
     },
+    retryDelay: (attempt) => Math.min(1000 * Math.pow(2, attempt), 8000),
   });
 
   const activePart = part || fetchedPart;
@@ -340,10 +340,8 @@ export default function PartModal({ part, partId, onClose }) {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     refetchOnMount: false, // PHASE 1: Don't refetch on every mount
-    retry: (failureCount, error) => {
-      if (error?.status === 429) return false;
-      return failureCount < 1;
-    },
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * Math.pow(2, attempt), 8000),
   });
 
   // Location breakdown - ONLY used for location display, NOT for totals
@@ -362,10 +360,8 @@ export default function PartModal({ part, partId, onClose }) {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     refetchOnMount: false,
-    retry: (failureCount, error) => {
-      if (error?.status === 429) return false;
-      return failureCount < 1;
-    },
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * Math.pow(2, attempt), 8000),
   });
 
   const updateMutation = useMutation({
