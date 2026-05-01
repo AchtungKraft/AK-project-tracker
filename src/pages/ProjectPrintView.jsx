@@ -46,8 +46,8 @@ export default function ProjectPrintView() {
   const taskIds = useMemo(() => activeTasks.map(t => t.id), [activeTasks]);
 
   const { data: allChecklistItems = [] } = useQuery({
-    queryKey: ['taskChecklistItems', 'print', projectId],
-    queryFn: () => base44.entities.TaskChecklistItem.list(),
+    queryKey: ['taskChecklistItems', 'print', projectId, taskIds],
+    queryFn: () => base44.entities.TaskChecklistItem.filter({ task_id: { $in: taskIds } }),
     enabled: taskIds.length > 0,
   });
 

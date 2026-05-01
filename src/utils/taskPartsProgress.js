@@ -13,9 +13,16 @@ export function getTaskPartsProgressFromLinks(links) {
 
   links.forEach(link => {
     const required = link.qty_allocated ?? 1;
-    const done = Math.min(link.qty_installed ?? 0, required);
-    total += required;
-    installed += done;
+    // Primary: check install_status (set by lifecycle/commitment state)
+    // Fallback: check qty_installed field
+    if (link.install_status === 'complete') {
+      total += required;
+      installed += required;
+    } else {
+      const done = Math.min(link.qty_installed ?? 0, required);
+      total += required;
+      installed += done;
+    }
   });
 
   return { installed, total };

@@ -46,8 +46,8 @@ export default function PersonPrintView() {
   const taskIds = useMemo(() => activeTasks.map(t => t.id), [activeTasks]);
 
   const { data: allChecklistItems = [] } = useQuery({
-    queryKey: ['taskChecklistItems', 'print', memberId],
-    queryFn: () => base44.entities.TaskChecklistItem.list(),
+    queryKey: ['taskChecklistItems', 'print', memberId, taskIds],
+    queryFn: () => base44.entities.TaskChecklistItem.filter({ task_id: { $in: taskIds } }),
     enabled: taskIds.length > 0,
   });
 
@@ -56,8 +56,8 @@ export default function PersonPrintView() {
   }, [allChecklistItems, taskIds]);
 
   const { data: allTaskPartLinks = [] } = useQuery({
-    queryKey: ['taskPartLinks', 'printPerson', memberId],
-    queryFn: () => base44.entities.TaskPartLink.list(),
+    queryKey: ['taskPartLinks', 'printPerson', memberId, taskIds],
+    queryFn: () => base44.entities.TaskPartLink.filter({ task_id: { $in: taskIds } }),
     enabled: taskIds.length > 0,
   });
 

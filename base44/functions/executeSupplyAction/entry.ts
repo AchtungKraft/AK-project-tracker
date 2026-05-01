@@ -824,6 +824,25 @@ async function install(ctx,commitment_ids,payload) {
   const unitCost = c.unit_cost_snapshot ?? part.cost ?? 0;
   await ctx.base44.asServiceRole.entities.InstalledPart.create({part_id:part.id,project_id:c.project_id,commitment_id:cid,qty_consumed:qty_to_install,unit_cost_at_install:unitCost,extended_cost:unitCost*qty_to_install,installed_by:ctx.user.email,installed_date:ctx.timestamp});
   ctx.mutations.push({entity:'PartCommitment',id:cid,action:'INSTALL'});
+
+  // ── SYNC TaskPartLink install status ──
+  try {
+    const taskPartLinks = await ctx.base44.asServiceRole.entities.TaskPartLink.filter({ commitment_id: cid });
+    for (const tpl of taskPartLinks) {
+      const tplRequired = tpl.qty_allocated ?? 1;
+      const newTplInstalled = Math.min(newInst, tplRequired);
+      const newTplStatus = newTplInstalled >= tplRequired ? 'complete' : (newTplInstalled > 0 ? 'partial' : 'pending');
+      await ctx.base44.asServiceRole.entities.TaskPartLink.update(tpl.id, {
+        qty_installed: newTplInstalled,
+        install_status: newTplStatus,
+        ...(newTplStatus === 'complete' ? { installed_at: ctx.timestamp, installed_by: ctx.user.email } : {}),
+      });
+      ctx.mutations.push({ entity: 'TaskPartLink', id: tpl.id, action: 'INSTALL_SYNC' });
+    }
+  } catch (e) {
+    console.warn(`[INSTALL_TPL_SYNC] Failed to sync TaskPartLinks for commitment ${cid}: ${e.message}`);
+  }
+
   return {commitment_id:cid,qty_installed:qty_to_install,total_installed:newInst,new_reserved:newRes};
 }
 
@@ -865,6 +884,25 @@ async function reverseInstall(ctx,commitment_ids,payload) {
   }
   ctx.mutations.push({entity:'PartCommitment',id:cid,action:'REVERSE_INSTALL'});
   ctx.lifecycle_events.push({commitment_id:cid,event_type:'REVERSE_INSTALL',trigger_source:'UNIFIED_ENGINE',triggered_by:ctx.user.email,actor_email:ctx.user.email,part_id:part.id,project_id:c.project_id,old_values:JSON.stringify({qty_installed:cn.qty_installed}),new_values:JSON.stringify({qty_installed:newInstalled,new_status:newStatus}),metadata:JSON.stringify({qty_reversed:qty_to_reverse,reason:reason||null,affects_stock:affStock}),event_date:ctx.timestamp});
+
+  // ── SYNC TaskPartLink install status on reversal ──
+  try {
+    const taskPartLinks = await ctx.base44.asServiceRole.entities.TaskPartLink.filter({ commitment_id: cid });
+    for (const tpl of taskPartLinks) {
+      const tplRequired = tpl.qty_allocated ?? 1;
+      const newTplInstalled = Math.min(newInstalled, tplRequired);
+      const newTplStatus = newTplInstalled >= tplRequired ? 'complete' : (newTplInstalled > 0 ? 'partial' : 'pending');
+      await ctx.base44.asServiceRole.entities.TaskPartLink.update(tpl.id, {
+        qty_installed: newTplInstalled,
+        install_status: newTplStatus,
+        ...(newTplStatus !== 'complete' ? { installed_at: null, installed_by: null } : {}),
+      });
+      ctx.mutations.push({ entity: 'TaskPartLink', id: tpl.id, action: 'REVERSE_INSTALL_SYNC' });
+    }
+  } catch (e) {
+    console.warn(`[REVERSE_INSTALL_TPL_SYNC] Failed to sync TaskPartLinks for commitment ${cid}: ${e.message}`);
+  }
+
   return {commitment_id:cid,qty_reversed:qty_to_reverse,new_installed:newInstalled,new_status:newStatus,part_id:part.id,project_id:c.project_id};
 }
 
