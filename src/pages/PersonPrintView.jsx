@@ -3,6 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Printer } from "lucide-react";
 import { filterActiveTasks } from "@/utils/getActivePriorityTasks";
+import PrintTaskChecklistItems from "@/components/print/PrintTaskChecklistItems";
 
 export default function PersonPrintView() {
   const params = new URLSearchParams(window.location.search);
@@ -38,6 +39,27 @@ export default function PersonPrintView() {
 
   // Filter out completed/done/closed/archived/cancelled tasks (matches dashboard)
   const activeTasks = useMemo(() => filterActiveTasks(allTasks, statuses), [allTasks, statuses]);
+
+  const taskIds = useMemo(() => activeTasks.map(t => t.id), [activeTasks]);
+
+  const { data: allChecklistItems = [] } = useQuery({
+    queryKey: ["printChecklist", memberId],
+    queryFn: () => base44.entities.TaskChecklistItem.list(),
+    enabled: taskIds.length > 0,
+  });
+
+  const checklistItemsByTaskId = useMemo(() => {
+    const taskIdSet = new Set(taskIds);
+    const map = {};
+    allChecklistItems
+      .filter(i => !i.is_complete && taskIdSet.has(i.task_id))
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+      .forEach(i => {
+        if (!map[i.task_id]) map[i.task_id] = [];
+        map[i.task_id].push(i);
+      });
+    return map;
+  }, [allChecklistItems, taskIds]);
 
   const projectMap = useMemo(() => {
     const m = {};
@@ -188,17 +210,20 @@ export default function PersonPrintView() {
 
                 <div className="space-y-0">
                   {section.tasks.map((task) => (
-                    <div key={task.id} className="flex items-start gap-2 py-1 border-b border-gray-100 ml-2">
-                      <div className="w-4 h-4 border-2 border-gray-400 rounded-sm mt-0.5 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm leading-snug">{task.name}</div>
-                        {task.description && (
-                          <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{task.description}</div>
-                        )}
+                    <div key={task.id} className="break-inside-avoid ml-2">
+                      <div className="flex items-start gap-2 py-1 border-b border-gray-100">
+                        <div className="w-4 h-4 border-2 border-gray-400 rounded-sm mt-0.5 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm leading-snug">{task.name}</div>
+                          {task.description && (
+                            <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{task.description}</div>
+                          )}
+                        </div>
+                        <div className={`text-xs shrink-0 w-12 text-right ${isOverdue(task.due_date) ? "font-bold" : "text-gray-500"}`}>
+                          {formatDate(task.due_date) || "—"}
+                        </div>
                       </div>
-                      <div className={`text-xs shrink-0 w-12 text-right ${isOverdue(task.due_date) ? "font-bold" : "text-gray-500"}`}>
-                        {formatDate(task.due_date) || "—"}
-                      </div>
+                      <PrintTaskChecklistItems taskId={task.id} checklistItemsByTaskId={checklistItemsByTaskId} />
                     </div>
                   ))}
                 </div>
