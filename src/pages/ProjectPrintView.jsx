@@ -6,6 +6,7 @@ import { filterActiveTasks } from "@/utils/getActivePriorityTasks";
 import PrintTaskChecklistItems from "@/components/print/PrintTaskChecklistItems";
 import PrintTaskPartsProgress from "@/components/print/PrintTaskPartsProgress";
 import { groupIncompleteByTaskId } from "@/components/tasks/checklistHelpers";
+import { groupTaskPartLinksByTaskId } from "@/utils/taskPartsProgress";
 
 export default function ProjectPrintView() {
   const projectId = new URLSearchParams(window.location.search).get("id");
@@ -61,14 +62,7 @@ export default function ProjectPrintView() {
   });
 
   const taskPartLinksByTaskId = useMemo(() => {
-    const map = {};
-    const taskIdSet = new Set(taskIds);
-    allTaskPartLinks.forEach(link => {
-      if (!taskIdSet.has(link.task_id)) return;
-      if (!map[link.task_id]) map[link.task_id] = [];
-      map[link.task_id].push(link);
-    });
-    return map;
+    return groupTaskPartLinksByTaskId(allTaskPartLinks, new Set(taskIds));
   }, [allTaskPartLinks, taskIds]);
 
   // Sort buckets by order, group tasks
