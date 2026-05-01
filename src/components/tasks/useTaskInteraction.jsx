@@ -38,6 +38,7 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
   const [activeTask, setActiveTask] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [pendingPriorityRemoval, setPendingPriorityRemoval] = useState(null);
+  const [pendingChecklistCompletion, setPendingChecklistCompletion] = useState(null);
 
   // ═══════════════════════════════════════════════════════════════
   // DATA FETCHING
@@ -257,7 +258,17 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
   // PUBLIC API - Status Toggle
   // ═══════════════════════════════════════════════════════════════
 
-  const toggleComplete = useCallback(async (task) => {
+  const executeCompletion = useCallback(async (task) => {
+    if (completedStatus) {
+      await updateTask(task.id, {
+        status_id: completedStatus.id,
+        completed_date: new Date().toISOString(),
+      });
+      toast.success('Task completed');
+    }
+  }, [completedStatus, updateTask]);
+
+  const toggleComplete = useCallback(async (task, skipChecklistCheck = false) => {
     const isCurrentlyComplete = task.status_id === completedStatus?.id;
 
     if (isCurrentlyComplete) {
@@ -270,15 +281,29 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
         toast.success('Task reopened');
       }
     } else {
-      if (completedStatus) {
-        await updateTask(task.id, {
-          status_id: completedStatus.id,
-          completed_date: new Date().toISOString(),
-        });
-        toast.success('Task completed');
+      if (!skipChecklistCheck) {
+        // Check for incomplete checklist items before completing
+        const checklistItems = await base44.entities.TaskChecklistItem.filter({ task_id: task.id });
+        const incompleteCount = checklistItems.filter(i => !i.is_complete).length;
+        if (incompleteCount > 0) {
+          setPendingChecklistCompletion({ task, incompleteCount });
+          return { requiresConfirmation: true };
+        }
       }
+      await executeCompletion(task);
     }
-  }, [completedStatus, taskStatuses, updateTask]);
+  }, [completedStatus, taskStatuses, updateTask, executeCompletion]);
+
+  const confirmChecklistCompletion = useCallback(async () => {
+    if (!pendingChecklistCompletion) return;
+    const { task } = pendingChecklistCompletion;
+    setPendingChecklistCompletion(null);
+    await executeCompletion(task);
+  }, [pendingChecklistCompletion, executeCompletion]);
+
+  const cancelChecklistCompletion = useCallback(() => {
+    setPendingChecklistCompletion(null);
+  }, []);
 
   // ═══════════════════════════════════════════════════════════════
   // PUBLIC API - Date Updates
@@ -342,6 +367,11 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
     pendingPriorityRemoval,
     confirmRemovePriority,
     cancelPriorityRemoval,
+
+    // Checklist Completion Confirmation State
+    pendingChecklistCompletion,
+    confirmChecklistCompletion,
+    cancelChecklistCompletion,
 
     // Drawer State
     activeTask,

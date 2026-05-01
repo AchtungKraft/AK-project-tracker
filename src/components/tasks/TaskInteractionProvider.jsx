@@ -2,6 +2,7 @@ import React, { createContext, useContext } from 'react';
 import { useTaskInteraction } from './useTaskInteraction';
 import PriorityRemoveConfirm from './PriorityRemoveConfirm';
 import DeleteTaskConfirm from './DeleteTaskConfirm';
+import CompleteTaskConfirm from './CompleteTaskConfirm';
 
 /**
  * TaskInteractionContext - Provider for task interaction state
@@ -78,6 +79,16 @@ export function TaskInteractionProvider({
         onConfirm={handleConfirmDelete}
         taskName={pendingDelete?.name}
         isLoading={interaction.isDeleting}
+      />
+
+      {/* Checklist Completion Confirmation - Global */}
+      <CompleteTaskConfirm
+        isOpen={!!interaction.pendingChecklistCompletion}
+        onClose={interaction.cancelChecklistCompletion}
+        onConfirm={interaction.confirmChecklistCompletion}
+        taskName={interaction.pendingChecklistCompletion?.task?.name}
+        incompleteChecklistCount={interaction.pendingChecklistCompletion?.incompleteCount || 0}
+        isLoading={interaction.isUpdating}
       />
     </TaskInteractionContext.Provider>
   );
