@@ -299,6 +299,7 @@ export default function TaskPartsSection({
         {/* View Part Modal — portaled to escape parent modal z-index */}
         {viewPartId && createPortal(
           <PartModal
+            part={partsMap[viewPartId]}
             partId={viewPartId}
             onClose={() => setViewPartId(null)}
           />,
