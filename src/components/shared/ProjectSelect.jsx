@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Clock } from "lucide-react";
-import { getLastUsedProjects, recordProjectUsage } from "./useLastUsedProjects";
+import { useLastUsedProjects } from "./useLastUsedProjects";
 
 const GROUP_SORT_ORDER = ["client", "performance", "development", "internal"];
 
@@ -24,7 +24,7 @@ const GROUP_SORT_ORDER = ["client", "performance", "development", "internal"];
  *  - includeCompleted: boolean (default false)
  *  - placeholder: string
  *  - className: string
- *  - renderItem: (project, { alreadyUsed }) => ReactNode (optional per-item decorator)
+ *  - renderItem: (project) => ReactNode (optional per-item decorator)
  */
 export default function ProjectSelect({
   value,
@@ -48,6 +48,12 @@ export default function ProjectSelect({
     queryKey: ["statuses"],
     queryFn: () => base44.entities.StatusList.list(),
   });
+
+  // O(1) lookup map
+  const projectMap = useMemo(
+    () => new Map(projects.map((p) => [p.id, p])),
+    [projects]
+  );
 
   const typesMap = useMemo(
     () => new Map(projectTypes.map((t) => [t.id, t])),
@@ -75,30 +81,38 @@ export default function ProjectSelect({
   }, [statuses, includeCompleted]);
 
   const activeProjects = useMemo(
-    () =>
-      projects.filter(
-        (p) => !excludedStatusIds.has(p.status_id)
-      ),
+    () => projects.filter((p) => !excludedStatusIds.has(p.status_id)),
     [projects, excludedStatusIds]
   );
 
-  // Last-used section
-  const lastUsed = useMemo(() => getLastUsedProjects(), [value]); // re-derive when value changes
-  const lastUsedIds = useMemo(() => new Set(lastUsed.map((e) => e.id)), [lastUsed]);
+  // Valid IDs for pruning stale localStorage entries
+  const validProjectIds = useMemo(
+    () => new Set(activeProjects.map((p) => p.id)),
+    [activeProjects]
+  );
 
+  // Hook handles read, pruning, cross-tab sync
+  const { entries: lastUsedEntries, record } = useLastUsedProjects(validProjectIds);
+
+  // Resolve entries to project objects via map (O(1) each)
   const lastUsedProjects = useMemo(() => {
-    return lastUsed
-      .map((e) => activeProjects.find((p) => p.id === e.id))
+    return lastUsedEntries
+      .map((e) => projectMap.get(e.id))
       .filter(Boolean);
-  }, [lastUsed, activeProjects]);
+  }, [lastUsedEntries, projectMap]);
 
-  // Grouped projects (excluding last-used to avoid duplicates)
+  const lastUsedIds = useMemo(
+    () => new Set(lastUsedProjects.map((p) => p.id)),
+    [lastUsedProjects]
+  );
+
+  // Grouped projects (excluding last-used to prevent duplicates)
   const grouped = useMemo(() => {
     const groups = new Map();
     const ungrouped = [];
 
     for (const p of activeProjects) {
-      if (lastUsedIds.has(p.id)) continue; // skip — already in Last Used
+      if (lastUsedIds.has(p.id)) continue;
       const typeId = p.project_type_id;
       if (!typeId) {
         ungrouped.push(p);
@@ -121,7 +135,6 @@ export default function ProjectSelect({
       groups.get(typeId).projects.push(p);
     }
 
-    // Sort projects within each group
     for (const g of groups.values()) {
       g.projects.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
     }
@@ -144,13 +157,13 @@ export default function ProjectSelect({
   const handleChange = useCallback(
     (projectId) => {
       if (!projectId) return;
-      recordProjectUsage(projectId);
+      record(projectId);
       onChange(projectId);
     },
-    [onChange]
+    [onChange, record]
   );
 
-  const defaultRenderItem = (project) => project.name;
+  const renderLabel = renderItem || ((p) => p.name);
 
   return (
     <Select value={value || undefined} onValueChange={handleChange}>
@@ -164,7 +177,6 @@ export default function ProjectSelect({
           </div>
         ) : (
           <>
-            {/* Last Used Section */}
             {lastUsedProjects.length > 0 && (
               <SelectGroup>
                 <SelectLabel className="text-xs text-gray-500 font-semibold px-2 py-1.5 bg-gray-800/50 flex items-center gap-1.5">
@@ -173,13 +185,12 @@ export default function ProjectSelect({
                 </SelectLabel>
                 {lastUsedProjects.map((p) => (
                   <SelectItem key={`recent-${p.id}`} value={p.id} className="pl-6">
-                    {renderItem ? renderItem(p) : defaultRenderItem(p)}
+                    {renderLabel(p)}
                   </SelectItem>
                 ))}
               </SelectGroup>
             )}
 
-            {/* Grouped by Type */}
             {grouped.map((group) => (
               <SelectGroup key={group.typeName}>
                 <SelectLabel className="text-xs text-gray-500 font-semibold px-2 py-1.5 bg-gray-800/50 flex items-center gap-1.5">
@@ -196,7 +207,7 @@ export default function ProjectSelect({
                 </SelectLabel>
                 {group.projects.map((p) => (
                   <SelectItem key={p.id} value={p.id} className="pl-6">
-                    {renderItem ? renderItem(p) : defaultRenderItem(p)}
+                    {renderLabel(p)}
                   </SelectItem>
                 ))}
               </SelectGroup>

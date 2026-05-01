@@ -1,13 +1,13 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Search, Clock } from "lucide-react";
-import { getLastUsedProjects, recordProjectUsage } from "@/components/shared/useLastUsedProjects";
+import { useLastUsedProjects } from "@/components/shared/useLastUsedProjects";
 
 /**
  * GroupedProjectSelector — Searchable project list grouped by ProjectType.
- * Now includes "Last Used" section at top.
+ * Includes "Last Used" section at top with deduplication.
  *
  * Props:
  *  - selectedProjectId: string
@@ -34,11 +34,23 @@ export default function GroupedProjectSelector({ selectedProjectId, onSelect, se
     queryFn: () => base44.entities.ProjectType.list("sort_order", 100),
   });
 
+  // O(1) lookup maps
+  const projectMap = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects]);
   const typesMap = useMemo(() => new Map(projectTypes.map(t => [t.id, t])), [projectTypes]);
 
-  // Last used
-  const lastUsed = useMemo(() => getLastUsedProjects(), [selectedProjectId]);
-  const lastUsedIds = useMemo(() => new Set(lastUsed.map(e => e.id)), [lastUsed]);
+  // Valid IDs for pruning stale localStorage entries
+  const validProjectIds = useMemo(() => new Set(projects.map(p => p.id)), [projects]);
+
+  // Hook handles read, pruning, cross-tab sync
+  const { entries: lastUsedEntries, record } = useLastUsedProjects(validProjectIds);
+
+  // Resolve entries to project objects via map (O(1) each)
+  const lastUsedProjects = useMemo(() => {
+    if (searchTerm) return []; // hide when searching
+    return lastUsedEntries.map(e => projectMap.get(e.id)).filter(Boolean);
+  }, [lastUsedEntries, projectMap, searchTerm]);
+
+  const lastUsedIds = useMemo(() => new Set(lastUsedProjects.map(p => p.id)), [lastUsedProjects]);
 
   // Filter by search
   const filtered = useMemo(() => {
@@ -50,18 +62,13 @@ export default function GroupedProjectSelector({ selectedProjectId, onSelect, se
     );
   }, [projects, searchTerm]);
 
-  const lastUsedProjects = useMemo(() => {
-    if (searchTerm) return []; // hide when searching
-    return lastUsed.map(e => projects.find(p => p.id === e.id)).filter(Boolean);
-  }, [lastUsed, projects, searchTerm]);
-
-  // Group projects by type (excluding last-used to avoid duplicates)
+  // Group projects by type (excluding last-used to prevent duplicates)
   const grouped = useMemo(() => {
     const groups = new Map();
     const ungrouped = [];
 
     for (const p of filtered) {
-      if (!searchTerm && lastUsedIds.has(p.id)) continue;
+      if (lastUsedIds.has(p.id)) continue;
       const typeId = p.project_type_id;
       if (!typeId) {
         ungrouped.push(p);
@@ -78,21 +85,25 @@ export default function GroupedProjectSelector({ selectedProjectId, onSelect, se
       groups.get(typeId).projects.push(p);
     }
 
+    // Stable sort within groups
+    for (const g of groups.values()) {
+      g.projects.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    }
+
     const result = [...groups.values()].sort((a, b) => a.sortKey - b.sortKey);
 
     if (ungrouped.length > 0) {
+      ungrouped.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
       result.push({ typeName: "Uncategorized", sortKey: 999, color: null, projects: ungrouped });
     }
 
     return result;
-  }, [filtered, typesMap, lastUsedIds, searchTerm]);
+  }, [filtered, typesMap, lastUsedIds]);
 
-  const totalCount = filtered.length;
-
-  const handleSelect = (projectId) => {
-    recordProjectUsage(projectId);
+  const handleSelect = useCallback((projectId) => {
+    record(projectId);
     onSelect(projectId);
-  };
+  }, [record, onSelect]);
 
   const renderRow = (p) => (
     <button
@@ -111,6 +122,8 @@ export default function GroupedProjectSelector({ selectedProjectId, onSelect, se
     </button>
   );
 
+  const hasAnyContent = lastUsedProjects.length > 0 || filtered.length > 0;
+
   return (
     <div className="space-y-2">
       <div className="relative">
@@ -123,11 +136,10 @@ export default function GroupedProjectSelector({ selectedProjectId, onSelect, se
         />
       </div>
       <div className="max-h-48 overflow-y-auto border border-gray-700 rounded-md bg-gray-900/50">
-        {totalCount === 0 && lastUsedProjects.length === 0 ? (
+        {!hasAnyContent ? (
           <p className="text-xs text-gray-500 p-3 text-center">No projects found</p>
         ) : (
           <>
-            {/* Last Used Section */}
             {lastUsedProjects.length > 0 && (
               <div>
                 <div className="sticky top-0 z-10 px-3 py-1.5 bg-gray-800 border-b border-gray-700 flex items-center gap-1.5">
@@ -138,7 +150,6 @@ export default function GroupedProjectSelector({ selectedProjectId, onSelect, se
               </div>
             )}
 
-            {/* Grouped */}
             {grouped.map(group => (
               <div key={group.typeName}>
                 <div className="sticky top-0 z-10 px-3 py-1.5 bg-gray-800 border-b border-gray-700 flex items-center gap-2">
