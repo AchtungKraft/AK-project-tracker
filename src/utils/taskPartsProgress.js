@@ -38,3 +38,21 @@ export function groupTaskPartLinksByTaskId(allLinks, taskIdSet) {
   });
   return map;
 }
+
+/**
+ * Compute parts progress for every task in a set, returning a map of
+ * task_id → { installed, total } (only for tasks that have linked parts).
+ *
+ * @param {Array} allLinks - All TaskPartLink records
+ * @param {Set<string>} taskIdSet - Task IDs to include
+ * @returns {Object} Map of task_id → { installed: number, total: number }
+ */
+export function computePartsProgressByTaskId(allLinks, taskIdSet) {
+  const grouped = groupTaskPartLinksByTaskId(allLinks, taskIdSet);
+  const result = {};
+  Object.entries(grouped).forEach(([taskId, links]) => {
+    const progress = getTaskPartsProgressFromLinks(links);
+    if (progress) result[taskId] = progress;
+  });
+  return result;
+}

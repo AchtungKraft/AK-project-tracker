@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { User, CheckCircle2, Circle, MessageSquare, CalendarIcon, AlertCircle, PlayCircle, Flag, Loader2 } from "lucide-react";
+import { User, CheckCircle2, Circle, MessageSquare, CalendarIcon, AlertCircle, PlayCircle, Flag, Loader2, Package } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
@@ -25,7 +25,7 @@ const getCategoryPath = (categoryId, categories) => {
   return category.name;
 };
 
-export default function TaskCard({ task, teamMembers = [], categories = [], statuses = [], onToggleComplete, onClick, onUpdateDueDate, onUpdateStartDate, onTogglePriority, commentCount = 0, checklistProgress, compact = false, showInlineControls = true }) {
+export default function TaskCard({ task, teamMembers = [], categories = [], statuses = [], onToggleComplete, onClick, onUpdateDueDate, onUpdateStartDate, onTogglePriority, commentCount = 0, checklistProgress, partsProgress, compact = false, showInlineControls = true }) {
   const isMobile = useIsMobile();
   const isCompact = compact || isMobile;
   const assignedMember = teamMembers.find(m => m.id === task.assigned_team_member_id);
@@ -256,6 +256,20 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
             )}>
               {task.name}
             </h4>
+            {/* Parts progress indicator (compact mode) */}
+            {isCompact && partsProgress && partsProgress.total > 0 && (
+              <span className={cn(
+                "text-[10px] shrink-0 tabular-nums font-medium flex items-center gap-0.5",
+                partsProgress.installed >= partsProgress.total
+                  ? "text-green-500"
+                  : partsProgress.installed === 0
+                    ? "text-amber-500/70"
+                    : "text-blue-400/70"
+              )} title={`Parts: ${partsProgress.installed} of ${partsProgress.total} installed`}>
+                <Package className="w-2.5 h-2.5" />
+                {partsProgress.installed}/{partsProgress.total}
+              </span>
+            )}
             {/* Checklist progress indicator (compact mode) */}
             {isCompact && checklistProgress && checklistProgress.total > 0 && (
               <span className={cn(
@@ -279,6 +293,31 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
               <span style={{ color: categoryColor || '#9CA3AF' }}>
                 {categoryPath}
               </span>
+            </div>
+          )}
+          
+          {/* Parts progress indicator (non-compact) */}
+          {!isCompact && partsProgress && partsProgress.total > 0 && (
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <Package className={cn(
+                "w-3 h-3",
+                partsProgress.installed >= partsProgress.total ? "text-green-500" : partsProgress.installed === 0 ? "text-amber-500/70" : "text-blue-400/70"
+              )} />
+              <span className={cn(
+                "text-xs tabular-nums",
+                partsProgress.installed >= partsProgress.total ? "text-green-500" : partsProgress.installed === 0 ? "text-amber-500/70" : "text-blue-400/70"
+              )}>
+                Parts: {partsProgress.installed}/{partsProgress.total}
+              </span>
+              <div className="w-12 h-1 bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full rounded-full",
+                    partsProgress.installed >= partsProgress.total ? "bg-green-500" : partsProgress.installed === 0 ? "bg-amber-500/50" : "bg-blue-400"
+                  )}
+                  style={{ width: `${Math.round((partsProgress.installed / partsProgress.total) * 100)}%` }}
+                />
+              </div>
             </div>
           )}
           

@@ -31,6 +31,7 @@ import { useSavedProjectViews } from "@/components/common/useSavedProjectViews";
 import SavedViewsSelector from "@/components/common/SavedViewsSelector";
 import { useFilterState, PRIORITY_DEFAULTS } from "@/components/common/useFilterState";
 import { useTaskData } from "../components/tasks/useTaskData";
+import { computePartsProgressByTaskId } from "@/utils/taskPartsProgress";
 
 export default function PriorityDashboard() {
   const queryClient = useQueryClient();
@@ -203,6 +204,19 @@ export default function PriorityDashboard() {
     });
     return map;
   }, [allTaskComments]);
+
+  // Fetch TaskPartLinks for all priority tasks (single query)
+  const { data: allTaskPartLinks = [] } = useQuery({
+    queryKey: ['taskPartLinks', 'priority', priorityTaskIds],
+    queryFn: () => priorityTaskIds.length > 0
+      ? base44.entities.TaskPartLink.filter({ task_id: { $in: priorityTaskIds } })
+      : [],
+    enabled: priorityTaskIds.length > 0,
+  });
+
+  const partsProgressByTaskId = useMemo(() => {
+    return computePartsProgressByTaskId(allTaskPartLinks, new Set(priorityTaskIds));
+  }, [allTaskPartLinks, priorityTaskIds]);
 
   // Get active team members sorted by sort_order for the Assigned To filter
   const activeTeamMembers = useMemo(() => {
@@ -696,6 +710,7 @@ export default function PriorityDashboard() {
                                     onToggleComplete={handleToggleComplete}
                                     onClick={() => setSelectedTask(task)}
                                     commentCount={commentCountByTaskId[task.id] || 0}
+                                    partsProgress={partsProgressByTaskId[task.id]}
                                     onUpdateDueDate={handleUpdateDueDate}
                                     onUpdateStartDate={handleUpdateStartDate}
                                     onTogglePriority={wrappedTogglePriority}
@@ -726,6 +741,7 @@ export default function PriorityDashboard() {
                 statuses={statuses}
                 commentCountByTaskId={commentCountByTaskId}
                 allTaskComments={allTaskComments}
+                partsProgressByTaskId={partsProgressByTaskId}
                 updateTaskMutation={updateTaskMutation}
                 onTaskClick={setSelectedTask}
                 onToggleComplete={handleToggleComplete}
@@ -749,6 +765,7 @@ export default function PriorityDashboard() {
                 primaryGroupBy={primaryGroupBy}
                 secondaryGroupBy={secondaryGroupBy}
                 commentCountByTaskId={commentCountByTaskId}
+                partsProgressByTaskId={partsProgressByTaskId}
                 selectedTypes={selectedTypes}
                 statusFilter={statusFilter}
                 onToggleComplete={handleToggleComplete}

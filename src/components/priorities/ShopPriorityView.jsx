@@ -60,6 +60,7 @@ function ShopTaskRow({ task, sp, showProject }) {
         onClick={() => {}}
         commentCount={sp.commentCountByTaskId[task.id] || 0}
         checklistProgress={sp.checklistProgressByTaskId?.[task.id]}
+        partsProgress={sp.partsProgressByTaskId?.[task.id]}
         onUpdateDueDate={sp.onUpdateDueDate}
         onUpdateStartDate={sp.onUpdateStartDate}
         onTogglePriority={sp.onTogglePriority}
@@ -286,7 +287,8 @@ function PersonColumn({ name, initials, tasks, projects, sp, memberId }) {
 // ── main view ──
 export default function ShopPriorityView({
   tasks, projects, categories, teamMembers, statuses,
-  commentCountByTaskId, allTaskComments, updateTaskMutation,
+  commentCountByTaskId, allTaskComments, partsProgressByTaskId,
+  updateTaskMutation,
   onTaskClick, onToggleComplete, onUpdateDueDate, onUpdateStartDate, onTogglePriority,
 }) {
   const [filterByMemberId, setFilterByMemberId] = useState(null);
@@ -403,7 +405,7 @@ export default function ShopPriorityView({
 
   const sp = {
     categories, teamMembers, statuses, commentCountByTaskId, latestCommentByTaskId, projectMap, bucketsByProjectId,
-    checklistProgressByTaskId,
+    checklistProgressByTaskId, partsProgressByTaskId,
     onTaskClick, onToggleComplete, onUpdateDueDate, onUpdateStartDate, onTogglePriority,
     onAssign: handleAssign, onAddTask: handleAddTask,
   };
