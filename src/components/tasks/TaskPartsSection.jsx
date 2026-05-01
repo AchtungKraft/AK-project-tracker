@@ -17,6 +17,25 @@ import InstallPartModal from "@/components/project/InstallPartModal";
 import { resolveLifecycleState, getLifecycleLabel } from "@/components/supply/resolveCommitmentStateLocal";
 import TaskPartSelector from "@/components/tasks/TaskPartSelector";
 
+const INSTALL_STATUS_BADGE_STYLES = {
+  complete: "border-gray-600 text-gray-400",
+  partial:  "border-blue-600 text-blue-400",
+  pending:  "border-amber-600 text-amber-400",
+};
+
+function InstallStatusBadge({ installStatus, qtyInstalled, qtyAllocated }) {
+  const status = installStatus || 'pending';
+  const style = INSTALL_STATUS_BADGE_STYLES[status] || "border-gray-600 text-gray-400";
+  const label = status === 'complete' ? 'Installed'
+    : status === 'partial' ? `Partial (${qtyInstalled ?? 0}/${qtyAllocated ?? 1})`
+    : 'Pending';
+  return (
+    <Badge variant="outline" className={cn("text-xs", style)}>
+      {label}
+    </Badge>
+  );
+}
+
 const LIFECYCLE_BADGE_STYLES = {
   INSTALL_READY: "border-emerald-600 text-emerald-400",
   INSTALLED:     "border-gray-600 text-gray-400",
@@ -164,9 +183,9 @@ export default function TaskPartsSection({
               if (!part) return null;
 
               const commitment = commitmentsMap[link.commitment_id];
+              // TaskPartLink is the CANONICAL source for task-level install state
+              const isInstalled = link.install_status === 'complete';
               const lifecycleState = resolveLifecycleState(commitment);
-              const lifecycleLabel = getLifecycleLabel(commitment);
-              const isInstalled = lifecycleState === 'INSTALLED';
               const isTerminal = lifecycleState === 'CANCELLED' || lifecycleState === 'CLOSED';
 
               return (
@@ -184,7 +203,11 @@ export default function TaskPartsSection({
                     </div>
                     <div className="flex items-center gap-2 text-xs text-gray-400">
                       <span>Qty: {link.qty_allocated}</span>
-                      <LifecycleStateBadge state={lifecycleState} label={lifecycleLabel} />
+                      <InstallStatusBadge
+                        installStatus={link.install_status}
+                        qtyInstalled={link.qty_installed}
+                        qtyAllocated={link.qty_allocated}
+                      />
                     </div>
                     <div className="mt-1">
                       <FinancialStatusBadge 
@@ -204,7 +227,7 @@ export default function TaskPartsSection({
                     >
                       <Eye className="w-4 h-4" />
                     </Button>
-                    {lifecycleState === 'INSTALL_READY' && (
+                    {!isInstalled && !isTerminal && lifecycleState === 'INSTALL_READY' && (
                       <Button
                         size="sm"
                         variant="ghost"

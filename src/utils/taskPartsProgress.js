@@ -1,6 +1,17 @@
 /**
- * Canonical helper: compute task-level parts progress from TaskPartLink records.
- * Single source of truth — use across print views, dashboards, modals.
+ * ══════════════════════════════════════════════════════════════════════
+ * CANONICAL: Task-level parts progress from TaskPartLink records.
+ * 
+ * TaskPartLink is the SINGLE SOURCE OF TRUTH for task progress display.
+ * Never derive task progress from commitment lifecycle state, 
+ * resolveLifecycleState(), or commitment_status fields.
+ * 
+ * Commitment remains source of truth for inventory/ordering/execution,
+ * but TaskPartLink owns the task display contract.
+ * 
+ * All install paths in executeSupplyAction MUST sync TaskPartLink
+ * immediately after mutating commitment qty_installed.
+ * ══════════════════════════════════════════════════════════════════════
  *
  * @param {Array} links - Array of TaskPartLink records for a single task
  * @returns {{ installed: number, total: number } | null} - null if no links
@@ -13,15 +24,11 @@ export function getTaskPartsProgressFromLinks(links) {
 
   links.forEach(link => {
     const required = link.qty_allocated ?? 1;
-    // Primary: check install_status (set by lifecycle/commitment state)
-    // Fallback: check qty_installed field
+    total += required;
     if (link.install_status === 'complete') {
-      total += required;
       installed += required;
     } else {
-      const done = Math.min(link.qty_installed ?? 0, required);
-      total += required;
-      installed += done;
+      installed += Math.min(link.qty_installed ?? 0, required);
     }
   });
 
