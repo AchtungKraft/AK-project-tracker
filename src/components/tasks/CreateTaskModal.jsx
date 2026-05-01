@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+// Note: Select is still used for bucket dropdown below
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Loader2, CalendarIcon, UserPlus } from "lucide-react";
@@ -14,6 +15,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { useTaskCategories, useTaskStatuses, useAssignableTeamMembers } from "./useTaskDropdownData";
 import { TaskCategorySelect, TaskStatusSelect, TaskAssigneeSelect } from "./TaskDropdownSelects";
+import ProjectSelect from "@/components/shared/ProjectSelect";
 
 export default function CreateTaskModal({ onClose, projectId, defaultAssigneeId, defaultBucketId, defaultIsPriority = false }) {
   const queryClient = useQueryClient();
@@ -39,12 +41,6 @@ export default function CreateTaskModal({ onClose, projectId, defaultAssigneeId,
   const { categories } = useTaskCategories();
   const { statuses, defaultStatusId } = useTaskStatuses();
   const { teamMembers } = useAssignableTeamMembers();
-
-  const { data: projects = [] } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list(),
-    enabled: !projectId,
-  });
 
   // Load buckets for the selected project
   const activeProjectId = taskData.project_id || projectId;
@@ -132,19 +128,11 @@ export default function CreateTaskModal({ onClose, projectId, defaultAssigneeId,
           {!projectId && (
             <div>
               <Label className="text-gray-400">Project *</Label>
-              <Select
+              <ProjectSelect
                 value={taskData.project_id}
-                onValueChange={(value) => setTaskData({ ...taskData, project_id: value })}
-              >
-                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                  <SelectValue placeholder="Select project" />
-                </SelectTrigger>
-                <SelectContent>
-                  {projects.map(project => (
-                    <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(value) => setTaskData({ ...taskData, project_id: value })}
+                placeholder="Select project"
+              />
             </div>
           )}
 

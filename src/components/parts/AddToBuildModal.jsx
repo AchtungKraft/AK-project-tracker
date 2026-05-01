@@ -5,12 +5,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Loader2, Plus, Wrench } from "lucide-react";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
+import ProjectSelect from "@/components/shared/ProjectSelect";
 
 /**
  * CANONICAL SUPPLY FLOW ENFORCED - PHASE 2B
@@ -42,16 +43,6 @@ export default function AddToBuildModal({ part, onClose }) {
   const [flagNeedToOrder, setFlagNeedToOrder] = useState(false);
   const [requiresPrepay, setRequiresPrepay] = useState(false); // FIX C: Order before/after pay toggle
 
-  const { data: projects = [] } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list('-created_date'),
-  });
-  
-  const { data: projectTypes = [] } = useQuery({
-    queryKey: ['projectTypes'],
-    queryFn: () => base44.entities.ProjectType.list(),
-  });
-  
   const { data: inventoryItems = [] } = useQuery({
     queryKey: ['inventoryItems', 'forPart', part?.id],
     queryFn: () => base44.entities.InventoryItem.filter({ part_id: part?.id }),
@@ -217,34 +208,10 @@ export default function AddToBuildModal({ part, onClose }) {
     createRequirementMutation.mutate();
   };
 
-  // Filter to active projects only
-  const activeProjects = projects.filter(p => p.status_id !== 'completed' && p.status_id !== 'cancelled');
-
-  // Track projects that already have a commitment (for UI hint only - not for disabling)
+  // Track projects that already have a commitment (for UI hint only)
   const projectsWithPart = existingCommitments
     .map(c => c.project_id)
-    .filter((id, idx, arr) => arr.indexOf(id) === idx); // unique
-  
-  // Get project type name
-  const getTypeName = (typeId) => {
-    const type = projectTypes.find(t => t.id === typeId);
-    return type?.name || 'Uncategorized';
-  };
-  
-  // Group projects by type
-  const projectsByType = activeProjects.reduce((acc, project) => {
-    const typeName = getTypeName(project.project_type_id);
-    if (!acc[typeName]) acc[typeName] = [];
-    acc[typeName].push(project);
-    return acc;
-  }, {});
-  
-  // Sort type names alphabetically, but put "Uncategorized" last
-  const sortedTypeNames = Object.keys(projectsByType).sort((a, b) => {
-    if (a === 'Uncategorized') return 1;
-    if (b === 'Uncategorized') return -1;
-    return a.localeCompare(b);
-  });
+    .filter((id, idx, arr) => arr.indexOf(id) === idx);
   
   // Calculate available inventory
   const availableInventory = inventoryItems.reduce((sum, item) => {
@@ -273,49 +240,22 @@ export default function AddToBuildModal({ part, onClose }) {
             )}
           </div>
 
-          {/* Project Selection - Grouped by Type */}
+          {/* Project Selection - Grouped by Type with Last Used */}
           <div>
             <Label className="text-gray-400 text-xs">Project / Build *</Label>
-            <Select
+            <ProjectSelect
               value={formData.project_id}
-              onValueChange={(v) => setFormData({ ...formData, project_id: v })}
-            >
-              <SelectTrigger className="bg-gray-800 border-gray-700">
-                <SelectValue placeholder="Select project..." />
-              </SelectTrigger>
-              <SelectContent className="max-h-64">
-                {activeProjects.length === 0 ? (
-                  <div className="p-2 text-sm text-gray-400 text-center">
-                    No active projects
-                  </div>
-                ) : (
-                  sortedTypeNames.map(typeName => (
-                    <SelectGroup key={typeName}>
-                      <SelectLabel className="text-xs text-gray-500 font-semibold px-2 py-1.5 bg-gray-800/50">
-                        {typeName}
-                      </SelectLabel>
-                      {projectsByType[typeName]
-                        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-                        .map(project => {
-                          const alreadyAdded = projectsWithPart.includes(project.id);
-                          return (
-                            <SelectItem 
-                              key={project.id} 
-                              value={project.id}
-                            >
-                              <span>
-                                {project.name}
-                                {alreadyAdded && <span className="text-gray-500 ml-1">(will update existing)</span>}
-                              </span>
-                            </SelectItem>
-                          );
-                        })
-                      }
-                    </SelectGroup>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
+              onChange={(v) => setFormData({ ...formData, project_id: v })}
+              placeholder="Select project..."
+              renderItem={(project) => (
+                <span>
+                  {project.name}
+                  {projectsWithPart.includes(project.id) && (
+                    <span className="text-gray-500 ml-1">(will update existing)</span>
+                  )}
+                </span>
+              )}
+            />
           </div>
 
           {/* Quantity and Priority */}

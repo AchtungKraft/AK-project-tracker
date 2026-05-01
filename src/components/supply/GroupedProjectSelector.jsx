@@ -2,10 +2,12 @@ import React, { useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
+import { Search, Clock } from "lucide-react";
+import { getLastUsedProjects, recordProjectUsage } from "@/components/shared/useLastUsedProjects";
 
 /**
  * GroupedProjectSelector — Searchable project list grouped by ProjectType.
+ * Now includes "Last Used" section at top.
  *
  * Props:
  *  - selectedProjectId: string
@@ -23,7 +25,7 @@ const GROUP_SORT_ORDER = [
 
 export default function GroupedProjectSelector({ selectedProjectId, onSelect, searchTerm, onSearchChange }) {
   const { data: projects = [] } = useQuery({
-    queryKey: ["projects-for-service-modal"],
+    queryKey: ["projects"],
     queryFn: () => base44.entities.Project.list("-created_date", 200),
   });
 
@@ -33,6 +35,10 @@ export default function GroupedProjectSelector({ selectedProjectId, onSelect, se
   });
 
   const typesMap = useMemo(() => new Map(projectTypes.map(t => [t.id, t])), [projectTypes]);
+
+  // Last used
+  const lastUsed = useMemo(() => getLastUsedProjects(), [selectedProjectId]);
+  const lastUsedIds = useMemo(() => new Set(lastUsed.map(e => e.id)), [lastUsed]);
 
   // Filter by search
   const filtered = useMemo(() => {
@@ -44,12 +50,18 @@ export default function GroupedProjectSelector({ selectedProjectId, onSelect, se
     );
   }, [projects, searchTerm]);
 
-  // Group projects by type
+  const lastUsedProjects = useMemo(() => {
+    if (searchTerm) return []; // hide when searching
+    return lastUsed.map(e => projects.find(p => p.id === e.id)).filter(Boolean);
+  }, [lastUsed, projects, searchTerm]);
+
+  // Group projects by type (excluding last-used to avoid duplicates)
   const grouped = useMemo(() => {
-    const groups = new Map(); // typeId -> { typeName, sortKey, projects[] }
+    const groups = new Map();
     const ungrouped = [];
 
     for (const p of filtered) {
+      if (!searchTerm && lastUsedIds.has(p.id)) continue;
       const typeId = p.project_type_id;
       if (!typeId) {
         ungrouped.push(p);
@@ -59,7 +71,6 @@ export default function GroupedProjectSelector({ selectedProjectId, onSelect, se
         const typeRec = typesMap.get(typeId);
         const typeName = typeRec?.name || "Other";
         const nameLC = typeName.toLowerCase();
-        // Use explicit sort order if found, otherwise push to end
         let sortKey = GROUP_SORT_ORDER.indexOf(nameLC);
         if (sortKey === -1) sortKey = GROUP_SORT_ORDER.length + (typeRec?.sort_order || 99);
         groups.set(typeId, { typeName, sortKey, color: typeRec?.color, projects: [] });
@@ -74,9 +85,31 @@ export default function GroupedProjectSelector({ selectedProjectId, onSelect, se
     }
 
     return result;
-  }, [filtered, typesMap]);
+  }, [filtered, typesMap, lastUsedIds, searchTerm]);
 
   const totalCount = filtered.length;
+
+  const handleSelect = (projectId) => {
+    recordProjectUsage(projectId);
+    onSelect(projectId);
+  };
+
+  const renderRow = (p) => (
+    <button
+      key={p.id}
+      onClick={() => handleSelect(p.id)}
+      className={`w-full text-left px-3 py-2 text-sm transition-colors border-b border-gray-800/50 last:border-b-0 ${
+        selectedProjectId === p.id
+          ? "bg-blue-900/40 text-white"
+          : "text-gray-300 hover:bg-gray-800"
+      }`}
+    >
+      <span className="font-medium">{p.name}</span>
+      {p.client_name && (
+        <span className="text-gray-500 ml-2 text-xs">— {p.client_name}</span>
+      )}
+    </button>
+  );
 
   return (
     <div className="space-y-2">
@@ -90,43 +123,37 @@ export default function GroupedProjectSelector({ selectedProjectId, onSelect, se
         />
       </div>
       <div className="max-h-48 overflow-y-auto border border-gray-700 rounded-md bg-gray-900/50">
-        {totalCount === 0 ? (
+        {totalCount === 0 && lastUsedProjects.length === 0 ? (
           <p className="text-xs text-gray-500 p-3 text-center">No projects found</p>
         ) : (
-          grouped.map(group => (
-            <div key={group.typeName}>
-              {/* Group Header */}
-              <div className="sticky top-0 z-10 px-3 py-1.5 bg-gray-800 border-b border-gray-700 flex items-center gap-2">
-                {group.color && (
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: group.color }}
-                  />
-                )}
-                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                  {group.typeName}
-                </span>
-                <span className="text-[10px] text-gray-600">{group.projects.length}</span>
+          <>
+            {/* Last Used Section */}
+            {lastUsedProjects.length > 0 && (
+              <div>
+                <div className="sticky top-0 z-10 px-3 py-1.5 bg-gray-800 border-b border-gray-700 flex items-center gap-1.5">
+                  <Clock className="w-3 h-3 text-gray-500" />
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Last Used</span>
+                </div>
+                {lastUsedProjects.map(renderRow)}
               </div>
-              {/* Project Rows */}
-              {group.projects.map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => onSelect(p.id)}
-                  className={`w-full text-left px-3 py-2 text-sm transition-colors border-b border-gray-800/50 last:border-b-0 ${
-                    selectedProjectId === p.id
-                      ? "bg-blue-900/40 text-white"
-                      : "text-gray-300 hover:bg-gray-800"
-                  }`}
-                >
-                  <span className="font-medium">{p.name}</span>
-                  {p.client_name && (
-                    <span className="text-gray-500 ml-2 text-xs">— {p.client_name}</span>
+            )}
+
+            {/* Grouped */}
+            {grouped.map(group => (
+              <div key={group.typeName}>
+                <div className="sticky top-0 z-10 px-3 py-1.5 bg-gray-800 border-b border-gray-700 flex items-center gap-2">
+                  {group.color && (
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: group.color }} />
                   )}
-                </button>
-              ))}
-            </div>
-          ))
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                    {group.typeName}
+                  </span>
+                  <span className="text-[10px] text-gray-600">{group.projects.length}</span>
+                </div>
+                {group.projects.map(renderRow)}
+              </div>
+            ))}
+          </>
         )}
       </div>
     </div>
