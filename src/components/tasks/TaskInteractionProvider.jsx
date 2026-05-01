@@ -92,15 +92,15 @@ export function TaskInteractionProvider({
         isLoading={interaction.isUpdating}
       />
 
-      {/* Part Install on Completion - Global */}
+      {/* Commitment Install on Completion - Global */}
       <InstallPartsOnCompleteModal
-        isOpen={!!interaction.pendingPartInstallCompletion}
-        onClose={interaction.cancelPartInstallCompletion}
-        onInstallAndComplete={interaction.confirmPartInstallAndComplete}
-        onSkipAndComplete={interaction.skipPartInstallAndComplete}
-        taskName={interaction.pendingPartInstallCompletion?.task?.name}
-        parts={interaction.pendingPartInstallCompletion?.parts || []}
-        isLoading={interaction.isUpdating}
+        isOpen={!!interaction.pendingInstallCommitments}
+        onClose={interaction.cancelInstallCommitments}
+        onInstallAndComplete={interaction.confirmInstallAndComplete}
+        onSkipAndComplete={interaction.skipInstallAndComplete}
+        taskName={interaction.pendingInstallCommitments?.task?.name}
+        commitments={interaction.pendingInstallCommitments?.commitments || []}
+        isProcessing={interaction.isProcessingInstall}
       />
     </TaskInteractionContext.Provider>
   );
