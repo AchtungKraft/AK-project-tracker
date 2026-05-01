@@ -4,13 +4,6 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Package, Plus, Wrench, Trash2, CheckCircle } from "lucide-react";
@@ -20,6 +13,7 @@ import FinancialStatusBadge from "@/components/financial/FinancialStatusBadge";
 import { useFinancialStatusBatch } from "@/components/financial/useFinancialStatus";
 import InstallPartModal from "@/components/project/InstallPartModal";
 import { resolveLifecycleState, getLifecycleLabel } from "@/components/supply/resolveCommitmentStateLocal";
+import TaskPartSelector from "@/components/tasks/TaskPartSelector";
 
 const LIFECYCLE_BADGE_STYLES = {
   INSTALL_READY: "border-emerald-600 text-emerald-400",
@@ -53,7 +47,9 @@ export default function TaskPartsSection({
   const queryClient = useQueryClient();
   const [showAddPart, setShowAddPart] = useState(false);
   const [selectedPartId, setSelectedPartId] = useState("");
+  const [selectedCommitmentId, setSelectedCommitmentId] = useState("");
   const [allocateQty, setAllocateQty] = useState(1);
+  const [maxQty, setMaxQty] = useState(99);
   const [installTarget, setInstallTarget] = useState(null);
 
   // Fetch task-part links
@@ -102,29 +98,14 @@ export default function TaskPartsSection({
     return map;
   }, [financialStatuses]);
 
-  // Available parts for this project (from commitments, not yet fully linked)
-  // Filter out archived parts from new linkages
-  const availableParts = commitments
-    .filter((c) => {
-      const part = partsMap[c.part_id];
-      return part && !part.is_archived;
-    })
-    .map((c) => ({
-      ...partsMap[c.part_id],
-      commitment: c,
-      availableQty: c.qty_committed - c.qty_installed,
-    }))
-    .filter((p) => p.availableQty > 0);
-
   // Add part link mutation
   const addLinkMutation = useMutation({
     mutationFn: async () => {
-      const commitment = commitments.find((c) => c.part_id === selectedPartId);
       return base44.entities.TaskPartLink.create({
         task_id: task.id,
         project_id: project?.id,
         part_id: selectedPartId,
-        commitment_id: commitment?.id,
+        commitment_id: selectedCommitmentId,
         qty_allocated: allocateQty,
         qty_installed: 0,
         install_status: "pending",
@@ -134,7 +115,9 @@ export default function TaskPartsSection({
       queryClient.invalidateQueries({ queryKey: ["taskPartLinks", task?.id] });
       setShowAddPart(false);
       setSelectedPartId("");
+      setSelectedCommitmentId("");
       setAllocateQty(1);
+      setMaxQty(99);
     },
   });
 
@@ -242,40 +225,39 @@ export default function TaskPartsSection({
         {/* Add Part Form */}
         {showAddPart ? (
           <div className="bg-gray-900/50 rounded-lg p-3 space-y-3">
-            <Select value={selectedPartId} onValueChange={setSelectedPartId}>
-              <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                <SelectValue placeholder="Select a project part..." />
-              </SelectTrigger>
-              <SelectContent>
-                {availableParts.length === 0 ? (
-                  <SelectItem value="_none" disabled>
-                    No available parts
-                  </SelectItem>
-                ) : (
-                  availableParts.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.part_name} (Available: {p.availableQty})
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
-
-            <Input
-              type="number"
-              min={1}
-              max={availableParts.find((p) => p.id === selectedPartId)?.availableQty || 99}
-              value={allocateQty}
-              onChange={(e) => setAllocateQty(parseInt(e.target.value) || 1)}
-              placeholder="Quantity"
-              className="bg-gray-800 border-gray-700 text-white"
+            <TaskPartSelector
+              commitments={commitments}
+              partsMap={partsMap}
+              selectedPartId={selectedPartId}
+              onSelect={(partId, commitmentId, availableQty) => {
+                setSelectedPartId(partId);
+                setSelectedCommitmentId(commitmentId);
+                setMaxQty(availableQty || 99);
+                setAllocateQty(1);
+              }}
             />
+
+            {selectedPartId && (
+              <Input
+                type="number"
+                min={1}
+                max={maxQty}
+                value={allocateQty}
+                onChange={(e) => setAllocateQty(Math.min(parseInt(e.target.value) || 1, maxQty))}
+                placeholder="Quantity"
+                className="bg-gray-800 border-gray-700 text-white"
+              />
+            )}
 
             <div className="flex gap-2">
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => setShowAddPart(false)}
+                onClick={() => {
+                  setShowAddPart(false);
+                  setSelectedPartId("");
+                  setSelectedCommitmentId("");
+                }}
                 className="flex-1 border-gray-700"
               >
                 Cancel
