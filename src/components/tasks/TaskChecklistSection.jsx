@@ -37,6 +37,12 @@ export default function TaskChecklistSection({ taskId }) {
     return [...incomplete, ...complete];
   }, [items]);
 
+  const invalidateChecklist = () => {
+    queryClient.invalidateQueries({ queryKey: ['taskChecklistItems', taskId] });
+    queryClient.invalidateQueries({ queryKey: ['shopChecklistItems'] });
+    queryClient.invalidateQueries({ queryKey: ['printChecklist'] });
+  };
+
   const createMutation = useMutation({
     mutationFn: (title) => base44.entities.TaskChecklistItem.create({
       task_id: taskId,
@@ -47,7 +53,7 @@ export default function TaskChecklistSection({ taskId }) {
       visibility: "internal",
     }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['taskChecklistItems', taskId] });
+      invalidateChecklist();
       setNewItemTitle("");
     },
   });
@@ -57,16 +63,12 @@ export default function TaskChecklistSection({ taskId }) {
       is_complete,
       completed_at: is_complete ? new Date().toISOString() : null,
     }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['taskChecklistItems', taskId] });
-    },
+    onSuccess: invalidateChecklist,
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id) => base44.entities.TaskChecklistItem.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['taskChecklistItems', taskId] });
-    },
+    onSuccess: invalidateChecklist,
   });
 
   const handleAddItem = () => {
