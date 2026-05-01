@@ -39,6 +39,7 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
   const [isEditing, setIsEditing] = useState(false);
   const [pendingPriorityRemoval, setPendingPriorityRemoval] = useState(null);
   const [pendingChecklistCompletion, setPendingChecklistCompletion] = useState(null);
+  const [pendingPartInstallCompletion, setPendingPartInstallCompletion] = useState(null);
 
   // ═══════════════════════════════════════════════════════════════
   // DATA FETCHING
@@ -268,6 +269,63 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
     }
   }, [completedStatus, updateTask]);
 
+  /**
+   * Check for installable linked parts before completing.
+   * Returns { hasInstallableParts, parts } if parts are found.
+   */
+  const checkLinkedParts = useCallback(async (task) => {
+    const links = await base44.entities.TaskPartLink.filter({ task_id: task.id });
+    if (links.length === 0) return { hasInstallableParts: false, parts: [] };
+
+    // Fetch commitments and parts for these links
+    const commitmentIds = [...new Set(links.map(l => l.commitment_id).filter(Boolean))];
+    const partIds = [...new Set(links.map(l => l.part_id).filter(Boolean))];
+
+    const [commitments, parts] = await Promise.all([
+      commitmentIds.length > 0
+        ? base44.entities.PartCommitment.filter({ id: commitmentIds })
+        : Promise.resolve([]),
+      partIds.length > 0
+        ? base44.entities.Part.filter({ id: partIds })
+        : Promise.resolve([]),
+    ]);
+
+    const commitmentMap = new Map(commitments.map(c => [c.id, c]));
+    const partMap = new Map(parts.map(p => [p.id, p]));
+
+    const resolved = links.map(link => {
+      const part = partMap.get(link.part_id);
+      const commitment = link.commitment_id ? commitmentMap.get(link.commitment_id) : null;
+      const reserved = commitment?.reserved_from_stock ?? 0;
+      const installed = commitment?.qty_installed ?? 0;
+      const installable = Math.max(0, reserved - installed);
+
+      return {
+        linkId: link.id,
+        partName: part?.part_name || 'Unknown Part',
+        partNumber: part?.vendor_part_number || '',
+        commitmentId: link.commitment_id,
+        qtyAllocated: link.qty_allocated || 0,
+        qtyInstalled: installed,
+        installable,
+      };
+    }).filter(r => r.commitmentId); // only show parts with commitments
+
+    const hasInstallableParts = resolved.some(r => r.installable > 0);
+    return { hasInstallableParts, parts: resolved };
+  }, []);
+
+  const proceedToPartCheck = useCallback(async (task) => {
+    // Check for linked parts that can be installed
+    const { hasInstallableParts, parts } = await checkLinkedParts(task);
+    if (parts.length > 0) {
+      setPendingPartInstallCompletion({ task, parts });
+      return { requiresConfirmation: true };
+    }
+    // No linked parts — complete immediately
+    await executeCompletion(task);
+  }, [checkLinkedParts, executeCompletion]);
+
   const toggleComplete = useCallback(async (task, skipChecklistCheck = false) => {
     const isCurrentlyComplete = task.status_id === completedStatus?.id;
 
@@ -290,19 +348,60 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
           return { requiresConfirmation: true };
         }
       }
-      await executeCompletion(task);
+      // Checklist passed — now check for installable parts
+      await proceedToPartCheck(task);
     }
-  }, [completedStatus, taskStatuses, updateTask, executeCompletion]);
+  }, [completedStatus, taskStatuses, updateTask, proceedToPartCheck]);
 
   const confirmChecklistCompletion = useCallback(async () => {
     if (!pendingChecklistCompletion) return;
     const { task } = pendingChecklistCompletion;
     setPendingChecklistCompletion(null);
-    await executeCompletion(task);
-  }, [pendingChecklistCompletion, executeCompletion]);
+    // After checklist confirm, proceed to part check
+    await proceedToPartCheck(task);
+  }, [pendingChecklistCompletion, proceedToPartCheck]);
 
   const cancelChecklistCompletion = useCallback(() => {
     setPendingChecklistCompletion(null);
+  }, []);
+
+  // ═══════════════════════════════════════════════════════════════
+  // PUBLIC API - Part Install on Completion
+  // ═══════════════════════════════════════════════════════════════
+
+  const confirmPartInstallAndComplete = useCallback(async (selectedCommitmentIds) => {
+    if (!pendingPartInstallCompletion) return;
+    const { task, parts } = pendingPartInstallCompletion;
+    setPendingPartInstallCompletion(null);
+
+    // Install selected parts via canonical supply dispatcher
+    for (const commitmentId of selectedCommitmentIds) {
+      const partInfo = parts.find(p => p.commitmentId === commitmentId);
+      if (!partInfo || partInfo.installable <= 0) continue;
+
+      await base44.functions.invoke('executeSupplyAction', {
+        action_type: 'INSTALL',
+        commitment_ids: [commitmentId],
+        payload: {
+          qty_to_install: partInfo.installable,
+          notes: `Auto-installed on task completion: ${task.name}`,
+        },
+        dry_run: false,
+      });
+    }
+
+    await executeCompletion(task);
+  }, [pendingPartInstallCompletion, executeCompletion]);
+
+  const skipPartInstallAndComplete = useCallback(async () => {
+    if (!pendingPartInstallCompletion) return;
+    const { task } = pendingPartInstallCompletion;
+    setPendingPartInstallCompletion(null);
+    await executeCompletion(task);
+  }, [pendingPartInstallCompletion, executeCompletion]);
+
+  const cancelPartInstallCompletion = useCallback(() => {
+    setPendingPartInstallCompletion(null);
   }, []);
 
   // ═══════════════════════════════════════════════════════════════
@@ -372,6 +471,12 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
     pendingChecklistCompletion,
     confirmChecklistCompletion,
     cancelChecklistCompletion,
+
+    // Part Install on Completion State
+    pendingPartInstallCompletion,
+    confirmPartInstallAndComplete,
+    skipPartInstallAndComplete,
+    cancelPartInstallCompletion,
 
     // Drawer State
     activeTask,

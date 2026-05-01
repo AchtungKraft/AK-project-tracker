@@ -3,6 +3,7 @@ import { useTaskInteraction } from './useTaskInteraction';
 import PriorityRemoveConfirm from './PriorityRemoveConfirm';
 import DeleteTaskConfirm from './DeleteTaskConfirm';
 import CompleteTaskConfirm from './CompleteTaskConfirm';
+import InstallPartsOnCompleteModal from './InstallPartsOnCompleteModal';
 
 /**
  * TaskInteractionContext - Provider for task interaction state
@@ -88,6 +89,17 @@ export function TaskInteractionProvider({
         onConfirm={interaction.confirmChecklistCompletion}
         taskName={interaction.pendingChecklistCompletion?.task?.name}
         incompleteChecklistCount={interaction.pendingChecklistCompletion?.incompleteCount || 0}
+        isLoading={interaction.isUpdating}
+      />
+
+      {/* Part Install on Completion - Global */}
+      <InstallPartsOnCompleteModal
+        isOpen={!!interaction.pendingPartInstallCompletion}
+        onClose={interaction.cancelPartInstallCompletion}
+        onInstallAndComplete={interaction.confirmPartInstallAndComplete}
+        onSkipAndComplete={interaction.skipPartInstallAndComplete}
+        taskName={interaction.pendingPartInstallCompletion?.task?.name}
+        parts={interaction.pendingPartInstallCompletion?.parts || []}
         isLoading={interaction.isUpdating}
       />
     </TaskInteractionContext.Provider>
