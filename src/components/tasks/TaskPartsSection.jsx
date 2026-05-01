@@ -6,7 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { Package, Plus, Wrench, Trash2, CheckCircle } from "lucide-react";
+import { Package, Plus, Wrench, Trash2, CheckCircle, Eye } from "lucide-react";
+import { createPortal } from "react-dom";
+import PartModal from "@/components/parts/PartModal";
 import { PartTypeBadge } from "@/components/parts/PartTypeSelector";
 import { toast } from "sonner";
 import FinancialStatusBadge from "@/components/financial/FinancialStatusBadge";
@@ -51,6 +53,7 @@ export default function TaskPartsSection({
   const [allocateQty, setAllocateQty] = useState(1);
   const [maxQty, setMaxQty] = useState(99);
   const [installTarget, setInstallTarget] = useState(null);
+  const [viewPartId, setViewPartId] = useState(null);
 
   // Fetch task-part links
   const { data: taskPartLinks = [], isLoading: linksLoading } = useQuery({
@@ -192,6 +195,15 @@ export default function TaskPartsSection({
                   </div>
 
                   <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setViewPartId(part.id)}
+                      className="text-gray-400 hover:text-white hover:bg-gray-700/50"
+                      title="View part details"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </Button>
                     {lifecycleState === 'INSTALL_READY' && (
                       <Button
                         size="sm"
@@ -282,6 +294,15 @@ export default function TaskPartsSection({
             <Plus className="w-4 h-4 mr-2" />
             Link Part
           </Button>
+        )}
+
+        {/* View Part Modal — portaled to escape parent modal z-index */}
+        {viewPartId && createPortal(
+          <PartModal
+            partId={viewPartId}
+            onClose={() => setViewPartId(null)}
+          />,
+          document.body
         )}
 
         {/* Canonical Install Part Modal */}
