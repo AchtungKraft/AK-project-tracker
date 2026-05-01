@@ -58,6 +58,7 @@ function ShopTaskRow({ task, sp, showProject }) {
         onToggleComplete={sp.onToggleComplete}
         onClick={() => {}}
         commentCount={sp.commentCountByTaskId[task.id] || 0}
+        checklistProgress={sp.checklistProgressByTaskId?.[task.id]}
         onUpdateDueDate={sp.onUpdateDueDate}
         onUpdateStartDate={sp.onUpdateStartDate}
         onTogglePriority={sp.onTogglePriority}
@@ -293,6 +294,24 @@ export default function ShopPriorityView({
   const [createTaskContext, setCreateTaskContext] = useState(null); // { projectId, memberId }
   const [groupMode, setGroupMode] = useState("assigned"); // "assigned" | "project"
 
+  // Load checklist items for progress indicators
+  const taskIds = useMemo(() => tasks.map(t => t.id), [tasks]);
+  const { data: allChecklistItems = [] } = useQuery({
+    queryKey: ['shopChecklistItems', taskIds],
+    queryFn: () => base44.entities.TaskChecklistItem.list(),
+    enabled: taskIds.length > 0,
+  });
+  const checklistProgressByTaskId = useMemo(() => {
+    const taskIdSet = new Set(taskIds);
+    const m = {};
+    allChecklistItems.filter(i => taskIdSet.has(i.task_id)).forEach(i => {
+      if (!m[i.task_id]) m[i.task_id] = { completed: 0, total: 0 };
+      m[i.task_id].total++;
+      if (i.is_complete) m[i.task_id].completed++;
+    });
+    return m;
+  }, [allChecklistItems, taskIds]);
+
   // Load all buckets for projects that have tasks
   const projectIds = useMemo(() => [...new Set(tasks.map(t => t.project_id))], [tasks]);
   const { data: allBuckets = [] } = useQuery({
@@ -389,6 +408,7 @@ export default function ShopPriorityView({
 
   const sp = {
     categories, teamMembers, statuses, commentCountByTaskId, latestCommentByTaskId, projectMap, bucketsByProjectId,
+    checklistProgressByTaskId,
     onTaskClick, onToggleComplete, onUpdateDueDate, onUpdateStartDate, onTogglePriority,
     onAssign: handleAssign, onAddTask: handleAddTask,
   };

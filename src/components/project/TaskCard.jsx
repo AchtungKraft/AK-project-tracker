@@ -24,7 +24,7 @@ const getCategoryPath = (categoryId, categories) => {
   return category.name;
 };
 
-export default function TaskCard({ task, teamMembers = [], categories = [], statuses = [], onToggleComplete, onClick, onUpdateDueDate, onUpdateStartDate, onTogglePriority, commentCount = 0, compact = false, showInlineControls = true }) {
+export default function TaskCard({ task, teamMembers = [], categories = [], statuses = [], onToggleComplete, onClick, onUpdateDueDate, onUpdateStartDate, onTogglePriority, commentCount = 0, checklistProgress, compact = false, showInlineControls = true }) {
   const isMobile = useIsMobile();
   const isCompact = compact || isMobile;
   const assignedMember = teamMembers.find(m => m.id === task.assigned_team_member_id);
@@ -255,6 +255,10 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
             )}>
               {task.name}
             </h4>
+            {/* Checklist progress indicator (compact mode) */}
+            {isCompact && checklistProgress && checklistProgress.total > 0 && (
+              <span className="text-[10px] text-gray-500 shrink-0 tabular-nums">{checklistProgress.completed}/{checklistProgress.total}</span>
+            )}
             {/* Compact: inline controls on same row as name, visible on hover */}
             {isCompact && hasInlineControls && (
               <div className="flex items-center gap-0 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">{renderInlineControls()}</div>

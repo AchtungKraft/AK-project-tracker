@@ -40,6 +40,7 @@ function TaskRow({ task, sp }) {
         onToggleComplete={sp.onToggleComplete}
         onClick={() => {}}
         commentCount={sp.commentCountByTaskId[task.id] || 0}
+        checklistProgress={sp.checklistProgressByTaskId?.[task.id]}
         onUpdateDueDate={sp.onUpdateDueDate}
         onUpdateStartDate={sp.onUpdateStartDate}
         onTogglePriority={sp.onTogglePriority}
