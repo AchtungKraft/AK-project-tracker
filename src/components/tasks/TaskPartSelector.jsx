@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -240,12 +241,13 @@ export default function TaskPartSelector({
         </div>
       </div>
 
-      {/* Part detail modal — opens without breaking selection flow */}
-      {viewPartId && (
+      {/* Part detail modal — portaled to document.body to escape parent modal z-index */}
+      {viewPartId && createPortal(
         <PartModal
           partId={viewPartId}
           onClose={() => setViewPartId(null)}
-        />
+        />,
+        document.body
       )}
     </>
   );
