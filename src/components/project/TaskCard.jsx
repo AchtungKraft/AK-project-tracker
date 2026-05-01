@@ -8,6 +8,7 @@ import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { Button } from "@/components/ui/button";
 import PriorityRemoveConfirm from "@/components/tasks/PriorityRemoveConfirm";
 import CompleteTaskConfirm from "@/components/tasks/CompleteTaskConfirm";
+import { getChecklistProgressColor } from "@/components/tasks/checklistHelpers";
 
 // Helper to get full category path
 const getCategoryPath = (categoryId, categories) => {
@@ -257,7 +258,12 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
             </h4>
             {/* Checklist progress indicator (compact mode) */}
             {isCompact && checklistProgress && checklistProgress.total > 0 && (
-              <span className="text-[10px] text-gray-500 shrink-0 tabular-nums">{checklistProgress.completed}/{checklistProgress.total}</span>
+              <span className={cn(
+                "text-[10px] shrink-0 tabular-nums font-medium",
+                getChecklistProgressColor(checklistProgress.completed, checklistProgress.total) || "text-gray-500"
+              )}>
+                {checklistProgress.completed}/{checklistProgress.total}
+              </span>
             )}
             {/* Compact: inline controls on same row as name, visible on hover */}
             {isCompact && hasInlineControls && (

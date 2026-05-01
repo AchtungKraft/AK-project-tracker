@@ -1,12 +1,33 @@
 import { base44 } from "@/api/base44Client";
 
 /**
+ * Compute next sort_order for a new checklist item (append to end).
+ * Uses spacing of 10 for future insert flexibility.
+ */
+export function getNextSortOrder(items) {
+  const max = Math.max(0, ...items.map(i => i.sort_order || 0));
+  return max + 10;
+}
+
+/**
  * Sort checklist items: incomplete first by sort_order, then complete by sort_order.
  */
 export function sortChecklistItems(items) {
   const incomplete = items.filter(i => !i.is_complete).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   const complete = items.filter(i => i.is_complete).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   return [...incomplete, ...complete];
+}
+
+/**
+ * Determine progress color state from completed/total counts.
+ * Returns null if no checklist items exist.
+ */
+export function getChecklistProgressColor(completed, total) {
+  if (!total) return null;
+  const ratio = completed / total;
+  if (ratio >= 1) return 'text-green-500';
+  if (ratio >= 0.5) return 'text-yellow-400';
+  return 'text-red-500';
 }
 
 /**
