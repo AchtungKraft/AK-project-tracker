@@ -3,12 +3,14 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, MessageSquare, Send, Paperclip, X } from "lucide-react";
+import { Loader2, MessageSquare, Send, Paperclip, X, Link2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import ImageModal from "../ui/ImageModal";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { getMobileTextareaClass } from "@/components/mobile/MobileFormStyles";
+import CommentLinkInput from "./CommentLinkInput";
+import { CommentLinkCardEditable, CommentLinkCardDisplay } from "./CommentLinkCard";
 
 export default function TaskCommentsSection({ taskId }) {
   const queryClient = useQueryClient();
@@ -18,6 +20,8 @@ export default function TaskCommentsSection({ taskId }) {
   const [uploadedPhotos, setUploadedPhotos] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [pendingLinks, setPendingLinks] = useState([]);
+  const [showLinkInput, setShowLinkInput] = useState(false);
 
   const { data: comments = [], isLoading } = useQuery({
     queryKey: ['taskComments', taskId],
@@ -36,6 +40,8 @@ export default function TaskCommentsSection({ taskId }) {
       queryClient.invalidateQueries({ queryKey: ['taskComments', taskId] });
       setNewComment("");
       setUploadedPhotos([]);
+      setPendingLinks([]);
+      setShowLinkInput(false);
       toast.success('Comment added');
     },
     onError: () => {
@@ -74,6 +80,7 @@ export default function TaskCommentsSection({ taskId }) {
       task_id: taskId,
       content: newComment,
       photos: uploadedPhotos,
+      ...(pendingLinks.length > 0 ? { links: pendingLinks } : {}),
     });
   };
 
@@ -123,6 +130,30 @@ export default function TaskCommentsSection({ taskId }) {
             </div>
           )}
 
+          {/* Pending Links Preview */}
+          {pendingLinks.length > 0 && (
+            <div className="space-y-1.5">
+              {pendingLinks.map((link, idx) => (
+                <CommentLinkCardEditable
+                  key={idx}
+                  link={link}
+                  onRemove={() => setPendingLinks(prev => prev.filter((_, i) => i !== idx))}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Link Input */}
+          {showLinkInput && (
+            <CommentLinkInput
+              onAdd={(link) => {
+                setPendingLinks(prev => [...prev, link]);
+                setShowLinkInput(false);
+              }}
+              onCancel={() => setShowLinkInput(false)}
+            />
+          )}
+
           {/* Hidden file input */}
           <input
             ref={fileInputRef}
@@ -150,9 +181,23 @@ export default function TaskCommentsSection({ taskId }) {
                   <Paperclip className="w-5 h-5" />
                 )}
               </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowLinkInput(true)}
+                className="h-10 w-10 p-0 text-gray-400 hover:text-white hover:bg-gray-800"
+              >
+                <Link2 className="w-5 h-5" />
+              </Button>
               
-              {uploadedPhotos.length > 0 && (
-                <span className="text-xs text-gray-400">{uploadedPhotos.length} attached</span>
+              {(uploadedPhotos.length > 0 || pendingLinks.length > 0) && (
+                <span className="text-xs text-gray-400">
+                  {[
+                    uploadedPhotos.length > 0 && `${uploadedPhotos.length} img`,
+                    pendingLinks.length > 0 && `${pendingLinks.length} link${pendingLinks.length > 1 ? 's' : ''}`,
+                  ].filter(Boolean).join(', ')}
+                </span>
               )}
               
               <div className="flex-1" />
@@ -193,6 +238,15 @@ export default function TaskCommentsSection({ taskId }) {
                     Add Images
                   </>
                 )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-gray-700 cursor-pointer"
+                onClick={() => setShowLinkInput(true)}
+              >
+                <Link2 className="w-4 h-4 mr-2" />
+                Add Link
               </Button>
               
               <Button
@@ -267,6 +321,15 @@ export default function TaskCommentsSection({ taskId }) {
                           className="max-w-full max-h-full object-contain"
                         />
                       </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Display attached links */}
+                {comment.links && comment.links.length > 0 && (
+                  <div className="space-y-1.5 mt-3">
+                    {comment.links.map((link, idx) => (
+                      <CommentLinkCardDisplay key={idx} link={link} />
                     ))}
                   </div>
                 )}

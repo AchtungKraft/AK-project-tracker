@@ -1,0 +1,46 @@
+{
+  "name": "TaskComment",
+  "type": "object",
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "description": "Reference to Task"
+    },
+    "content": {
+      "type": "string",
+      "description": "Comment text content"
+    },
+    "photos": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Array of image URLs attached to the comment"
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Link URL"
+          },
+          "title": {
+            "type": "string",
+            "description": "Optional display title"
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional description"
+          }
+        }
+      },
+      "description": "Structured links attached to the comment"
+    }
+  },
+  "required": [
+    "task_id",
+    "content"
+  ]
+}
