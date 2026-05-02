@@ -162,6 +162,24 @@ export default function TaskPartsSection({
 
   if (!task) return null;
 
+  // Empty state: inline single-line display, no card wrapper
+  if (!linksLoading && taskPartLinks.length === 0 && !showAddPart) {
+    return (
+      <div className="flex items-center justify-between py-1">
+        <span className="text-sm text-gray-500">No parts linked</span>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setShowAddPart(true)}
+          className="text-gray-400 hover:text-white gap-1 h-8 text-xs"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Link Part
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <Card className="bg-gray-800/50 border-gray-700">
       <CardHeader className="pb-3">
@@ -174,8 +192,6 @@ export default function TaskPartsSection({
         {/* Linked Parts List */}
         {linksLoading ? (
           <p className="text-gray-400 text-sm">Loading...</p>
-        ) : taskPartLinks.length === 0 ? (
-          <p className="text-gray-500 text-sm">No parts linked to this task.</p>
         ) : (
           <div className="space-y-2">
             {taskPartLinks.map((link) => {

@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { CalendarIcon, Loader2, UserPlus, ExternalLink, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import TaskCommentsSection from "./TaskCommentsSection";
@@ -82,7 +83,7 @@ function ClientFeedbackLinks({ taskId }) {
   );
 }
 
-// Truncatable description — shows first 4 lines, expands on click
+// Truncatable description with section header
 function DescriptionBlock({ text }) {
   const [expanded, setExpanded] = React.useState(false);
   if (!text) return null;
@@ -91,8 +92,8 @@ function DescriptionBlock({ text }) {
   const isLong = lines.length > 4 || text.length > 280;
 
   return (
-    <div>
-      <p className="text-xs text-gray-500 mb-1">Description</p>
+    <div className="mt-1">
+      <h4 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-1.5">Description</h4>
       <p
         className={`text-gray-300 text-sm whitespace-pre-wrap ${!expanded && isLong ? 'line-clamp-4' : ''}`}
       >
@@ -353,14 +354,21 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
 
         <div className="flex-1 overflow-y-auto py-4">
 
-          {/* ── CHECKLIST — adaptive: full section if items exist, inline CTA if empty ── */}
+          {/* ── CHECKLIST — adaptive: dense section if items, compact CTA if empty ── */}
           {checklistItems.length > 0 ? (
-            <section className="mb-5">
+            <section className="mb-6">
               <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-3">Checklist</h3>
               <ExecutionChecklistSection taskId={task?.id} variant="full" />
+              {/* Ready-to-complete banner when all items done */}
+              {checklistItems.length > 0 && incompleteChecklistCount === 0 && (
+                <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-md bg-green-900/30 border border-green-800/40">
+                  <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                  <span className="text-sm text-green-300 font-medium">Ready to complete</span>
+                </div>
+              )}
             </section>
           ) : (
-            <div className="mb-4">
+            <div className="mb-3">
               <ExecutionChecklistSection taskId={task?.id} variant="empty-cta" />
             </div>
           )}
@@ -514,13 +522,13 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
 
           <hr className="border-gray-700/50 mb-5" />
 
-          {/* ── PARTS ── */}
-          <section className="mb-5">
-            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-3">Parts</h3>
+          {/* ── PARTS — uses smaller margin when empty (inline display) ── */}
+          <section className="mb-3">
+            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-2">Parts</h3>
             <TaskPartsSection task={task} project={project} />
           </section>
 
-          <hr className="border-gray-700/50 mb-5" />
+          <hr className="border-gray-700/50 mb-4" />
 
           {/* ── COMMENTS ── */}
           <section className="mb-4">
@@ -576,7 +584,12 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
               <Button
                 onClick={() => setShowCompleteConfirm(true)}
                 disabled={!completedStatus}
-                className="flex-1 h-11 min-h-[44px] bg-green-700 hover:bg-green-800 text-white gap-2"
+                className={cn(
+                  "flex-1 h-11 min-h-[44px] text-white gap-2 transition-all",
+                  checklistItems.length > 0 && incompleteChecklistCount === 0
+                    ? "bg-green-600 hover:bg-green-700 ring-2 ring-green-500/40 shadow-lg shadow-green-900/30"
+                    : "bg-green-700 hover:bg-green-800"
+                )}
               >
                 <CheckCircle2 className="w-4 h-4" />
                 Complete Task

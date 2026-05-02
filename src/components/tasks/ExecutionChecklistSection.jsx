@@ -83,29 +83,26 @@ export default function ExecutionChecklistSection({ taskId, variant = "full" }) 
     );
   }
 
-  // Empty-CTA variant: lightweight inline prompt when no items exist
+  // Empty-CTA variant: action-first prompt when no items exist
   if (variant === "empty-cta" && totalCount === 0) {
     return (
-      <div className="flex items-center gap-3 py-3">
-        <span className="text-sm text-gray-500">No checklist yet</span>
+      <div className="flex items-center gap-3 py-2">
         <Button
           size="sm"
-          variant="outline"
-          className="border-gray-700 text-gray-300 gap-1.5 h-8 text-xs"
+          className="bg-red-600 hover:bg-red-700 text-white gap-1.5 h-9 text-xs font-medium"
           onClick={() => inputRef.current?.focus()}
         >
-          <Plus className="w-3 h-3" />
-          Add First Step
+          <Plus className="w-3.5 h-3.5" />
+          Start Checklist
         </Button>
-        {/* Hidden input that appears on focus */}
         <Input
           ref={inputRef}
           value={newItemTitle}
           onChange={(e) => setNewItemTitle(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Step description…"
+          placeholder="First step…"
           disabled={createMutation.isPending}
-          className="bg-gray-800/50 border-gray-700 text-white text-sm h-8 flex-1 max-w-[220px]"
+          className="bg-gray-800/50 border-gray-700 text-white text-sm h-9 flex-1 max-w-[220px]"
         />
       </div>
     );
@@ -134,22 +131,22 @@ export default function ExecutionChecklistSection({ taskId, variant = "full" }) 
         </div>
       )}
 
-      {/* Checklist rows */}
+      {/* Checklist rows — entire row is clickable toggle target */}
       <div className="space-y-0">
         {sortedItems.map((item) => (
-          <div
+          <label
             key={item.id}
-            onClick={() => toggleMutation.mutate({ id: item.id, is_complete: !item.is_complete })}
+            role="button"
+            onClick={(e) => { e.preventDefault(); toggleMutation.mutate({ id: item.id, is_complete: !item.is_complete }); }}
             className={cn(
-              "flex items-center gap-3 py-3 px-3 -mx-3 rounded cursor-pointer transition-colors",
+              "flex items-center gap-3 py-3 px-3 -mx-3 rounded cursor-pointer transition-colors select-none",
               "hover:bg-gray-800/50 active:bg-gray-800/70",
               "min-h-[48px]"
             )}
           >
             <Checkbox
               checked={item.is_complete}
-              onCheckedChange={() => {}}
-              onClick={(e) => e.stopPropagation()}
+              tabIndex={-1}
               className="shrink-0 pointer-events-none"
             />
             <span className={cn(
@@ -158,7 +155,7 @@ export default function ExecutionChecklistSection({ taskId, variant = "full" }) 
             )}>
               {item.title}
             </span>
-          </div>
+          </label>
         ))}
 
         {sortedItems.length === 0 && (

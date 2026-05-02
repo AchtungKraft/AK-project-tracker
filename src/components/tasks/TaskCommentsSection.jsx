@@ -96,27 +96,93 @@ export default function TaskCommentsSection({ taskId, initialMaxVisible }) {
 
   return (
     <>
-      <div className="space-y-4">
-        {/* Add Comment Form */}
+      <div className="space-y-3">
+        {/* Comments List — shown first so recent activity is visible immediately */}
+        <div className={cn("space-y-3", showAll && "max-h-[400px] overflow-y-auto")}>
+          {isLoading ? (
+            <div className="text-center py-6 text-gray-500">
+              <Loader2 className="w-5 h-5 animate-spin mx-auto mb-1" />
+              <span className="text-xs">Loading…</span>
+            </div>
+          ) : sortedComments.length === 0 ? (
+            <p className="text-gray-500 text-sm py-1">No comments yet</p>
+          ) : (
+            <>
+              {visibleComments.map((comment) => (
+                <div
+                  key={comment.id}
+                  className="p-3 bg-gray-800/50 rounded-lg border border-gray-700"
+                >
+                  <div className="flex items-start justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 bg-gradient-to-br from-red-600 to-red-800 rounded-full flex items-center justify-center">
+                        <span className="text-white font-bold text-[10px]">
+                          {comment.created_by?.charAt(0).toUpperCase() || 'U'}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-white leading-tight">
+                          {comment.created_by || 'Unknown User'}
+                        </p>
+                        <p className="text-[11px] text-gray-500">
+                          {format(new Date(comment.created_date), 'MMM d, h:mm a')}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-300 whitespace-pre-wrap">{comment.content}</p>
+                  
+                  {comment.photos && comment.photos.length > 0 && (
+                    <div className="grid grid-cols-3 md:grid-cols-4 gap-2 mt-2">
+                      {comment.photos.map((url, idx) => (
+                        <div
+                          key={idx}
+                          className="w-full h-20 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden cursor-pointer hover:border-red-500 transition-colors"
+                          onClick={() => setSelectedImage(url)}
+                        >
+                          <img src={url} alt={`Attachment ${idx + 1}`} className="max-w-full max-h-full object-contain" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {comment.links && comment.links.length > 0 && (
+                    <div className="space-y-1.5 mt-2">
+                      {comment.links.map((link, idx) => (
+                        <CommentLinkCardDisplay key={idx} link={link} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {hasHidden && (
+                <button
+                  type="button"
+                  onClick={() => setShowAll(true)}
+                  className="text-xs text-blue-400 hover:text-blue-300 py-1"
+                >
+                  View all {sortedComments.length} comments
+                </button>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Add Comment Form — after list so it doesn't push content down */}
         <form onSubmit={handleSubmit} className={isMobile ? "space-y-2" : "space-y-3"}>
           <Textarea
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Add a comment or note..."
-            className={getMobileTextareaClass(isMobile, "bg-gray-800 border-gray-700 text-white min-h-[60px]")}
+            placeholder="Add a comment…"
+            className={getMobileTextareaClass(isMobile, "bg-gray-800 border-gray-700 text-white min-h-[56px]")}
           />
           
-          {/* Photo Upload & Preview */}
           {uploadedPhotos.length > 0 && (
             <div className="grid grid-cols-4 md:grid-cols-5 gap-2">
               {uploadedPhotos.map((url, idx) => (
                 <div key={idx} className="relative group">
                   <div className={`w-full bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden ${isMobile ? 'h-16' : 'h-20'}`}>
-                    <img
-                      src={url}
-                      alt={`Upload ${idx + 1}`}
-                      className="max-w-full max-h-full object-contain"
-                    />
+                    <img src={url} alt={`Upload ${idx + 1}`} className="max-w-full max-h-full object-contain" />
                   </div>
                   <button
                     type="button"
@@ -130,7 +196,6 @@ export default function TaskCommentsSection({ taskId, initialMaxVisible }) {
             </div>
           )}
 
-          {/* Pending Links Preview */}
           {pendingLinks.length > 0 && (
             <div className="space-y-1.5">
               {pendingLinks.map((link, idx) => (
@@ -143,7 +208,6 @@ export default function TaskCommentsSection({ taskId, initialMaxVisible }) {
             </div>
           )}
 
-          {/* Link Input */}
           {showLinkInput && (
             <CommentLinkInput
               onAdd={(link) => {
@@ -154,7 +218,6 @@ export default function TaskCommentsSection({ taskId, initialMaxVisible }) {
             />
           )}
 
-          {/* Hidden file input */}
           <input
             ref={fileInputRef}
             type="file"
@@ -164,190 +227,38 @@ export default function TaskCommentsSection({ taskId, initialMaxVisible }) {
             className="hidden"
           />
 
-          {/* Action Bar - Compact on mobile */}
           {isMobile ? (
             <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="h-10 w-10 p-0 text-gray-400 hover:text-white hover:bg-gray-800"
-              >
-                {uploading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <Paperclip className="w-5 h-5" />
-                )}
+              <Button type="button" variant="ghost" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="h-10 w-10 p-0 text-gray-400 hover:text-white hover:bg-gray-800">
+                {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Paperclip className="w-5 h-5" />}
               </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowLinkInput(true)}
-                className="h-10 w-10 p-0 text-gray-400 hover:text-white hover:bg-gray-800"
-              >
+              <Button type="button" variant="ghost" size="sm" onClick={() => setShowLinkInput(true)} className="h-10 w-10 p-0 text-gray-400 hover:text-white hover:bg-gray-800">
                 <Link2 className="w-5 h-5" />
               </Button>
-              
               {(uploadedPhotos.length > 0 || pendingLinks.length > 0) && (
                 <span className="text-xs text-gray-400">
-                  {[
-                    uploadedPhotos.length > 0 && `${uploadedPhotos.length} img`,
-                    pendingLinks.length > 0 && `${pendingLinks.length} link${pendingLinks.length > 1 ? 's' : ''}`,
-                  ].filter(Boolean).join(', ')}
+                  {[uploadedPhotos.length > 0 && `${uploadedPhotos.length} img`, pendingLinks.length > 0 && `${pendingLinks.length} link${pendingLinks.length > 1 ? 's' : ''}`].filter(Boolean).join(', ')}
                 </span>
               )}
-              
               <div className="flex-1" />
-              
-              <Button
-                type="submit"
-                size="sm"
-                disabled={createCommentMutation.isPending || !newComment.trim()}
-                className="h-10 px-4 bg-red-600 hover:bg-red-700"
-              >
-                {createCommentMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <>
-                    <Send className="w-4 h-4 mr-2" />
-                    Send
-                  </>
-                )}
+              <Button type="submit" size="sm" disabled={createCommentMutation.isPending || !newComment.trim()} className="h-10 px-4 bg-red-600 hover:bg-red-700">
+                {createCommentMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Send className="w-4 h-4 mr-2" />Send</>}
               </Button>
             </div>
           ) : (
             <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="border-gray-700 cursor-pointer"
-                disabled={uploading}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {uploading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <Paperclip className="w-4 h-4 mr-2" />
-                    Add Images
-                  </>
-                )}
+              <Button type="button" variant="outline" className="border-gray-700 cursor-pointer" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
+                {uploading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Uploading...</> : <><Paperclip className="w-4 h-4 mr-2" />Add Images</>}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="border-gray-700 cursor-pointer"
-                onClick={() => setShowLinkInput(true)}
-              >
-                <Link2 className="w-4 h-4 mr-2" />
-                Add Link
+              <Button type="button" variant="outline" className="border-gray-700 cursor-pointer" onClick={() => setShowLinkInput(true)}>
+                <Link2 className="w-4 h-4 mr-2" />Add Link
               </Button>
-              
-              <Button
-                type="submit"
-                disabled={createCommentMutation.isPending || !newComment.trim()}
-                className="bg-red-600 hover:bg-red-700 gap-2"
-              >
-                {createCommentMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Posting...
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    Add Comment
-                  </>
-                )}
+              <Button type="submit" disabled={createCommentMutation.isPending || !newComment.trim()} className="bg-red-600 hover:bg-red-700 gap-2">
+                {createCommentMutation.isPending ? <><Loader2 className="w-4 h-4 animate-spin" />Posting...</> : <><Send className="w-4 h-4" />Add Comment</>}
               </Button>
             </div>
           )}
         </form>
-
-        {/* Comments List */}
-        <div className={cn("space-y-3", showAll && "max-h-[400px] overflow-y-auto")}>
-          {isLoading ? (
-            <div className="text-center py-8 text-gray-500">
-              <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
-              Loading comments...
-            </div>
-          ) : sortedComments.length === 0 ? (
-            <div className="text-center py-4 text-gray-500 text-sm">
-              No comments yet
-            </div>
-          ) : (
-            <>
-            {visibleComments.map((comment) => (
-              <div
-                key={comment.id}
-                className="p-4 bg-gray-800/50 rounded-lg border border-gray-700"
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-gradient-to-br from-red-600 to-red-800 rounded-full flex items-center justify-center">
-                      <span className="text-white font-bold text-xs">
-                        {comment.created_by?.charAt(0).toUpperCase() || 'U'}
-                      </span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-white">
-                        {comment.created_by || 'Unknown User'}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {format(new Date(comment.created_date), 'MMM d, yyyy h:mm a')}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <p className="text-sm text-gray-300 whitespace-pre-wrap">{comment.content}</p>
-                
-                {/* Display attached images */}
-                {comment.photos && comment.photos.length > 0 && (
-                  <div className="grid grid-cols-3 md:grid-cols-4 gap-2 mt-3">
-                    {comment.photos.map((url, idx) => (
-                      <div
-                        key={idx}
-                        className="w-full h-20 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden cursor-pointer hover:border-red-500 transition-colors"
-                        onClick={() => setSelectedImage(url)}
-                      >
-                        <img
-                          src={url}
-                          alt={`Attachment ${idx + 1}`}
-                          className="max-w-full max-h-full object-contain"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Display attached links */}
-                {comment.links && comment.links.length > 0 && (
-                  <div className="space-y-1.5 mt-3">
-                    {comment.links.map((link, idx) => (
-                      <CommentLinkCardDisplay key={idx} link={link} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-            {hasHidden && (
-              <button
-                type="button"
-                onClick={() => setShowAll(true)}
-                className="text-xs text-blue-400 hover:text-blue-300 py-1"
-              >
-                View all {sortedComments.length} comments
-              </button>
-            )}
-            </>
-          )}
-        </div>
       </div>
 
       <ImageModal
