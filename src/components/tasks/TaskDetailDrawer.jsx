@@ -358,7 +358,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           <SheetTitle className="text-white text-xl font-bold leading-tight pt-3">{task?.name}</SheetTitle>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto pt-2 pb-3">
+        <div className="flex-1 overflow-y-auto pt-0 pb-3">
 
           {/* Description — immediately under title */}
           {!editing && <DescriptionBlock text={task?.description} />}

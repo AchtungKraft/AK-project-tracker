@@ -139,9 +139,9 @@ export default function ExecutionChecklistSection({ taskId, variant = "full" }) 
             role="button"
             onClick={(e) => { e.preventDefault(); toggleMutation.mutate({ id: item.id, is_complete: !item.is_complete }); }}
             className={cn(
-              "flex items-center gap-3 py-3 px-3 -mx-3 rounded cursor-pointer transition-colors select-none",
+              "flex items-center gap-3 py-1.5 px-3 -mx-3 rounded cursor-pointer transition-colors select-none",
               "hover:bg-gray-800/50 active:bg-gray-800/70",
-              "min-h-[48px]"
+              "min-h-[36px]"
             )}
           >
             <Checkbox
