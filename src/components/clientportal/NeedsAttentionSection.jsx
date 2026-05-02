@@ -114,6 +114,7 @@ const NeedsAttentionSection = ({
               Action Queue
             </CardTitle>
             <div className="hidden md:flex gap-3 text-[11px] text-gray-500 mt-0.5">
+              <span>{(columnData.needs_sending || []).length} drafts</span>
               <span>{(columnData.client_waiting || []).length} waiting</span>
               <span>{(columnData.review_active || []).length} review</span>
               <span>{(columnData.follow_up || []).length} follow-up</span>
@@ -127,7 +128,7 @@ const NeedsAttentionSection = ({
       </CardHeader>
       <CardContent className="p-2 md:p-4">
         {/* 3-Column Active Board */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 md:gap-4">
           {BOARD_COLUMNS.map(col => (
             <BoardColumn
               key={col.key}

@@ -15,6 +15,7 @@ import { getTime } from './feedbackTimeline';
 const FOLLOW_UP_THRESHOLD_HOURS = 48;
 
 const PRIORITY = {
+  needs_sending: 1,
   needs_response: 1,
   overdue: 2,
   needs_review: 3,
@@ -26,6 +27,13 @@ const PRIORITY = {
  * Badge configuration for attention types
  */
 export const ATTENTION_BADGE_CONFIG = {
+  needs_sending: {
+    label: "Needs Sending",
+    color: "purple",
+    bgClass: "bg-purple-600/20",
+    borderClass: "border-purple-600/50",
+    textClass: "text-purple-400",
+  },
   needs_response: {
     label: "Client Waiting",
     color: "red",
@@ -67,6 +75,18 @@ export const ATTENTION_BADGE_CONFIG = {
  * Column configuration for the task board
  */
 export const BOARD_COLUMNS = [
+  {
+    key: 'needs_sending',
+    label: 'Needs Sending',
+    subtitle: 'Draft — not yet sent to client',
+    color: 'purple',
+    headerBg: 'bg-purple-500/10',
+    headerBorder: 'border-purple-500/30',
+    headerText: 'text-purple-400',
+    countBg: 'bg-purple-500/20',
+    countText: 'text-purple-300',
+    emptyText: 'No drafts pending',
+  },
   {
     key: 'client_waiting',
     label: 'Client Waiting',
@@ -195,9 +215,6 @@ export function buildAttentionList(projectGroups) {
       const decisions = request.decisions || [];
       const canonicalState = getRequestStateCanonical(request, decisions, []);
 
-      // Skip drafts — they're not actionable yet
-      if (canonicalState.key === 'draft') return;
-
       const item = classifyRequest(request, group.project, canonicalState);
       if (item) items.push(item);
     });
@@ -230,6 +247,27 @@ function classifyRequest(request, project, canonicalState) {
     : 0;
 
   let type;
+
+  // Drafts — not yet sent to client, needs team action to post
+  if (canonicalKey === 'draft') {
+    return {
+      request,
+      requestId: request.id,
+      project,
+      type: 'needs_sending',
+      priority: PRIORITY.needs_sending,
+      lastActor: 'team',
+      lastActivityAt: request.updated_date || request.created_date,
+      lastActivityLabel: formatActivityLabel('team', request.updated_date || request.created_date),
+      followUpLabel: null,
+      followUpMeta: null,
+      lastCommentSnippet: request.title || null,
+      isOverdue: false,
+      needsResponse: false,
+      isStalled: false,
+      isReviewStale: false,
+    };
+  }
 
   // HIGHEST PRIORITY: Team explicitly marked "in_review" → ALWAYS show in Active Review.
   // This override beats all other classification (client-waiting, approved, follow-up).
@@ -351,6 +389,7 @@ export function groupByColumn(attentionItems) {
     .sort((a, b) => getTime(a.lastActivityAt) - getTime(b.lastActivityAt));
 
   return {
+    needs_sending: attentionItems.filter(i => i.type === 'needs_sending'),
     client_waiting: attentionItems.filter(i => i.type === 'needs_response'),
     review_active: attentionItems.filter(i => i.type === 'needs_review' || i.type === 'overdue'),
     follow_up: followUp,
