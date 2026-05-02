@@ -10,19 +10,19 @@ import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { CalendarIcon, Loader2, UserPlus, ExternalLink } from "lucide-react";
+import { CalendarIcon, Loader2, UserPlus, ExternalLink, Package, MessageSquare, Info, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import TaskCommentsSection from "./TaskCommentsSection";
-import TaskChecklistSection from "./TaskChecklistSection";
+import ExecutionChecklistSection from "./ExecutionChecklistSection";
 import TaskPartsSection from "./TaskPartsSection";
+import CollapsibleSection from "./CollapsibleSection";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { getMobileInputClass, getMobileTextareaClass, getMobileSelectClass } from "@/components/mobile/MobileFormStyles";
-import TaskActionFooter from "./TaskActionFooter";
 import { TASK_CACHE_KEYS } from "./useTaskInteraction";
+import CompleteTaskConfirm from "./CompleteTaskConfirm";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -246,12 +246,44 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
     }
   }, [userTeamMember, formData]);
 
+  const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+
   const project = projects.find(p => p.id === task?.project_id);
   const category = categories.find(c => c.id === task?.category_id);
   const categoryPath = getCategoryPath(task?.category_id, categories);
   const categoryColor = category?.color;
   const status = statuses.find(s => s.id === task?.status_id);
   const assignedMember = teamMembers.find(m => m.id === task?.assigned_team_member_id);
+
+  // Fetch checklist items for incomplete count in complete confirmation
+  const { data: checklistItems = [] } = useQuery({
+    queryKey: ['taskChecklistItems', 'task', task?.id],
+    queryFn: () => base44.entities.TaskChecklistItem.filter({ task_id: task?.id }),
+    enabled: !!task?.id,
+    staleTime: 30000,
+  });
+  const incompleteChecklistCount = checklistItems.filter(i => !i.is_complete).length;
+
+  // Find the "completed" status
+  const completedStatus = useMemo(() =>
+    statuses.find(s => s.scope === 'Task' && s.label?.toLowerCase().includes('complete') && s.active),
+    [statuses]
+  );
+
+  const completeMutation = useMutation({
+    mutationFn: () => base44.entities.Task.update(task.id, {
+      status_id: completedStatus?.id,
+      completed_date: new Date().toISOString(),
+    }),
+    onSuccess: () => {
+      TASK_CACHE_KEYS.forEach(key => queryClient.invalidateQueries({ queryKey: key }));
+      queryClient.invalidateQueries({ queryKey: ['myTasks'] });
+      queryClient.invalidateQueries({ queryKey: ['allTasks'] });
+      toast.success('Task completed');
+      setShowCompleteConfirm(false);
+      onClose();
+    },
+  });
 
   return (
     <>
@@ -263,7 +295,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
       modal={!showDeleteConfirm}
     >
       <SheetContent 
-        className="bg-gray-900 text-white w-full sm:max-w-2xl overflow-y-auto"
+        className="bg-gray-900 text-white w-full sm:max-w-2xl overflow-y-auto flex flex-col"
         onInteractOutside={(e) => {
           if (showDeleteConfirm) e.preventDefault();
         }}
@@ -271,259 +303,247 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           if (showDeleteConfirm) e.preventDefault();
         }}
       >
-        <SheetHeader className="border-b border-gray-700 pb-4">
-          <SheetTitle className="text-white text-xl">{task?.name}</SheetTitle>
-          {project && (
-            <p className="text-sm text-gray-400">Project: {project.name}</p>
-          )}
-        </SheetHeader>
-
-        <div className="py-6 space-y-6">
-          {/* Task Details Section */}
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">Task Details</h3>
-            </div>
-
-            {editing ? (
-              <form className={isMobile ? "space-y-3" : "space-y-4"}>
-                <div>
-                  <Label className="text-gray-400">Task Name</Label>
-                  <Input
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="Task name"
-                    className={getMobileInputClass(isMobile, "bg-gray-800 border-gray-700 text-white")}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <Label className="text-gray-400">Description</Label>
-                  <Textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Task description"
-                    className={getMobileTextareaClass(isMobile, "bg-gray-800 border-gray-700 text-white min-h-[80px]")}
-                  />
-                </div>
-
-                <div className={`grid grid-cols-2 ${isMobile ? 'gap-3' : 'gap-4'}`}>
-                  <div>
-                    <Label className="text-gray-400">Category</Label>
-                    <Select
-                      value={formData.category_id}
-                      onValueChange={(value) => setFormData({ ...formData, category_id: value })}
-                    >
-                      <SelectTrigger className={getMobileSelectClass(isMobile, "bg-gray-800 border-gray-700 text-white")}>
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {parentCategories.map(parent => {
-                          const children = activeCategories.filter(c => c.parent_id === parent.id);
-                          return (
-                            <div key={parent.id} className="contents">
-                              <SelectItem value={parent.id}>
-                                <span style={{ color: parent.color }}>{parent.name}</span>
-                              </SelectItem>
-                              {children.map(child => (
-                                <SelectItem key={child.id} value={child.id}>
-                                  <span className="ml-4" style={{ color: child.color }}>
-                                    → {child.name}
-                                  </span>
-                                </SelectItem>
-                              ))}
-                            </div>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label className="text-gray-400">Status</Label>
-                    <Select
-                      value={formData.status_id}
-                      onValueChange={(value) => setFormData({ ...formData, status_id: value })}
-                    >
-                      <SelectTrigger className={getMobileSelectClass(isMobile, "bg-gray-800 border-gray-700 text-white")}>
-                        <SelectValue placeholder="Select status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {taskStatuses.map(status => (
-                          <SelectItem key={status.id} value={status.id}>{status.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <Label className="text-gray-400">Assign To</Label>
-                    {userTeamMember && formData.assigned_team_member_id !== userTeamMember.id && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setFormData({ ...formData, assigned_team_member_id: userTeamMember.id })}
-                        className="border-gray-700 text-xs gap-1"
-                      >
-                        <UserPlus className="w-3 h-3" />
-                        Assign to Me
-                      </Button>
-                    )}
-                  </div>
-                  <Select
-                    value={formData.assigned_team_member_id}
-                    onValueChange={(value) => setFormData({ ...formData, assigned_team_member_id: value })}
-                  >
-                    <SelectTrigger className={getMobileSelectClass(isMobile, "bg-gray-800 border-gray-700 text-white")}>
-                      <SelectValue placeholder="Assign to team member" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {activeTeamMembers.map(member => (
-                        <SelectItem key={member.id} value={member.id}>
-                          {member.full_name} {member.team_role && `(${member.team_role})`}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className={`grid grid-cols-2 ${isMobile ? 'gap-3' : 'gap-4'}`}>
-                  <div>
-                    <Label className="text-gray-400">Start Date</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="w-full justify-start bg-gray-800 border-gray-700 text-white"
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {formData.start_date ? format(new Date(formData.start_date), 'PPP') : 'Pick a date'}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <Calendar
-                          mode="single"
-                          selected={formData.start_date ? new Date(formData.start_date) : undefined}
-                          onSelect={(date) => setFormData({ ...formData, start_date: date ? format(date, 'yyyy-MM-dd') : '' })}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-
-                  <div>
-                    <Label className="text-gray-400">Due Date</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="w-full justify-start bg-gray-800 border-gray-700 text-white"
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {formData.due_date ? format(new Date(formData.due_date), 'PPP') : 'Pick a date'}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <Calendar
-                          mode="single"
-                          selected={formData.due_date ? new Date(formData.due_date) : undefined}
-                          onSelect={(date) => setFormData({ ...formData, due_date: date ? format(date, 'yyyy-MM-dd') : '' })}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                </div>
-              </form>
-            ) : (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">Status</p>
-                    {status ? (
-                      <Badge style={{ backgroundColor: status.color }} className="text-white">
-                        {status.label}
-                      </Badge>
-                    ) : (
-                      <p className="text-white">-</p>
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">Assigned To</p>
-                    <p className="text-white">
-                      {assignedMember ? `${assignedMember.full_name}${assignedMember.team_role ? ` (${assignedMember.team_role})` : ''}` : 'Unassigned'}
-                    </p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">Category</p>
-                    <p style={{ color: categoryColor || '#FFFFFF' }}>{categoryPath || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">Due Date</p>
-                    <p className="text-white">
-                      {task?.due_date ? format(new Date(task.due_date), 'MMM d, yyyy') : '-'}
-                    </p>
-                  </div>
-                </div>
-                {task?.description && (
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">Description</p>
-                    <p className="text-white whitespace-pre-wrap">{task.description}</p>
-                  </div>
-                )}
-              </div>
+        {/* ── Slim header ── */}
+        <SheetHeader className="pb-2 shrink-0">
+          <SheetTitle className="text-white text-base font-semibold leading-tight">{task?.name}</SheetTitle>
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            {project && <span>{project.name}</span>}
+            {assignedMember && (
+              <>
+                <span>•</span>
+                <span>{assignedMember.full_name}</span>
+              </>
+            )}
+            {task?.due_date && (
+              <>
+                <span>•</span>
+                <span>{format(new Date(task.due_date), 'MMM d')}</span>
+              </>
             )}
           </div>
+        </SheetHeader>
 
-          <Separator className="bg-gray-700" />
+        <div className="flex-1 overflow-y-auto py-3 space-y-1">
+          {/* ── PRIMARY: Checklist (always expanded) ── */}
+          <ExecutionChecklistSection taskId={task?.id} />
 
-          {/* Client Feedback Links */}
-          <ClientFeedbackLinks taskId={task?.id} />
+          {/* ── SECONDARY: Collapsible sections ── */}
+          <div className="border-t border-gray-800 pt-2 mt-4 space-y-0">
+            {/* Task Details */}
+            <CollapsibleSection title="Task Details" icon={Info} defaultOpen={editing}>
+              {editing ? (
+                <form className={isMobile ? "space-y-3" : "space-y-4"}>
+                  <div>
+                    <Label className="text-gray-400">Task Name</Label>
+                    <Input
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      placeholder="Task name"
+                      className={getMobileInputClass(isMobile, "bg-gray-800 border-gray-700 text-white")}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-gray-400">Description</Label>
+                    <Textarea
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      placeholder="Task description"
+                      className={getMobileTextareaClass(isMobile, "bg-gray-800 border-gray-700 text-white min-h-[80px]")}
+                    />
+                  </div>
+                  <div className={`grid grid-cols-2 ${isMobile ? 'gap-3' : 'gap-4'}`}>
+                    <div>
+                      <Label className="text-gray-400">Category</Label>
+                      <Select value={formData.category_id} onValueChange={(value) => setFormData({ ...formData, category_id: value })}>
+                        <SelectTrigger className={getMobileSelectClass(isMobile, "bg-gray-800 border-gray-700 text-white")}>
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {parentCategories.map(parent => {
+                            const children = activeCategories.filter(c => c.parent_id === parent.id);
+                            return (
+                              <div key={parent.id} className="contents">
+                                <SelectItem value={parent.id}>
+                                  <span style={{ color: parent.color }}>{parent.name}</span>
+                                </SelectItem>
+                                {children.map(child => (
+                                  <SelectItem key={child.id} value={child.id}>
+                                    <span className="ml-4" style={{ color: child.color }}>→ {child.name}</span>
+                                  </SelectItem>
+                                ))}
+                              </div>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-gray-400">Status</Label>
+                      <Select value={formData.status_id} onValueChange={(value) => setFormData({ ...formData, status_id: value })}>
+                        <SelectTrigger className={getMobileSelectClass(isMobile, "bg-gray-800 border-gray-700 text-white")}>
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {taskStatuses.map(s => <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <Label className="text-gray-400">Assign To</Label>
+                      {userTeamMember && formData.assigned_team_member_id !== userTeamMember.id && (
+                        <Button type="button" size="sm" variant="outline" onClick={() => setFormData({ ...formData, assigned_team_member_id: userTeamMember.id })} className="border-gray-700 text-xs gap-1">
+                          <UserPlus className="w-3 h-3" /> Assign to Me
+                        </Button>
+                      )}
+                    </div>
+                    <Select value={formData.assigned_team_member_id} onValueChange={(value) => setFormData({ ...formData, assigned_team_member_id: value })}>
+                      <SelectTrigger className={getMobileSelectClass(isMobile, "bg-gray-800 border-gray-700 text-white")}>
+                        <SelectValue placeholder="Assign to team member" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {activeTeamMembers.map(m => <SelectItem key={m.id} value={m.id}>{m.full_name} {m.team_role && `(${m.team_role})`}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className={`grid grid-cols-2 ${isMobile ? 'gap-3' : 'gap-4'}`}>
+                    <div>
+                      <Label className="text-gray-400">Start Date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button type="button" variant="outline" className="w-full justify-start bg-gray-800 border-gray-700 text-white">
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {formData.start_date ? format(new Date(formData.start_date), 'PPP') : 'Pick a date'}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar mode="single" selected={formData.start_date ? new Date(formData.start_date) : undefined} onSelect={(date) => setFormData({ ...formData, start_date: date ? format(date, 'yyyy-MM-dd') : '' })} />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div>
+                      <Label className="text-gray-400">Due Date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button type="button" variant="outline" className="w-full justify-start bg-gray-800 border-gray-700 text-white">
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {formData.due_date ? format(new Date(formData.due_date), 'PPP') : 'Pick a date'}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar mode="single" selected={formData.due_date ? new Date(formData.due_date) : undefined} onSelect={(date) => setFormData({ ...formData, due_date: date ? format(date, 'yyyy-MM-dd') : '' })} />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                </form>
+              ) : (
+                <div className="space-y-2 text-sm">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs text-gray-500">Status</p>
+                      {status ? <Badge style={{ backgroundColor: status.color }} className="text-white text-xs mt-0.5">{status.label}</Badge> : <p className="text-gray-400">-</p>}
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Category</p>
+                      <p style={{ color: categoryColor || '#9CA3AF' }} className="mt-0.5">{categoryPath || '-'}</p>
+                    </div>
+                  </div>
+                  {task?.description && (
+                    <div>
+                      <p className="text-xs text-gray-500">Description</p>
+                      <p className="text-gray-300 whitespace-pre-wrap mt-0.5">{task.description}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CollapsibleSection>
 
-          {/* Checklist Section */}
-          <TaskChecklistSection taskId={task?.id} />
+            {/* Client Feedback Links */}
+            <ClientFeedbackLinks taskId={task?.id} />
 
-          {/* Associated Parts Section */}
-          <TaskPartsSection task={task} project={project} />
+            {/* Parts */}
+            <CollapsibleSection title="Parts" icon={Package}>
+              <TaskPartsSection task={task} project={project} />
+            </CollapsibleSection>
 
-          {/* Comments Section */}
-          <TaskCommentsSection taskId={task?.id} />
-
+            {/* Comments */}
+            <CollapsibleSection title="Comments" icon={MessageSquare}>
+              <TaskCommentsSection taskId={task?.id} />
+            </CollapsibleSection>
+          </div>
         </div>
 
-        {/* Unified Sticky Footer - Using TaskActionFooter */}
-        <TaskActionFooter
-          mode={editing ? 'edit' : 'view'}
-          onEdit={() => setEditing(true)}
-          onSave={handleSubmit}
-          onClose={onClose}
-          onDelete={handleDeleteClick}
-          onCancel={() => {
-            setEditing(false);
-            setFormData({
-              name: task.name || "",
-              description: task.description || "",
-              project_id: task.project_id || projectId || "",
-              category_id: task.category_id || "",
-              assigned_team_member_id: task.assigned_team_member_id || "",
-              status_id: task.status_id || "",
-              start_date: task.start_date || "",
-              due_date: task.due_date || "",
-            });
+        {/* ── Execution-first footer ── */}
+        <div
+          className="sticky bottom-0 left-0 right-0 bg-gray-900 border-t border-red-900/30 shrink-0"
+          style={{
+            padding: isMobile ? '12px 16px' : '16px',
+            paddingBottom: isMobile ? 'calc(12px + env(safe-area-inset-bottom, 0px))' : '16px',
           }}
-          isSaving={updateMutation.isPending}
-          isDeleting={deleteMutation.isPending}
-        />
+        >
+          {editing ? (
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEditing(false);
+                  setFormData({
+                    name: task.name || "", description: task.description || "",
+                    project_id: task.project_id || projectId || "", category_id: task.category_id || "",
+                    assigned_team_member_id: task.assigned_team_member_id || "", status_id: task.status_id || "",
+                    start_date: task.start_date || "", due_date: task.due_date || "",
+                  });
+                }}
+                className="flex-1 h-11 min-h-[44px] border-gray-700"
+                disabled={updateMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSubmit}
+                disabled={updateMutation.isPending}
+                className="flex-1 h-11 min-h-[44px] bg-red-600 hover:bg-red-700"
+              >
+                {updateMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
+              </Button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setEditing(true)}
+                className="h-11 min-h-[44px] px-4 border-gray-700 text-gray-300"
+              >
+                Edit
+              </Button>
+              <Button
+                onClick={() => setShowCompleteConfirm(true)}
+                disabled={!completedStatus}
+                className="flex-1 h-11 min-h-[44px] bg-green-700 hover:bg-green-800 text-white gap-2"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Complete Task
+              </Button>
+            </div>
+          )}
+        </div>
       </SheetContent>
     </Sheet>
 
-    {/* Delete Confirmation - Radix AlertDialog sibling to Sheet */}
+    {/* Complete Task Confirmation */}
+    <CompleteTaskConfirm
+      isOpen={showCompleteConfirm}
+      onClose={() => setShowCompleteConfirm(false)}
+      onConfirm={() => completeMutation.mutate()}
+      taskName={task?.name}
+      isLoading={completeMutation.isPending}
+      incompleteChecklistCount={incompleteChecklistCount}
+    />
+
+    {/* Delete Confirmation */}
     <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
       <AlertDialogContent className="bg-gray-900 border-red-900/30 text-white">
         <AlertDialogHeader>
@@ -533,18 +553,10 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel 
-            disabled={deleteMutation.isPending}
-            className="border-gray-700 text-white hover:bg-gray-800"
-          >
-            Cancel
-          </AlertDialogCancel>
+          <AlertDialogCancel disabled={deleteMutation.isPending} className="border-gray-700 text-white hover:bg-gray-800">Cancel</AlertDialogCancel>
           <AlertDialogAction
             disabled={deleteMutation.isPending}
-            onClick={(e) => {
-              e.preventDefault();
-              deleteMutation.mutate();
-            }}
+            onClick={(e) => { e.preventDefault(); deleteMutation.mutate(); }}
             className="bg-red-600 hover:bg-red-700 text-white"
           >
             {deleteMutation.isPending ? 'Deleting...' : 'Delete Task'}
