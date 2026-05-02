@@ -82,6 +82,35 @@ function ClientFeedbackLinks({ taskId }) {
   );
 }
 
+// Truncatable description — shows first 4 lines, expands on click
+function DescriptionBlock({ text }) {
+  const [expanded, setExpanded] = React.useState(false);
+  if (!text) return null;
+
+  const lines = text.split('\n');
+  const isLong = lines.length > 4 || text.length > 280;
+
+  return (
+    <div>
+      <p className="text-xs text-gray-500 mb-1">Description</p>
+      <p
+        className={`text-gray-300 text-sm whitespace-pre-wrap ${!expanded && isLong ? 'line-clamp-4' : ''}`}
+      >
+        {text}
+      </p>
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          className="text-xs text-blue-400 hover:text-blue-300 mt-1"
+        >
+          {expanded ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // Helper to get full category path
 const getCategoryPath = (categoryId, categories) => {
   if (!categoryId) return null;
@@ -322,18 +351,24 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           </div>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto py-4 space-y-6">
+        <div className="flex-1 overflow-y-auto py-4">
 
-          {/* ── CHECKLIST ── */}
-          <section>
-            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-3">Checklist</h3>
-            <ExecutionChecklistSection taskId={task?.id} />
-          </section>
+          {/* ── CHECKLIST — adaptive: full section if items exist, inline CTA if empty ── */}
+          {checklistItems.length > 0 ? (
+            <section className="mb-5">
+              <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-3">Checklist</h3>
+              <ExecutionChecklistSection taskId={task?.id} variant="full" />
+            </section>
+          ) : (
+            <div className="mb-4">
+              <ExecutionChecklistSection taskId={task?.id} variant="empty-cta" />
+            </div>
+          )}
 
-          <hr className="border-gray-700/50" />
+          <hr className="border-gray-700/50 mb-5" />
 
           {/* ── TASK DETAILS ── */}
-          <section>
+          <section className="mb-5">
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-3">Task Details</h3>
             {editing ? (
               <form className="space-y-4">
@@ -469,12 +504,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                     </p>
                   </div>
                 </div>
-                {task?.description && (
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">Description</p>
-                    <p className="text-gray-300 text-sm whitespace-pre-wrap">{task.description}</p>
-                  </div>
-                )}
+                <DescriptionBlock text={task?.description} />
               </div>
             )}
           </section>
@@ -482,20 +512,20 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           {/* ── CLIENT FEEDBACK ── */}
           <ClientFeedbackLinks taskId={task?.id} />
 
-          <hr className="border-gray-700/50" />
+          <hr className="border-gray-700/50 mb-5" />
 
           {/* ── PARTS ── */}
-          <section>
+          <section className="mb-5">
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-3">Parts</h3>
             <TaskPartsSection task={task} project={project} />
           </section>
 
-          <hr className="border-gray-700/50" />
+          <hr className="border-gray-700/50 mb-5" />
 
           {/* ── COMMENTS ── */}
-          <section>
+          <section className="mb-4">
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-3">Comments</h3>
-            <TaskCommentsSection taskId={task?.id} />
+            <TaskCommentsSection taskId={task?.id} initialMaxVisible={2} />
           </section>
 
         </div>

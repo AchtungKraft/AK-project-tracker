@@ -3,15 +3,19 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
  * Execution-first checklist: checkbox + label only.
  * No reorder arrows, no delete icons, no collapse toggle.
  * Entire row is clickable. Optimistic-feel toggling.
+ *
+ * variant="full" (default) — shows section header + progress bar + items + add input
+ * variant="empty-cta" — shows only the "Add First Step" CTA (no header, no divider)
  */
-export default function ExecutionChecklistSection({ taskId }) {
+export default function ExecutionChecklistSection({ taskId, variant = "full" }) {
   const queryClient = useQueryClient();
   const inputRef = useRef(null);
   const [newItemTitle, setNewItemTitle] = useState("");
@@ -75,6 +79,34 @@ export default function ExecutionChecklistSection({ taskId }) {
       <div className="flex items-center gap-2 py-4 text-gray-500 text-sm">
         <Loader2 className="w-4 h-4 animate-spin" />
         Loading checklist...
+      </div>
+    );
+  }
+
+  // Empty-CTA variant: lightweight inline prompt when no items exist
+  if (variant === "empty-cta" && totalCount === 0) {
+    return (
+      <div className="flex items-center gap-3 py-3">
+        <span className="text-sm text-gray-500">No checklist yet</span>
+        <Button
+          size="sm"
+          variant="outline"
+          className="border-gray-700 text-gray-300 gap-1.5 h-8 text-xs"
+          onClick={() => inputRef.current?.focus()}
+        >
+          <Plus className="w-3 h-3" />
+          Add First Step
+        </Button>
+        {/* Hidden input that appears on focus */}
+        <Input
+          ref={inputRef}
+          value={newItemTitle}
+          onChange={(e) => setNewItemTitle(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Step description…"
+          disabled={createMutation.isPending}
+          className="bg-gray-800/50 border-gray-700 text-white text-sm h-8 flex-1 max-w-[220px]"
+        />
       </div>
     );
   }

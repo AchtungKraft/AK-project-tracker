@@ -6,13 +6,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2, MessageSquare, Send, Paperclip, X, Link2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import ImageModal from "../ui/ImageModal";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { getMobileTextareaClass } from "@/components/mobile/MobileFormStyles";
 import CommentLinkInput from "./CommentLinkInput";
 import { CommentLinkCardEditable, CommentLinkCardDisplay } from "./CommentLinkCard";
 
-export default function TaskCommentsSection({ taskId }) {
+export default function TaskCommentsSection({ taskId, initialMaxVisible }) {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const fileInputRef = useRef(null);
@@ -84,19 +85,18 @@ export default function TaskCommentsSection({ taskId }) {
     });
   };
 
+  const [showAll, setShowAll] = useState(!initialMaxVisible);
+
   const sortedComments = [...comments].sort((a, b) => 
     new Date(b.created_date) - new Date(a.created_date)
   );
 
+  const visibleComments = showAll ? sortedComments : sortedComments.slice(0, initialMaxVisible || sortedComments.length);
+  const hasHidden = !showAll && initialMaxVisible && sortedComments.length > initialMaxVisible;
+
   return (
     <>
       <div className="space-y-4">
-        <div className="flex items-center gap-2 pb-2 border-b border-gray-700">
-          <MessageSquare className="w-5 h-5 text-gray-400" />
-          <h3 className="text-lg font-semibold text-white">Comments & Notes</h3>
-          <span className="text-sm text-gray-500">({comments.length})</span>
-        </div>
-
         {/* Add Comment Form */}
         <form onSubmit={handleSubmit} className={isMobile ? "space-y-2" : "space-y-3"}>
           <Textarea
@@ -271,18 +271,19 @@ export default function TaskCommentsSection({ taskId }) {
         </form>
 
         {/* Comments List */}
-        <div className="space-y-3 max-h-[400px] overflow-y-auto">
+        <div className={cn("space-y-3", showAll && "max-h-[400px] overflow-y-auto")}>
           {isLoading ? (
             <div className="text-center py-8 text-gray-500">
               <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
               Loading comments...
             </div>
           ) : sortedComments.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              No comments yet. Be the first to add a note!
+            <div className="text-center py-4 text-gray-500 text-sm">
+              No comments yet
             </div>
           ) : (
-            sortedComments.map((comment) => (
+            <>
+            {visibleComments.map((comment) => (
               <div
                 key={comment.id}
                 className="p-4 bg-gray-800/50 rounded-lg border border-gray-700"
@@ -334,7 +335,17 @@ export default function TaskCommentsSection({ taskId }) {
                   </div>
                 )}
               </div>
-            ))
+            ))}
+            {hasHidden && (
+              <button
+                type="button"
+                onClick={() => setShowAll(true)}
+                className="text-xs text-blue-400 hover:text-blue-300 py-1"
+              >
+                View all {sortedComments.length} comments
+              </button>
+            )}
+            </>
           )}
         </div>
       </div>
