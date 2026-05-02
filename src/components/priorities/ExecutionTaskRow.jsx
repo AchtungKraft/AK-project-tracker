@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
@@ -10,7 +10,6 @@ export default function ExecutionTaskRow({
   onToggleChecklistItem,
   onTaskClick,
 }) {
-  const [expanded, setExpanded] = useState(false);
   const hasChecklist = checklistItems && checklistItems.length > 0;
   const dueDate = task.due_date ? new Date(task.due_date) : null;
   const isOverdue = dueDate && dueDate < new Date();
@@ -19,10 +18,7 @@ export default function ExecutionTaskRow({
   return (
     <div className="break-inside-avoid">
       {/* Task row */}
-      <div
-        className="flex items-start gap-2 py-[4px] border-b border-white/5 cursor-pointer"
-        onClick={() => hasChecklist && setExpanded(v => !v)}
-      >
+      <div className="flex items-start gap-2 py-[4px] border-b border-white/5">
         <span onClick={e => e.stopPropagation()} className="shrink-0 mt-0.5">
           <Checkbox
             checked={false}
@@ -55,8 +51,8 @@ export default function ExecutionTaskRow({
         </div>
       </div>
 
-      {/* Subtasks */}
-      {expanded && hasChecklist && checklistItems.map(item => (
+      {/* Checklist items — always visible, matching ProjectPrintView */}
+      {hasChecklist && checklistItems.map(item => (
         <div key={item.id} className="flex items-start gap-2 py-[2px] ml-6">
           <Checkbox
             checked={item.is_complete}
