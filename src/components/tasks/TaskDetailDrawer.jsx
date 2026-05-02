@@ -92,7 +92,7 @@ function DescriptionBlock({ text }) {
   const isLong = lines.length > 4 || text.length > 280;
 
   return (
-    <div className="mt-2">
+    <div className="mt-1">
       <p
         className={`text-gray-300 text-sm leading-relaxed whitespace-pre-wrap ${!expanded && isLong ? 'line-clamp-4' : ''}`}
       >
@@ -355,7 +355,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
             <p className="text-xs text-gray-500">{project.name}</p>
           )}
           {/* Dominant title */}
-          <SheetTitle className="text-white text-xl font-bold leading-tight pt-1">{task?.name}</SheetTitle>
+          <SheetTitle className="text-white text-xl font-bold leading-tight pt-3">{task?.name}</SheetTitle>
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto pt-2 pb-3">
