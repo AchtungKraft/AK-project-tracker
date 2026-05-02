@@ -1,11 +1,22 @@
 import React, { useMemo, useState, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Badge } from "@/components/ui/badge";
-import { FolderKanban } from "lucide-react";
 import { sortChecklistItems } from "@/components/tasks/checklistHelpers";
 import { toast } from "sonner";
 import ExecutionTaskRow from "./ExecutionTaskRow";
+
+/**
+ * Resolve full category path string (handles parent hierarchy).
+ */
+function resolveCategoryName(catId, categories) {
+  const cat = categories.find(c => c.id === catId);
+  if (!cat) return null;
+  if (cat.parent_id) {
+    const parent = categories.find(c => c.id === cat.parent_id);
+    return parent ? `${parent.name} › ${cat.name}` : cat.name;
+  }
+  return cat.name;
+}
 
 export default function PriorityExecutionView({
   tasks,
@@ -18,7 +29,7 @@ export default function PriorityExecutionView({
 }) {
   const queryClient = useQueryClient();
 
-  // Fetch checklist items for all priority tasks
+  // ── Checklist data ──
   const taskIds = useMemo(() => tasks.map(t => t.id), [tasks]);
   const { data: allChecklistItems = [] } = useQuery({
     queryKey: ['executionChecklist', taskIds],
@@ -28,30 +39,23 @@ export default function PriorityExecutionView({
     enabled: taskIds.length > 0,
   });
 
-  // Build checklistByTaskId map
   const checklistByTaskId = useMemo(() => {
     const map = {};
     allChecklistItems.forEach(item => {
       if (!map[item.task_id]) map[item.task_id] = [];
       map[item.task_id].push(item);
     });
-    // Sort each group
-    Object.keys(map).forEach(tid => {
-      map[tid] = sortChecklistItems(map[tid]);
-    });
+    Object.keys(map).forEach(tid => { map[tid] = sortChecklistItems(map[tid]); });
     return map;
   }, [allChecklistItems]);
 
-  // Checklist toggle mutation
   const toggleChecklistMutation = useMutation({
     mutationFn: (item) =>
       base44.entities.TaskChecklistItem.update(item.id, {
         is_complete: !item.is_complete,
         completed_at: !item.is_complete ? new Date().toISOString() : null,
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['executionChecklist'] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['executionChecklist'] }),
   });
 
   const handleToggleChecklistItem = useCallback((item) => {
@@ -59,75 +63,78 @@ export default function PriorityExecutionView({
     toast.success(item.is_complete ? 'Item unchecked' : 'Item checked');
   }, [toggleChecklistMutation]);
 
-  // Group tasks by project
-  const projectGroups = useMemo(() => {
-    const groups = {};
-    tasks.forEach(task => {
-      const pid = task.project_id || 'no-project';
-      if (!groups[pid]) {
-        const project = projects.find(p => p.id === pid);
-        groups[pid] = { project, tasks: [] };
-      }
-      groups[pid].tasks.push(task);
-    });
-    return Object.values(groups).sort((a, b) =>
-      (a.project?.name || '').localeCompare(b.project?.name || '')
-    );
-  }, [tasks, projects]);
-
-  // Unique client names for filtering
-  const clientNames = useMemo(() => {
-    const names = new Set();
-    projects.forEach(p => { if (p.client_name) names.add(p.client_name); });
-    return [...names].sort();
-  }, [projects]);
-
-  // Local filters
-  const [clientFilter, setClientFilter] = useState('all');
+  // ── Filters ──
+  const [projectFilter, setProjectFilter] = useState('all');
   const [assignedFilter, setAssignedFilter] = useState('all');
 
-  const filteredGroups = useMemo(() => {
-    return projectGroups
-      .filter(g => {
-        if (clientFilter !== 'all' && g.project?.client_name !== clientFilter) return false;
-        return true;
-      })
-      .map(g => ({
-        ...g,
-        tasks: g.tasks.filter(t => {
-          if (assignedFilter !== 'all' && t.assigned_team_member_id !== assignedFilter) return false;
-          return true;
-        }),
-      }))
-      .filter(g => g.tasks.length > 0);
-  }, [projectGroups, clientFilter, assignedFilter]);
+  // Projects that actually have priority tasks
+  const projectsWithTasks = useMemo(() => {
+    const ids = new Set(tasks.map(t => t.project_id));
+    return projects.filter(p => ids.has(p.id)).sort((a, b) => a.name.localeCompare(b.name));
+  }, [tasks, projects]);
 
   const activeTeamMembers = useMemo(() =>
     teamMembers.filter(tm => tm.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
     [teamMembers]
   );
 
-  const totalFiltered = filteredGroups.reduce((sum, g) => sum + g.tasks.length, 0);
+  // ── Build grouped structure: Project → Category → Tasks ──
+  const groupedData = useMemo(() => {
+    const filtered = tasks.filter(t => {
+      if (projectFilter !== 'all' && t.project_id !== projectFilter) return false;
+      if (assignedFilter !== 'all' && t.assigned_team_member_id !== assignedFilter) return false;
+      return true;
+    });
+
+    // Group by project
+    const projectMap = {};
+    filtered.forEach(task => {
+      const pid = task.project_id || 'no-project';
+      if (!projectMap[pid]) {
+        const project = projects.find(p => p.id === pid);
+        projectMap[pid] = { project, buckets: {} };
+      }
+      const catName = resolveCategoryName(task.category_id, categories) || 'UNCATEGORIZED';
+      if (!projectMap[pid].buckets[catName]) {
+        projectMap[pid].buckets[catName] = [];
+      }
+      projectMap[pid].buckets[catName].push(task);
+    });
+
+    // Sort projects alphabetically, sort buckets alphabetically within each
+    return Object.values(projectMap)
+      .sort((a, b) => (a.project?.name || '').localeCompare(b.project?.name || ''))
+      .map(pg => ({
+        ...pg,
+        sortedBuckets: Object.entries(pg.buckets).sort(([a], [b]) => {
+          if (a === 'UNCATEGORIZED') return 1;
+          if (b === 'UNCATEGORIZED') return -1;
+          return a.localeCompare(b);
+        }),
+      }));
+  }, [tasks, projects, categories, projectFilter, assignedFilter]);
+
+  const totalCount = groupedData.reduce(
+    (sum, pg) => sum + pg.sortedBuckets.reduce((s, [, tasks]) => s + tasks.length, 0), 0
+  );
 
   if (tasks.length === 0) {
-    return (
-      <div className="text-center py-12 text-gray-500">
-        No priority tasks to display.
-      </div>
-    );
+    return <div className="text-center py-12 text-gray-600 text-sm">No priority tasks.</div>;
   }
 
   return (
-    <div className="space-y-3">
-      {/* Execution-local filters */}
+    <div className="space-y-4">
+      {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
         <select
-          value={clientFilter}
-          onChange={e => setClientFilter(e.target.value)}
-          className="bg-gray-900/60 border border-gray-700 text-gray-300 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-red-600"
+          value={projectFilter}
+          onChange={e => setProjectFilter(e.target.value)}
+          className="bg-gray-900/60 border border-gray-700 text-gray-300 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-red-600 max-w-[220px]"
         >
-          <option value="all">All Clients</option>
-          {clientNames.map(c => <option key={c} value={c}>{c}</option>)}
+          <option value="all">All Projects ({projectsWithTasks.length})</option>
+          {projectsWithTasks.map(p => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
         </select>
 
         <select
@@ -141,47 +148,56 @@ export default function PriorityExecutionView({
           ))}
         </select>
 
-        <span className="text-[11px] text-gray-600 ml-auto">
-          {totalFiltered} task{totalFiltered !== 1 ? 's' : ''}
+        <span className="text-[10px] text-gray-700 ml-auto tabular-nums">
+          {totalCount} task{totalCount !== 1 ? 's' : ''}
         </span>
       </div>
 
-      {/* Project groups */}
-      {filteredGroups.map(group => (
-        <div
-          key={group.project?.id || 'none'}
-          className="bg-black/40 border border-gray-700/50 rounded-lg overflow-hidden"
-        >
+      {/* Grouped output */}
+      {groupedData.map(pg => (
+        <div key={pg.project?.id || 'none'}>
           {/* Project header */}
-          <div className="flex items-center gap-2 px-3 py-2 bg-gray-800/40 border-b border-gray-700/50">
-            <FolderKanban className="w-4 h-4 text-red-400/70 shrink-0" />
-            <span className="text-sm font-semibold text-gray-200 truncate">
-              {group.project?.name || 'No Project'}
-            </span>
-            {group.project?.client_name && (
-              <span className="text-xs text-gray-500 truncate hidden sm:inline">
-                — {group.project.client_name}
-              </span>
-            )}
-            <Badge className="ml-auto bg-gray-800 text-gray-400 border-gray-700 text-[10px] px-1.5 py-0 shrink-0">
-              {group.tasks.length}
-            </Badge>
+          <div className="border-b-2 border-gray-600 pb-1 mb-2">
+            <h2 className="text-sm font-bold text-gray-200 tracking-wide uppercase">
+              {pg.project?.name || 'No Project'}
+              {pg.project?.client_name && (
+                <span className="font-normal text-gray-500 normal-case ml-2 text-xs">
+                  {pg.project.client_name}
+                </span>
+              )}
+            </h2>
           </div>
 
-          {/* Task rows */}
-          <div>
-            {group.tasks.map(task => (
-              <ExecutionTaskRow
-                key={task.id}
-                task={task}
-                assignee={teamMembers.find(tm => tm.id === task.assigned_team_member_id)}
-                checklistItems={checklistByTaskId[task.id] || []}
-                onToggleComplete={onToggleComplete}
-                onToggleChecklistItem={handleToggleChecklistItem}
-                onTaskClick={onTaskClick}
-              />
-            ))}
-          </div>
+          {/* Category buckets */}
+          {pg.sortedBuckets.map(([bucketName, bucketTasks]) => (
+            <div key={bucketName} className="mb-3">
+              {/* Bucket label */}
+              <div className="flex items-center gap-2 mb-0.5 pl-1">
+                <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                  {bucketName}
+                </span>
+                <span className="text-[10px] text-gray-700 tabular-nums">
+                  ({bucketTasks.length})
+                </span>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-800/60 mb-0.5" />
+
+              {/* Task rows */}
+              {bucketTasks.map(task => (
+                <ExecutionTaskRow
+                  key={task.id}
+                  task={task}
+                  assignee={teamMembers.find(tm => tm.id === task.assigned_team_member_id)}
+                  checklistItems={checklistByTaskId[task.id] || []}
+                  onToggleComplete={onToggleComplete}
+                  onToggleChecklistItem={handleToggleChecklistItem}
+                  onTaskClick={onTaskClick}
+                />
+              ))}
+            </div>
+          ))}
         </div>
       ))}
     </div>
