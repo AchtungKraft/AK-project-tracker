@@ -58,6 +58,13 @@ export default function PriorityExecutionView({
     toast.success(item.is_complete ? 'Unchecked' : 'Checked');
   }, [toggleChecklistMutation]);
 
+  // ── Team map ──
+  const teamMap = useMemo(() => {
+    const m = {};
+    teamMembers.forEach(tm => { m[tm.id] = tm.full_name; });
+    return m;
+  }, [teamMembers]);
+
   // ── Filters ──
   const [projectFilter, setProjectFilter] = useState('all');
   const [assignedFilter, setAssignedFilter] = useState('all');
@@ -72,7 +79,7 @@ export default function PriorityExecutionView({
     [teamMembers]
   );
 
-  // ── Build Project → Category → Tasks structure ──
+  // ── Build Project → Category → Tasks ──
   const groupedData = useMemo(() => {
     const filtered = tasks.filter(t => {
       if (projectFilter !== 'all' && t.project_id !== projectFilter) return false;
@@ -86,57 +93,50 @@ export default function PriorityExecutionView({
       if (!projectMap[pid]) {
         projectMap[pid] = { project: projects.find(p => p.id === pid), buckets: {} };
       }
-      const catName = resolveCategoryName(task.category_id, categories) || 'UNCATEGORIZED';
+      const catName = resolveCategoryName(task.category_id, categories) || 'Uncategorized';
       if (!projectMap[pid].buckets[catName]) projectMap[pid].buckets[catName] = [];
       projectMap[pid].buckets[catName].push(task);
     });
+
+    // Sort tasks by due date within each bucket
+    const sortTasks = (arr) =>
+      [...arr].sort((a, b) => {
+        if (!a.due_date && !b.due_date) return 0;
+        if (!a.due_date) return 1;
+        if (!b.due_date) return -1;
+        return new Date(a.due_date) - new Date(b.due_date);
+      });
 
     return Object.values(projectMap)
       .sort((a, b) => (a.project?.name || '').localeCompare(b.project?.name || ''))
       .map(pg => ({
         ...pg,
-        sortedBuckets: Object.entries(pg.buckets).sort(([a], [b]) => {
-          if (a === 'UNCATEGORIZED') return 1;
-          if (b === 'UNCATEGORIZED') return -1;
-          return a.localeCompare(b);
-        }),
+        sortedBuckets: Object.entries(pg.buckets)
+          .sort(([a], [b]) => {
+            if (a === 'Uncategorized') return 1;
+            if (b === 'Uncategorized') return -1;
+            return a.localeCompare(b);
+          })
+          .map(([name, tasks]) => [name, sortTasks(tasks)]),
       }));
   }, [tasks, projects, categories, projectFilter, assignedFilter]);
 
-  // ── Helpers for rollup stats ──
-  function bucketStats(bucketTasks) {
-    let partsInstalled = 0, partsTotal = 0;
-    bucketTasks.forEach(t => {
-      const pp = partsProgressByTaskId[t.id];
-      if (pp) { partsInstalled += pp.installed; partsTotal += pp.total; }
-    });
-    return { count: bucketTasks.length, partsInstalled, partsTotal };
-  }
-
-  function projectStats(pg) {
-    let total = 0, partsInstalled = 0, partsTotal = 0;
-    pg.sortedBuckets.forEach(([, tasks]) => {
-      total += tasks.length;
-      tasks.forEach(t => {
-        const pp = partsProgressByTaskId[t.id];
-        if (pp) { partsInstalled += pp.installed; partsTotal += pp.total; }
-      });
-    });
-    return { total, partsInstalled, partsTotal };
-  }
+  const totalCount = groupedData.reduce(
+    (sum, pg) => sum + pg.sortedBuckets.reduce((s, [, t]) => s + t.length, 0), 0
+  );
 
   if (tasks.length === 0) {
-    return <div className="text-center py-12 text-gray-600 text-sm">No priority tasks.</div>;
+    return <p className="text-gray-500 text-center py-8">No active priority tasks.</p>;
   }
 
   return (
     <div>
-      {/* Filters — compact bar */}
-      <div className="flex flex-wrap items-center gap-2 mb-3">
+      {/* Filter bar — no-print style */}
+      <div className="flex flex-wrap items-center gap-2 mb-4 no-print">
         <select
           value={projectFilter}
           onChange={e => setProjectFilter(e.target.value)}
-          className="bg-transparent border border-gray-700/60 text-gray-400 text-[11px] rounded px-1.5 py-1 focus:outline-none focus:border-red-600 max-w-[200px]"
+          className="bg-transparent border border-gray-700 text-gray-400 text-xs rounded px-1.5 py-1 focus:outline-none max-w-[200px]"
         >
           <option value="all">All Projects ({projectsWithTasks.length})</option>
           {projectsWithTasks.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -144,74 +144,59 @@ export default function PriorityExecutionView({
         <select
           value={assignedFilter}
           onChange={e => setAssignedFilter(e.target.value)}
-          className="bg-transparent border border-gray-700/60 text-gray-400 text-[11px] rounded px-1.5 py-1 focus:outline-none focus:border-red-600"
+          className="bg-transparent border border-gray-700 text-gray-400 text-xs rounded px-1.5 py-1 focus:outline-none"
         >
           <option value="all">All Assignees</option>
           {activeTeamMembers.map(tm => <option key={tm.id} value={tm.id}>{tm.full_name}</option>)}
         </select>
+        <span className="text-xs text-gray-600 ml-auto tabular-nums">
+          {totalCount} priority tasks
+        </span>
       </div>
 
-      {/* Document body */}
-      <div className="space-y-5">
-        {groupedData.map(pg => {
-          const ps = projectStats(pg);
-          return (
-            <div key={pg.project?.id || 'none'}>
-              {/* ── PROJECT HEADER ── */}
-              <div className="border-b border-gray-500 pb-0.5 mb-1.5 flex items-baseline justify-between">
-                <h2 className="text-[13px] font-bold text-gray-200 uppercase tracking-wide leading-none">
-                  {pg.project?.name || 'No Project'}
-                  {pg.project?.client_name && (
-                    <span className="font-normal text-gray-600 normal-case ml-2 text-[11px]">
-                      {pg.project.client_name}
-                    </span>
-                  )}
-                </h2>
-                <span className="text-[9px] text-gray-600 tabular-nums font-mono shrink-0">
-                  {ps.total} tasks
-                  {ps.partsTotal > 0 && <> · {ps.partsInstalled}/{ps.partsTotal} parts</>}
-                </span>
-              </div>
-
-              {/* ── CATEGORY BUCKETS ── */}
-              {pg.sortedBuckets.map(([bucketName, bucketTasks]) => {
-                const bs = bucketStats(bucketTasks);
-                return (
-                  <div key={bucketName} className="mb-2">
-                    {/* Bucket label */}
-                    <div className="flex items-baseline justify-between pl-1 mb-px">
-                      <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-[0.08em] leading-none">
-                        {bucketName}
-                      </span>
-                      <span className="text-[9px] text-gray-700 tabular-nums font-mono">
-                        {bs.count} tasks
-                        {bs.partsTotal > 0 && <> · {bs.partsInstalled}/{bs.partsTotal}p</>}
-                      </span>
-                    </div>
-                    <div className="border-t border-gray-800/50" />
-
-                    {/* Task rows */}
-                    {bucketTasks.map(task => (
-                      <ExecutionTaskRow
-                        key={task.id}
-                        task={task}
-                        assignee={teamMembers.find(tm => tm.id === task.assigned_team_member_id)}
-                        status={statuses.find(s => s.id === task.status_id)}
-                        checklistItems={checklistByTaskId[task.id] || []}
-                        partsProgress={partsProgressByTaskId[task.id]}
-                        commentCount={commentCountByTaskId[task.id] || 0}
-                        onToggleComplete={onToggleComplete}
-                        onToggleChecklistItem={handleToggleChecklistItem}
-                        onTaskClick={onTaskClick}
-                      />
-                    ))}
-                  </div>
-                );
-              })}
+      {/* Document body — mirrors ProjectPrintView exactly */}
+      {groupedData.map(pg => {
+        const projTaskCount = pg.sortedBuckets.reduce((s, [, t]) => s + t.length, 0);
+        return (
+          <div key={pg.project?.id || 'none'} className="mb-6">
+            {/* Project header — matches print: bold, border-b-2 */}
+            <h1 className="text-lg font-bold border-b-2 border-gray-400 pb-1 mb-1 text-gray-100">
+              {pg.project?.name || 'No Project'}
+            </h1>
+            <div className="text-xs text-gray-600 mb-4">
+              Priority Tasks ({projTaskCount})
+              {pg.project?.client_name && ` • ${pg.project.client_name}`}
             </div>
-          );
-        })}
-      </div>
+
+            {/* Category sections — matches print: sm bold uppercase tracking-wider, border-b */}
+            {pg.sortedBuckets.map(([bucketName, bucketTasks]) => (
+              <div key={bucketName} className="mb-4">
+                <h2 className="text-sm font-bold uppercase tracking-wider text-gray-400 border-b border-gray-700 pb-1 mb-1">
+                  {bucketName}
+                  <span className="text-gray-600 font-normal ml-2">({bucketTasks.length})</span>
+                </h2>
+
+                <div>
+                  {bucketTasks.map(task => (
+                    <ExecutionTaskRow
+                      key={task.id}
+                      task={task}
+                      assigneeName={teamMap[task.assigned_team_member_id]}
+                      statusColor={statuses.find(s => s.id === task.status_id)?.color}
+                      checklistItems={checklistByTaskId[task.id] || []}
+                      partsProgress={partsProgressByTaskId[task.id]}
+                      commentCount={commentCountByTaskId[task.id] || 0}
+                      onToggleComplete={onToggleComplete}
+                      onToggleChecklistItem={handleToggleChecklistItem}
+                      onTaskClick={onTaskClick}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }
