@@ -92,9 +92,9 @@ function DescriptionBlock({ text }) {
   const isLong = lines.length > 4 || text.length > 280;
 
   return (
-    <div className="mt-0.5">
+    <div className="mt-[2px]">
       <p
-        className={`text-gray-300 text-[15px] leading-relaxed whitespace-pre-wrap ${!expanded && isLong ? 'line-clamp-4' : ''}`}
+        className={`text-gray-300 text-[16px] leading-snug whitespace-pre-wrap ${!expanded && isLong ? 'line-clamp-4' : ''}`}
       >
         {text}
       </p>
@@ -355,7 +355,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
             <p className="text-xs text-gray-500">{project.name}</p>
           )}
           {/* Dominant title */}
-          <SheetTitle className="text-white text-xl font-bold leading-tight pt-3">{task?.name}</SheetTitle>
+          <SheetTitle className="text-white text-xl font-bold leading-tight mt-1">{task?.name}</SheetTitle>
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto pt-0 pb-3">
@@ -559,7 +559,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
               <Button
                 variant="outline"
                 onClick={() => setEditing(true)}
-                className="h-11 min-h-[44px] px-4 border-gray-700 text-gray-300"
+                className="h-11 min-h-[44px] px-4 border-green-700/50 text-green-400 hover:bg-green-900/30 hover:text-green-300"
               >
                 Edit
               </Button>
@@ -569,8 +569,8 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                 className={cn(
                   "flex-1 h-11 min-h-[44px] text-white gap-2 transition-all",
                   checklistItems.length > 0 && incompleteChecklistCount === 0
-                    ? "bg-green-600 hover:bg-green-700 ring-2 ring-green-500/40 shadow-lg shadow-green-900/30"
-                    : "bg-green-700 hover:bg-green-800"
+                    ? "bg-red-600 hover:bg-red-700 ring-2 ring-red-500/40 shadow-lg shadow-red-900/30"
+                    : "bg-red-600 hover:bg-red-700"
                 )}
               >
                 <CheckCircle2 className="w-4 h-4" />
