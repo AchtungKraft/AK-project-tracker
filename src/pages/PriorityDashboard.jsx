@@ -770,6 +770,8 @@ export default function PriorityDashboard() {
                 teamMembers={teamMembers}
                 categories={categories}
                 statuses={statuses}
+                partsProgressByTaskId={partsProgressByTaskId}
+                commentCountByTaskId={commentCountByTaskId}
                 onToggleComplete={handleToggleComplete}
                 onTaskClick={setSelectedTask}
               />
