@@ -109,9 +109,9 @@ export default function ExecutionChecklistSection({ taskId }) {
             key={item.id}
             onClick={() => toggleMutation.mutate({ id: item.id, is_complete: !item.is_complete })}
             className={cn(
-              "flex items-center gap-3 py-2.5 px-2 -mx-2 rounded cursor-pointer transition-colors",
+              "flex items-center gap-3 py-3 px-3 -mx-3 rounded cursor-pointer transition-colors",
               "hover:bg-gray-800/50 active:bg-gray-800/70",
-              "min-h-[44px]"
+              "min-h-[48px]"
             )}
           >
             <Checkbox

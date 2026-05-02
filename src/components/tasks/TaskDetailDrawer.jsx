@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { CalendarIcon, Loader2, UserPlus, ExternalLink, Package, MessageSquare, Info, CheckCircle2 } from "lucide-react";
+import { CalendarIcon, Loader2, UserPlus, ExternalLink, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -18,7 +18,6 @@ import { createPageUrl } from "@/utils";
 import TaskCommentsSection from "./TaskCommentsSection";
 import ExecutionChecklistSection from "./ExecutionChecklistSection";
 import TaskPartsSection from "./TaskPartsSection";
-import CollapsibleSection from "./CollapsibleSection";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { getMobileInputClass, getMobileTextareaClass, getMobileSelectClass } from "@/components/mobile/MobileFormStyles";
 import { TASK_CACHE_KEYS } from "./useTaskInteraction";
@@ -323,157 +322,182 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           </div>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto py-3 space-y-1">
-          {/* ── PRIMARY: Checklist (always expanded) ── */}
-          <ExecutionChecklistSection taskId={task?.id} />
+        <div className="flex-1 overflow-y-auto py-4 space-y-6">
 
-          {/* ── SECONDARY: Collapsible sections ── */}
-          <div className="border-t border-gray-800 pt-2 mt-4 space-y-0">
-            {/* Task Details */}
-            <CollapsibleSection title="Task Details" icon={Info} defaultOpen={editing}>
-              {editing ? (
-                <form className={isMobile ? "space-y-3" : "space-y-4"}>
+          {/* ── CHECKLIST ── */}
+          <section>
+            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-3">Checklist</h3>
+            <ExecutionChecklistSection taskId={task?.id} />
+          </section>
+
+          <hr className="border-gray-700/50" />
+
+          {/* ── TASK DETAILS ── */}
+          <section>
+            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-3">Task Details</h3>
+            {editing ? (
+              <form className="space-y-4">
+                <div>
+                  <Label className="text-gray-400">Task Name</Label>
+                  <Input
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="Task name"
+                    className={getMobileInputClass(isMobile, "bg-gray-800 border-gray-700 text-white")}
+                    required
+                  />
+                </div>
+                <div>
+                  <Label className="text-gray-400">Description</Label>
+                  <Textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    placeholder="Task description"
+                    className={getMobileTextareaClass(isMobile, "bg-gray-800 border-gray-700 text-white min-h-[80px]")}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label className="text-gray-400">Task Name</Label>
-                    <Input
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="Task name"
-                      className={getMobileInputClass(isMobile, "bg-gray-800 border-gray-700 text-white")}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-gray-400">Description</Label>
-                    <Textarea
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      placeholder="Task description"
-                      className={getMobileTextareaClass(isMobile, "bg-gray-800 border-gray-700 text-white min-h-[80px]")}
-                    />
-                  </div>
-                  <div className={`grid grid-cols-2 ${isMobile ? 'gap-3' : 'gap-4'}`}>
-                    <div>
-                      <Label className="text-gray-400">Category</Label>
-                      <Select value={formData.category_id} onValueChange={(value) => setFormData({ ...formData, category_id: value })}>
-                        <SelectTrigger className={getMobileSelectClass(isMobile, "bg-gray-800 border-gray-700 text-white")}>
-                          <SelectValue placeholder="Select category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {parentCategories.map(parent => {
-                            const children = activeCategories.filter(c => c.parent_id === parent.id);
-                            return (
-                              <div key={parent.id} className="contents">
-                                <SelectItem value={parent.id}>
-                                  <span style={{ color: parent.color }}>{parent.name}</span>
-                                </SelectItem>
-                                {children.map(child => (
-                                  <SelectItem key={child.id} value={child.id}>
-                                    <span className="ml-4" style={{ color: child.color }}>→ {child.name}</span>
-                                  </SelectItem>
-                                ))}
-                              </div>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label className="text-gray-400">Status</Label>
-                      <Select value={formData.status_id} onValueChange={(value) => setFormData({ ...formData, status_id: value })}>
-                        <SelectTrigger className={getMobileSelectClass(isMobile, "bg-gray-800 border-gray-700 text-white")}>
-                          <SelectValue placeholder="Select status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {taskStatuses.map(s => <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <Label className="text-gray-400">Assign To</Label>
-                      {userTeamMember && formData.assigned_team_member_id !== userTeamMember.id && (
-                        <Button type="button" size="sm" variant="outline" onClick={() => setFormData({ ...formData, assigned_team_member_id: userTeamMember.id })} className="border-gray-700 text-xs gap-1">
-                          <UserPlus className="w-3 h-3" /> Assign to Me
-                        </Button>
-                      )}
-                    </div>
-                    <Select value={formData.assigned_team_member_id} onValueChange={(value) => setFormData({ ...formData, assigned_team_member_id: value })}>
+                    <Label className="text-gray-400">Category</Label>
+                    <Select value={formData.category_id} onValueChange={(value) => setFormData({ ...formData, category_id: value })}>
                       <SelectTrigger className={getMobileSelectClass(isMobile, "bg-gray-800 border-gray-700 text-white")}>
-                        <SelectValue placeholder="Assign to team member" />
+                        <SelectValue placeholder="Select category" />
                       </SelectTrigger>
                       <SelectContent>
-                        {activeTeamMembers.map(m => <SelectItem key={m.id} value={m.id}>{m.full_name} {m.team_role && `(${m.team_role})`}</SelectItem>)}
+                        {parentCategories.map(parent => {
+                          const children = activeCategories.filter(c => c.parent_id === parent.id);
+                          return (
+                            <div key={parent.id} className="contents">
+                              <SelectItem value={parent.id}>
+                                <span style={{ color: parent.color }}>{parent.name}</span>
+                              </SelectItem>
+                              {children.map(child => (
+                                <SelectItem key={child.id} value={child.id}>
+                                  <span className="ml-4" style={{ color: child.color }}>→ {child.name}</span>
+                                </SelectItem>
+                              ))}
+                            </div>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className={`grid grid-cols-2 ${isMobile ? 'gap-3' : 'gap-4'}`}>
-                    <div>
-                      <Label className="text-gray-400">Start Date</Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button type="button" variant="outline" className="w-full justify-start bg-gray-800 border-gray-700 text-white">
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {formData.start_date ? format(new Date(formData.start_date), 'PPP') : 'Pick a date'}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                          <Calendar mode="single" selected={formData.start_date ? new Date(formData.start_date) : undefined} onSelect={(date) => setFormData({ ...formData, start_date: date ? format(date, 'yyyy-MM-dd') : '' })} />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                    <div>
-                      <Label className="text-gray-400">Due Date</Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button type="button" variant="outline" className="w-full justify-start bg-gray-800 border-gray-700 text-white">
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {formData.due_date ? format(new Date(formData.due_date), 'PPP') : 'Pick a date'}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                          <Calendar mode="single" selected={formData.due_date ? new Date(formData.due_date) : undefined} onSelect={(date) => setFormData({ ...formData, due_date: date ? format(date, 'yyyy-MM-dd') : '' })} />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
+                  <div>
+                    <Label className="text-gray-400">Status</Label>
+                    <Select value={formData.status_id} onValueChange={(value) => setFormData({ ...formData, status_id: value })}>
+                      <SelectTrigger className={getMobileSelectClass(isMobile, "bg-gray-800 border-gray-700 text-white")}>
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {taskStatuses.map(s => <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </div>
-                </form>
-              ) : (
-                <div className="space-y-2 text-sm">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-xs text-gray-500">Status</p>
-                      {status ? <Badge style={{ backgroundColor: status.color }} className="text-white text-xs mt-0.5">{status.label}</Badge> : <p className="text-gray-400">-</p>}
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Category</p>
-                      <p style={{ color: categoryColor || '#9CA3AF' }} className="mt-0.5">{categoryPath || '-'}</p>
-                    </div>
-                  </div>
-                  {task?.description && (
-                    <div>
-                      <p className="text-xs text-gray-500">Description</p>
-                      <p className="text-gray-300 whitespace-pre-wrap mt-0.5">{task.description}</p>
-                    </div>
-                  )}
                 </div>
-              )}
-            </CollapsibleSection>
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-gray-400">Assign To</Label>
+                    {userTeamMember && formData.assigned_team_member_id !== userTeamMember.id && (
+                      <Button type="button" size="sm" variant="outline" onClick={() => setFormData({ ...formData, assigned_team_member_id: userTeamMember.id })} className="border-gray-700 text-xs gap-1">
+                        <UserPlus className="w-3 h-3" /> Assign to Me
+                      </Button>
+                    )}
+                  </div>
+                  <Select value={formData.assigned_team_member_id} onValueChange={(value) => setFormData({ ...formData, assigned_team_member_id: value })}>
+                    <SelectTrigger className={getMobileSelectClass(isMobile, "bg-gray-800 border-gray-700 text-white")}>
+                      <SelectValue placeholder="Assign to team member" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activeTeamMembers.map(m => <SelectItem key={m.id} value={m.id}>{m.full_name} {m.team_role && `(${m.team_role})`}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-gray-400">Start Date</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button type="button" variant="outline" className="w-full justify-start bg-gray-800 border-gray-700 text-white">
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {formData.start_date ? format(new Date(formData.start_date), 'PPP') : 'Pick a date'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <Calendar mode="single" selected={formData.start_date ? new Date(formData.start_date) : undefined} onSelect={(date) => setFormData({ ...formData, start_date: date ? format(date, 'yyyy-MM-dd') : '' })} />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <div>
+                    <Label className="text-gray-400">Due Date</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button type="button" variant="outline" className="w-full justify-start bg-gray-800 border-gray-700 text-white">
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {formData.due_date ? format(new Date(formData.due_date), 'PPP') : 'Pick a date'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <Calendar mode="single" selected={formData.due_date ? new Date(formData.due_date) : undefined} onSelect={(date) => setFormData({ ...formData, due_date: date ? format(date, 'yyyy-MM-dd') : '' })} />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
+              </form>
+            ) : (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Status</p>
+                    {status ? <Badge style={{ backgroundColor: status.color }} className="text-white text-xs">{status.label}</Badge> : <p className="text-gray-400">-</p>}
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Assigned To</p>
+                    <p className="text-gray-200 text-sm">
+                      {assignedMember ? `${assignedMember.full_name}${assignedMember.team_role ? ` (${assignedMember.team_role})` : ''}` : 'Unassigned'}
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Category</p>
+                    <p style={{ color: categoryColor || '#9CA3AF' }} className="text-sm">{categoryPath || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Due Date</p>
+                    <p className="text-gray-200 text-sm">
+                      {task?.due_date ? format(new Date(task.due_date), 'MMM d, yyyy') : '-'}
+                    </p>
+                  </div>
+                </div>
+                {task?.description && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Description</p>
+                    <p className="text-gray-300 text-sm whitespace-pre-wrap">{task.description}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
 
-            {/* Client Feedback Links */}
-            <ClientFeedbackLinks taskId={task?.id} />
+          {/* ── CLIENT FEEDBACK ── */}
+          <ClientFeedbackLinks taskId={task?.id} />
 
-            {/* Parts */}
-            <CollapsibleSection title="Parts" icon={Package}>
-              <TaskPartsSection task={task} project={project} />
-            </CollapsibleSection>
+          <hr className="border-gray-700/50" />
 
-            {/* Comments */}
-            <CollapsibleSection title="Comments" icon={MessageSquare}>
-              <TaskCommentsSection taskId={task?.id} />
-            </CollapsibleSection>
-          </div>
+          {/* ── PARTS ── */}
+          <section>
+            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-3">Parts</h3>
+            <TaskPartsSection task={task} project={project} />
+          </section>
+
+          <hr className="border-gray-700/50" />
+
+          {/* ── COMMENTS ── */}
+          <section>
+            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-3">Comments</h3>
+            <TaskCommentsSection taskId={task?.id} />
+          </section>
+
         </div>
 
         {/* ── Execution-first footer ── */}
