@@ -331,36 +331,40 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           if (showDeleteConfirm) e.preventDefault();
         }}
       >
-        {/* ── PRIMARY HEADER: Title + Description + Metadata ── */}
-        <SheetHeader className="pb-0 shrink-0">
-          <SheetTitle className="text-white text-lg font-bold leading-tight">{task?.name}</SheetTitle>
-          {project && (
-            <p className="text-xs text-gray-500 mt-0.5">{project.name}</p>
-          )}
-        </SheetHeader>
-
-        <div className="flex-1 overflow-y-auto py-3">
-
-          {/* Description — primary content, immediately visible */}
-          {!editing && <DescriptionBlock text={task?.description} />}
-
-          {/* Inline metadata strip */}
+        {/* ── HEADER BLOCK: metadata → project → title → description ── */}
+        <SheetHeader className="pb-0 shrink-0 space-y-0">
+          {/* Muted metadata row — top line */}
           {!editing && (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-3 mb-4">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
               {status && (
-                <Badge style={{ backgroundColor: status.color }} className="text-white text-xs">{status.label}</Badge>
+                <Badge style={{ backgroundColor: status.color }} className="text-white text-[10px] px-1.5 py-0 h-4 leading-none">{status.label}</Badge>
               )}
               {assignedMember && (
-                <span className="text-sm text-gray-300">{assignedMember.full_name}</span>
+                <span className="text-xs text-gray-500">{assignedMember.full_name}</span>
               )}
               {categoryPath && (
-                <span style={{ color: categoryColor || '#9CA3AF' }} className="text-xs">{categoryPath}</span>
+                <span className="text-xs text-gray-500">{categoryPath}</span>
               )}
               {task?.due_date && (
-                <span className="text-xs text-gray-400">{format(new Date(task.due_date), 'MMM d, yyyy')}</span>
+                <span className="text-xs text-gray-500">{format(new Date(task.due_date), 'MMM d')}</span>
               )}
             </div>
           )}
+          {/* Project context */}
+          {project && !editing && (
+            <p className="text-xs text-gray-500">{project.name}</p>
+          )}
+          {/* Dominant title */}
+          <SheetTitle className="text-white text-xl font-bold leading-tight pt-1">{task?.name}</SheetTitle>
+        </SheetHeader>
+
+        <div className="flex-1 overflow-y-auto pt-2 pb-3">
+
+          {/* Description — immediately under title */}
+          {!editing && <DescriptionBlock text={task?.description} />}
+
+          {/* Spacer before secondary content */}
+          {!editing && <div className="mt-5" />}
 
           {/* ── EDIT FORM — replaces header content inline when editing ── */}
           {editing && (
