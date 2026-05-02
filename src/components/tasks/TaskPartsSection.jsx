@@ -181,182 +181,174 @@ export default function TaskPartsSection({
   }
 
   return (
-    <Card className="bg-gray-800/50 border-gray-700">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-white text-sm flex items-center gap-2">
-          <Package className="w-4 h-4" />
-          Associated Parts
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {/* Linked Parts List */}
-        {linksLoading ? (
-          <p className="text-gray-400 text-sm">Loading...</p>
-        ) : (
-          <div className="space-y-2">
-            {taskPartLinks.map((link) => {
-              const part = partsMap[link.part_id];
-              if (!part) return null;
+    <div>
+      {/* Linked Parts List */}
+      {linksLoading ? (
+        <p className="text-gray-400 text-sm">Loading...</p>
+      ) : (
+        <div className="divide-y divide-gray-800/60">
+          {taskPartLinks.map((link) => {
+            const part = partsMap[link.part_id];
+            if (!part) return null;
 
-              const commitment = commitmentsMap[link.commitment_id];
-              // TaskPartLink is the CANONICAL source for task-level install state
-              const isInstalled = link.install_status === 'complete';
-              const lifecycleState = resolveLifecycleState(commitment);
-              const isTerminal = lifecycleState === 'CANCELLED' || lifecycleState === 'CLOSED';
+            const commitment = commitmentsMap[link.commitment_id];
+            const isInstalled = link.install_status === 'complete';
+            const lifecycleState = resolveLifecycleState(commitment);
+            const isTerminal = lifecycleState === 'CANCELLED' || lifecycleState === 'CLOSED';
 
-              return (
-                <div
-                  key={link.id}
-                  className={cn(
-                    "bg-gray-900/50 rounded-lg p-3 flex items-center justify-between gap-3",
-                    (isInstalled || isTerminal) && "opacity-70"
-                  )}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-white font-medium truncate">{part.part_name}</span>
-                      {part.part_type && <PartTypeBadge partType={part.part_type} size="sm" />}
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-400">
-                      <span>Qty: {link.qty_allocated}</span>
-                      <InstallStatusBadge
-                        installStatus={link.install_status}
-                        qtyInstalled={link.qty_installed}
-                        qtyAllocated={link.qty_allocated}
-                      />
-                    </div>
-                    <div className="mt-1">
-                      <FinancialStatusBadge 
-                        financialStatus={financialStatusMap.get(link.part_id)} 
-                        displayMode="compact" 
-                      />
-                    </div>
+            return (
+              <div
+                key={link.id}
+                className={cn(
+                  "flex items-center gap-3 py-2 group",
+                  (isInstalled || isTerminal) && "opacity-60"
+                )}
+              >
+                {/* Thumbnail */}
+                {part.featured_photo ? (
+                  <img src={part.featured_photo} alt="" className="w-8 h-8 rounded object-cover shrink-0 bg-gray-800" />
+                ) : (
+                  <div className="w-8 h-8 rounded bg-gray-800 flex items-center justify-center shrink-0">
+                    <Package className="w-3.5 h-3.5 text-gray-500" />
                   </div>
+                )}
 
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setViewPartId(part.id)}
-                      className="text-gray-400 hover:text-white hover:bg-gray-700/50"
-                      title="View part details"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </Button>
-                    {!isInstalled && !isTerminal && lifecycleState === 'INSTALL_READY' && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleInstallClick(link)}
-                        className="text-green-400 hover:text-green-300 hover:bg-green-900/30"
-                      >
-                        <Wrench className="w-4 h-4" />
-                      </Button>
-                    )}
-                    {isInstalled && (
-                      <CheckCircle className="w-5 h-5 text-green-500" />
-                    )}
-                    {!isInstalled && !isTerminal && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => removeLinkMutation.mutate(link.id)}
-                        className="text-red-400 hover:text-red-300 hover:bg-red-900/30"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    )}
+                {/* Name + meta */}
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm text-gray-200 font-medium truncate block">{part.part_name}</span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-xs text-gray-500">Qty: {link.qty_allocated}</span>
+                    <InstallStatusBadge
+                      installStatus={link.install_status}
+                      qtyInstalled={link.qty_installed}
+                      qtyAllocated={link.qty_allocated}
+                    />
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
 
-        {/* Add Part Form */}
-        {showAddPart ? (
-          <div className="bg-gray-900/50 rounded-lg p-3 space-y-3">
-            <TaskPartSelector
-              commitments={commitments}
-              partsMap={partsMap}
-              selectedPartId={selectedPartId}
-              onSelect={(partId, commitmentId, availableQty) => {
-                setSelectedPartId(partId);
-                setSelectedCommitmentId(commitmentId);
-                setMaxQty(availableQty || 99);
-                setAllocateQty(1);
-              }}
-            />
+                {/* Status / actions — compact, revealed on hover */}
+                <div className="flex items-center gap-1 shrink-0">
+                  {isInstalled && (
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                  )}
+                  {!isInstalled && !isTerminal && lifecycleState === 'INSTALL_READY' && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => handleInstallClick(link)}
+                      className="h-7 w-7 text-green-400 hover:text-green-300 hover:bg-green-900/30 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <Wrench className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => setViewPartId(part.id)}
+                    className="h-7 w-7 text-gray-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                  </Button>
+                  {!isInstalled && !isTerminal && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => removeLinkMutation.mutate(link.id)}
+                      className="h-7 w-7 text-red-400/60 hover:text-red-300 hover:bg-red-900/30 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
-            {selectedPartId && (
-              <Input
-                type="number"
-                min={1}
-                max={maxQty}
-                value={allocateQty}
-                onChange={(e) => setAllocateQty(Math.min(parseInt(e.target.value) || 1, maxQty))}
-                placeholder="Quantity"
-                className="bg-gray-800 border-gray-700 text-white"
-              />
-            )}
-
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setShowAddPart(false);
-                  setSelectedPartId("");
-                  setSelectedCommitmentId("");
-                }}
-                className="flex-1 border-gray-700"
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => addLinkMutation.mutate()}
-                disabled={!selectedPartId || addLinkMutation.isPending}
-                className="flex-1 bg-red-600 hover:bg-red-700"
-              >
-                Add
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setShowAddPart(true)}
-            className="w-full border-gray-700 text-gray-300"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Link Part
-          </Button>
-        )}
-
-        {/* View Part Modal — portaled to escape parent modal z-index */}
-        {viewPartId && createPortal(
-          <PartModal
-            part={partsMap[viewPartId]}
-            partId={viewPartId}
-            onClose={() => setViewPartId(null)}
-          />,
-          document.body
-        )}
-
-        {/* Canonical Install Part Modal */}
-        {installTarget && (
-          <InstallPartModal
-            commitment={installTarget}
-            onClose={() => {
-              setInstallTarget(null);
-              queryClient.invalidateQueries({ queryKey: ["taskPartLinks", task?.id] });
-              queryClient.invalidateQueries({ queryKey: ["commitments", project?.id] });
+      {/* Add Part Form */}
+      {showAddPart ? (
+        <div className="mt-2 bg-gray-900/50 rounded-lg p-3 space-y-3">
+          <TaskPartSelector
+            commitments={commitments}
+            partsMap={partsMap}
+            selectedPartId={selectedPartId}
+            onSelect={(partId, commitmentId, availableQty) => {
+              setSelectedPartId(partId);
+              setSelectedCommitmentId(commitmentId);
+              setMaxQty(availableQty || 99);
+              setAllocateQty(1);
             }}
           />
-        )}
-      </CardContent>
-    </Card>
+
+          {selectedPartId && (
+            <Input
+              type="number"
+              min={1}
+              max={maxQty}
+              value={allocateQty}
+              onChange={(e) => setAllocateQty(Math.min(parseInt(e.target.value) || 1, maxQty))}
+              placeholder="Quantity"
+              className="bg-gray-800 border-gray-700 text-white"
+            />
+          )}
+
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setShowAddPart(false);
+                setSelectedPartId("");
+                setSelectedCommitmentId("");
+              }}
+              className="flex-1 border-gray-700"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => addLinkMutation.mutate()}
+              disabled={!selectedPartId || addLinkMutation.isPending}
+              className="flex-1 bg-red-600 hover:bg-red-700"
+            >
+              Add
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setShowAddPart(true)}
+          className="w-full mt-1 text-gray-400 hover:text-white border border-dashed border-gray-700 hover:border-gray-600"
+        >
+          <Plus className="w-3.5 h-3.5 mr-1.5" />
+          Link Part
+        </Button>
+      )}
+
+      {/* View Part Modal — portaled to escape parent modal z-index */}
+      {viewPartId && createPortal(
+        <PartModal
+          part={partsMap[viewPartId]}
+          partId={viewPartId}
+          onClose={() => setViewPartId(null)}
+        />,
+        document.body
+      )}
+
+      {/* Canonical Install Part Modal */}
+      {installTarget && (
+        <InstallPartModal
+          commitment={installTarget}
+          onClose={() => {
+            setInstallTarget(null);
+            queryClient.invalidateQueries({ queryKey: ["taskPartLinks", task?.id] });
+            queryClient.invalidateQueries({ queryKey: ["commitments", project?.id] });
+          }}
+        />
+      )}
+    </div>
   );
 }
