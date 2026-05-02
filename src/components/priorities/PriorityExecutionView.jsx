@@ -154,49 +154,34 @@ export default function PriorityExecutionView({
         </span>
       </div>
 
-      {/* Document body — mirrors ProjectPrintView exactly */}
-      {groupedData.map(pg => {
-        const projTaskCount = pg.sortedBuckets.reduce((s, [, t]) => s + t.length, 0);
-        return (
-          <div key={pg.project?.id || 'none'} className="mb-6">
-            {/* Project header — matches print: bold, border-b-2 */}
-            <h1 className="text-lg font-bold border-b-2 border-gray-400 pb-1 mb-1 text-gray-100">
-              {pg.project?.name || 'No Project'}
-            </h1>
-            <div className="text-xs text-gray-600 mb-4">
-              Priority Tasks ({projTaskCount})
-              {pg.project?.client_name && ` • ${pg.project.client_name}`}
+      {groupedData.map(pg => (
+        <div key={pg.project?.id || 'none'} className="mb-6">
+          <h1 className="text-lg font-bold border-b-2 border-gray-400 pb-1 mb-3 text-gray-100">
+            {pg.project?.name || 'No Project'}
+          </h1>
+
+          {pg.sortedBuckets.map(([bucketName, bucketTasks]) => (
+            <div key={bucketName} className="mb-4">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 border-b border-white/10 pb-1 mb-1">
+                {bucketName}
+                <span className="text-gray-600 font-normal ml-2">({bucketTasks.length})</span>
+              </h2>
+
+              {bucketTasks.map(task => (
+                <ExecutionTaskRow
+                  key={task.id}
+                  task={task}
+                  assigneeName={teamMap[task.assigned_team_member_id]}
+                  checklistItems={checklistByTaskId[task.id] || []}
+                  onToggleComplete={onToggleComplete}
+                  onToggleChecklistItem={handleToggleChecklistItem}
+                  onTaskClick={onTaskClick}
+                />
+              ))}
             </div>
-
-            {/* Category sections — matches print: sm bold uppercase tracking-wider, border-b */}
-            {pg.sortedBuckets.map(([bucketName, bucketTasks]) => (
-              <div key={bucketName} className="mb-4">
-                <h2 className="text-sm font-bold uppercase tracking-wider text-gray-400 border-b border-gray-700 pb-1 mb-1">
-                  {bucketName}
-                  <span className="text-gray-600 font-normal ml-2">({bucketTasks.length})</span>
-                </h2>
-
-                <div>
-                  {bucketTasks.map(task => (
-                    <ExecutionTaskRow
-                      key={task.id}
-                      task={task}
-                      assigneeName={teamMap[task.assigned_team_member_id]}
-                      statusColor={statuses.find(s => s.id === task.status_id)?.color}
-                      checklistItems={checklistByTaskId[task.id] || []}
-                      partsProgress={partsProgressByTaskId[task.id]}
-                      commentCount={commentCountByTaskId[task.id] || 0}
-                      onToggleComplete={onToggleComplete}
-                      onToggleChecklistItem={handleToggleChecklistItem}
-                      onTaskClick={onTaskClick}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        );
-      })}
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
