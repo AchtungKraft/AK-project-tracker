@@ -323,7 +323,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
       modal={!showDeleteConfirm}
     >
       <SheetContent 
-        className="bg-gray-900 text-white w-full sm:max-w-2xl overflow-y-auto flex flex-col"
+        className="bg-gray-900 text-white w-full sm:max-w-2xl overflow-y-auto overflow-x-hidden flex flex-col"
         onInteractOutside={(e) => {
           if (showDeleteConfirm) e.preventDefault();
         }}
