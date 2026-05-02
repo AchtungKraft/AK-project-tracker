@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Flame, Loader2, FolderKanban, RefreshCw, LayoutGrid, Calendar, X, User, List } from "lucide-react";
+import { Flame, Loader2, FolderKanban, RefreshCw, LayoutGrid, Calendar, X, User, List, ClipboardCheck } from "lucide-react";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 import MobileMetricPriorityGrid from "@/components/mobile/MobileMetricPriorityGrid";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
@@ -28,6 +28,7 @@ import PriorityCalendarView from "../components/priorities/PriorityCalendarView"
 import ShopPriorityView from "../components/priorities/ShopPriorityView";
 import PriorityRemoveConfirm from "../components/tasks/PriorityRemoveConfirm";
 import PriorityListView from "../components/priorities/PriorityListView";
+import PriorityExecutionView from "../components/priorities/PriorityExecutionView";
 import { useSavedProjectViews } from "@/components/common/useSavedProjectViews";
 import SavedViewsSelector from "@/components/common/SavedViewsSelector";
 import { useFilterState, PRIORITY_DEFAULTS } from "@/components/common/useFilterState";
@@ -586,6 +587,13 @@ export default function PriorityDashboard() {
                   <span className="hidden sm:inline">List</span>
                 </TabsTrigger>
                 <TabsTrigger 
+                  value="execution-view" 
+                  className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
+                >
+                  <ClipboardCheck className="w-4 h-4" />
+                  <span className="hidden sm:inline">Execution</span>
+                </TabsTrigger>
+                <TabsTrigger 
                   value="shop-view" 
                   className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
                 >
@@ -749,6 +757,19 @@ export default function PriorityDashboard() {
                 statuses={statuses}
                 commentCountByTaskId={commentCountByTaskId}
                 partsProgressByTaskId={partsProgressByTaskId}
+                onToggleComplete={handleToggleComplete}
+                onTaskClick={setSelectedTask}
+              />
+            </TabsContent>
+
+            {/* Execution View Tab Content */}
+            <TabsContent value="execution-view" className="mt-0">
+              <PriorityExecutionView
+                tasks={activePriorityTasks}
+                projects={projects}
+                teamMembers={teamMembers}
+                categories={categories}
+                statuses={statuses}
                 onToggleComplete={handleToggleComplete}
                 onTaskClick={setSelectedTask}
               />
