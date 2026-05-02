@@ -364,7 +364,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           {!editing && <DescriptionBlock text={task?.description} />}
 
           {/* Spacer before secondary content */}
-          {!editing && <div className="mt-5" />}
+          {!editing && <div className="mt-3" />}
 
           {/* ── EDIT FORM — replaces header content inline when editing ── */}
           {editing && (
@@ -559,7 +559,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
               <Button
                 variant="outline"
                 onClick={() => setEditing(true)}
-                className="h-11 min-h-[44px] px-4 border-green-700/50 text-green-400 hover:bg-green-900/30 hover:text-green-300"
+                className="h-11 min-h-[44px] px-4 border-gray-600 text-gray-300 hover:bg-gray-800 hover:text-white"
               >
                 Edit
               </Button>

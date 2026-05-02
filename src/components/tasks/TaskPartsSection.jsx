@@ -321,9 +321,9 @@ export default function TaskPartsSection({
           size="sm"
           variant="ghost"
           onClick={() => setShowAddPart(true)}
-          className="w-full mt-1 text-gray-400 hover:text-white border border-dashed border-gray-700 hover:border-gray-600"
+          className="mt-1 text-gray-500 hover:text-gray-300 border border-dashed border-gray-700/50 hover:border-gray-600 text-xs h-8 px-3"
         >
-          <Plus className="w-3.5 h-3.5 mr-1.5" />
+          <Plus className="w-3 h-3 mr-1" />
           Link Part
         </Button>
       )}
