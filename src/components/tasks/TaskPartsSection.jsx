@@ -30,7 +30,7 @@ function InstallStatusBadge({ installStatus, qtyInstalled, qtyAllocated }) {
     : status === 'partial' ? `Partial (${qtyInstalled ?? 0}/${qtyAllocated ?? 1})`
     : 'Pending';
   return (
-    <Badge variant="outline" className={cn("text-xs", style)}>
+    <Badge variant="outline" className={cn("text-xs px-2 py-0.5 inline", style)}>
       {label}
     </Badge>
   );
@@ -206,18 +206,18 @@ export default function TaskPartsSection({
               >
                 {/* Thumbnail */}
                 {part.featured_photo ? (
-                  <img src={part.featured_photo} alt="" className="w-8 h-8 rounded object-cover shrink-0 bg-gray-800" />
+                  <img src={part.featured_photo} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0 bg-gray-800" />
                 ) : (
-                  <div className="w-8 h-8 rounded bg-gray-800 flex items-center justify-center shrink-0">
+                  <div className="w-8 h-8 rounded bg-gray-800 flex items-center justify-center flex-shrink-0">
                     <Package className="w-3.5 h-3.5 text-gray-500" />
                   </div>
                 )}
 
                 {/* Name + meta */}
-                <div className="flex-1 min-w-0">
-                  <span className="text-sm text-gray-200 font-medium truncate block">{part.part_name}</span>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className="text-xs text-gray-500">Qty: {link.qty_allocated}</span>
+                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                  <span className="text-sm font-medium leading-tight text-gray-200 truncate block">{part.part_name}</span>
+                  <div className="flex items-center gap-2 mt-0.5 text-xs text-white/60">
+                    <span>Qty: {link.qty_allocated}</span>
                     <InstallStatusBadge
                       installStatus={link.install_status}
                       qtyInstalled={link.qty_installed}
@@ -317,15 +317,14 @@ export default function TaskPartsSection({
           </div>
         </div>
       ) : (
-        <Button
-          size="sm"
-          variant="ghost"
+        <button
+          type="button"
           onClick={() => setShowAddPart(true)}
-          className="mt-1 text-gray-500 hover:text-gray-300 border border-dashed border-gray-700/50 hover:border-gray-600 text-xs h-8 px-3"
+          className="mt-2 inline-flex items-center gap-1 border border-dashed border-white/10 text-white/50 hover:text-white/70 hover:border-white/20 text-xs py-2 px-3 rounded-md max-w-xs transition-colors"
         >
-          <Plus className="w-3 h-3 mr-1" />
+          <Plus className="w-3 h-3" />
           Link Part
-        </Button>
+        </button>
       )}
 
       {/* View Part Modal — portaled to escape parent modal z-index */}

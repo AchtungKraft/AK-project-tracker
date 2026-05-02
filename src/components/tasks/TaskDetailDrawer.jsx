@@ -360,10 +360,10 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
 
         <div className="flex-1 overflow-y-auto pt-0 pb-3">
 
-          {/* Description — immediately under title */}
+          {/* Description — immediately under title, tight to title */}
           {!editing && <DescriptionBlock text={task?.description} />}
 
-          {/* Spacer before secondary content */}
+          {/* Breathing room before divider */}
           {!editing && <div className="mt-3" />}
 
           {/* ── EDIT FORM — replaces header content inline when editing ── */}
@@ -555,26 +555,25 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
               </Button>
             </div>
           ) : (
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setEditing(true)}
-                className="h-11 min-h-[44px] px-4 border-gray-600 text-gray-300 hover:bg-gray-800 hover:text-white"
-              >
-                Edit
-              </Button>
+            <div className="flex flex-col gap-2">
               <Button
                 onClick={() => setShowCompleteConfirm(true)}
                 disabled={!completedStatus}
                 className={cn(
-                  "flex-1 h-11 min-h-[44px] text-white gap-2 transition-all",
+                  "w-full h-11 min-h-[44px] text-white gap-2 transition-all bg-red-600 hover:bg-red-500",
                   checklistItems.length > 0 && incompleteChecklistCount === 0
-                    ? "bg-red-600 hover:bg-red-700 ring-2 ring-red-500/40 shadow-lg shadow-red-900/30"
-                    : "bg-red-600 hover:bg-red-700"
+                    && "ring-2 ring-red-500/40 shadow-lg shadow-red-900/30"
                 )}
               >
                 <CheckCircle2 className="w-4 h-4" />
                 Complete Task
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => setEditing(true)}
+                className="h-10 min-h-[40px] px-4 border border-white/15 text-white/60 bg-transparent hover:bg-white/5 hover:text-white/80"
+              >
+                Edit
               </Button>
             </div>
           )}
