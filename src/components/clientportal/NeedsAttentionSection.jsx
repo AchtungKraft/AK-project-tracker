@@ -7,12 +7,14 @@ import { buildAttentionList, groupByColumn, BOARD_COLUMNS } from "./attentionHel
 import AttentionCard from "./AttentionCard";
 import AttentionColumnHeader from "./AttentionColumnHeader";
 import FollowUpClientGroups from "./FollowUpClientGroups";
+import DraftClientGroups from "./DraftClientGroups";
 
 /**
  * A single scrollable board column.
  */
 function BoardColumn({ col, items, onUpdateDueDate, muted = false }) {
   const isFollowUp = col.key === 'follow_up';
+  const isDrafts = col.key === 'needs_sending';
 
   return (
     <div className="space-y-2">
@@ -22,6 +24,11 @@ function BoardColumn({ col, items, onUpdateDueDate, muted = false }) {
           <div className="text-center py-4 text-xs text-gray-600 italic">
             {col.emptyText}
           </div>
+        ) : isDrafts ? (
+          <DraftClientGroups
+            items={items}
+            onUpdateDueDate={onUpdateDueDate}
+          />
         ) : isFollowUp ? (
           <FollowUpClientGroups
             items={items}

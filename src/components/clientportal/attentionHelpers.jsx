@@ -77,8 +77,8 @@ export const ATTENTION_BADGE_CONFIG = {
 export const BOARD_COLUMNS = [
   {
     key: 'needs_sending',
-    label: 'Needs Sending',
-    subtitle: 'Draft — not yet sent to client',
+    label: 'Drafts',
+    subtitle: 'Not yet sent to client',
     color: 'purple',
     headerBg: 'bg-purple-500/10',
     headerBorder: 'border-purple-500/30',
