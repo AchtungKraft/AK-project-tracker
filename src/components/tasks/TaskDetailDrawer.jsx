@@ -92,9 +92,9 @@ function DescriptionBlock({ text }) {
   const isLong = lines.length > 4 || text.length > 280;
 
   return (
-    <div className="mt-1">
+    <div className="mt-0.5">
       <p
-        className={`text-gray-300 text-sm leading-relaxed whitespace-pre-wrap ${!expanded && isLong ? 'line-clamp-4' : ''}`}
+        className={`text-gray-300 text-[15px] leading-relaxed whitespace-pre-wrap ${!expanded && isLong ? 'line-clamp-4' : ''}`}
       >
         {text}
       </p>
