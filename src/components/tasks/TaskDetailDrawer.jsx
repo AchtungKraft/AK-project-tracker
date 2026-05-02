@@ -83,7 +83,7 @@ function ClientFeedbackLinks({ taskId }) {
   );
 }
 
-// Truncatable description with section header
+// Description block — inline under title, no section header
 function DescriptionBlock({ text }) {
   const [expanded, setExpanded] = React.useState(false);
   if (!text) return null;
@@ -92,10 +92,9 @@ function DescriptionBlock({ text }) {
   const isLong = lines.length > 4 || text.length > 280;
 
   return (
-    <div className="mt-1">
-      <h4 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-1.5">Description</h4>
+    <div className="mt-2">
       <p
-        className={`text-gray-300 text-sm whitespace-pre-wrap ${!expanded && isLong ? 'line-clamp-4' : ''}`}
+        className={`text-gray-300 text-sm leading-relaxed whitespace-pre-wrap ${!expanded && isLong ? 'line-clamp-4' : ''}`}
       >
         {text}
       </p>
@@ -332,53 +331,40 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           if (showDeleteConfirm) e.preventDefault();
         }}
       >
-        {/* ── Slim header ── */}
-        <SheetHeader className="pb-2 shrink-0">
-          <SheetTitle className="text-white text-base font-semibold leading-tight">{task?.name}</SheetTitle>
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            {project && <span>{project.name}</span>}
-            {assignedMember && (
-              <>
-                <span>•</span>
-                <span>{assignedMember.full_name}</span>
-              </>
-            )}
-            {task?.due_date && (
-              <>
-                <span>•</span>
-                <span>{format(new Date(task.due_date), 'MMM d')}</span>
-              </>
-            )}
-          </div>
+        {/* ── PRIMARY HEADER: Title + Description + Metadata ── */}
+        <SheetHeader className="pb-0 shrink-0">
+          <SheetTitle className="text-white text-lg font-bold leading-tight">{task?.name}</SheetTitle>
+          {project && (
+            <p className="text-xs text-gray-500 mt-0.5">{project.name}</p>
+          )}
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto py-4">
+        <div className="flex-1 overflow-y-auto py-3">
 
-          {/* ── CHECKLIST — adaptive: dense section if items, compact CTA if empty ── */}
-          {checklistItems.length > 0 ? (
-            <section className="mb-6">
-              <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-3">Checklist</h3>
-              <ExecutionChecklistSection taskId={task?.id} variant="full" />
-              {/* Ready-to-complete banner when all items done */}
-              {checklistItems.length > 0 && incompleteChecklistCount === 0 && (
-                <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-md bg-green-900/30 border border-green-800/40">
-                  <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                  <span className="text-sm text-green-300 font-medium">Ready to complete</span>
-                </div>
+          {/* Description — primary content, immediately visible */}
+          {!editing && <DescriptionBlock text={task?.description} />}
+
+          {/* Inline metadata strip */}
+          {!editing && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-3 mb-4">
+              {status && (
+                <Badge style={{ backgroundColor: status.color }} className="text-white text-xs">{status.label}</Badge>
               )}
-            </section>
-          ) : (
-            <div className="mb-3">
-              <ExecutionChecklistSection taskId={task?.id} variant="empty-cta" />
+              {assignedMember && (
+                <span className="text-sm text-gray-300">{assignedMember.full_name}</span>
+              )}
+              {categoryPath && (
+                <span style={{ color: categoryColor || '#9CA3AF' }} className="text-xs">{categoryPath}</span>
+              )}
+              {task?.due_date && (
+                <span className="text-xs text-gray-400">{format(new Date(task.due_date), 'MMM d, yyyy')}</span>
+              )}
             </div>
           )}
 
-          <hr className="border-gray-700/50 mb-5" />
-
-          {/* ── TASK DETAILS ── */}
-          <section className="mb-5">
-            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-3">Task Details</h3>
-            {editing ? (
+          {/* ── EDIT FORM — replaces header content inline when editing ── */}
+          {editing && (
+            <section className="mb-5">
               <form className="space-y-4">
                 <div>
                   <Label className="text-gray-400">Task Name</Label>
@@ -486,45 +472,37 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                   </div>
                 </div>
               </form>
-            ) : (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">Status</p>
-                    {status ? <Badge style={{ backgroundColor: status.color }} className="text-white text-xs">{status.label}</Badge> : <p className="text-gray-400">-</p>}
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">Assigned To</p>
-                    <p className="text-gray-200 text-sm">
-                      {assignedMember ? `${assignedMember.full_name}${assignedMember.team_role ? ` (${assignedMember.team_role})` : ''}` : 'Unassigned'}
-                    </p>
-                  </div>
+            </section>
+          )}
+
+          <hr className="border-gray-700/50 mb-4" />
+
+          {/* ── CHECKLIST — secondary, supports the task ── */}
+          {checklistItems.length > 0 ? (
+            <section className="mb-5">
+              <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">Checklist</h3>
+              <ExecutionChecklistSection taskId={task?.id} variant="full" />
+              {incompleteChecklistCount === 0 && (
+                <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-md bg-green-900/30 border border-green-800/40">
+                  <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                  <span className="text-sm text-green-300 font-medium">Ready to complete</span>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">Category</p>
-                    <p style={{ color: categoryColor || '#9CA3AF' }} className="text-sm">{categoryPath || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">Due Date</p>
-                    <p className="text-gray-200 text-sm">
-                      {task?.due_date ? format(new Date(task.due_date), 'MMM d, yyyy') : '-'}
-                    </p>
-                  </div>
-                </div>
-                <DescriptionBlock text={task?.description} />
-              </div>
-            )}
-          </section>
+              )}
+            </section>
+          ) : (
+            <div className="mb-3">
+              <ExecutionChecklistSection taskId={task?.id} variant="empty-cta" />
+            </div>
+          )}
 
           {/* ── CLIENT FEEDBACK ── */}
           <ClientFeedbackLinks taskId={task?.id} />
 
-          <hr className="border-gray-700/50 mb-5" />
+          <hr className="border-gray-700/50 mb-4" />
 
-          {/* ── PARTS — uses smaller margin when empty (inline display) ── */}
+          {/* ── PARTS ── */}
           <section className="mb-3">
-            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-2">Parts</h3>
+            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">Parts</h3>
             <TaskPartsSection task={task} project={project} />
           </section>
 
@@ -532,7 +510,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
 
           {/* ── COMMENTS ── */}
           <section className="mb-4">
-            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-3">Comments</h3>
+            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">Comments</h3>
             <TaskCommentsSection taskId={task?.id} initialMaxVisible={2} />
           </section>
 
