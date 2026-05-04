@@ -196,15 +196,15 @@ Deno.serve(async (req) => {
     const emailPayload = {
       from: BRAND.fromLine,
       to: Array.isArray(to) ? to : [to],
-      subject: `[DEBUG v2] ${subject}`,
+      subject,
       html,
       ...(textBody ? { text: textBody } : {}),
       // 🔴 MUST BE LAST — hard-locked, no overrides. Resend expects an array.
       reply_to: [BRAND.replyTo],
     };
 
-    // DEPLOYMENT VERIFICATION LOG — remove after confirming [DEBUG v2] in subject
-    console.log("FINAL_EMAIL_PAYLOAD_V2", JSON.stringify(emailPayload));
+    // Structured send log
+    console.log("sendClientEmail payload", JSON.stringify({ to: emailPayload.to, subject: emailPayload.subject, reply_to: emailPayload.reply_to }));
 
     // Send
     const emailResponse = await fetch('https://api.resend.com/emails', {
