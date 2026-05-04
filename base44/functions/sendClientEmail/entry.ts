@@ -39,9 +39,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  *   // Text fallback
  *   textBody: string,           // plain text version
  *   
- *   // Reply handling
- *   replyToEmail: string,       // optional reply-to address
- *   replyToName: string,        // optional reply-to display name
+ *   // Reply-to is HARD-LOCKED to sales@achtungkraft.com at the transport layer.
+ *   // No caller can override it.
  *   
  *   // Logging context
  *   requestId: string,
@@ -163,7 +162,6 @@ Deno.serve(async (req) => {
       statusChangeHtml, linksBlockHtml,
       ctaUrl, ctaText, clientSlug,
       textBody,
-      replyToEmail, replyToName,
       requestId, projectId, journalEntryId,
     } = payload;
 
@@ -194,23 +192,19 @@ Deno.serve(async (req) => {
       clientSlug,
     });
 
-    // Build Resend payload
+    // Build final Resend payload — reply_to is LAST to prevent any future ...rest overwrites
     const emailPayload = {
       from: BRAND.fromLine,
       to: Array.isArray(to) ? to : [to],
-      subject,
+      subject: `[DEBUG v2] ${subject}`,
       html,
+      ...(textBody ? { text: textBody } : {}),
+      // 🔴 MUST BE LAST — hard-locked, no overrides
+      reply_to: BRAND.replyTo,
     };
 
-    if (textBody) {
-      emailPayload.text = textBody;
-    }
-
-    // 🔴 FORCE reply-to at final layer — no overrides allowed
-    emailPayload.reply_to = BRAND.replyTo;
-
-    // TEMP DEBUG — remove after verification
-    console.log("FINAL EMAIL PAYLOAD", JSON.stringify(emailPayload));
+    // DEPLOYMENT VERIFICATION LOG — remove after confirming [DEBUG v2] in subject
+    console.log("FINAL_EMAIL_PAYLOAD_V2", JSON.stringify(emailPayload));
 
     // Send
     const emailResponse = await fetch('https://api.resend.com/emails', {
