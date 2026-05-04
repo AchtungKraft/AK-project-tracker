@@ -206,11 +206,11 @@ Deno.serve(async (req) => {
       emailPayload.text = textBody;
     }
 
-    // Reply-to — always set, defaults to sales@achtungkraft.com
-    const effectiveReplyTo = replyToEmail || BRAND.replyTo;
-    emailPayload.reply_to = replyToName
-      ? `${replyToName} <${effectiveReplyTo}>`
-      : effectiveReplyTo;
+    // 🔴 FORCE reply-to at final layer — no overrides allowed
+    emailPayload.reply_to = BRAND.replyTo;
+
+    // TEMP DEBUG — remove after verification
+    console.log("FINAL EMAIL PAYLOAD", JSON.stringify(emailPayload));
 
     // Send
     const emailResponse = await fetch('https://api.resend.com/emails', {
