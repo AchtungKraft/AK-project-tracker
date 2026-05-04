@@ -1,0 +1,61 @@
+{
+  "name": "ClientPage",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Page title"
+    },
+    "client_contact_id": {
+      "type": "string",
+      "description": "Reference to ClientContact"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project"
+    },
+    "page_slug": {
+      "type": "string",
+      "description": "URL slug for the page"
+    },
+    "purpose": {
+      "type": "string",
+      "enum": [
+        "proposal",
+        "sales",
+        "update",
+        "resources",
+        "onboarding"
+      ],
+      "description": "Page purpose category"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "published",
+        "archived"
+      ],
+      "default": "draft",
+      "description": "Page status"
+    },
+    "visibility": {
+      "type": "string",
+      "enum": [
+        "portal",
+        "public_link"
+      ],
+      "default": "portal",
+      "description": "Access level for the page"
+    },
+    "short_description": {
+      "type": "string",
+      "description": "Brief page description"
+    }
+  },
+  "required": [
+    "title",
+    "project_id",
+    "page_slug"
+  ]
+}

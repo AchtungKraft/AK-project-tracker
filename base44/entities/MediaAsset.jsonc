@@ -1,0 +1,27 @@
+{
+  "name": "MediaAsset",
+  "type": "object",
+  "properties": {
+    "file_url": {
+      "type": "string",
+      "description": "URL of the uploaded file"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "image",
+        "video",
+        "document"
+      ],
+      "description": "Asset type"
+    },
+    "title": {
+      "type": "string",
+      "description": "Asset title/filename"
+    }
+  },
+  "required": [
+    "file_url",
+    "type"
+  ]
+}

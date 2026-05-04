@@ -1,0 +1,40 @@
+{
+  "name": "PageAnalytics",
+  "type": "object",
+  "properties": {
+    "page_id": {
+      "type": "string",
+      "description": "Reference to ClientPage"
+    },
+    "client_contact_id": {
+      "type": "string",
+      "description": "Reference to ClientContact"
+    },
+    "client_slug": {
+      "type": "string",
+      "description": "Client URL slug"
+    },
+    "page_slug": {
+      "type": "string",
+      "description": "Page URL slug"
+    },
+    "block_id": {
+      "type": "string",
+      "description": "Optional reference to PageBlock"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "view",
+        "link_click",
+        "cta_click",
+        "file_click"
+      ],
+      "description": "Type of analytics event"
+    }
+  },
+  "required": [
+    "page_id",
+    "event_type"
+  ]
+}

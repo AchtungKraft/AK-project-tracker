@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, Users, FolderKanban, Eye, Calendar } from "lucide-react";
+import { Loader2, Users, FolderKanban, Eye, Calendar, FileText, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
@@ -38,6 +38,7 @@ export default function ClientProjects() {
   const projects = clientData?.projects || [];
   const statusList = clientData?.statuses || [];
   const projectTypes = clientData?.projectTypes || [];
+  const clientPages = clientData?.clientPages || [];
 
   if ((!token && !slug) || loadingProjects || !clientData?.success) {
     return (
@@ -61,6 +62,36 @@ export default function ClientProjects() {
             <p className="text-sm text-gray-400">Welcome, {clientContact.name}</p>
           )}
         </div>
+
+        {/* Client Pages Section */}
+        {clientPages.length > 0 && (
+          <div className="space-y-3">
+            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+              <FileText className="w-5 h-5 text-red-400" />
+              Resources & Pages
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {clientPages.map(page => (
+                <div
+                  key={page.id}
+                  onClick={() => navigate(`/clientpage?slug=${slug}&page=${page.page_slug}`)}
+                  className="bg-black/40 border border-gray-700 hover:border-red-500/50 rounded-lg p-4 cursor-pointer transition-all group"
+                >
+                  <h3 className="font-medium text-white group-hover:text-red-400 transition-colors">
+                    {page.title}
+                  </h3>
+                  {page.short_description && (
+                    <p className="text-sm text-gray-400 mt-1 line-clamp-2">{page.short_description}</p>
+                  )}
+                  <div className="flex items-center justify-between mt-3">
+                    <span className="text-xs text-gray-500 capitalize">{page.purpose}</span>
+                    <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-red-400 transition-colors" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {projects.length === 0 ? (
           <div className="text-center text-gray-500 py-10">

@@ -1,0 +1,56 @@
+{
+  "name": "SharedBlock",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Shared block name"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "text",
+        "media",
+        "links",
+        "files",
+        "cta"
+      ],
+      "description": "Block type"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "pricing",
+        "process",
+        "materials",
+        "faq",
+        "sales",
+        "legal",
+        "general",
+        "onboarding"
+      ],
+      "description": "Content category"
+    },
+    "data": {
+      "type": "object",
+      "description": "Block content data"
+    },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "global",
+        "project"
+      ],
+      "default": "global",
+      "description": "Scope of the shared block"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project when scope is project"
+    }
+  },
+  "required": [
+    "name",
+    "type"
+  ]
+}

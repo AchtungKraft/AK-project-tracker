@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 // Simple retry wrapper for rate-limit resilience
 async function withRetry(fn, retries = 2, delayMs = 300) {
@@ -137,9 +137,13 @@ Deno.serve(async (req) => {
             id: p.id,
             name: p.name,
             featured_image_url: p.featured_image_url,
+            images: p.images,
             status_id: p.status_id,
             project_type_id: p.project_type_id,
-            progress_percent: p.progress_percent
+            progress_percent: p.progress_percent,
+            client_name: p.client_name,
+            target_completion: p.target_completion,
+            vin: p.vin
         }));
 
         const minimalStatuses = statuses
@@ -158,13 +162,39 @@ Deno.serve(async (req) => {
                 color: t.color
             }));
 
+        // Fetch published client pages
+        await pause();
+        let clientPages = [];
+        try {
+            clientPages = await withRetry(() =>
+                base44.asServiceRole.entities.ClientPage.filter({
+                    client_contact_id: clientContactId,
+                    status: 'published'
+                })
+            );
+        } catch (e) {
+            console.warn('Failed to fetch client pages:', e.message);
+        }
+
+        const minimalPages = clientPages.map(p => ({
+            id: p.id,
+            title: p.title,
+            page_slug: p.page_slug,
+            purpose: p.purpose,
+            short_description: p.short_description,
+            project_id: p.project_id,
+            visibility: p.visibility,
+            updated_date: p.updated_date
+        }));
+
         return Response.json({
             success: true,
             contact: minimalContact,
             accesses: minimalAccesses,
             projects: minimalProjects,
             statuses: minimalStatuses,
-            projectTypes: minimalProjectTypes
+            projectTypes: minimalProjectTypes,
+            clientPages: minimalPages
         }, {
             headers: { 'Access-Control-Allow-Origin': '*' }
         });
