@@ -199,8 +199,8 @@ Deno.serve(async (req) => {
       subject: `[DEBUG v2] ${subject}`,
       html,
       ...(textBody ? { text: textBody } : {}),
-      // 🔴 MUST BE LAST — hard-locked, no overrides
-      reply_to: BRAND.replyTo,
+      // 🔴 MUST BE LAST — hard-locked, no overrides. Resend expects an array.
+      reply_to: [BRAND.replyTo],
     };
 
     // DEPLOYMENT VERIFICATION LOG — remove after confirming [DEBUG v2] in subject
