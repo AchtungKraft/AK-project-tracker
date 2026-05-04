@@ -53,6 +53,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 // ── BRAND CONSTANTS ──────────────────────────────────────────────────
 const BRAND = {
   fromLine: 'Achtung Kraft Projects <updates@projects.achtungkraft.com>',
+  replyTo: 'sales@achtungkraft.com',
   name: 'Achtung Kraft',
   color: '#cc0000',
   closing: '— Achtung Kraft Projects',
@@ -132,7 +133,7 @@ function buildEmailHtml({
   }
 
   // Respond-in-portal note
-  sections.push(`<p style="color:#999;font-size:13px;font-style:italic;margin-top:24px;font-family:Arial,sans-serif;">Please respond directly in the portal — replies to this email are not monitored.</p>`);
+  sections.push(`<p style="color:#999;font-size:13px;font-style:italic;margin-top:24px;font-family:Arial,sans-serif;">For detailed feedback, please use the portal. You can also reply directly to this email.</p>`);
 
   // Closing
   sections.push(`<p style="color:#666;font-family:Arial,sans-serif;">${BRAND.closing}</p>`);
@@ -205,12 +206,11 @@ Deno.serve(async (req) => {
       emailPayload.text = textBody;
     }
 
-    // Reply-to
-    if (replyToEmail) {
-      emailPayload.reply_to = replyToName
-        ? `${replyToName} <${replyToEmail}>`
-        : replyToEmail;
-    }
+    // Reply-to — always set, defaults to sales@achtungkraft.com
+    const effectiveReplyTo = replyToEmail || BRAND.replyTo;
+    emailPayload.reply_to = replyToName
+      ? `${replyToName} <${effectiveReplyTo}>`
+      : effectiveReplyTo;
 
     // Send
     const emailResponse = await fetch('https://api.resend.com/emails', {
