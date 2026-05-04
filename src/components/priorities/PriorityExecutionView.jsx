@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { sortChecklistItems } from "@/components/tasks/checklistHelpers";
 import { toast } from "sonner";
 import ExecutionTaskRow from "./ExecutionTaskRow";
+import { sortTasksByPriority } from "@/utils/taskPrioritySort";
 
 function resolveCategoryName(catId, categories) {
   const cat = categories.find(c => c.id === catId);
@@ -98,15 +99,6 @@ export default function PriorityExecutionView({
       projectMap[pid].buckets[catName].push(task);
     });
 
-    // Sort tasks by due date within each bucket
-    const sortTasks = (arr) =>
-      [...arr].sort((a, b) => {
-        if (!a.due_date && !b.due_date) return 0;
-        if (!a.due_date) return 1;
-        if (!b.due_date) return -1;
-        return new Date(a.due_date) - new Date(b.due_date);
-      });
-
     return Object.values(projectMap)
       .sort((a, b) => (a.project?.name || '').localeCompare(b.project?.name || ''))
       .map(pg => ({
@@ -117,7 +109,7 @@ export default function PriorityExecutionView({
             if (b === 'Uncategorized') return -1;
             return a.localeCompare(b);
           })
-          .map(([name, tasks]) => [name, sortTasks(tasks)]),
+          .map(([name, tasks]) => [name, sortTasksByPriority(tasks)]),
       }));
   }, [tasks, projects, categories, projectFilter, assignedFilter]);
 

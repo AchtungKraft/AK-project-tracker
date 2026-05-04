@@ -7,6 +7,35 @@ import PrintTaskChecklistItems from "@/components/print/PrintTaskChecklistItems"
 import PrintTaskPartsProgress from "@/components/print/PrintTaskPartsProgress";
 import { groupIncompleteByTaskId } from "@/components/tasks/checklistHelpers";
 import { groupTaskPartLinksByTaskId } from "@/utils/taskPartsProgress";
+import { sortTasksByPriority, isUrgentPriority } from "@/utils/taskPrioritySort";
+
+function PrintTaskRow({ task, teamMap, formatDate, isOverdue, isUrgent, taskPartLinksByTaskId, checklistItemsByTaskId }) {
+  return (
+    <div className="break-inside-avoid">
+      <div className="flex items-start gap-2 py-1 border-b border-gray-100">
+        <div className="w-4 h-4 border-2 border-gray-400 rounded-sm mt-0.5 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="text-sm leading-snug">
+            {isUrgent && <span className="font-bold text-red-700 mr-1">[!!!]</span>}
+            {!isUrgent && task.is_priority && <span className="text-gray-500 mr-1">[!]</span>}
+            {task.name}
+          </div>
+          {task.description && (
+            <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{task.description}</div>
+          )}
+        </div>
+        <div className="text-xs text-gray-500 shrink-0 w-20 text-right truncate">
+          {teamMap[task.assigned_team_member_id] || "—"}
+        </div>
+        <div className={`text-xs shrink-0 w-12 text-right ${isOverdue(task.due_date) ? "font-bold" : "text-gray-500"}`}>
+          {formatDate(task.due_date) || "—"}
+        </div>
+      </div>
+      <PrintTaskPartsProgress taskId={task.id} taskPartLinksByTaskId={taskPartLinksByTaskId} />
+      <PrintTaskChecklistItems taskId={task.id} checklistItemsByTaskId={checklistItemsByTaskId} />
+    </div>
+  );
+}
 
 export default function ProjectPrintView() {
   const projectId = new URLSearchParams(window.location.search).get("id");
@@ -65,39 +94,40 @@ export default function ProjectPrintView() {
     return groupTaskPartLinksByTaskId(allTaskPartLinks, new Set(taskIds));
   }, [allTaskPartLinks, taskIds]);
 
-  // Sort buckets by order, group tasks
-  const sections = useMemo(() => {
-    const sortedBuckets = [...allBuckets].sort((a, b) => (a.order || 0) - (b.order || 0));
-    const tasksByBucket = {};
-    const unbucketed = [];
+  // Split into urgent and upcoming, then group by buckets within each
+  const { urgentSections, upcomingSections } = useMemo(() => {
+    const sorted = sortTasksByPriority(activeTasks);
+    const urgent = sorted.filter(isUrgentPriority);
+    const upcoming = sorted.filter(t => !isUrgentPriority(t));
 
-    activeTasks.forEach((t) => {
-      if (t.kanban_bucket_id && sortedBuckets.find((b) => b.id === t.kanban_bucket_id)) {
-        if (!tasksByBucket[t.kanban_bucket_id]) tasksByBucket[t.kanban_bucket_id] = [];
-        tasksByBucket[t.kanban_bucket_id].push(t);
-      } else {
-        unbucketed.push(t);
-      }
-    });
+    const buildSections = (tasks) => {
+      const sortedBuckets = [...allBuckets].sort((a, b) => (a.order || 0) - (b.order || 0));
+      const tasksByBucket = {};
+      const unbucketed = [];
 
-    // Sort tasks by due date within each bucket
-    const sortTasks = (arr) =>
-      [...arr].sort((a, b) => {
-        if (!a.due_date && !b.due_date) return 0;
-        if (!a.due_date) return 1;
-        if (!b.due_date) return -1;
-        return new Date(a.due_date) - new Date(b.due_date);
+      tasks.forEach((t) => {
+        if (t.kanban_bucket_id && sortedBuckets.find((b) => b.id === t.kanban_bucket_id)) {
+          if (!tasksByBucket[t.kanban_bucket_id]) tasksByBucket[t.kanban_bucket_id] = [];
+          tasksByBucket[t.kanban_bucket_id].push(t);
+        } else {
+          unbucketed.push(t);
+        }
       });
 
-    const result = sortedBuckets
-      .filter((b) => tasksByBucket[b.id]?.length > 0)
-      .map((b) => ({ name: b.name, tasks: sortTasks(tasksByBucket[b.id]) }));
+      const result = sortedBuckets
+        .filter((b) => tasksByBucket[b.id]?.length > 0)
+        .map((b) => ({ name: b.name, tasks: sortTasksByPriority(tasksByBucket[b.id]) }));
 
-    if (unbucketed.length > 0) {
-      result.push({ name: sortedBuckets.length > 0 ? "Unsorted" : "All Tasks", tasks: sortTasks(unbucketed) });
-    }
+      if (unbucketed.length > 0) {
+        result.push({ name: sortedBuckets.length > 0 ? "Unsorted" : "All Tasks", tasks: sortTasksByPriority(unbucketed) });
+      }
+      return result;
+    };
 
-    return result;
+    return {
+      urgentSections: buildSections(urgent),
+      upcomingSections: buildSections(upcoming),
+    };
   }, [activeTasks, allBuckets]);
 
   const teamMap = useMemo(() => {
@@ -163,46 +193,51 @@ export default function ProjectPrintView() {
           {project.client_name && ` • ${project.client_name}`}
         </div>
 
-        {/* Sections */}
-        {sections.map((section) => (
-          <div key={section.name} className="mb-6">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-gray-700 border-b border-gray-300 pb-1 mb-2">
-              {section.name}
-              <span className="text-gray-400 font-normal ml-2">({section.tasks.length})</span>
-            </h2>
-
-            <div className="space-y-0">
-              {section.tasks.map((task) => (
-                <div key={task.id} className="break-inside-avoid">
-                  <div className="flex items-start gap-2 py-1 border-b border-gray-100">
-                    {/* Checkbox */}
-                    <div className="w-4 h-4 border-2 border-gray-400 rounded-sm mt-0.5 shrink-0" />
-
-                    {/* Task info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm leading-snug">{task.name}</div>
-                      {task.description && (
-                        <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{task.description}</div>
-                      )}
-                    </div>
-
-                    {/* Assigned */}
-                    <div className="text-xs text-gray-500 shrink-0 w-20 text-right truncate">
-                      {teamMap[task.assigned_team_member_id] || "—"}
-                    </div>
-
-                    {/* Due date */}
-                    <div className={`text-xs shrink-0 w-12 text-right ${isOverdue(task.due_date) ? "font-bold" : "text-gray-500"}`}>
-                      {formatDate(task.due_date) || "—"}
-                    </div>
-                  </div>
-                  <PrintTaskPartsProgress taskId={task.id} taskPartLinksByTaskId={taskPartLinksByTaskId} />
-                  <PrintTaskChecklistItems taskId={task.id} checklistItemsByTaskId={checklistItemsByTaskId} />
-                </div>
-              ))}
+        {/* Urgent Priority Section */}
+        {urgentSections.some(s => s.tasks.length > 0) && (
+          <div className="mb-8">
+            <div className="text-xs font-bold uppercase tracking-wider text-red-700 border-b-2 border-red-400 pb-1 mb-3">
+              ⚡ CURRENT PRIORITIES (Next 14 Days)
             </div>
+            {urgentSections.map((section) => (
+              <div key={section.name} className="mb-4">
+                <h2 className="text-sm font-bold uppercase tracking-wider text-gray-700 border-b border-gray-300 pb-1 mb-2">
+                  {section.name}
+                  <span className="text-gray-400 font-normal ml-2">({section.tasks.length})</span>
+                </h2>
+                <div className="space-y-0">
+                  {section.tasks.map((task) => (
+                    <PrintTaskRow key={task.id} task={task} teamMap={teamMap} formatDate={formatDate} isOverdue={isOverdue} isUrgent={true}
+                      taskPartLinksByTaskId={taskPartLinksByTaskId} checklistItemsByTaskId={checklistItemsByTaskId} />
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
+
+        {/* All Scheduled Work Section */}
+        {upcomingSections.some(s => s.tasks.length > 0) && (
+          <div className="mb-6">
+            <div className="text-xs font-bold uppercase tracking-wider text-gray-600 border-b-2 border-gray-400 pb-1 mb-3">
+              ALL SCHEDULED WORK
+            </div>
+            {upcomingSections.map((section) => (
+              <div key={section.name} className="mb-4">
+                <h2 className="text-sm font-bold uppercase tracking-wider text-gray-700 border-b border-gray-300 pb-1 mb-2">
+                  {section.name}
+                  <span className="text-gray-400 font-normal ml-2">({section.tasks.length})</span>
+                </h2>
+                <div className="space-y-0">
+                  {section.tasks.map((task) => (
+                    <PrintTaskRow key={task.id} task={task} teamMap={teamMap} formatDate={formatDate} isOverdue={isOverdue} isUrgent={false}
+                      taskPartLinksByTaskId={taskPartLinksByTaskId} checklistItemsByTaskId={checklistItemsByTaskId} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {activeTasks.length === 0 && (
           <p className="text-gray-400 text-center py-8">No active priority tasks for this project.</p>

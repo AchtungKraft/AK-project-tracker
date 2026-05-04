@@ -7,6 +7,44 @@ import PrintTaskChecklistItems from "@/components/print/PrintTaskChecklistItems"
 import PrintTaskPartsProgress from "@/components/print/PrintTaskPartsProgress";
 import { groupIncompleteByTaskId } from "@/components/tasks/checklistHelpers";
 import { groupTaskPartLinksByTaskId } from "@/utils/taskPartsProgress";
+import { sortTasksByPriority, isUrgentPriority } from "@/utils/taskPrioritySort";
+
+function PersonPrintBucketSection({ section, formatDate, isOverdue, isUrgent, taskPartLinksByTaskId, checklistItemsByTaskId }) {
+  return (
+    <div className="mb-3">
+      {section.bucketName && (
+        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 ml-2">
+          {section.bucketName}
+          <span className="text-gray-400 font-normal ml-1">({section.tasks.length})</span>
+        </h3>
+      )}
+      <div className="space-y-0">
+        {section.tasks.map((task) => (
+          <div key={task.id} className="break-inside-avoid ml-2">
+            <div className="flex items-start gap-2 py-1 border-b border-gray-100">
+              <div className="w-4 h-4 border-2 border-gray-400 rounded-sm mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm leading-snug">
+                  {isUrgent && <span className="font-bold text-red-700 mr-1">[!!!]</span>}
+                  {!isUrgent && task.is_priority && <span className="text-gray-500 mr-1">[!]</span>}
+                  {task.name}
+                </div>
+                {task.description && (
+                  <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{task.description}</div>
+                )}
+              </div>
+              <div className={`text-xs shrink-0 w-12 text-right ${isOverdue(task.due_date) ? "font-bold" : "text-gray-500"}`}>
+                {formatDate(task.due_date) || "—"}
+              </div>
+            </div>
+            <PrintTaskPartsProgress taskId={task.id} taskPartLinksByTaskId={taskPartLinksByTaskId} />
+            <PrintTaskChecklistItems taskId={task.id} checklistItemsByTaskId={checklistItemsByTaskId} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function PersonPrintView() {
   const params = new URLSearchParams(window.location.search);
@@ -77,66 +115,69 @@ export default function PersonPrintView() {
     return m;
   }, [allBuckets]);
 
-  // Group tasks: project → bucket → tasks sorted by due date
-  const projectSections = useMemo(() => {
-    const byProject = {};
-    activeTasks.forEach((t) => {
-      const pid = t.project_id || "__none__";
-      if (!byProject[pid]) byProject[pid] = [];
-      byProject[pid].push(t);
-    });
+  // Split into urgent and upcoming, build project sections for each
+  const { urgentProjectSections, upcomingProjectSections } = useMemo(() => {
+    const sorted = sortTasksByPriority(activeTasks);
+    const urgent = sorted.filter(isUrgentPriority);
+    const upcoming = sorted.filter(t => !isUrgentPriority(t));
 
-    const sortTasks = (arr) =>
-      [...arr].sort((a, b) => {
-        if (!a.due_date && !b.due_date) return 0;
-        if (!a.due_date) return 1;
-        if (!b.due_date) return -1;
-        return new Date(a.due_date) - new Date(b.due_date);
+    const buildProjectSections = (tasks) => {
+      const byProject = {};
+      tasks.forEach((t) => {
+        const pid = t.project_id || "__none__";
+        if (!byProject[pid]) byProject[pid] = [];
+        byProject[pid].push(t);
       });
 
-    return Object.entries(byProject)
-      .map(([pid, tasks]) => {
-        const project = projectMap[pid] || { id: pid, name: "Unassigned / General" };
-        const projectBuckets = allBuckets
-          .filter((b) => b.project_id === pid)
-          .sort((a, b) => (a.order || 0) - (b.order || 0));
+      return Object.entries(byProject)
+        .map(([pid, ptasks]) => {
+          const project = projectMap[pid] || { id: pid, name: "Unassigned / General" };
+          const projectBuckets = allBuckets
+            .filter((b) => b.project_id === pid)
+            .sort((a, b) => (a.order || 0) - (b.order || 0));
 
-        const bucketSections = [];
-        const unbucketed = [];
+          const bucketSections = [];
+          const unbucketed = [];
 
-        tasks.forEach((t) => {
-          if (t.kanban_bucket_id && projectBuckets.find((b) => b.id === t.kanban_bucket_id)) {
-            const existing = bucketSections.find((s) => s.bucketId === t.kanban_bucket_id);
-            if (existing) {
-              existing.tasks.push(t);
+          ptasks.forEach((t) => {
+            if (t.kanban_bucket_id && projectBuckets.find((b) => b.id === t.kanban_bucket_id)) {
+              const existing = bucketSections.find((s) => s.bucketId === t.kanban_bucket_id);
+              if (existing) {
+                existing.tasks.push(t);
+              } else {
+                const bucket = projectBuckets.find((b) => b.id === t.kanban_bucket_id);
+                bucketSections.push({
+                  bucketId: t.kanban_bucket_id,
+                  bucketName: bucket?.name || "Unknown",
+                  bucketOrder: bucket?.order || 0,
+                  tasks: [t],
+                });
+              }
             } else {
-              const bucket = projectBuckets.find((b) => b.id === t.kanban_bucket_id);
-              bucketSections.push({
-                bucketId: t.kanban_bucket_id,
-                bucketName: bucket?.name || "Unknown",
-                bucketOrder: bucket?.order || 0,
-                tasks: [t],
-              });
+              unbucketed.push(t);
             }
-          } else {
-            unbucketed.push(t);
-          }
-        });
-
-        bucketSections.sort((a, b) => a.bucketOrder - b.bucketOrder);
-        bucketSections.forEach((s) => { s.tasks = sortTasks(s.tasks); });
-
-        if (unbucketed.length > 0) {
-          bucketSections.push({
-            bucketId: "__unsorted__",
-            bucketName: projectBuckets.length > 0 ? "Unsorted" : "",
-            tasks: sortTasks(unbucketed),
           });
-        }
 
-        return { project, tasks, bucketSections };
-      })
-      .sort((a, b) => b.tasks.length - a.tasks.length);
+          bucketSections.sort((a, b) => a.bucketOrder - b.bucketOrder);
+          bucketSections.forEach((s) => { s.tasks = sortTasksByPriority(s.tasks); });
+
+          if (unbucketed.length > 0) {
+            bucketSections.push({
+              bucketId: "__unsorted__",
+              bucketName: projectBuckets.length > 0 ? "Unsorted" : "",
+              tasks: sortTasksByPriority(unbucketed),
+            });
+          }
+
+          return { project, tasks: ptasks, bucketSections };
+        })
+        .sort((a, b) => b.tasks.length - a.tasks.length);
+    };
+
+    return {
+      urgentProjectSections: buildProjectSections(urgent),
+      upcomingProjectSections: buildProjectSections(upcoming),
+    };
   }, [activeTasks, projectMap, allBuckets]);
 
   const formatDate = (d) => {
@@ -196,46 +237,45 @@ export default function PersonPrintView() {
           {` • ${activeTasks.length} task${activeTasks.length !== 1 ? "s" : ""}`}
         </div>
 
-        {/* Project sections */}
-        {projectSections.map(({ project, bucketSections }) => (
-          <div key={project.id || project.name} className="mb-6">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-gray-800 border-b border-gray-400 pb-1 mb-2">
-              {project.name}
-            </h2>
-
-            {bucketSections.map((section) => (
-              <div key={section.bucketId} className="mb-3">
-                {section.bucketName && (
-                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 ml-2">
-                    {section.bucketName}
-                    <span className="text-gray-400 font-normal ml-1">({section.tasks.length})</span>
-                  </h3>
-                )}
-
-                <div className="space-y-0">
-                  {section.tasks.map((task) => (
-                    <div key={task.id} className="break-inside-avoid ml-2">
-                      <div className="flex items-start gap-2 py-1 border-b border-gray-100">
-                        <div className="w-4 h-4 border-2 border-gray-400 rounded-sm mt-0.5 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm leading-snug">{task.name}</div>
-                          {task.description && (
-                            <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{task.description}</div>
-                          )}
-                        </div>
-                        <div className={`text-xs shrink-0 w-12 text-right ${isOverdue(task.due_date) ? "font-bold" : "text-gray-500"}`}>
-                          {formatDate(task.due_date) || "—"}
-                        </div>
-                      </div>
-                      <PrintTaskPartsProgress taskId={task.id} taskPartLinksByTaskId={taskPartLinksByTaskId} />
-                      <PrintTaskChecklistItems taskId={task.id} checklistItemsByTaskId={checklistItemsByTaskId} />
-                    </div>
-                  ))}
-                </div>
+        {/* Urgent Priority Section */}
+        {urgentProjectSections.length > 0 && urgentProjectSections.some(s => s.tasks.length > 0) && (
+          <div className="mb-8">
+            <div className="text-xs font-bold uppercase tracking-wider text-red-700 border-b-2 border-red-400 pb-1 mb-3">
+              ⚡ CURRENT PRIORITIES (Next 14 Days)
+            </div>
+            {urgentProjectSections.map(({ project, bucketSections }) => (
+              <div key={project.id || project.name} className="mb-4">
+                <h2 className="text-sm font-bold uppercase tracking-wider text-gray-800 border-b border-gray-400 pb-1 mb-2">
+                  {project.name}
+                </h2>
+                {bucketSections.map((section) => (
+                  <PersonPrintBucketSection key={section.bucketId} section={section} formatDate={formatDate} isOverdue={isOverdue} isUrgent={true}
+                    taskPartLinksByTaskId={taskPartLinksByTaskId} checklistItemsByTaskId={checklistItemsByTaskId} />
+                ))}
               </div>
             ))}
           </div>
-        ))}
+        )}
+
+        {/* All Scheduled Work Section */}
+        {upcomingProjectSections.length > 0 && upcomingProjectSections.some(s => s.tasks.length > 0) && (
+          <div className="mb-6">
+            <div className="text-xs font-bold uppercase tracking-wider text-gray-600 border-b-2 border-gray-400 pb-1 mb-3">
+              ALL SCHEDULED WORK
+            </div>
+            {upcomingProjectSections.map(({ project, bucketSections }) => (
+              <div key={project.id || project.name} className="mb-4">
+                <h2 className="text-sm font-bold uppercase tracking-wider text-gray-800 border-b border-gray-400 pb-1 mb-2">
+                  {project.name}
+                </h2>
+                {bucketSections.map((section) => (
+                  <PersonPrintBucketSection key={section.bucketId} section={section} formatDate={formatDate} isOverdue={isOverdue} isUrgent={false}
+                    taskPartLinksByTaskId={taskPartLinksByTaskId} checklistItemsByTaskId={checklistItemsByTaskId} />
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
 
         {activeTasks.length === 0 && (
           <p className="text-gray-400 text-center py-8">No active priority tasks for this person.</p>

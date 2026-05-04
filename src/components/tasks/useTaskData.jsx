@@ -255,9 +255,13 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
     }
     
     const mutationTimestamp = Date.now();
+    const newIsPriority = !task.is_priority;
     await updateTaskMutation.mutateAsync({
       id: task.id,
-      data: { is_priority: !task.is_priority },
+      data: {
+        is_priority: newIsPriority,
+        priority_set_at: newIsPriority ? new Date().toISOString() : null,
+      },
       mutationTimestamp
     });
     toast.success(task.is_priority ? 'Removed from priority' : 'Marked as priority');
@@ -270,7 +274,7 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
     const mutationTimestamp = Date.now();
     await updateTaskMutation.mutateAsync({
       id: task.id,
-      data: { is_priority: false },
+      data: { is_priority: false, priority_set_at: null },
       mutationTimestamp
     });
     toast.success('Removed from priority');

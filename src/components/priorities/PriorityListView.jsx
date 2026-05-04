@@ -1,17 +1,23 @@
 import React, { useMemo } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquare, Package, FolderKanban } from "lucide-react";
+import { MessageSquare, Package, FolderKanban, Flame } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { sortTasksByPriority, isUrgentPriority, isFuturePriority } from "@/utils/taskPrioritySort";
 
 function TaskRow({ task, project, assignee, status, commentCount, partsProgress, onToggleComplete, onTaskClick }) {
   const dueDate = task.due_date ? new Date(task.due_date) : null;
   const isOverdue = dueDate && dueDate < new Date() && status?.label?.toLowerCase() !== 'complete';
+  const urgent = isUrgentPriority(task);
+  const future = isFuturePriority(task);
 
   return (
     <div
-      className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-800/40 transition-colors group border-b border-gray-800/30 last:border-b-0"
+      className={cn(
+        "flex items-center gap-2 px-3 py-1.5 hover:bg-gray-800/40 transition-colors group border-b border-gray-800/30 last:border-b-0",
+        urgent && "border-l-2 border-l-red-500 bg-red-950/10"
+      )}
     >
       {/* Checkbox */}
       <Checkbox
@@ -19,6 +25,10 @@ function TaskRow({ task, project, assignee, status, commentCount, partsProgress,
         onCheckedChange={() => onToggleComplete(task)}
         className="border-gray-600 data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600 shrink-0"
       />
+
+      {/* Priority indicator */}
+      {urgent && <Flame className="w-3.5 h-3.5 text-red-400 shrink-0" />}
+      {future && <Flame className="w-3 h-3 text-gray-600 shrink-0" />}
 
       {/* Task name — clickable */}
       <button
@@ -89,7 +99,7 @@ export default function PriorityListView({
   onToggleComplete,
   onTaskClick,
 }) {
-  // Group by project
+  // Group by project, apply canonical sort within each group
   const projectGroups = useMemo(() => {
     const groups = {};
     tasks.forEach(task => {
@@ -100,10 +110,10 @@ export default function PriorityListView({
       }
       groups[pid].tasks.push(task);
     });
-    // Sort groups by project name
-    return Object.values(groups).sort((a, b) =>
-      (a.project?.name || '').localeCompare(b.project?.name || '')
-    );
+    // Sort tasks within each group, then sort groups by project name
+    return Object.values(groups)
+      .map(g => ({ ...g, tasks: sortTasksByPriority(g.tasks) }))
+      .sort((a, b) => (a.project?.name || '').localeCompare(b.project?.name || ''));
   }, [tasks, projects]);
 
   if (tasks.length === 0) {

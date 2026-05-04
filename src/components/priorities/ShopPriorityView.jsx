@@ -9,6 +9,7 @@ import { computeChecklistProgress } from "@/components/tasks/checklistHelpers";
 import ShopTeamSummaryBar from "./ShopTeamSummaryBar";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 import ProjectFirstView from "./ProjectFirstView";
+import { sortTasksByPriority, isUrgentPriority } from "@/utils/taskPrioritySort";
 
 // ── urgency helpers ──
 function getSubBucket(task) {
@@ -21,22 +22,16 @@ function getSubBucket(task) {
   return "ready";
 }
 
-const dueDateSort = (a, b) => {
-  if (!a.due_date && !b.due_date) return 0;
-  if (!a.due_date) return 1;
-  if (!b.due_date) return -1;
-  return new Date(a.due_date) - new Date(b.due_date);
-};
-
 function splitAndSort(tasks) {
+  // Apply canonical sort first, then split into sub-buckets preserving that order
+  const sorted = sortTasksByPriority(tasks);
   const o = [], t = [], r = [];
-  tasks.forEach(tk => {
+  sorted.forEach(tk => {
     const b = getSubBucket(tk);
     if (b === "overdue") o.push(tk);
     else if (b === "today") t.push(tk);
     else r.push(tk);
   });
-  [o, t, r].forEach(arr => arr.sort(dueDateSort));
   return { overdue: o, today: t, ready: r };
 }
 

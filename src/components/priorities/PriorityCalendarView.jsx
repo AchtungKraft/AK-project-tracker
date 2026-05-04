@@ -4,13 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight, Calendar, FolderKanban, User, Tag, AlertCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar, FolderKanban, User, Tag, AlertCircle, Flame } from "lucide-react";
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, parseISO, isWithinInterval, isBefore } from "date-fns";
 import { createPageUrl } from "@/utils";
 import TaskCard from "../project/TaskCard";
 import { toast } from "sonner";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { cn } from "@/lib/utils";
+import { sortTasksByPriority, isUrgentPriority } from "@/utils/taskPrioritySort";
 
 export default function PriorityCalendarView({
   tasks,
