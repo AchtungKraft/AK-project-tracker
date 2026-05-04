@@ -94,11 +94,15 @@ export function buildFeedbackTimeline(request, comments = [], decisions = []) {
   );
 
   sortedDecisions.forEach(d => {
+    const decisionLabel = d.decision === 'approved' ? 'Approved'
+      : d.decision === 'changes_requested' ? 'Requested changes'
+      : d.decision || 'Decision';
     allEvents.push({
       kind: 'decision',
       actor: d.decided_by_type === 'client_contact' ? 'client' : 'team',
       date: normalizeDate(getEventTimestamp(d)),
       decision: d,
+      body: d.note || decisionLabel,
     });
   });
 

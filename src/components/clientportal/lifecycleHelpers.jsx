@@ -165,11 +165,13 @@ export const enrichRequest = (request, comments, decisions, attachments) => {
     c => c.author_type === 'internal_user'
   );
 
-  // Derive latest comment from allEvents (SINGLE SOURCE — no manual sort)
-  const latestCommentEvent = allEvents.find(e => e.kind === 'comment');
-  const latestCommentContent = latestCommentEvent?.comment?.content_fallback
-    || latestCommentEvent?.comment?.body || null;
-  const latestCommentActor = latestCommentEvent?.actor || null;
+  // Derive latest interaction content from allEvents (SINGLE SOURCE — no manual sort)
+  // Includes both comments and decisions for displayable message preview
+  const latestInteractionEvent = allEvents.find(e => e.kind === 'comment' || e.kind === 'decision');
+  const latestCommentContent = latestInteractionEvent?.kind === 'comment'
+    ? (latestInteractionEvent.comment?.content_fallback || latestInteractionEvent.comment?.body || null)
+    : (latestInteractionEvent?.body || null);
+  const latestCommentActor = latestInteractionEvent?.actor || null;
 
   // Derive last client comment from allEvents (SINGLE SOURCE — no manual sort)
   const lastClientCommentEvent = allEvents.find(
