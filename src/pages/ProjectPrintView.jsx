@@ -99,33 +99,6 @@ export default function ProjectPrintView() {
     return groupTaskPartLinksByTaskId(allTaskPartLinks, new Set(taskIds));
   }, [allTaskPartLinks, taskIds]);
 
-  // Assigned-to grouping: group sorted tasks by team member
-  const assignedSections = useMemo(() => {
-    const sorted = sortTasksByPriority(activeTasks);
-    const byMember = {};
-    sorted.forEach(t => {
-      const key = t.assigned_team_member_id || "__unassigned__";
-      if (!byMember[key]) byMember[key] = [];
-      byMember[key].push(t);
-    });
-
-    // Sort members by sort_order from teamMembers, unassigned last
-    const memberOrder = {};
-    teamMembers.forEach(tm => { memberOrder[tm.id] = tm.sort_order ?? 999; });
-
-    return Object.entries(byMember)
-      .map(([memberId, tasks]) => ({
-        memberId,
-        name: memberId === "__unassigned__" ? "Unassigned" : (teamMap[memberId] || "Unknown"),
-        tasks,
-      }))
-      .sort((a, b) => {
-        if (a.memberId === "__unassigned__") return 1;
-        if (b.memberId === "__unassigned__") return -1;
-        return (memberOrder[a.memberId] ?? 999) - (memberOrder[b.memberId] ?? 999);
-      });
-  }, [activeTasks, teamMembers, teamMap]);
-
   // Split into urgent and upcoming, then group by buckets within each
   const { urgentSections, upcomingSections } = useMemo(() => {
     const sorted = sortTasksByPriority(activeTasks);
@@ -167,6 +140,32 @@ export default function ProjectPrintView() {
     teamMembers.forEach((tm) => { m[tm.id] = tm.full_name; });
     return m;
   }, [teamMembers]);
+
+  // Assigned-to grouping: group sorted tasks by team member
+  const assignedSections = useMemo(() => {
+    const sorted = sortTasksByPriority(activeTasks);
+    const byMember = {};
+    sorted.forEach(t => {
+      const key = t.assigned_team_member_id || "__unassigned__";
+      if (!byMember[key]) byMember[key] = [];
+      byMember[key].push(t);
+    });
+
+    const memberOrder = {};
+    teamMembers.forEach(tm => { memberOrder[tm.id] = tm.sort_order ?? 999; });
+
+    return Object.entries(byMember)
+      .map(([memberId, tasks]) => ({
+        memberId,
+        name: memberId === "__unassigned__" ? "Unassigned" : (teamMap[memberId] || "Unknown"),
+        tasks,
+      }))
+      .sort((a, b) => {
+        if (a.memberId === "__unassigned__") return 1;
+        if (b.memberId === "__unassigned__") return -1;
+        return (memberOrder[a.memberId] ?? 999) - (memberOrder[b.memberId] ?? 999);
+      });
+  }, [activeTasks, teamMembers, teamMap]);
 
   const formatDate = (d) => {
     if (!d) return "";
