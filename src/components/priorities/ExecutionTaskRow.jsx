@@ -4,7 +4,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Flame, CalendarDays, User } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { isUrgentPriority, isFuturePriority } from "@/utils/taskPrioritySort";
+import { isUrgentPriority } from "@/utils/taskPrioritySort";
 
 export default function ExecutionTaskRow({
   task,
@@ -24,7 +24,6 @@ export default function ExecutionTaskRow({
   const fmtDate = (d) => d ? `${d.getMonth() + 1}/${d.getDate()}` : "—";
 
   const urgent = isUrgentPriority(task);
-  const future = isFuturePriority(task);
 
   const [dateOpen, setDateOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
@@ -58,16 +57,13 @@ export default function ExecutionTaskRow({
         </span>
 
         {/* Priority flame indicator */}
-        {(urgent || future) && (
+        {task.is_priority && (
           <button
             onClick={e => { e.stopPropagation(); if (onTogglePriority) onTogglePriority(task); }}
-            className={cn(
-              "shrink-0 mt-0.5 transition-colors",
-              urgent ? "text-red-500 hover:text-red-400" : "text-gray-500 hover:text-gray-400"
-            )}
-            title={urgent ? "Urgent priority (≤14 days)" : "Future priority"}
+            className="shrink-0 mt-0.5 transition-colors text-red-500 hover:text-red-400"
+            title="Priority"
           >
-            <Flame className="w-3.5 h-3.5" />
+            <Flame className="w-3.5 h-3.5" fill="none" strokeWidth={2} />
           </button>
         )}
 
@@ -117,7 +113,7 @@ export default function ExecutionTaskRow({
             )}
             title={task.is_priority ? "Remove priority" : "Set priority"}
           >
-            <Flame className="w-3.5 h-3.5" />
+            <Flame className="w-3.5 h-3.5" fill="none" strokeWidth={2} />
           </button>
 
           {/* Assignment selector */}
