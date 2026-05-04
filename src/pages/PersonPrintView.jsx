@@ -24,9 +24,9 @@ function PersonPrintBucketSection({ section, formatDate, isOverdue, isUrgent, ta
             <div className="flex items-start gap-2 py-1 border-b border-gray-100">
               <div className="w-4 h-4 border-2 border-gray-400 rounded-sm mt-0.5 shrink-0" />
               <div className="flex-1 min-w-0">
-                <div className="text-sm leading-snug">
-                  {isUrgent && <span className="font-bold text-red-700 mr-1">[!!!]</span>}
-                  {!isUrgent && task.is_priority && <span className="text-gray-500 mr-1">[!]</span>}
+                <div className={`text-sm leading-snug ${task.is_priority ? 'font-bold' : ''}`}>
+                  {isUrgent && <span className="mr-1" title="Urgent priority">🔥</span>}
+                  {!isUrgent && task.is_priority && <span className="mr-1 opacity-50" title="Priority">🔥</span>}
                   {task.name}
                 </div>
                 {task.description && (

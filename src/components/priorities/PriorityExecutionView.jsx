@@ -22,6 +22,9 @@ export default function PriorityExecutionView({
   commentCountByTaskId = {},
   onToggleComplete,
   onTaskClick,
+  onUpdateDueDate,
+  onTogglePriority,
+  updateTaskMutation,
 }) {
   const queryClient = useQueryClient();
 
@@ -164,10 +167,14 @@ export default function PriorityExecutionView({
                   key={task.id}
                   task={task}
                   assigneeName={teamMap[task.assigned_team_member_id]}
+                  teamMembers={teamMembers}
                   checklistItems={checklistByTaskId[task.id] || []}
                   onToggleComplete={onToggleComplete}
                   onToggleChecklistItem={handleToggleChecklistItem}
                   onTaskClick={onTaskClick}
+                  onUpdateDueDate={onUpdateDueDate}
+                  onTogglePriority={onTogglePriority}
+                  updateTaskMutation={updateTaskMutation}
                 />
               ))}
             </div>

@@ -1,22 +1,52 @@
-import React from "react";
+import React, { useState, useCallback } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Flame, CalendarDays, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isUrgentPriority, isFuturePriority } from "@/utils/taskPrioritySort";
 
 export default function ExecutionTaskRow({
   task,
   assigneeName,
+  teamMembers = [],
   checklistItems,
   onToggleComplete,
   onToggleChecklistItem,
   onTaskClick,
+  onUpdateDueDate,
+  onTogglePriority,
+  updateTaskMutation,
 }) {
   const hasChecklist = checklistItems && checklistItems.length > 0;
   const dueDate = task.due_date ? new Date(task.due_date) : null;
   const isOverdue = dueDate && dueDate < new Date();
   const fmtDate = (d) => d ? `${d.getMonth() + 1}/${d.getDate()}` : "—";
 
+  const urgent = isUrgentPriority(task);
+  const future = isFuturePriority(task);
+
+  const [dateOpen, setDateOpen] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
+
+  const activeMembers = teamMembers.filter(tm => tm.active);
+
+  const handleDateSelect = useCallback((date) => {
+    if (onUpdateDueDate) {
+      onUpdateDueDate(task, date);
+    }
+    setDateOpen(false);
+  }, [task, onUpdateDueDate]);
+
+  const handleAssign = useCallback((memberId) => {
+    if (updateTaskMutation) {
+      updateTaskMutation.mutate({ id: task.id, data: { assigned_team_member_id: memberId } });
+    }
+    setAssignOpen(false);
+  }, [task, updateTaskMutation]);
+
   return (
-    <div className="break-inside-avoid">
+    <div className="break-inside-avoid group/row">
       {/* Task row */}
       <div className="flex items-start gap-2 py-[4px] border-b border-white/5">
         <span onClick={e => e.stopPropagation()} className="shrink-0 mt-0.5">
@@ -27,10 +57,27 @@ export default function ExecutionTaskRow({
           />
         </span>
 
+        {/* Priority flame indicator */}
+        {(urgent || future) && (
+          <button
+            onClick={e => { e.stopPropagation(); if (onTogglePriority) onTogglePriority(task); }}
+            className={cn(
+              "shrink-0 mt-0.5 transition-colors",
+              urgent ? "text-red-500 hover:text-red-400" : "text-gray-500 hover:text-gray-400"
+            )}
+            title={urgent ? "Urgent priority (≤14 days)" : "Future priority"}
+          >
+            <Flame className="w-3.5 h-3.5" />
+          </button>
+        )}
+
         <div className="flex-1 min-w-0">
           <button
             onClick={e => { e.stopPropagation(); onTaskClick(task); }}
-            className="text-sm leading-snug text-gray-200 text-left"
+            className={cn(
+              "text-sm leading-snug text-left",
+              task.is_priority ? "text-gray-100 font-semibold" : "text-gray-200"
+            )}
           >
             {task.name}
           </button>
@@ -39,6 +86,79 @@ export default function ExecutionTaskRow({
           )}
         </div>
 
+        {/* Inline controls — visible on hover */}
+        <div className="flex items-center gap-1 shrink-0 mt-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+          {/* Due date editor */}
+          <Popover open={dateOpen} onOpenChange={setDateOpen}>
+            <PopoverTrigger asChild>
+              <button
+                className="text-gray-500 hover:text-blue-400 transition-colors p-0.5 rounded"
+                title="Set due date"
+              >
+                <CalendarDays className="w-3.5 h-3.5" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0 bg-gray-900 border-gray-700" side="left" align="start">
+              <Calendar
+                mode="single"
+                selected={dueDate || undefined}
+                onSelect={handleDateSelect}
+                className="bg-gray-900"
+              />
+            </PopoverContent>
+          </Popover>
+
+          {/* Priority toggle */}
+          <button
+            onClick={() => { if (onTogglePriority) onTogglePriority(task); }}
+            className={cn(
+              "transition-colors p-0.5 rounded",
+              task.is_priority ? "text-red-500 hover:text-red-400" : "text-gray-600 hover:text-red-400"
+            )}
+            title={task.is_priority ? "Remove priority" : "Set priority"}
+          >
+            <Flame className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Assignment selector */}
+          <Popover open={assignOpen} onOpenChange={setAssignOpen}>
+            <PopoverTrigger asChild>
+              <button
+                className="text-gray-500 hover:text-blue-400 transition-colors p-0.5 rounded"
+                title="Assign"
+              >
+                <User className="w-3.5 h-3.5" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-44 p-1 bg-gray-900 border-gray-700" side="left" align="start">
+              <div className="space-y-px max-h-52 overflow-y-auto">
+                <button
+                  onClick={() => handleAssign(null)}
+                  className={cn(
+                    "w-full text-left px-2 py-1 rounded text-xs transition-colors flex items-center gap-1.5",
+                    !task.assigned_team_member_id ? "bg-gray-800 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white"
+                  )}
+                >
+                  <User className="w-3 h-3" /> Unassigned
+                </button>
+                {activeMembers.map(tm => (
+                  <button
+                    key={tm.id}
+                    onClick={() => handleAssign(tm.id)}
+                    className={cn(
+                      "w-full text-left px-2 py-1 rounded text-xs transition-colors flex items-center gap-1.5",
+                      task.assigned_team_member_id === tm.id ? "bg-blue-900/40 text-blue-300" : "text-gray-300 hover:bg-gray-800 hover:text-white"
+                    )}
+                  >
+                    {tm.full_name}
+                  </button>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+
+        {/* Assignee name — always visible */}
         <div className="text-xs text-gray-500 shrink-0 w-20 text-right truncate mt-0.5 hidden md:block">
           {assigneeName || "—"}
         </div>
