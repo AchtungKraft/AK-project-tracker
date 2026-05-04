@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { Printer } from "lucide-react";
+import { Printer, Flame } from "lucide-react";
 import { filterActiveTasks } from "@/utils/getActivePriorityTasks";
 import PrintTaskChecklistItems from "@/components/print/PrintTaskChecklistItems";
 import PrintTaskPartsProgress from "@/components/print/PrintTaskPartsProgress";
@@ -16,8 +16,7 @@ function PrintTaskRow({ task, teamMap, formatDate, isOverdue, isUrgent, taskPart
         <div className="w-4 h-4 border-2 border-gray-400 rounded-sm mt-0.5 shrink-0" />
         <div className="flex-1 min-w-0">
           <div className={`text-sm leading-snug ${task.is_priority ? 'font-bold' : ''}`}>
-            {isUrgent && <span className="mr-1" title="Urgent priority">🔥</span>}
-            {!isUrgent && task.is_priority && <span className="mr-1 opacity-50" title="Priority">🔥</span>}
+            {task.is_priority && <Flame className="inline-block w-3.5 h-3.5 mr-1 text-red-500 align-text-bottom" fill="none" strokeWidth={2} />}
             {task.name}
           </div>
           {task.description && (
