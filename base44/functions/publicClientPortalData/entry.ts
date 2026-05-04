@@ -234,9 +234,14 @@ Deno.serve(async (req) => {
             last_viewed_at: new Date().toISOString()
         }).catch(() => {});
 
-        // Determine consent completion: has at least one opt-in date
+        // Determine consent completion:
+        // - Has at least one explicit opt-in date, OR
+        // - Is a legacy contact where email is not explicitly disabled (notify_email !== false)
+        //   Legacy contacts were created before the consent system and implicitly receive emails
+        const hasExplicitOptIn = !!(clientContact?.opt_in_email_date || clientContact?.opt_in_sms_date || clientContact?.opt_in_whatsapp_date);
+        const isLegacyEmailConsent = clientContact && clientContact.notify_email !== false && !hasExplicitOptIn;
         const hasCompletedConsent = clientContact
-            ? !!(clientContact.opt_in_email_date || clientContact.opt_in_sms_date || clientContact.opt_in_whatsapp_date)
+            ? (hasExplicitOptIn || isLegacyEmailConsent)
             : false;
 
         return Response.json({
