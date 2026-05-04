@@ -1,7 +1,7 @@
-import React, { useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { Printer, Flame } from "lucide-react";
+import { Printer, Flame, Users, ListChecks } from "lucide-react";
 import { filterActiveTasks } from "@/utils/getActivePriorityTasks";
 import PrintTaskChecklistItems from "@/components/print/PrintTaskChecklistItems";
 import PrintTaskPartsProgress from "@/components/print/PrintTaskPartsProgress";
@@ -37,7 +37,10 @@ function PrintTaskRow({ task, teamMap, formatDate, isOverdue, isUrgent, taskPart
 }
 
 export default function ProjectPrintView() {
-  const projectId = new URLSearchParams(window.location.search).get("id");
+  const params = new URLSearchParams(window.location.search);
+  const projectId = params.get("id");
+  const initialMode = params.get("view") || "priority";
+  const [viewMode, setViewMode] = useState(initialMode);
 
   const { data: project } = useQuery({
     queryKey: ["printProject", projectId],
@@ -95,6 +98,33 @@ export default function ProjectPrintView() {
   const taskPartLinksByTaskId = useMemo(() => {
     return groupTaskPartLinksByTaskId(allTaskPartLinks, new Set(taskIds));
   }, [allTaskPartLinks, taskIds]);
+
+  // Assigned-to grouping: group sorted tasks by team member
+  const assignedSections = useMemo(() => {
+    const sorted = sortTasksByPriority(activeTasks);
+    const byMember = {};
+    sorted.forEach(t => {
+      const key = t.assigned_team_member_id || "__unassigned__";
+      if (!byMember[key]) byMember[key] = [];
+      byMember[key].push(t);
+    });
+
+    // Sort members by sort_order from teamMembers, unassigned last
+    const memberOrder = {};
+    teamMembers.forEach(tm => { memberOrder[tm.id] = tm.sort_order ?? 999; });
+
+    return Object.entries(byMember)
+      .map(([memberId, tasks]) => ({
+        memberId,
+        name: memberId === "__unassigned__" ? "Unassigned" : (teamMap[memberId] || "Unknown"),
+        tasks,
+      }))
+      .sort((a, b) => {
+        if (a.memberId === "__unassigned__") return 1;
+        if (b.memberId === "__unassigned__") return -1;
+        return (memberOrder[a.memberId] ?? 999) - (memberOrder[b.memberId] ?? 999);
+      });
+  }, [activeTasks, teamMembers, teamMap]);
 
   // Split into urgent and upcoming, then group by buckets within each
   const { urgentSections, upcomingSections } = useMemo(() => {
@@ -170,14 +200,32 @@ export default function ProjectPrintView() {
       `}</style>
 
       <div className="min-h-screen bg-white text-black p-8 max-w-3xl mx-auto font-sans">
-        {/* Print button */}
-        <div className="no-print flex items-center gap-3 mb-6">
+        {/* Print controls */}
+        <div className="no-print flex items-center gap-3 mb-6 flex-wrap">
           <button
             onClick={() => window.print()}
             className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded text-sm font-medium hover:bg-gray-700 transition-colors"
           >
             <Printer className="w-4 h-4" /> Print Checklist
           </button>
+          <div className="flex items-center border border-gray-300 rounded overflow-hidden">
+            <button
+              onClick={() => setViewMode('priority')}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${
+                viewMode === 'priority' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              <ListChecks className="w-4 h-4" /> Priority
+            </button>
+            <button
+              onClick={() => setViewMode('assigned')}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${
+                viewMode === 'assigned' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              <Users className="w-4 h-4" /> By Person
+            </button>
+          </div>
           <button
             onClick={() => window.close()}
             className="px-4 py-2 border border-gray-300 rounded text-sm text-gray-600 hover:bg-gray-50 transition-colors"
@@ -191,48 +239,71 @@ export default function ProjectPrintView() {
           {project.name}
         </h1>
         <div className="text-xs text-gray-500 mb-6">
-          Active Tasks • Printed {new Date().toLocaleDateString()}
+          Active Tasks • {viewMode === 'assigned' ? 'By Person' : 'By Priority'} • Printed {new Date().toLocaleDateString()}
           {project.client_name && ` • ${project.client_name}`}
         </div>
 
-        {/* Urgent Priority Section */}
-        {urgentSections.some(s => s.tasks.length > 0) && (
-          <div className="mb-8">
-            <div className="text-xs font-bold uppercase tracking-wider text-red-700 border-b-2 border-red-400 pb-1 mb-3">
-              ⚡ CURRENT PRIORITIES (Next 14 Days)
-            </div>
-            {urgentSections.map((section) => (
-              <div key={section.name} className="mb-4">
-                <h2 className="text-sm font-bold uppercase tracking-wider text-gray-700 border-b border-gray-300 pb-1 mb-2">
-                  {section.name}
-                  <span className="text-gray-400 font-normal ml-2">({section.tasks.length})</span>
-                </h2>
-                <div className="space-y-0">
-                  {section.tasks.map((task) => (
-                    <PrintTaskRow key={task.id} task={task} teamMap={teamMap} formatDate={formatDate} isOverdue={isOverdue} isUrgent={true}
-                      taskPartLinksByTaskId={taskPartLinksByTaskId} checklistItemsByTaskId={checklistItemsByTaskId} />
-                  ))}
+        {/* === PRIORITY VIEW === */}
+        {viewMode === 'priority' && (
+          <>
+            {urgentSections.some(s => s.tasks.length > 0) && (
+              <div className="mb-8">
+                <div className="text-xs font-bold uppercase tracking-wider text-red-700 border-b-2 border-red-400 pb-1 mb-3">
+                  ⚡ CURRENT PRIORITIES (Next 14 Days)
                 </div>
+                {urgentSections.map((section) => (
+                  <div key={section.name} className="mb-4">
+                    <h2 className="text-sm font-bold uppercase tracking-wider text-gray-700 border-b border-gray-300 pb-1 mb-2">
+                      {section.name}
+                      <span className="text-gray-400 font-normal ml-2">({section.tasks.length})</span>
+                    </h2>
+                    <div className="space-y-0">
+                      {section.tasks.map((task) => (
+                        <PrintTaskRow key={task.id} task={task} teamMap={teamMap} formatDate={formatDate} isOverdue={isOverdue} isUrgent={true}
+                          taskPartLinksByTaskId={taskPartLinksByTaskId} checklistItemsByTaskId={checklistItemsByTaskId} />
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            )}
+
+            {upcomingSections.some(s => s.tasks.length > 0) && (
+              <div className="mb-6">
+                <div className="text-xs font-bold uppercase tracking-wider text-gray-600 border-b-2 border-gray-400 pb-1 mb-3">
+                  ALL SCHEDULED WORK
+                </div>
+                {upcomingSections.map((section) => (
+                  <div key={section.name} className="mb-4">
+                    <h2 className="text-sm font-bold uppercase tracking-wider text-gray-700 border-b border-gray-300 pb-1 mb-2">
+                      {section.name}
+                      <span className="text-gray-400 font-normal ml-2">({section.tasks.length})</span>
+                    </h2>
+                    <div className="space-y-0">
+                      {section.tasks.map((task) => (
+                        <PrintTaskRow key={task.id} task={task} teamMap={teamMap} formatDate={formatDate} isOverdue={isOverdue} isUrgent={false}
+                          taskPartLinksByTaskId={taskPartLinksByTaskId} checklistItemsByTaskId={checklistItemsByTaskId} />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
 
-        {/* All Scheduled Work Section */}
-        {upcomingSections.some(s => s.tasks.length > 0) && (
+        {/* === ASSIGNED VIEW === */}
+        {viewMode === 'assigned' && (
           <div className="mb-6">
-            <div className="text-xs font-bold uppercase tracking-wider text-gray-600 border-b-2 border-gray-400 pb-1 mb-3">
-              ALL SCHEDULED WORK
-            </div>
-            {upcomingSections.map((section) => (
-              <div key={section.name} className="mb-4">
-                <h2 className="text-sm font-bold uppercase tracking-wider text-gray-700 border-b border-gray-300 pb-1 mb-2">
+            {assignedSections.map((section) => (
+              <div key={section.memberId} className="mb-6">
+                <h2 className="text-sm font-bold uppercase tracking-wider text-gray-800 border-b-2 border-gray-400 pb-1 mb-2">
                   {section.name}
                   <span className="text-gray-400 font-normal ml-2">({section.tasks.length})</span>
                 </h2>
                 <div className="space-y-0">
                   {section.tasks.map((task) => (
-                    <PrintTaskRow key={task.id} task={task} teamMap={teamMap} formatDate={formatDate} isOverdue={isOverdue} isUrgent={false}
+                    <PrintTaskRow key={task.id} task={task} teamMap={teamMap} formatDate={formatDate} isOverdue={isOverdue} isUrgent={isUrgentPriority(task)}
                       taskPartLinksByTaskId={taskPartLinksByTaskId} checklistItemsByTaskId={checklistItemsByTaskId} />
                   ))}
                 </div>
