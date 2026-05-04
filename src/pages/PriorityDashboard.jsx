@@ -212,11 +212,6 @@ export default function PriorityDashboard() {
     queryFn: () => base44.entities.TaskPartLink.list(),
   });
 
-  const activeTaskIds = useMemo(() => activePriorityTasks.map(t => t.id), [activePriorityTasks]);
-  const partsProgressByTaskId = useMemo(() => {
-    return computePartsProgressByTaskId(allTaskPartLinks, new Set(activeTaskIds));
-  }, [allTaskPartLinks, activeTaskIds]);
-
   // Get active team members sorted by sort_order for the Assigned To filter
   const activeTeamMembers = useMemo(() => {
     return teamMembers
@@ -241,6 +236,12 @@ export default function PriorityDashboard() {
     });
     return sortTasksByPriority(filtered);
   }, [allSortedTasks, completedStatus, assignedTo, projects, selectedTypes, statusFilter]);
+
+  // Parts progress — must be after activePriorityTasks
+  const activeTaskIds = useMemo(() => activePriorityTasks.map(t => t.id), [activePriorityTasks]);
+  const partsProgressByTaskId = useMemo(() => {
+    return computePartsProgressByTaskId(allTaskPartLinks, new Set(activeTaskIds));
+  }, [allTaskPartLinks, activeTaskIds]);
 
   // Counts for metrics/badges
   const urgentCount = useMemo(() => activePriorityTasks.filter(isUrgentPriority).length, [activePriorityTasks]);
