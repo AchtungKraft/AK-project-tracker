@@ -49,6 +49,16 @@ export default function PersonPrintView() {
   const params = new URLSearchParams(window.location.search);
   const memberId = params.get("memberId");
 
+  // Read shared dashboard filters from localStorage (same as PriorityDashboard)
+  const sharedFilters = useMemo(() => {
+    try {
+      const stored = localStorage.getItem('ak_shared_filters');
+      return stored ? JSON.parse(stored) : {};
+    } catch { return {}; }
+  }, []);
+  const selectedTypes = sharedFilters.selectedTypes || [];
+  const statusFilter = sharedFilters.statusFilter || 'all';
+
   const { data: teamMembers = [] } = useQuery({
     queryKey: ["printTeam"],
     queryFn: () => base44.entities.TeamMember.list(),
@@ -61,9 +71,6 @@ export default function PersonPrintView() {
     queryFn: () => base44.entities.Task.filter({ assigned_team_member_id: memberId }),
     enabled: !!memberId,
   });
-
-  // Use full member task list — priority influences sort order, not inclusion
-  const allTasks = allMemberTasks;
 
   const { data: projects = [] } = useQuery({
     queryKey: ["printPersonProjects"],
@@ -80,8 +87,16 @@ export default function PersonPrintView() {
     queryFn: () => base44.entities.StatusList.list(),
   });
 
-  // Filter out completed/done/closed/archived/cancelled tasks (matches dashboard)
-  const activeTasks = useMemo(() => filterActiveTasks(allTasks, statuses), [allTasks, statuses]);
+  // Filter out completed tasks, then apply dashboard project filters (selectedTypes, statusFilter)
+  const activeTasks = useMemo(() => {
+    const baseActive = filterActiveTasks(allMemberTasks, statuses);
+    return baseActive.filter(t => {
+      const project = projects.find(p => p.id === t.project_id);
+      if (selectedTypes.length > 0 && project && !selectedTypes.includes(project.project_type_id)) return false;
+      if (statusFilter !== 'all' && project && project.status_id !== statusFilter) return false;
+      return true;
+    });
+  }, [allMemberTasks, statuses, projects, selectedTypes, statusFilter]);
 
   const taskIds = useMemo(() => activeTasks.map(t => t.id), [activeTasks]);
 
@@ -237,6 +252,7 @@ export default function PersonPrintView() {
         <div className="text-xs text-gray-500 mb-6">
           Active Tasks • Printed {new Date().toLocaleDateString()}
           {` • ${activeTasks.length} task${activeTasks.length !== 1 ? "s" : ""}`}
+          {(selectedTypes.length > 0 || statusFilter !== 'all') && ' • Filtered'}
         </div>
 
         {/* Urgent Priority Section */}
