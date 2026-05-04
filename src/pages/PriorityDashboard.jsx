@@ -132,7 +132,7 @@ export default function PriorityDashboard() {
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['priorityTasks'] });
+      queryClient.invalidateQueries({ queryKey: ['allTasks'] });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
     },
   });

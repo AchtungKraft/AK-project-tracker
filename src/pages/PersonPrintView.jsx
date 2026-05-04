@@ -57,11 +57,14 @@ export default function PersonPrintView() {
 
   const member = teamMembers.find((tm) => tm.id === memberId);
 
-  const { data: allTasks = [] } = useQuery({
+  const { data: allMemberTasks = [] } = useQuery({
     queryKey: ["printPersonTasks", memberId],
-    queryFn: () => base44.entities.Task.filter({ assigned_team_member_id: memberId, is_priority: true }),
+    queryFn: () => base44.entities.Task.filter({ assigned_team_member_id: memberId }),
     enabled: !!memberId,
   });
+
+  // Derive priority tasks client-side
+  const allTasks = useMemo(() => allMemberTasks.filter(t => t.is_priority), [allMemberTasks]);
 
   const { data: projects = [] } = useQuery({
     queryKey: ["printPersonProjects"],

@@ -40,15 +40,7 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
     enabled: scope === 'all' || !!projectId,
   });
 
-  // Fetch priority tasks separately for priority filtering - normalize after fetch
-  const { data: priorityTasks = [] } = useQuery({
-    queryKey: ['priorityTasks'],
-    queryFn: async () => {
-      const rawTasks = await base44.entities.Task.filter({ is_priority: true });
-      return normalizeTasks(rawTasks);
-    },
-    enabled: priorityOnly,
-  });
+  // Priority tasks are derived client-side from the main task list — no separate query
 
   // Fetch all related data
   const { data: projects = [] } = useQuery({
@@ -94,17 +86,22 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
     });
   }, [statuses]);
 
-  // Filter tasks based on options
+  // Filter tasks based on options — priority tasks derived client-side
   const filteredTasks = useMemo(() => {
-    let result = priorityOnly ? priorityTasks : tasks;
+    let result = tasks;
     
     // Filter by project if scope is project
     if (scope === 'project' && projectId) {
       result = result.filter(t => t.project_id === projectId);
     }
 
+    // Filter to priority-only if requested
+    if (priorityOnly) {
+      result = result.filter(t => t.is_priority);
+    }
+
     return result;
-  }, [tasks, priorityTasks, scope, projectId, priorityOnly]);
+  }, [tasks, scope, projectId, priorityOnly]);
 
   // Active (non-completed) tasks
   const activeTasks = useMemo(() => {
@@ -118,7 +115,7 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['tasks'] });
       await queryClient.cancelQueries({ queryKey: ['allTasks'] });
-      await queryClient.cancelQueries({ queryKey: ['priorityTasks'] });
+      // priorityTasks derived from allTasks — no separate cache to cancel
       if (projectId) {
         await queryClient.cancelQueries({ queryKey: ['tasks', projectId] });
         await queryClient.cancelQueries({ queryKey: ['projectTasks', projectId] });
@@ -136,7 +133,7 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
       // Snapshot previous values
       const previousAllTasks = queryClient.getQueryData(['allTasks']);
       const previousProjectTasks = projectId ? queryClient.getQueryData(['tasks', projectId]) : null;
-      const previousPriorityTasks = queryClient.getQueryData(['priorityTasks']);
+      // priorityTasks derived from allTasks — no separate snapshot needed
 
       // Optimistically update all caches with normalization
       const updateCache = (old) => {
@@ -145,13 +142,12 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
       };
 
       queryClient.setQueryData(['allTasks'], updateCache);
-      queryClient.setQueryData(['priorityTasks'], updateCache);
       if (projectId) {
         queryClient.setQueryData(['tasks', projectId], updateCache);
         queryClient.setQueryData(['projectTasks', projectId], updateCache);
       }
 
-      return { previousAllTasks, previousProjectTasks, previousPriorityTasks };
+      return { previousAllTasks, previousProjectTasks };
     },
     onError: (err, variables, context) => {
       // Rollback on error
@@ -160,9 +156,6 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
       }
       if (context?.previousProjectTasks && projectId) {
         queryClient.setQueryData(['tasks', projectId], context.previousProjectTasks);
-      }
-      if (context?.previousPriorityTasks) {
-        queryClient.setQueryData(['priorityTasks'], context.previousPriorityTasks);
       }
       toast.error('Failed to update task');
     },

@@ -47,11 +47,14 @@ export default function ProjectPrintView() {
     enabled: !!projectId,
   });
 
-  const { data: allTasks = [] } = useQuery({
+  const { data: allProjectTasks = [] } = useQuery({
     queryKey: ["printTasks", projectId],
-    queryFn: () => base44.entities.Task.filter({ project_id: projectId, is_priority: true }),
+    queryFn: () => base44.entities.Task.filter({ project_id: projectId }),
     enabled: !!projectId,
   });
+
+  // Derive priority tasks client-side
+  const allTasks = useMemo(() => allProjectTasks.filter(t => t.is_priority), [allProjectTasks]);
 
   const { data: allBuckets = [] } = useQuery({
     queryKey: ["printBuckets", projectId],

@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, Plus, User, Zap, Clock, Printer } from "lucide-react";
 import TaskCard from "@/components/project/TaskCard";
 import TaskQuickPreview from "./TaskQuickPreview";
+import { sortTasksByPriority } from "@/utils/taskPrioritySort";
 
 // ── urgency helpers ──
 function getSubBucket(task) {
@@ -13,13 +14,6 @@ function getSubBucket(task) {
   if (dueStr === todayStr) return "today";
   return "ready";
 }
-
-const dueDateSort = (a, b) => {
-  if (!a.due_date && !b.due_date) return 0;
-  if (!a.due_date) return 1;
-  if (!b.due_date) return -1;
-  return new Date(a.due_date) - new Date(b.due_date);
-};
 
 // ── Task row ──
 function TaskRow({ task, sp }) {
@@ -54,15 +48,8 @@ function TaskRow({ task, sp }) {
 
 // ── Person group inside a bucket column ──
 function PersonGroup({ name, initials, tasks, sp }) {
-  // Sort: overdue first, then by due date asc
-  const sorted = useMemo(() => {
-    return [...tasks].sort((a, b) => {
-      const aUrgency = getSubBucket(a) === "overdue" ? 0 : getSubBucket(a) === "today" ? 1 : 2;
-      const bUrgency = getSubBucket(b) === "overdue" ? 0 : getSubBucket(b) === "today" ? 1 : 2;
-      if (aUrgency !== bUrgency) return aUrgency - bUrgency;
-      return dueDateSort(a, b);
-    });
-  }, [tasks]);
+  // Apply canonical global sort
+  const sorted = useMemo(() => sortTasksByPriority(tasks), [tasks]);
 
   const overdueCount = tasks.filter(t => getSubBucket(t) === "overdue").length;
 

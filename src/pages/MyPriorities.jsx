@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { sortTasksByPriority } from "@/utils/taskPrioritySort";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -46,15 +47,18 @@ export default function MyPriorities() {
     fetchUser();
   }, []);
 
-  const { data: allTasks = [], isLoading: tasksLoading } = useQuery({
-    queryKey: ['priorityTasks'],
-    queryFn: () => base44.entities.Task.filter({ is_priority: true }),
+  const { data: allTasksRaw = [], isLoading: tasksLoading } = useQuery({
+    queryKey: ['allTasks'],
+    queryFn: () => base44.entities.Task.list(),
   });
+
+  // Derive priority tasks client-side
+  const allTasks = useMemo(() => allTasksRaw.filter(t => t.is_priority), [allTasksRaw]);
 
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['priorityTasks'] });
+      queryClient.invalidateQueries({ queryKey: ['allTasks'] });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
     },
   });
@@ -130,9 +134,12 @@ export default function MyPriorities() {
   });
   
   const projectIds = new Set(projects.map(p => p.id));
-  const activePriorityTasks = allTasks.filter(t => 
-    projectIds.has(t.project_id) && t.status_id !== completedStatus?.id
-  );
+  const activePriorityTasks = useMemo(() => {
+    const filtered = allTasks.filter(t => 
+      projectIds.has(t.project_id) && t.status_id !== completedStatus?.id
+    );
+    return sortTasksByPriority(filtered);
+  }, [allTasks, projectIds, completedStatus]);
 
   // Group tasks by project, then sub-group by selected filter
   const tasksByProject = useMemo(() => {
@@ -176,6 +183,11 @@ export default function MyPriorities() {
         groups[groupKey].tasks.push(task);
       });
       
+      // Apply canonical sort within each sub-group
+      Object.values(groups).forEach(g => {
+        g.tasks = sortTasksByPriority(g.tasks);
+      });
+
       grouped[projectId].groups = groups;
     });
     
