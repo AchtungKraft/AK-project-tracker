@@ -41,7 +41,9 @@ Deno.serve(async (req) => {
 
     // Require at least one identification method
     if (!clientSlug && !shareToken) {
-      return Response.json({ error: 'clientSlug or shareToken is required' }, { status: 400 });
+      return Response.json({ success: false, error: 'clientSlug or shareToken is required', recoverable: true }, { 
+        status: 400, headers: { 'Access-Control-Allow-Origin': '*' } 
+      });
     }
 
     // Resolve the client contact
@@ -63,7 +65,9 @@ Deno.serve(async (req) => {
     }
 
     if (!contact) {
-      return Response.json({ error: 'Client not found' }, { status: 404 });
+      return Response.json({ success: false, error: 'Client not found', recoverable: true }, { 
+        status: 404, headers: { 'Access-Control-Allow-Origin': '*' } 
+      });
     }
 
     // Build update payload — only include fields that were explicitly provided
@@ -83,7 +87,9 @@ Deno.serve(async (req) => {
     const effectivePhone = phone !== undefined ? phone : (contact.phone || '');
 
     if ((effectiveSms || effectiveWhatsapp) && !effectivePhone?.trim()) {
-      return Response.json({ error: 'Phone number is required when SMS or WhatsApp notifications are enabled' }, { status: 400 });
+      return Response.json({ success: false, error: 'Phone number is required when SMS or WhatsApp notifications are enabled', recoverable: true }, { 
+        status: 400, headers: { 'Access-Control-Allow-Origin': '*' } 
+      });
     }
 
     if (notify_email !== undefined) {
@@ -115,7 +121,9 @@ Deno.serve(async (req) => {
     }
 
     if (!hasChanges) {
-      return Response.json({ error: 'No preferences provided to update' }, { status: 400 });
+      return Response.json({ success: false, error: 'No preferences provided to update', recoverable: true }, { 
+        status: 400, headers: { 'Access-Control-Allow-Origin': '*' } 
+      });
     }
 
     // Set opt-in metadata for any channel that was newly toggled ON
@@ -140,6 +148,7 @@ Deno.serve(async (req) => {
     return Response.json({
       success: true,
       contact_id: contact.id,
+      has_completed_consent: true,
       updated_preferences: {
         notify_email: updateData.notify_email ?? contact.notify_email ?? true,
         notify_sms: updateData.notify_sms ?? contact.notify_sms ?? false,
@@ -147,10 +156,23 @@ Deno.serve(async (req) => {
         phone: updateData.phone ?? contact.phone ?? null,
         last_opt_in_source: 'client',
       },
+    }, {
+      headers: { 'Access-Control-Allow-Origin': '*' }
     });
 
   } catch (error) {
-    console.error('updateClientNotificationPreferences error:', error);
-    return Response.json({ error: error.message }, { status: 500 });
+    console.error('PREFS UPDATE FAILURE', {
+      message: error.message,
+      status: error?.status,
+      stack: error?.stack?.split('\n').slice(0, 3).join(' | '),
+    });
+    return Response.json({ 
+      success: false,
+      error: error.message || 'Unknown server error',
+      recoverable: true
+    }, { 
+      status: 500,
+      headers: { 'Access-Control-Allow-Origin': '*' }
+    });
   }
 });
