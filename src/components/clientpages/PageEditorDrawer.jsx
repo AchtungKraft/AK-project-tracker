@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -24,6 +24,7 @@ import lodash from "lodash";
 export default function PageEditorDrawer({ pageId, onClose }) {
   const queryClient = useQueryClient();
 
+  // --- Page data ---
   const { data: page, isLoading: loadingPage } = useQuery({
     queryKey: ['clientPage', pageId],
     queryFn: async () => {
@@ -33,11 +34,29 @@ export default function PageEditorDrawer({ pageId, onClose }) {
     enabled: !!pageId,
   });
 
-  const { data: blocks = [], isLoading: loadingBlocks } = useQuery({
+  // --- Blocks data with local state to avoid refetch-on-edit ---
+  const { data: serverBlocks = [], isLoading: loadingBlocks } = useQuery({
     queryKey: ['pageBlocks', pageId],
     queryFn: () => base44.entities.PageBlock.filter({ page_id: pageId }),
     enabled: !!pageId,
   });
+
+  // Local blocks state — initialized from server, updated optimistically
+  const [localBlocks, setLocalBlocks] = useState(null);
+  const blocks = localBlocks ?? serverBlocks;
+
+  // Sync server blocks into local state when they arrive (only if we haven't edited yet)
+  const lastServerRef = useRef(null);
+  if (serverBlocks !== lastServerRef.current && localBlocks === null) {
+    lastServerRef.current = serverBlocks;
+  }
+  // When serverBlocks change from a refetch (add/delete), sync to local
+  if (serverBlocks !== lastServerRef.current) {
+    lastServerRef.current = serverBlocks;
+    if (localBlocks !== null) {
+      setLocalBlocks(null); // reset to server state
+    }
+  }
 
   const { data: allSharedBlocks = [] } = useQuery({
     queryKey: ['sharedBlocks'],
@@ -56,33 +75,56 @@ export default function PageEditorDrawer({ pageId, onClose }) {
     [blocks]
   );
 
-  // Page field updates with debounce
-  const updatePageMutation = useMutation({
-    mutationFn: ({ field, value }) => base44.entities.ClientPage.update(pageId, { [field]: value }),
-  });
-
-  const debouncedUpdatePage = useCallback(
+  // --- Page field mutations (no query invalidation — just fire-and-forget save) ---
+  const savePageField = useCallback(
     lodash.debounce((field, value) => {
-      updatePageMutation.mutate({ field, value });
+      base44.entities.ClientPage.update(pageId, { [field]: value });
     }, 800),
     [pageId]
   );
 
-  // Block mutations
-  const addBlockMutation = useMutation({
-    mutationFn: (blockData) => base44.entities.PageBlock.create(blockData),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pageBlocks', pageId] }),
+  // For status changes that need UI update
+  const updatePageMutation = useMutation({
+    mutationFn: ({ field, value }) => base44.entities.ClientPage.update(pageId, { [field]: value }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clientPage', pageId] }),
   });
 
-  const updateBlockMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.PageBlock.update(id, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pageBlocks', pageId] }),
+  // --- Block mutations ---
+  const addBlockMutation = useMutation({
+    mutationFn: (blockData) => base44.entities.PageBlock.create(blockData),
+    onSuccess: () => {
+      setLocalBlocks(null); // reset local so server data takes over
+      queryClient.invalidateQueries({ queryKey: ['pageBlocks', pageId] });
+    },
   });
 
   const deleteBlockMutation = useMutation({
     mutationFn: (id) => base44.entities.PageBlock.delete(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pageBlocks', pageId] }),
+    onSuccess: () => {
+      setLocalBlocks(null);
+      queryClient.invalidateQueries({ queryKey: ['pageBlocks', pageId] });
+    },
   });
+
+  // Block data update — optimistic local + debounced save, NO query invalidation
+  const pendingSavesRef = useRef({});
+
+  const saveBlockData = useCallback(
+    lodash.debounce((blockId, data) => {
+      base44.entities.PageBlock.update(blockId, { data });
+    }, 600),
+    []
+  );
+
+  const handleBlockDataChange = useCallback((blockId, newData) => {
+    // Update local state immediately (optimistic)
+    setLocalBlocks(prev => {
+      const current = prev ?? serverBlocks;
+      return current.map(b => b.id === blockId ? { ...b, data: newData } : b);
+    });
+    // Debounced save to server (no invalidation)
+    saveBlockData(blockId, newData);
+  }, [serverBlocks, saveBlockData]);
 
   const handleAddBlock = (type) => {
     const maxOrder = sortedBlocks.length > 0
@@ -113,9 +155,16 @@ export default function PageEditorDrawer({ pageId, onClose }) {
   const handleDetachSharedBlock = (block) => {
     const shared = sharedBlocksMap[block.shared_block_id];
     if (!shared) return;
-    updateBlockMutation.mutate({
-      id: block.id,
-      data: { source_type: 'inline', shared_block_id: null, data: shared.data },
+    // Optimistic local update
+    setLocalBlocks(prev => {
+      const current = prev ?? serverBlocks;
+      return current.map(b => b.id === block.id
+        ? { ...b, source_type: 'inline', shared_block_id: null, data: shared.data }
+        : b
+      );
+    });
+    base44.entities.PageBlock.update(block.id, {
+      source_type: 'inline', shared_block_id: null, data: shared.data
     });
     toast.success('Detached from shared block');
   };
@@ -125,38 +174,30 @@ export default function PageEditorDrawer({ pageId, onClose }) {
     const reordered = Array.from(sortedBlocks);
     const [moved] = reordered.splice(result.source.index, 1);
     reordered.splice(result.destination.index, 0, moved);
+
+    // Optimistic reorder
+    const updated = reordered.map((block, idx) => ({ ...block, order: idx }));
+    setLocalBlocks(updated);
+
+    // Save to server
     reordered.forEach((block, idx) => {
       if (block.order !== idx) {
         base44.entities.PageBlock.update(block.id, { order: idx });
       }
     });
-    queryClient.invalidateQueries({ queryKey: ['pageBlocks', pageId] });
   };
 
   const handlePublish = () => {
     updatePageMutation.mutate({ field: 'status', value: 'published' }, {
-      onSuccess: () => {
-        toast.success('Page published');
-        queryClient.invalidateQueries({ queryKey: ['clientPage', pageId] });
-      }
+      onSuccess: () => toast.success('Page published'),
     });
   };
 
   const handleUnpublish = () => {
     updatePageMutation.mutate({ field: 'status', value: 'draft' }, {
-      onSuccess: () => {
-        toast.success('Page unpublished');
-        queryClient.invalidateQueries({ queryKey: ['clientPage', pageId] });
-      }
+      onSuccess: () => toast.success('Page unpublished'),
     });
   };
-
-  const debouncedBlockUpdate = useCallback(
-    lodash.debounce((blockId, data) => {
-      updateBlockMutation.mutate({ id: blockId, data: { data } });
-    }, 600),
-    []
-  );
 
   if (loadingPage || loadingBlocks) {
     return (
@@ -199,13 +240,13 @@ export default function PageEditorDrawer({ pageId, onClose }) {
 
           <Input
             defaultValue={page.title}
-            onChange={e => debouncedUpdatePage('title', e.target.value)}
+            onChange={e => savePageField('title', e.target.value)}
             className="bg-gray-800 border-gray-700 text-white text-lg font-semibold"
             placeholder="Page title"
           />
           <Textarea
             defaultValue={page.short_description || ''}
-            onChange={e => debouncedUpdatePage('short_description', e.target.value)}
+            onChange={e => savePageField('short_description', e.target.value)}
             className="bg-gray-800 border-gray-700 text-white h-12 text-sm"
             placeholder="Short description"
           />
@@ -283,7 +324,7 @@ export default function PageEditorDrawer({ pageId, onClose }) {
                             ) : (
                               <BlockEditorInline
                                 block={block}
-                                onChange={(data) => debouncedBlockUpdate(block.id, data)}
+                                onChange={(data) => handleBlockDataChange(block.id, data)}
                               />
                             )}
                           </div>
