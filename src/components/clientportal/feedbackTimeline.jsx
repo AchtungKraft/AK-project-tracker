@@ -113,7 +113,11 @@ export function buildFeedbackTimeline(request, comments = [], decisions = []) {
     : [];
 
   // ── Derive convenience accessors ──
-  const latestDisplayEvent = allEvents[0] || null;
+  // Exclude internal_only comments from display events so they don't shift activity actor
+  const displayEvents = allEvents.filter(e =>
+    !(e.kind === 'comment' && e.comment?.visibility === 'internal_only')
+  );
+  const latestDisplayEvent = displayEvents[0] || null;
   const latestStateEvent = stateEvents[0] || null;
 
   // DEV INTEGRITY ASSERTION — warn if posted request has no display events

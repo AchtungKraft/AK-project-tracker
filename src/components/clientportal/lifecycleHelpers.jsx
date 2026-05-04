@@ -34,12 +34,13 @@ export const getLifecycleBucket = (request, decisions, attachments, comments) =>
   if (state === 'approved') return 'approved';
   
   // Check if client has replied since last post — use timeline stateEvents (SINGLE SOURCE)
+  // Includes both comments AND decisions (approve / request changes) from client
   if (request.posted_at) {
     const requestComments = comments.filter(c => c.request_id === request.id);
     const requestDecisions = decisions.filter(d => d.request_id === request.id);
     const { stateEvents } = buildFeedbackTimeline(request, requestComments, requestDecisions);
     
-    const hasClientReply = stateEvents.some(e => e.kind === 'comment' && e.actor === 'client');
+    const hasClientReply = stateEvents.some(e => e.actor === 'client');
     if (hasClientReply) {
       return 'client_replied';
     }

@@ -182,6 +182,10 @@ Deno.serve(async (req) => {
                 if (request.status === 'archived') {
                     updatePayload.archived_at = null;
                 }
+                // Clear review_state so items don't get stuck in Active Review after client action
+                if (request.review_state === 'in_review') {
+                    updatePayload.review_state = 'none';
+                }
                 updatedRequest = await base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, updatePayload);
                 console.log(`[STATUS UPDATE] Success! Updated request:`, JSON.stringify(updatedRequest));
             } catch (updateError) {
