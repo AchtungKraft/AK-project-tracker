@@ -14,7 +14,7 @@ export default function ClientPage() {
   const pageSlug = urlParams.get('page');
 
   const { data: pageData, isLoading, error } = useQuery({
-    queryKey: ['clientPage', slug, pageSlug],
+    queryKey: ['publicClientPage', slug, pageSlug],
     queryFn: async () => {
       const res = await base44.functions.invoke('publicClientPage', { slug, page_slug: pageSlug });
       return res.data;
@@ -23,12 +23,6 @@ export default function ClientPage() {
     staleTime: 30000,
     refetchOnWindowFocus: false,
   });
-
-  const trackEvent = (eventType, blockId) => {
-    base44.functions.invoke('publicClientPage', {
-      slug, page_slug: pageSlug, track_event: eventType, block_id: blockId
-    }).catch(() => {});
-  };
 
   if (!slug || !pageSlug) {
     return (
@@ -63,13 +57,7 @@ export default function ClientPage() {
     );
   }
 
-  const { page, blocks, sharedBlocks, mediaAssets, project } = pageData;
-
-  // Build lookup maps
-  const sharedBlocksMap = {};
-  (sharedBlocks || []).forEach(sb => { sharedBlocksMap[sb.id] = sb; });
-  const mediaAssetsMap = {};
-  (mediaAssets || []).forEach(ma => { mediaAssetsMap[ma.id] = ma; });
+  const { page, blocks, project } = pageData;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
@@ -99,9 +87,6 @@ export default function ClientPage() {
             <BlockRenderer
               key={block.id}
               block={block}
-              sharedBlocksMap={sharedBlocksMap}
-              mediaAssetsMap={mediaAssetsMap}
-              onCtaClick={() => trackEvent('cta_click', block.id)}
             />
           ))}
         </div>

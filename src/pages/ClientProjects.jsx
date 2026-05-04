@@ -75,16 +75,24 @@ export default function ClientProjects() {
                 <div
                   key={page.id}
                   onClick={() => navigate(`/clientpage?slug=${slug}&page=${page.page_slug}`)}
-                  className="bg-black/40 border border-gray-700 hover:border-red-500/50 rounded-lg p-4 cursor-pointer transition-all group"
+                  className="bg-black/40 border border-gray-700 hover:border-red-500/50 rounded-lg p-5 cursor-pointer transition-all group min-h-[100px] flex flex-col"
                 >
-                  <h3 className="font-medium text-white group-hover:text-red-400 transition-colors">
+                  <h3 className="font-medium text-white group-hover:text-red-400 transition-colors text-base">
                     {page.title}
                   </h3>
                   {page.short_description && (
-                    <p className="text-sm text-gray-400 mt-1 line-clamp-2">{page.short_description}</p>
+                    <p className="text-sm text-gray-400 mt-1.5 line-clamp-2 flex-1">{page.short_description}</p>
                   )}
-                  <div className="flex items-center justify-between mt-3">
-                    <span className="text-xs text-gray-500 capitalize">{page.purpose}</span>
+                  <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-800">
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <span className="capitalize">{page.purpose}</span>
+                      {page.updated_date && (
+                        <>
+                          <span>•</span>
+                          <span>Updated {format(new Date(page.updated_date), 'MMM d')}</span>
+                        </>
+                      )}
+                    </div>
                     <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-red-400 transition-colors" />
                   </div>
                 </div>

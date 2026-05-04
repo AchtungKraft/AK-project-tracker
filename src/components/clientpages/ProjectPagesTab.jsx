@@ -54,6 +54,7 @@ export default function ProjectPagesTab({ projectId }) {
     staleTime: 60000,
   });
 
+  // Canonical slug field: ClientContact.url_slug
   const contactSlugMap = useMemo(() => {
     const map = {};
     contacts.forEach(c => { if (c.url_slug) map[c.id] = c.url_slug; });

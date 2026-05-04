@@ -12,7 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import {
-  Plus, Send, Eye, GripVertical, Trash2, Loader2, Unlink, Share2
+  Plus, Send, Eye, GripVertical, Trash2, Loader2, Unlink, Share2, Lock
 } from "lucide-react";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
@@ -269,9 +269,17 @@ export default function PageEditorDrawer({ pageId, onClose }) {
                           {/* Block content editor */}
                           <div className="p-3">
                             {block.source_type === 'shared' ? (
-                              <p className="text-xs text-gray-500 italic">
-                                Content from shared block: {sharedBlocksMap[block.shared_block_id]?.name}
-                              </p>
+                              <div className="flex items-start gap-2 p-2.5 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+                                <Lock className="w-3.5 h-3.5 text-blue-400 mt-0.5 shrink-0" />
+                                <div className="text-xs text-blue-300 space-y-1">
+                                  <p className="font-medium">
+                                    Shared block: {sharedBlocksMap[block.shared_block_id]?.name || 'Unknown'}
+                                  </p>
+                                  <p className="text-blue-400/70">
+                                    This is a shared block. Edit it in the Block Library, or detach it to customize independently.
+                                  </p>
+                                </div>
+                              </div>
                             ) : (
                               <BlockEditorInline
                                 block={block}

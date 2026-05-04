@@ -104,7 +104,13 @@ export default function SharedBlockLibraryModal({ projectId, onClose }) {
                   )}
                 </div>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Used in {usageCount[sb.id] || 0} page{usageCount[sb.id] !== 1 ? 's' : ''}
+                  {(usageCount[sb.id] || 0) > 0 ? (
+                    <span className="text-amber-400/80">
+                      Used in {usageCount[sb.id]} page{usageCount[sb.id] !== 1 ? 's' : ''} — edits update everywhere
+                    </span>
+                  ) : (
+                    <span>Not used in any pages</span>
+                  )}
                 </p>
               </div>
               <div className="flex items-center gap-1">
