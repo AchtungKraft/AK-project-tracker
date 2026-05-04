@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useRef } from "react";
+import React, { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -24,8 +24,11 @@ import lodash from "lodash";
 export default function PageEditorDrawer({ pageId, onClose }) {
   const queryClient = useQueryClient();
 
-  // --- Page data ---
-  const { data: page, isLoading: loadingPage } = useQuery({
+  // ─── Editing guard: true while any input is focused ───
+  const editingRef = useRef(false);
+
+  // ─── Page data (server) ───
+  const { data: serverPage, isLoading: loadingPage } = useQuery({
     queryKey: ['clientPage', pageId],
     queryFn: async () => {
       const pages = await base44.entities.ClientPage.filter({ id: pageId });
@@ -34,27 +37,49 @@ export default function PageEditorDrawer({ pageId, onClose }) {
     enabled: !!pageId,
   });
 
-  // --- Blocks data with local state to avoid refetch-on-edit ---
+  // ─── Local page field state (controlled inputs) ───
+  const [localTitle, setLocalTitle] = useState('');
+  const [localDescription, setLocalDescription] = useState('');
+  const [localStatus, setLocalStatus] = useState('draft');
+  const [localVisibility, setLocalVisibility] = useState('portal');
+  const pageInitRef = useRef(null);
+
+  // Initialize local state from server page (only on first load or pageId change)
+  if (serverPage && serverPage.id !== pageInitRef.current) {
+    pageInitRef.current = serverPage.id;
+    setLocalTitle(serverPage.title || '');
+    setLocalDescription(serverPage.short_description || '');
+    setLocalStatus(serverPage.status || 'draft');
+    setLocalVisibility(serverPage.visibility || 'portal');
+  }
+
+  // Sync status/visibility from server ONLY when not editing
+  useEffect(() => {
+    if (serverPage && !editingRef.current) {
+      setLocalStatus(serverPage.status || 'draft');
+      setLocalVisibility(serverPage.visibility || 'portal');
+    }
+  }, [serverPage]);
+
+  // ─── Blocks data (server) ───
   const { data: serverBlocks = [], isLoading: loadingBlocks } = useQuery({
     queryKey: ['pageBlocks', pageId],
     queryFn: () => base44.entities.PageBlock.filter({ page_id: pageId }),
     enabled: !!pageId,
   });
 
-  // Local blocks state — initialized from server, updated optimistically
+  // ─── Local blocks state ───
   const [localBlocks, setLocalBlocks] = useState(null);
   const blocks = localBlocks ?? serverBlocks;
+  const serverBlocksIdRef = useRef(null);
 
-  // Sync server blocks into local state when they arrive (only if we haven't edited yet)
-  const lastServerRef = useRef(null);
-  if (serverBlocks !== lastServerRef.current && localBlocks === null) {
-    lastServerRef.current = serverBlocks;
-  }
-  // When serverBlocks change from a refetch (add/delete), sync to local
-  if (serverBlocks !== lastServerRef.current) {
-    lastServerRef.current = serverBlocks;
-    if (localBlocks !== null) {
-      setLocalBlocks(null); // reset to server state
+  // Sync server blocks to local ONLY when block count changes (add/delete)
+  // Never overwrite during editing
+  const serverBlockIds = serverBlocks.map(b => b.id).sort().join(',');
+  if (serverBlockIds !== serverBlocksIdRef.current) {
+    serverBlocksIdRef.current = serverBlockIds;
+    if (localBlocks !== null && !editingRef.current) {
+      setLocalBlocks(null); // reset to let server take over
     }
   }
 
@@ -75,57 +100,91 @@ export default function PageEditorDrawer({ pageId, onClose }) {
     [blocks]
   );
 
-  // --- Page field mutations (no query invalidation — just fire-and-forget save) ---
-  const savePageField = useCallback(
-    lodash.debounce((field, value) => {
+  // ─── Debounced page field save (fire-and-forget, NO invalidation) ───
+  const pageSaveTimers = useRef({});
+  const savePageField = useCallback((field, value) => {
+    if (pageSaveTimers.current[field]) {
+      clearTimeout(pageSaveTimers.current[field]);
+    }
+    pageSaveTimers.current[field] = setTimeout(() => {
       base44.entities.ClientPage.update(pageId, { [field]: value });
-    }, 800),
-    [pageId]
-  );
+    }, 800);
+  }, [pageId]);
 
-  // For status changes that need UI update
-  const updatePageMutation = useMutation({
+  // ─── Page status mutation (publish/unpublish — these DO invalidate) ───
+  const updateStatusMutation = useMutation({
     mutationFn: ({ field, value }) => base44.entities.ClientPage.update(pageId, { [field]: value }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clientPage', pageId] }),
   });
 
-  // --- Block mutations ---
+  // ─── Block structural mutations (add/delete — these DO invalidate) ───
   const addBlockMutation = useMutation({
     mutationFn: (blockData) => base44.entities.PageBlock.create(blockData),
-    onSuccess: () => {
-      setLocalBlocks(null); // reset local so server data takes over
-      queryClient.invalidateQueries({ queryKey: ['pageBlocks', pageId] });
-    },
-  });
-
-  const deleteBlockMutation = useMutation({
-    mutationFn: (id) => base44.entities.PageBlock.delete(id),
     onSuccess: () => {
       setLocalBlocks(null);
       queryClient.invalidateQueries({ queryKey: ['pageBlocks', pageId] });
     },
   });
 
-  // Block data update — optimistic local + debounced save, NO query invalidation
-  const pendingSavesRef = useRef({});
+  const deleteBlockMutation = useMutation({
+    mutationFn: (id) => {
+      // Optimistic removal from local state
+      setLocalBlocks(prev => {
+        const current = prev ?? serverBlocks;
+        return current.filter(b => b.id !== id);
+      });
+      return base44.entities.PageBlock.delete(id);
+    },
+    onSuccess: () => {
+      setLocalBlocks(null);
+      queryClient.invalidateQueries({ queryKey: ['pageBlocks', pageId] });
+    },
+  });
 
-  const saveBlockData = useCallback(
-    lodash.debounce((blockId, data) => {
+  // ─── Block data save — per-block debounce, NO invalidation ───
+  const blockSaveTimers = useRef({});
+  const saveBlockToServer = useCallback((blockId, data) => {
+    if (blockSaveTimers.current[blockId]) {
+      clearTimeout(blockSaveTimers.current[blockId]);
+    }
+    blockSaveTimers.current[blockId] = setTimeout(() => {
       base44.entities.PageBlock.update(blockId, { data });
-    }, 600),
-    []
-  );
+    }, 600);
+  }, []);
 
   const handleBlockDataChange = useCallback((blockId, newData) => {
-    // Update local state immediately (optimistic)
+    // Local state update — immediate
     setLocalBlocks(prev => {
       const current = prev ?? serverBlocks;
       return current.map(b => b.id === blockId ? { ...b, data: newData } : b);
     });
-    // Debounced save to server (no invalidation)
-    saveBlockData(blockId, newData);
-  }, [serverBlocks, saveBlockData]);
+    // Debounced server save — no invalidation
+    saveBlockToServer(blockId, newData);
+  }, [serverBlocks, saveBlockToServer]);
 
+  // ─── Page field handlers ───
+  const handleTitleChange = (e) => {
+    const v = e.target.value;
+    setLocalTitle(v);
+    savePageField('title', v);
+  };
+
+  const handleDescriptionChange = (e) => {
+    const v = e.target.value;
+    setLocalDescription(v);
+    savePageField('short_description', v);
+  };
+
+  const handleVisibilityChange = (v) => {
+    setLocalVisibility(v);
+    updateStatusMutation.mutate({ field: 'visibility', value: v });
+  };
+
+  // ─── Editing focus handlers ───
+  const onFieldFocus = () => { editingRef.current = true; };
+  const onFieldBlur = () => { editingRef.current = false; };
+
+  // ─── Block structural handlers ───
   const handleAddBlock = (type) => {
     const maxOrder = sortedBlocks.length > 0
       ? Math.max(...sortedBlocks.map(b => b.order || 0))
@@ -155,7 +214,6 @@ export default function PageEditorDrawer({ pageId, onClose }) {
   const handleDetachSharedBlock = (block) => {
     const shared = sharedBlocksMap[block.shared_block_id];
     if (!shared) return;
-    // Optimistic local update
     setLocalBlocks(prev => {
       const current = prev ?? serverBlocks;
       return current.map(b => b.id === block.id
@@ -175,11 +233,9 @@ export default function PageEditorDrawer({ pageId, onClose }) {
     const [moved] = reordered.splice(result.source.index, 1);
     reordered.splice(result.destination.index, 0, moved);
 
-    // Optimistic reorder
     const updated = reordered.map((block, idx) => ({ ...block, order: idx }));
     setLocalBlocks(updated);
 
-    // Save to server
     reordered.forEach((block, idx) => {
       if (block.order !== idx) {
         base44.entities.PageBlock.update(block.id, { order: idx });
@@ -188,16 +244,26 @@ export default function PageEditorDrawer({ pageId, onClose }) {
   };
 
   const handlePublish = () => {
-    updatePageMutation.mutate({ field: 'status', value: 'published' }, {
+    setLocalStatus('published');
+    updateStatusMutation.mutate({ field: 'status', value: 'published' }, {
       onSuccess: () => toast.success('Page published'),
     });
   };
 
   const handleUnpublish = () => {
-    updatePageMutation.mutate({ field: 'status', value: 'draft' }, {
+    setLocalStatus('draft');
+    updateStatusMutation.mutate({ field: 'status', value: 'draft' }, {
       onSuccess: () => toast.success('Page unpublished'),
     });
   };
+
+  // ─── Cleanup debounce timers on unmount ───
+  useEffect(() => {
+    return () => {
+      Object.values(pageSaveTimers.current).forEach(clearTimeout);
+      Object.values(blockSaveTimers.current).forEach(clearTimeout);
+    };
+  }, []);
 
   if (loadingPage || loadingBlocks) {
     return (
@@ -211,7 +277,7 @@ export default function PageEditorDrawer({ pageId, onClose }) {
     );
   }
 
-  if (!page) return null;
+  if (!serverPage) return null;
 
   return (
     <Sheet open onOpenChange={onClose}>
@@ -221,12 +287,12 @@ export default function PageEditorDrawer({ pageId, onClose }) {
           <div className="flex items-center justify-between">
             <SheetTitle className="text-white">Edit Page</SheetTitle>
             <div className="flex items-center gap-2">
-              <Badge className={page.status === 'published'
+              <Badge className={localStatus === 'published'
                 ? 'bg-green-500/20 text-green-400'
                 : 'bg-gray-500/20 text-gray-400'}>
-                {page.status}
+                {localStatus}
               </Badge>
-              {page.status === 'published' ? (
+              {localStatus === 'published' ? (
                 <Button size="sm" variant="outline" onClick={handleUnpublish}
                   className="border-gray-700 text-gray-300 text-xs">Unpublish</Button>
               ) : (
@@ -239,20 +305,23 @@ export default function PageEditorDrawer({ pageId, onClose }) {
           </div>
 
           <Input
-            defaultValue={page.title}
-            onChange={e => savePageField('title', e.target.value)}
+            value={localTitle}
+            onChange={handleTitleChange}
+            onFocus={onFieldFocus}
+            onBlur={onFieldBlur}
             className="bg-gray-800 border-gray-700 text-white text-lg font-semibold"
             placeholder="Page title"
           />
           <Textarea
-            defaultValue={page.short_description || ''}
-            onChange={e => savePageField('short_description', e.target.value)}
+            value={localDescription}
+            onChange={handleDescriptionChange}
+            onFocus={onFieldFocus}
+            onBlur={onFieldBlur}
             className="bg-gray-800 border-gray-700 text-white h-12 text-sm"
             placeholder="Short description"
           />
           <div className="flex gap-2">
-            <Select defaultValue={page.visibility || 'portal'}
-              onValueChange={v => updatePageMutation.mutate({ field: 'visibility', value: v })}>
+            <Select value={localVisibility} onValueChange={handleVisibilityChange}>
               <SelectTrigger className="bg-gray-800 border-gray-700 text-white w-36 h-8 text-xs">
                 <SelectValue />
               </SelectTrigger>
@@ -308,7 +377,7 @@ export default function PageEditorDrawer({ pageId, onClose }) {
                           </div>
 
                           {/* Block content editor */}
-                          <div className="p-3">
+                          <div className="p-3" onFocus={onFieldFocus} onBlur={onFieldBlur}>
                             {block.source_type === 'shared' ? (
                               <div className="flex items-start gap-2 p-2.5 bg-blue-900/20 border border-blue-500/30 rounded-lg">
                                 <Lock className="w-3.5 h-3.5 text-blue-400 mt-0.5 shrink-0" />
