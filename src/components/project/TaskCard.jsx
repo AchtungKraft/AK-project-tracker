@@ -25,7 +25,7 @@ const getCategoryPath = (categoryId, categories) => {
   return category.name;
 };
 
-export default function TaskCard({ task, teamMembers = [], categories = [], statuses = [], onToggleComplete, onClick, onUpdateDueDate, onUpdateStartDate, onTogglePriority, commentCount = 0, checklistProgress, partsProgress, compact = false, showInlineControls = true }) {
+export default function TaskCard({ task, teamMembers = [], categories = [], statuses = [], onToggleComplete, onClick, onUpdateDueDate, onUpdateStartDate, onTogglePriority, commentCount = 0, checklistProgress, partsProgress, compact = false, showInlineControls = true, titleRef, onTitleMouseEnter, onTitleMouseLeave }) {
   const isMobile = useIsMobile();
   const isCompact = compact || isMobile;
   const assignedMember = teamMembers.find(m => m.id === task.assigned_team_member_id);
@@ -249,8 +249,12 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
         
         <div className="flex-1 min-w-0" onClick={onClick}>
           <div className="flex items-center gap-1">
-            <h4 className={cn(
-              "text-white font-medium leading-tight group-hover:text-red-400 transition-colors flex-1 min-w-0",
+            <h4
+              ref={titleRef}
+              onMouseEnter={onTitleMouseEnter}
+              onMouseLeave={onTitleMouseLeave}
+              className={cn(
+              "text-white font-medium leading-tight group-hover:text-red-400 transition-colors min-w-0 inline",
               isCompact ? "text-xs line-clamp-1" : "text-sm line-clamp-2",
               isCompleted && "line-through opacity-60"
             )}>

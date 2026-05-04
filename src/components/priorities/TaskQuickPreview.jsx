@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useRef } from "react";
+import React, { useCallback, useState, useRef, cloneElement } from "react";
 import { createPortal } from "react-dom";
 import { User } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -19,27 +19,25 @@ export default function TaskQuickPreview({
   const activeMembers = teamMembers.filter(tm => tm.active);
   const assigned = teamMembers.find(m => m.id === task.assigned_team_member_id);
 
-  // Hover description panel state
+  // Hover description panel — positioned relative to title text only
   const [hoverVisible, setHoverVisible] = useState(false);
   const [panelPos, setPanelPos] = useState({ top: 0, left: 0 });
   const hoverTimer = useRef(null);
-  const rowRef = useRef(null);
+  const titleRef = useRef(null);
 
-  const handleMouseEnter = useCallback(() => {
+  // Exposed via a data attribute so TaskCard can attach hover to just the title
+  const handleTitleMouseEnter = useCallback(() => {
     if (!task.description) return;
     hoverTimer.current = setTimeout(() => {
-      if (rowRef.current) {
-        const rect = rowRef.current.getBoundingClientRect();
-        setPanelPos({
-          top: rect.bottom + 4,
-          left: rect.left,
-        });
+      if (titleRef.current) {
+        const rect = titleRef.current.getBoundingClientRect();
+        setPanelPos({ top: rect.bottom + 4, left: rect.left });
       }
       setHoverVisible(true);
-    }, 200);
+    }, 300);
   }, [task.description]);
 
-  const handleMouseLeave = useCallback(() => {
+  const handleTitleMouseLeave = useCallback(() => {
     clearTimeout(hoverTimer.current);
     setHoverVisible(false);
   }, []);
@@ -48,9 +46,13 @@ export default function TaskQuickPreview({
     <div className="relative flex items-start gap-1 py-px w-full max-w-full overflow-hidden mb-1">
       {/* Task content — click opens detail */}
       <div className="flex-1 min-w-0 cursor-pointer overflow-hidden" onClick={() => onTaskClick(task)}>
-        <div ref={rowRef} className="inline-block max-w-full" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
-          {children}
-        </div>
+        {React.isValidElement(children)
+          ? cloneElement(children, {
+              titleRef,
+              onTitleMouseEnter: handleTitleMouseEnter,
+              onTitleMouseLeave: handleTitleMouseLeave,
+            })
+          : children}
         {(projectName || latestComment) && (
           <div className="pl-[22px] -mt-px space-y-0 overflow-hidden">
             {projectName && (
