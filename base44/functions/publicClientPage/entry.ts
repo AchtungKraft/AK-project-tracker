@@ -28,7 +28,6 @@ Deno.serve(async (req) => {
 
     const page = pages[0];
 
-    // Check status
     if (page.status !== 'published') {
       return Response.json({ success: false, error: 'Page not published' }, { status: 404 });
     }
@@ -37,33 +36,67 @@ Deno.serve(async (req) => {
     const blocks = await base44.asServiceRole.entities.PageBlock.filter({ page_id: page.id });
     blocks.sort((a, b) => (a.order || 0) - (b.order || 0));
 
-    // Load shared blocks if any
+    // --- Batch-load shared blocks ---
     const sharedBlockIds = blocks
       .filter(b => b.source_type === 'shared' && b.shared_block_id)
       .map(b => b.shared_block_id);
 
-    let sharedBlocks = [];
+    const sharedBlocksMap = {};
     if (sharedBlockIds.length > 0) {
-      const allShared = await base44.asServiceRole.entities.SharedBlock.list();
-      sharedBlocks = allShared.filter(sb => sharedBlockIds.includes(sb.id));
+      const sharedBlocks = await base44.asServiceRole.entities.SharedBlock.filter({
+        id: { $in: sharedBlockIds }
+      });
+      sharedBlocks.forEach(sb => { sharedBlocksMap[sb.id] = sb; });
     }
 
-    // Load media assets referenced in block data
+    // --- Resolve block data server-side ---
     const allAssetIds = new Set();
-    const resolveAssetIds = (data) => {
-      if (!data) return;
-      if (data.asset_ids) data.asset_ids.forEach(id => allAssetIds.add(id));
-    };
 
-    blocks.forEach(b => {
-      if (b.source_type === 'inline') resolveAssetIds(b.data);
+    const resolvedBlocks = blocks.map(block => {
+      let resolved_data;
+      if (block.source_type === 'shared' && block.shared_block_id) {
+        const shared = sharedBlocksMap[block.shared_block_id];
+        if (shared) {
+          resolved_data = shared.data || {};
+        } else {
+          resolved_data = { _error: 'missing_shared_block' };
+        }
+      } else {
+        resolved_data = block.data || {};
+      }
+
+      // Collect asset_ids for batch resolution
+      if (resolved_data.asset_ids) {
+        resolved_data.asset_ids.forEach(id => allAssetIds.add(id));
+      }
+
+      return {
+        id: block.id,
+        type: block.type,
+        order: block.order,
+        source_type: block.source_type,
+        resolved_data,
+      };
     });
-    sharedBlocks.forEach(sb => resolveAssetIds(sb.data));
 
-    let mediaAssets = [];
+    // --- Batch-load media assets ---
+    const mediaAssetsMap = {};
     if (allAssetIds.size > 0) {
-      const allMedia = await base44.asServiceRole.entities.MediaAsset.list();
-      mediaAssets = allMedia.filter(m => allAssetIds.has(m.id));
+      const mediaAssets = await base44.asServiceRole.entities.MediaAsset.filter({
+        id: { $in: [...allAssetIds] }
+      });
+      mediaAssets.forEach(m => { mediaAssetsMap[m.id] = m; });
+    }
+
+    // --- Attach resolved assets to blocks that need them ---
+    for (const block of resolvedBlocks) {
+      const data = block.resolved_data;
+      if (data?.asset_ids && data.asset_ids.length > 0) {
+        block.resolved_assets = data.asset_ids
+          .map(id => mediaAssetsMap[id])
+          .filter(Boolean)
+          .map(a => ({ id: a.id, file_url: a.file_url, type: a.type, title: a.title }));
+      }
     }
 
     // Get project info
@@ -82,16 +115,17 @@ Deno.serve(async (req) => {
       event_type: 'view'
     }).catch(() => {});
 
+    console.log(`[publicClientPage] slug=${slug} page=${page_slug} blocks=${resolvedBlocks.length}`);
+
     return Response.json({
       success: true,
       page,
-      blocks,
-      sharedBlocks,
-      mediaAssets,
+      blocks: resolvedBlocks,
       project: project ? { id: project.id, name: project.name } : null,
       contact: { id: contact.id, name: contact.name }
     });
   } catch (error) {
+    console.error('[publicClientPage] Error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });

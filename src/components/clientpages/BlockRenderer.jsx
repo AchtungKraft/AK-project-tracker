@@ -1,15 +1,8 @@
 import React from "react";
-import { ExternalLink, Download, FileText, Image, Video, ChevronRight } from "lucide-react";
+import { ExternalLink, Download, FileText, ChevronRight, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-// Resolve block data — inline or from shared block lookup
-function resolveBlockData(block, sharedBlocksMap) {
-  if (block.source_type === 'shared' && block.shared_block_id) {
-    const shared = sharedBlocksMap[block.shared_block_id];
-    return shared?.data || {};
-  }
-  return block.data || {};
-}
+// --- Individual Block Components ---
 
 function TextBlock({ data }) {
   if (!data?.content) return null;
@@ -23,11 +16,8 @@ function TextBlock({ data }) {
   );
 }
 
-function MediaBlock({ data, mediaAssetsMap }) {
-  const assets = (data?.asset_ids || [])
-    .map(id => mediaAssetsMap[id])
-    .filter(Boolean);
-
+function MediaBlock({ data, resolvedAssets }) {
+  const assets = resolvedAssets || [];
   if (!assets.length) return null;
 
   const layout = data?.layout || 'grid';
@@ -93,11 +83,8 @@ function LinksBlock({ data }) {
   );
 }
 
-function FilesBlock({ data, mediaAssetsMap }) {
-  const assets = (data?.asset_ids || [])
-    .map(id => mediaAssetsMap[id])
-    .filter(Boolean);
-
+function FilesBlock({ data, resolvedAssets }) {
+  const assets = resolvedAssets || [];
   if (!assets.length) return null;
 
   return (
@@ -148,6 +135,17 @@ function CtaBlock({ data, onCtaClick }) {
   );
 }
 
+function MissingBlock() {
+  return (
+    <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-900/20 border border-amber-600/30 text-amber-400 text-sm">
+      <AlertTriangle className="w-4 h-4 shrink-0" />
+      <span>This content block is unavailable.</span>
+    </div>
+  );
+}
+
+// --- Main Renderer ---
+
 const BLOCK_COMPONENTS = {
   text: TextBlock,
   media: MediaBlock,
@@ -156,15 +154,23 @@ const BLOCK_COMPONENTS = {
   cta: CtaBlock,
 };
 
-export default function BlockRenderer({ block, sharedBlocksMap = {}, mediaAssetsMap = {}, onCtaClick }) {
-  const data = resolveBlockData(block, sharedBlocksMap);
-  const Component = BLOCK_COMPONENTS[block.type];
+export default function BlockRenderer({ block, onCtaClick }) {
+  const data = block.resolved_data || block.data || null;
 
+  if (!data || data._error) {
+    return <div className="py-4"><MissingBlock /></div>;
+  }
+
+  const Component = BLOCK_COMPONENTS[block.type];
   if (!Component) return null;
 
   return (
     <div className="py-4">
-      <Component data={data} mediaAssetsMap={mediaAssetsMap} onCtaClick={onCtaClick} />
+      <Component
+        data={data}
+        resolvedAssets={block.resolved_assets}
+        onCtaClick={onCtaClick}
+      />
     </div>
   );
 }
