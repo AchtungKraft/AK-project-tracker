@@ -147,15 +147,22 @@ Deno.serve(async (req) => {
             }
         }
 
-        // Add project client email if not already in contacts
+        // Add project client email if not already in contacts — but ONLY if they haven't opted out
         if (project.client_email) {
             const existing = clientContactsWithSlugs.find(c => c.email === project.client_email);
             if (!existing) {
-                clientContactsWithSlugs.push({
-                    email: project.client_email,
-                    name: project.client_name || 'Client',
-                    slug: null, token: null,
-                });
+                // Check if this email belongs to a ClientContact who opted out
+                const matchingContacts = await base44.asServiceRole.entities.ClientContact.filter({ email: project.client_email });
+                const matchingContact = matchingContacts[0];
+                if (!matchingContact || matchingContact.notify_email !== false) {
+                    clientContactsWithSlugs.push({
+                        email: project.client_email,
+                        name: project.client_name || 'Client',
+                        slug: matchingContact?.url_slug || null, token: null,
+                    });
+                } else {
+                    console.log(`Skipping project.client_email ${project.client_email} — opted out of email notifications`);
+                }
             }
         }
 

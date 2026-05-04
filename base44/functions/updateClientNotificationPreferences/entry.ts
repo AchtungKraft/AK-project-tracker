@@ -142,6 +142,23 @@ Deno.serve(async (req) => {
     // Always track last change source
     updateData.last_opt_in_source = resolvedSource;
 
+    // Structured compliance log
+    console.log('PREFS_UPDATE', JSON.stringify({
+      contact_id: contact.id,
+      email: contact.email,
+      changes: Object.keys(updateData).filter(k => k !== 'last_opt_in_source'),
+      notify_email: updateData.notify_email ?? contact.notify_email,
+      notify_sms: updateData.notify_sms ?? contact.notify_sms,
+      notify_whatsapp: updateData.notify_whatsapp ?? contact.notify_whatsapp,
+      new_opt_in_dates: {
+        email: updateData.opt_in_email_date || null,
+        sms: updateData.opt_in_sms_date || null,
+        whatsapp: updateData.opt_in_whatsapp_date || null,
+      },
+      source: resolvedSource,
+      method: resolvedMethod,
+    }));
+
     // Apply update
     await base44.asServiceRole.entities.ClientContact.update(contact.id, updateData);
 
