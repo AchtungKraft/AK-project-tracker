@@ -53,10 +53,8 @@ export default function AttentionCard({ item, onUpdateDueDate, muted = false }) 
 
   const onLeave = () => setIsHovered(false);
 
-  // Comment snippet for inline display
-  const snippet = request.lastClientComment?.content_fallback
-    || request.lastClientComment?.body
-    || null;
+  // Message snippet for inline display — unified across comments and decisions
+  const snippet = request.latestCommentContent || null;
   const truncatedSnippet = snippet ? (snippet.length > 80 ? snippet.slice(0, 80) + '…' : snippet) : null;
 
   // Hover preview snippet (longer, from unified field)

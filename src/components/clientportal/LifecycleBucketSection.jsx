@@ -126,9 +126,9 @@ const RequestCard = ({ request, bucket, getProjectClientSlug, onUpdateDueDate })
                 Sent {formatDistanceToNow(new Date(request.posted_at), { addSuffix: true })}
               </span>
             )}
-            {bucket === 'client_replied' && request.lastClientComment && (
+            {bucket === 'client_replied' && request.latestActivityAt && (
               <span className="text-blue-400">
-                Replied {formatDistanceToNow(new Date(request.lastClientComment.created_date), { addSuffix: true })}
+                Replied {formatDistanceToNow(new Date(request.latestActivityAt), { addSuffix: true })}
               </span>
             )}
             {isDraft && (
