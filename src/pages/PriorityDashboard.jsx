@@ -123,11 +123,11 @@ export default function PriorityDashboard() {
     queryFn: () => base44.entities.Task.list(),
   });
 
-  // Derive priority tasks from all tasks
-  const priorityTasks = useMemo(() =>
-    allTasksData.filter(t => t.is_priority),
-    [allTasksData]
-  );
+  // All tasks sorted by priority (urgent first, then by due date)
+  const allSortedTasks = useMemo(() => sortTasksByPriority(allTasksData), [allTasksData]);
+
+  // Priority count for metrics/badges only — NOT used for view filtering
+  const priorityTaskCount = useMemo(() => allTasksData.filter(t => t.is_priority).length, [allTasksData]);
 
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
@@ -191,14 +191,10 @@ export default function PriorityDashboard() {
     setTempFilters({ selectedTypes: [], statusFilter: 'all', assignedTo: [] });
   }, []);
 
-  // Scope task comments to priority task IDs only
-  const priorityTaskIds = useMemo(() => priorityTasks.map(t => t.id), [priorityTasks]);
+  // Fetch all task comments (not scoped to priority-only)
   const { data: allTaskComments = [] } = useQuery({
-    queryKey: ['priorityTaskComments', priorityTaskIds],
-    queryFn: () => priorityTaskIds.length > 0
-      ? base44.entities.TaskComment.filter({ task_id: { $in: priorityTaskIds } })
-      : [],
-    enabled: priorityTaskIds.length > 0,
+    queryKey: ['allTaskComments'],
+    queryFn: () => base44.entities.TaskComment.list(),
   });
 
   // Create a map of task_id -> comment count for efficient lookup
@@ -210,18 +206,16 @@ export default function PriorityDashboard() {
     return map;
   }, [allTaskComments]);
 
-  // Fetch TaskPartLinks for all priority tasks (single query)
+  // Fetch all TaskPartLinks
   const { data: allTaskPartLinks = [] } = useQuery({
-    queryKey: ['taskPartLinks', 'priority', priorityTaskIds],
-    queryFn: () => priorityTaskIds.length > 0
-      ? base44.entities.TaskPartLink.filter({ task_id: { $in: priorityTaskIds } })
-      : [],
-    enabled: priorityTaskIds.length > 0,
+    queryKey: ['taskPartLinks', 'all'],
+    queryFn: () => base44.entities.TaskPartLink.list(),
   });
 
+  const activeTaskIds = useMemo(() => activePriorityTasks.map(t => t.id), [activePriorityTasks]);
   const partsProgressByTaskId = useMemo(() => {
-    return computePartsProgressByTaskId(allTaskPartLinks, new Set(priorityTaskIds));
-  }, [allTaskPartLinks, priorityTaskIds]);
+    return computePartsProgressByTaskId(allTaskPartLinks, new Set(activeTaskIds));
+  }, [allTaskPartLinks, activeTaskIds]);
 
   // Get active team members sorted by sort_order for the Assigned To filter
   const activeTeamMembers = useMemo(() => {
@@ -230,14 +224,14 @@ export default function PriorityDashboard() {
       .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   }, [teamMembers]);
 
-  // Filter out completed tasks and apply project filters from saved views
+  // Filter out completed tasks and apply project filters — but include ALL tasks, not just priority
   const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
   const completedStatus = taskStatuses.find(s => {
     const label = s.label.toLowerCase();
     return label.includes('complete') || label.includes('done');
   });
   const activePriorityTasks = useMemo(() => {
-    const filtered = priorityTasks.filter(t => {
+    const filtered = allSortedTasks.filter(t => {
       if (t.status_id === completedStatus?.id) return false;
       if (assignedTo.length > 0 && !assignedTo.includes(t.assigned_team_member_id)) return false;
       const project = projects.find(p => p.id === t.project_id);
@@ -246,10 +240,11 @@ export default function PriorityDashboard() {
       return true;
     });
     return sortTasksByPriority(filtered);
-  }, [priorityTasks, completedStatus, assignedTo, projects, selectedTypes, statusFilter]);
+  }, [allSortedTasks, completedStatus, assignedTo, projects, selectedTypes, statusFilter]);
 
-  // Split into urgent and upcoming for section headers
+  // Counts for metrics/badges
   const urgentCount = useMemo(() => activePriorityTasks.filter(isUrgentPriority).length, [activePriorityTasks]);
+  const activePriorityCount = useMemo(() => activePriorityTasks.filter(t => t.is_priority).length, [activePriorityTasks]);
 
   // Group tasks by primary grouping, then sub-group by secondary grouping
   const groupedTasks = useMemo(() => {
@@ -369,9 +364,10 @@ export default function PriorityDashboard() {
   
   // Metrics for mobile priority grid
   const priorityMetrics = useMemo(() => [
-    { key: 'total', label: 'Priority Tasks', value: activePriorityTasks.length, icon: Flame, color: 'red' },
+    { key: 'total', label: 'All Tasks', value: activePriorityTasks.length, icon: Flame, color: 'red' },
+    { key: 'priority', label: 'Priority', value: activePriorityCount, icon: Flame, color: 'orange' },
     { key: 'projects', label: 'Projects', value: Object.keys(groupedTasks).length, icon: FolderKanban, color: 'blue' },
-  ], [activePriorityTasks.length, groupedTasks]);
+  ], [activePriorityTasks.length, activePriorityCount, groupedTasks]);
 
   if (tasksLoading) {
     return (
@@ -397,8 +393,8 @@ export default function PriorityDashboard() {
               <div>
                 <h1 className={`font-bold text-white ${isMobile ? 'text-lg' : 'text-xl md:text-3xl'}`}>PRIORITIES</h1>
                 <p className={`text-gray-400 ${isMobile ? 'text-xs' : 'text-xs md:text-sm'}`}>
-                  <span className="md:hidden">{activePriorityTasks.length} tasks{urgentCount > 0 ? ` • ${urgentCount} urgent` : ''}</span>
-                  <span className="hidden md:inline">{activePriorityTasks.length} priority {activePriorityTasks.length === 1 ? 'task' : 'tasks'}{urgentCount > 0 ? ` • ${urgentCount} urgent (≤14 days)` : ''}</span>
+                  <span className="md:hidden">{activePriorityTasks.length} tasks • {activePriorityCount} priority{urgentCount > 0 ? ` • ${urgentCount} urgent` : ''}</span>
+                  <span className="hidden md:inline">{activePriorityTasks.length} tasks • {activePriorityCount} priority{urgentCount > 0 ? ` • ${urgentCount} urgent (≤14 days)` : ''}</span>
                 </p>
               </div>
             </div>
@@ -612,7 +608,7 @@ export default function PriorityDashboard() {
               </TabsList>
 
               {/* Grouping dropdowns - only show on card view */}
-              {activeTab === 'card-view' && priorityTasks.length > 0 && (
+              {activeTab === 'card-view' && activePriorityTasks.length > 0 && (
                 <div className="flex gap-2 flex-wrap">
                   <Select value={primaryGroupBy} onValueChange={setPrimaryGroupBy}>
                     <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white h-9 text-sm">
@@ -695,7 +691,7 @@ export default function PriorityDashboard() {
                           variant="outline" 
                           style={{ borderColor: primaryGroup.color, color: primaryGroup.color, backgroundColor: `${primaryGroup.color}15` }}
                         >
-                          {tasks.length} priority {tasks.length === 1 ? 'task' : 'tasks'}
+                          {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'} ({tasks.filter(t => t.is_priority).length} priority)
                         </Badge>
                       </div>
                     </CardHeader>

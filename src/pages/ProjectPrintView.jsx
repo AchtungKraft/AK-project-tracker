@@ -53,8 +53,8 @@ export default function ProjectPrintView() {
     enabled: !!projectId,
   });
 
-  // Derive priority tasks client-side
-  const allTasks = useMemo(() => allProjectTasks.filter(t => t.is_priority), [allProjectTasks]);
+  // Use full project task list — priority influences sort order, not inclusion
+  const allTasks = allProjectTasks;
 
   const { data: allBuckets = [] } = useQuery({
     queryKey: ["printBuckets", projectId],
@@ -192,7 +192,7 @@ export default function ProjectPrintView() {
           {project.name}
         </h1>
         <div className="text-xs text-gray-500 mb-6">
-          Priority Tasks (Active) • Printed {new Date().toLocaleDateString()}
+          Active Tasks • Printed {new Date().toLocaleDateString()}
           {project.client_name && ` • ${project.client_name}`}
         </div>
 
@@ -243,12 +243,12 @@ export default function ProjectPrintView() {
         )}
 
         {activeTasks.length === 0 && (
-          <p className="text-gray-400 text-center py-8">No active priority tasks for this project.</p>
+          <p className="text-gray-400 text-center py-8">No active tasks for this project.</p>
         )}
 
         {/* Footer */}
         <div className="mt-8 pt-4 border-t border-gray-200 text-xs text-gray-400 text-center">
-          {project.name} • {activeTasks.length} priority tasks • {new Date().toLocaleDateString()}
+          {project.name} • {activeTasks.length} tasks • {new Date().toLocaleDateString()}
         </div>
       </div>
     </>

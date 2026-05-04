@@ -52,8 +52,8 @@ export default function MyPriorities() {
     queryFn: () => base44.entities.Task.list(),
   });
 
-  // Derive priority tasks client-side
-  const allTasks = useMemo(() => allTasksRaw.filter(t => t.is_priority), [allTasksRaw]);
+  // Use full task list — priority influences sort order, not inclusion
+  const allTasks = allTasksRaw;
 
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
@@ -241,9 +241,9 @@ export default function MyPriorities() {
                 <Flame className="w-6 h-6 text-red-500" />
               </div>
               <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-white">MY PRIORITY TASKS</h1>
+                <h1 className="text-2xl md:text-3xl font-bold text-white">MY TASKS</h1>
                 <p className="text-sm text-gray-400">
-                  {activePriorityTasks.length} high-priority {activePriorityTasks.length === 1 ? 'task' : 'tasks'} across {Object.keys(tasksByProject).length} {Object.keys(tasksByProject).length === 1 ? 'project' : 'projects'}
+                  {activePriorityTasks.length} tasks ({activePriorityTasks.filter(t => t.is_priority).length} priority) across {Object.keys(tasksByProject).length} {Object.keys(tasksByProject).length === 1 ? 'project' : 'projects'}
                 </p>
               </div>
             </div>
@@ -322,7 +322,7 @@ export default function MyPriorities() {
                           variant="outline" 
                           className="border-red-600 text-red-400 bg-red-600/10"
                         >
-                          {tasks.length} priority {tasks.length === 1 ? 'task' : 'tasks'}
+                          {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'} ({tasks.filter(t => t.is_priority).length} priority)
                         </Badge>
                       </div>
                     </CardHeader>

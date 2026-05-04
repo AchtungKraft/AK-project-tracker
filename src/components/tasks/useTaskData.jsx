@@ -95,13 +95,9 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
       result = result.filter(t => t.project_id === projectId);
     }
 
-    // Filter to priority-only if requested
-    if (priorityOnly) {
-      result = result.filter(t => t.is_priority);
-    }
-
+    // priorityOnly no longer filters — priority affects sort order, not inclusion
     return result;
-  }, [tasks, scope, projectId, priorityOnly]);
+  }, [tasks, scope, projectId]);
 
   // Active (non-completed) tasks
   const activeTasks = useMemo(() => {
