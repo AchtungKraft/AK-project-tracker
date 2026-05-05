@@ -318,7 +318,12 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
     <Sheet 
       open={true} 
       onOpenChange={(nextOpen) => {
-        if (!nextOpen && !showDeleteConfirm) onClose();
+        if (!nextOpen && !showDeleteConfirm) {
+          // Refresh checklist data in all parent views when drawer closes
+          queryClient.invalidateQueries({ queryKey: ['taskChecklistItems'] });
+          queryClient.invalidateQueries({ queryKey: ['executionChecklist'] });
+          onClose();
+        }
       }} 
       modal={!showDeleteConfirm}
     >

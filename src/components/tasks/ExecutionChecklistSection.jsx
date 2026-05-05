@@ -38,6 +38,7 @@ export default function ExecutionChecklistSection({ taskId, variant = "full" }) 
 
   const invalidateChecklist = () => {
     queryClient.invalidateQueries({ queryKey: ['taskChecklistItems'] });
+    queryClient.invalidateQueries({ queryKey: ['executionChecklist'] });
   };
 
   const toggleMutation = useMutation({
