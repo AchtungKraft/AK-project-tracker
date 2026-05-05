@@ -385,7 +385,7 @@ export default function ProjectPrintView() {
                   {tasksByProject ? (
                     tasksByProject.map(({ project: proj, tasks }) => (
                       <div key={proj.id || proj.name} className="mb-3">
-                        <h3 className="text-xs font-semibold text-gray-600 border-b border-gray-200 pb-0.5 mb-1 ml-1">
+                        <h3 className="text-sm font-bold text-gray-700 border-b border-gray-300 pb-1 mb-2 mt-3">
                           {proj.name}
                           <span className="text-gray-400 font-normal ml-1">({tasks.length})</span>
                         </h3>
