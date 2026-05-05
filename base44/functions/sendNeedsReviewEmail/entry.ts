@@ -154,10 +154,13 @@ function buildReviewEmailHtml({
   commentHtml, actionItems, nextStep,
   ctaUrl, ctaText, clientSlug,
 }) {
-  // Omit description if it duplicates the comment content
+  // Description subhead — always render under title if present
   const descriptionBlock = description
-    ? `<div style="margin-top:10px;font-size:15px;color:#444;line-height:1.5;white-space:pre-wrap;">${description}</div>`
+    ? `<div style="font-size:15px;color:#555;margin-top:8px;line-height:1.5;white-space:pre-wrap;">${description}</div>`
     : '';
+
+  // Context line before comment
+  const contextLine = "Here's our latest update for your review:";
 
   return `<div style="max-width:580px;margin:0 auto;padding:36px 24px;background:#ffffff;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111;">
 
@@ -168,23 +171,27 @@ function buildReviewEmailHtml({
   <div style="margin-top:20px;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#999;">Project</div>
   <div style="font-size:16px;font-weight:600;color:#111;margin-top:4px;">${projectName}</div>
 
-  <!-- Request Title -->
+  <!-- Title -->
   <div style="font-size:24px;font-weight:700;color:#111;margin-top:16px;line-height:1.3;">${requestTitle}</div>
 
-  <!-- Comment Hero -->
-  <div style="margin-top:24px;padding-top:20px;border-top:1px solid #eee;">
-    <div style="font-size:18px;font-weight:600;color:#111;line-height:1.5;">${commentHtml}</div>
+  <!-- Description (subhead) -->
+  ${descriptionBlock}
+
+  <!-- Context line -->
+  <div style="margin-top:24px;font-size:14px;color:#666;">${contextLine}</div>
+
+  <!-- Comment (WYSIWYG hero) -->
+  <div style="margin-top:12px;padding-top:16px;border-top:1px solid #eee;">
+    <div style="font-size:16px;line-height:1.6;color:#111;">${commentHtml}</div>
   </div>
 
-  <!-- CTA #1 (primary action, immediately after comment) -->
+  <!-- CTA #1 -->
   <div style="margin-top:24px;">
     <a href="${ctaUrl}" style="display:inline-block;background:#cc0000;color:#fff;padding:12px 20px;border-radius:6px;font-weight:600;font-size:15px;text-decoration:none;">${ctaText}</a>
   </div>
 
-  <!-- Images (supporting, after CTA) -->
+  <!-- Images -->
   ${imagesHtml}
-
-  ${descriptionBlock}
 
   <!-- Action Items -->
   <ul style="margin-top:28px;margin-bottom:0;padding-left:20px;color:#333;font-size:15px;line-height:1.5;">
@@ -194,7 +201,7 @@ ${actionItems.map(item => `    <li style="margin:0 0 7px 0;">${item}</li>`).join
   <!-- Next Step -->
   <div style="margin-top:24px;font-size:14px;color:#555;line-height:1.5;">${nextStep}</div>
 
-  <!-- CTA #2 (bottom) -->
+  <!-- CTA #2 -->
   <div style="margin-top:28px;">
     <a href="${ctaUrl}" style="display:inline-block;background:#cc0000;color:#fff;padding:12px 20px;border-radius:6px;font-weight:600;font-size:15px;text-decoration:none;">${ctaText}</a>
   </div>
@@ -349,12 +356,13 @@ Deno.serve(async (req) => {
                 '',
                 `Project: ${project.name}`,
                 request.title,
+                description || '',
                 '',
                 '---',
                 '',
-                commentText,
+                "Here's our latest update for your review:",
                 '',
-                description ? description : '',
+                commentText,
                 '',
                 ...actionItems.map(item => `- ${item}`),
                 '',
