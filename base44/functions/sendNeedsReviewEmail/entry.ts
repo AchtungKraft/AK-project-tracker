@@ -82,11 +82,74 @@ function getFirstName(fullName) {
   return fullName.trim().split(/\s+/)[0] || null;
 }
 
+// ── Resolve images for email (max 2) ─────────────────────────────────
+function collectImageUrls(attachments, latestComment) {
+  const urls = [];
+  // 1. Request-level image attachments (sorted by sort_order)
+  if (attachments?.length) {
+    const imageAttachments = attachments
+      .filter(a => a.attachment_type === 'image' && a.file_url)
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    for (const a of imageAttachments) {
+      if (!urls.includes(a.file_url)) urls.push(a.file_url);
+    }
+  }
+  // 2. Images from latest team comment
+  if (latestComment?.photos?.length) {
+    for (const url of latestComment.photos) {
+      if (url && !urls.includes(url)) urls.push(url);
+    }
+  }
+  return urls.slice(0, 2);
+}
+
+function buildImagesHtml(imageUrls, totalAvailable) {
+  if (!imageUrls?.length) return '';
+  const imgs = imageUrls.map(url =>
+    `<img src="${url}" style="width:100%;max-width:560px;height:auto;display:block;margin-top:12px;border-radius:6px;" />`
+  ).join('\n');
+  const overflow = totalAvailable > 2
+    ? `\n<p style="font-size:13px;color:#666;margin-top:8px;">Additional images available in the full review</p>`
+    : '';
+  return `<div style="margin-top:16px;">\n${imgs}${overflow}\n</div>`;
+}
+
+// ── Context-aware action items ───────────────────────────────────────
+function getActionItems(requestType) {
+  if (requestType === 'design_review') {
+    return [
+      'Review the design options',
+      'Select your preferred direction',
+      'Share any refinement notes',
+    ];
+  }
+  if (requestType === 'deliverable_review') {
+    return [
+      'Review the deliverable',
+      'Confirm quality and direction',
+      'Share any adjustments',
+    ];
+  }
+  // Default
+  return [
+    'Review the item',
+    'Confirm if it meets your expectations',
+    'Share any changes you\'d like us to make',
+  ];
+}
+
+// ── Priority label resolver ──────────────────────────────────────────
+function getPriorityLabel(requestType) {
+  const approvalTypes = ['design_review', 'deliverable_review', 'budget_review'];
+  if (approvalTypes.includes(requestType)) return 'Approval Required';
+  return 'Review Required';
+}
+
 // ── Build complete editorial HTML layout ─────────────────────────────
 function buildReviewEmailHtml({
   projectName, requestTitle, description,
-  greeting, openingLine, commentHtml,
-  actionItems, nextStep,
+  greeting, openingLine, priorityLabel, imagesHtml,
+  commentHtml, actionItems, nextStep,
   ctaUrl, ctaText, clientSlug,
 }) {
   return `<div style="max-width:580px;margin:0 auto;padding:36px 24px;background:#ffffff;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111;">
@@ -94,18 +157,30 @@ function buildReviewEmailHtml({
   <!-- Project Header -->
   <p style="margin:0 0 16px 0;font-size:14px;font-weight:600;letter-spacing:0.08em;color:#cc0000;text-transform:uppercase;">PROJECT: ${projectName}</p>
 
+  <!-- Priority Label -->
+  <p style="margin:0 0 8px 0;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#cc0000;">${priorityLabel}</p>
+
   <!-- Request Title -->
   <h1 style="margin:0 0 10px 0;font-size:23px;font-weight:700;color:#111;line-height:1.3;">${requestTitle}</h1>
 
   <!-- Greeting + Opening -->
   <p style="margin:0 0 6px 0;color:#333;font-size:15px;line-height:1.5;">${greeting}</p>
-  <p style="margin:0 0 28px 0;color:#333;font-size:15px;line-height:1.5;">${openingLine}</p>
+  <p style="margin:0 0 12px 0;color:#333;font-size:15px;line-height:1.5;">${openingLine}</p>
+
+  <!-- Priority Line -->
+  <p style="margin:0 0 28px 0;font-size:15px;color:#111;font-weight:500;">Your input is required to proceed with this phase of the build.</p>
 
   <!-- Description -->
-  <p style="margin:0 0 28px 0;color:#333;font-size:15px;line-height:1.5;white-space:pre-wrap;">${description}</p>
+  <p style="margin:0 0 0 0;color:#333;font-size:15px;line-height:1.5;white-space:pre-wrap;">${description}</p>
+
+  <!-- Images -->
+  ${imagesHtml}
+
+  <!-- spacer after description + images -->
+  <div style="margin-top:28px;"></div>
 
   <!-- Latest Update -->
-  <p style="margin:28px 0 10px 0;font-size:12px;font-weight:600;letter-spacing:0.08em;color:#888;text-transform:uppercase;">Latest Update</p>
+  <p style="margin:0 0 10px 0;font-size:12px;font-weight:600;letter-spacing:0.08em;color:#888;text-transform:uppercase;">Latest Update</p>
   <div style="margin:0 0 28px 0;color:#333;font-size:15px;line-height:1.5;">${commentHtml}</div>
 
   <!-- Action Items -->
@@ -184,25 +259,32 @@ Deno.serve(async (req) => {
             return Response.json({ message: 'No client contacts found' });
         }
 
+        // Fetch images from attachments
+        const attachments = await base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: request.id });
+        const allImageUrls = [
+            ...attachments.filter(a => a.attachment_type === 'image' && a.file_url).map(a => a.file_url),
+            ...(latestTeamComment?.photos || []).filter(Boolean),
+        ];
+        const imageUrls = collectImageUrls(attachments, latestTeamComment);
+        const imagesHtml = buildImagesHtml(imageUrls, allImageUrls.length);
+
         const clientPortalBaseUrl = 'https://akclient.base44.app';
         const subjectTemplate = savedTemplate?.subject_template || defaultTpl.subject;
         const buttonText = savedTemplate?.button_text || defaultTpl.button_text;
 
         const description = request.body?.trim() || 'This item has been prepared for your review.';
         const openingLine = "We've completed an update on your project and need your input before moving forward.";
-        const actionItems = [
-            'Review the item',
-            'Confirm if it meets your expectations',
-            'Share any changes you\'d like us to make',
-        ];
+        const actionItems = getActionItems(request.request_type);
+        const priorityLabel = getPriorityLabel(request.request_type);
         const nextStep = "Once we receive your feedback, we'll either refine further or proceed to the next phase of the build.";
 
         // Comment content
+        const noCommentFallback = "We've prepared updated materials for your review.";
         const commentHtml = getCommentHtml(latestTeamComment)
-            || '<p style="margin:0;color:#888;font-size:15px;line-height:1.6;">No additional notes at this time.</p>';
+            || `<p style="margin:0;color:#333;font-size:15px;line-height:1.5;">${noCommentFallback}</p>`;
         const commentText = latestTeamComment
             ? getCommentText(latestTeamComment)
-            : 'No additional notes at this time.';
+            : noCommentFallback;
 
         const results = [];
         for (let i = 0; i < contacts.length; i++) {
@@ -254,6 +336,8 @@ Deno.serve(async (req) => {
                 description,
                 greeting,
                 openingLine,
+                priorityLabel,
+                imagesHtml,
                 commentHtml,
                 actionItems,
                 nextStep,
