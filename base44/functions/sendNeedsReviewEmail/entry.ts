@@ -159,9 +159,6 @@ function buildReviewEmailHtml({
     ? `<div style="font-size:15px;color:#555;margin-top:8px;line-height:1.5;white-space:pre-wrap;">${description}</div>`
     : '';
 
-  // Context line before comment
-  const contextLine = "Here's our latest update for your review:";
-
   return `<div style="max-width:580px;margin:0 auto;padding:36px 24px;background:#ffffff;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111;">
 
   <!-- Greeting -->
@@ -177,13 +174,13 @@ function buildReviewEmailHtml({
   <!-- Description (subhead) -->
   ${descriptionBlock}
 
-  <!-- Context line -->
-  <div style="margin-top:24px;font-size:14px;color:#666;">${contextLine}</div>
-
-  <!-- Comment (WYSIWYG hero) -->
-  <div style="margin-top:12px;padding-top:16px;border-top:1px solid #eee;">
-    <div style="font-size:16px;line-height:1.6;color:#111;">${commentHtml}</div>
+  <!-- Section break + instruction -->
+  <div style="margin-top:28px;border-top:1px solid #e5e5e5;padding-top:20px;">
+    <div style="font-size:16px;font-weight:600;color:#111;margin-bottom:12px;">Review the following and share your feedback:</div>
   </div>
+
+  <!-- Comment (WYSIWYG) -->
+  <div style="font-size:16px;line-height:1.6;color:#111;">${commentHtml}</div>
 
   <!-- CTA #1 -->
   <div style="margin-top:24px;">
@@ -360,7 +357,7 @@ Deno.serve(async (req) => {
                 '',
                 '---',
                 '',
-                "Here's our latest update for your review:",
+                'Review the following and share your feedback:',
                 '',
                 commentText,
                 '',
