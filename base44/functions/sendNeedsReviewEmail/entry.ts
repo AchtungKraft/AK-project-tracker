@@ -138,13 +138,28 @@ function getActionItems(requestType) {
   ];
 }
 
+// ── Description redundancy check ─────────────────────────────────────
+function isDescriptionRedundant(description, commentText) {
+  if (!description || !commentText) return false;
+  const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const d = norm(description);
+  const c = norm(commentText);
+  if (!d || !c) return false;
+  return d === c || c.includes(d) || d.includes(c);
+}
+
 // ── Build complete editorial HTML layout ─────────────────────────────
 function buildReviewEmailHtml({
   projectName, requestTitle, description,
-  greeting, openingLine, imagesHtml,
+  greeting, introLine, imagesHtml,
   commentHtml, actionItems, nextStep,
   ctaUrl, ctaText, clientSlug,
 }) {
+  // Omit description if it duplicates the comment content
+  const descriptionBlock = description
+    ? `<div style="margin-top:10px;font-size:15px;color:#444;line-height:1.5;white-space:pre-wrap;">${description}</div>`
+    : '';
+
   return `<div style="max-width:580px;margin:0 auto;padding:36px 24px;background:#ffffff;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111;">
 
   <!-- Project label -->
@@ -154,22 +169,16 @@ function buildReviewEmailHtml({
   <!-- Request Title -->
   <div style="font-size:24px;font-weight:700;color:#111;margin-top:16px;line-height:1.3;">${requestTitle}</div>
 
-  <!-- Greeting + Opening -->
-  <div style="margin-top:20px;font-size:15px;color:#333;line-height:1.5;">${greeting}</div>
-  <div style="margin-top:6px;font-size:15px;color:#333;line-height:1.5;">${openingLine}</div>
+  <!-- Greeting + Single-line intro -->
+  <div style="margin-top:20px;font-size:15px;color:#333;line-height:1.5;">${greeting} ${introLine}</div>
 
-  <!-- Priority Line -->
-  <div style="margin-top:12px;font-size:15px;color:#111;font-weight:500;">Your input is required to proceed with this phase of the build.</div>
-
-  <!-- Description -->
-  <div style="margin-top:10px;font-size:15px;color:#444;line-height:1.5;white-space:pre-wrap;">${description}</div>
-
-  <!-- Review Block -->
-  <div style="margin-top:32px;padding-top:24px;border-top:1px solid #eee;">
-    <div style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#999;margin-bottom:10px;">Review Notes</div>
-    <div style="font-size:16px;color:#111;line-height:1.6;font-weight:500;margin-bottom:16px;">${commentHtml}</div>
+  <!-- Comment Hero -->
+  <div style="margin-top:24px;padding-top:20px;border-top:1px solid #eee;">
+    <div style="font-size:18px;font-weight:600;color:#111;line-height:1.5;">${commentHtml}</div>
     ${imagesHtml}
   </div>
+
+  ${descriptionBlock}
 
   <!-- Action Items -->
   <div style="margin-top:28px;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#999;margin-bottom:10px;">What We Need From You</div>
@@ -256,18 +265,23 @@ Deno.serve(async (req) => {
         const subjectTemplate = savedTemplate?.subject_template || defaultTpl.subject;
         const buttonText = savedTemplate?.button_text || defaultTpl.button_text;
 
-        const description = request.body?.trim() || 'This item has been prepared for your review.';
-        const openingLine = "We've completed an update on your project and need your input before moving forward.";
+        const introLine = "We've prepared updates for your review and need your input to proceed.";
         const actionItems = getActionItems(request.request_type);
         const nextStep = "Once we receive your feedback, we'll finalize the direction and move into the next phase.";
 
-        // Comment content
-        const noCommentFallback = "We've prepared materials for your review.";
+        // Comment content — hero element, with fallback chain
+        const noCommentFallback = "Please review the materials and share your feedback.";
         const commentHtml = getCommentHtml(latestTeamComment)
-            || `<p style="margin:0;color:#333;font-size:15px;line-height:1.5;">${noCommentFallback}</p>`;
+            || (request.body?.trim()
+                ? `<p style="margin:0;line-height:1.6;white-space:pre-wrap;">${request.body.trim()}</p>`
+                : `<p style="margin:0;">${noCommentFallback}</p>`);
         const commentText = latestTeamComment
             ? getCommentText(latestTeamComment)
-            : noCommentFallback;
+            : (request.body?.trim() || noCommentFallback);
+
+        // Description: omit if redundant with comment
+        const rawDescription = request.body?.trim() || '';
+        const description = isDescriptionRedundant(rawDescription, commentText) ? null : rawDescription;
 
         const results = [];
         for (let i = 0; i < contacts.length; i++) {
@@ -312,13 +326,13 @@ Deno.serve(async (req) => {
 
             const subject = replacePlaceholders(subjectTemplate, placeholderData);
 
-            // Build complete HTML — this function now owns the full layout
+            // Build complete HTML — this function owns the full layout
             const rawHtml = buildReviewEmailHtml({
                 projectName: project.name,
                 requestTitle: request.title,
                 description,
                 greeting,
-                openingLine,
+                introLine,
                 imagesHtml,
                 commentHtml,
                 actionItems,
@@ -333,22 +347,18 @@ Deno.serve(async (req) => {
                 `PROJECT: ${project.name}`,
                 `Review Requested: ${request.title}`,
                 '',
-                greeting,
-                '',
-                openingLine,
+                `${greeting} ${introLine}`,
                 '',
                 '---',
                 '',
-                request.title,
-                description,
-                '',
-                'Latest Update:',
                 commentText,
+                '',
+                description ? description : '',
                 '',
                 'What We Need From You:',
                 ...actionItems.map(item => `- ${item}`),
                 '',
-                `Next Step: ${nextStep}`,
+                nextStep,
                 '',
                 `${buttonText}:`,
                 requestDetailUrl,
