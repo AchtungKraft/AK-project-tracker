@@ -176,7 +176,8 @@ function buildReviewEmailHtml({
 
   <!-- Section break + instruction -->
   <div style="margin-top:28px;border-top:1px solid #e5e5e5;padding-top:20px;">
-    <div style="font-size:16px;font-weight:600;color:#111;margin-bottom:12px;">Review the following and share your feedback:</div>
+    <div style="font-size:16px;font-weight:600;color:#111;margin-bottom:10px;">Review the following and share your feedback:</div>
+    <div style="border-top:1px solid #e5e5e5;margin-bottom:14px;"></div>
   </div>
 
   <!-- Comment (WYSIWYG) -->
