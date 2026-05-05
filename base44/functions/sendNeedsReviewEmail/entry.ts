@@ -103,30 +103,14 @@ function collectImageUrls(attachments, latestComment) {
   return urls.slice(0, 2);
 }
 
-function getImageContextLine(visibleCount, totalCount) {
-  if (!visibleCount) return '';
-  if (totalCount > visibleCount) {
-    return `We've included ${visibleCount} of ${totalCount} new design variations for your review.`;
-  }
-  if (totalCount <= 2) {
-    return 'Here are the latest design variations for your review.';
-  }
-  return 'We\'ve included a selection of new design variations for your review.';
-}
-
-function buildImagesHtml(imageUrls, totalAvailable) {
+function buildImagesHtml(imageUrls) {
   if (!imageUrls?.length) return '';
-  const contextLine = getImageContextLine(imageUrls.length, totalAvailable);
-  const contextHtml = contextLine
-    ? `<div style="margin-top:16px;font-size:14px;color:#555;line-height:1.5;">${contextLine}</div>`
-    : '';
+  const contextHtml = `<div style="margin-top:16px;font-size:14px;color:#555;">We've included a few images below to guide your review.</div>`;
   const imgs = imageUrls.map(url =>
     `<img src="${url}" style="width:100%;max-width:560px;height:auto;display:block;margin-top:12px;border-radius:6px;" />`
   ).join('\n');
-  const overflow = totalAvailable > 2
-    ? `\n<div style="font-size:13px;color:#666;margin-top:8px;">View the full set in the review link below.</div>`
-    : '';
-  return `${contextHtml}\n<div style="margin-top:8px;">\n${imgs}${overflow}\n</div>`;
+  const fallback = `\n<div style="font-size:13px;color:#666;margin-top:8px;">View the full set in the review link below.</div>`;
+  return `${contextHtml}\n<div style="margin-top:8px;">\n${imgs}${fallback}\n</div>`;
 }
 
 // ── Context-aware action items ───────────────────────────────────────
@@ -275,12 +259,8 @@ Deno.serve(async (req) => {
 
         // Fetch images from attachments
         const attachments = await base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: request.id });
-        const allImageUrls = [
-            ...attachments.filter(a => a.attachment_type === 'image' && a.file_url).map(a => a.file_url),
-            ...(latestTeamComment?.photos || []).filter(Boolean),
-        ];
         const imageUrls = collectImageUrls(attachments, latestTeamComment);
-        const imagesHtml = buildImagesHtml(imageUrls, allImageUrls.length);
+        const imagesHtml = buildImagesHtml(imageUrls);
 
         const clientPortalBaseUrl = 'https://akclient.base44.app';
         const subjectTemplate = savedTemplate?.subject_template || defaultTpl.subject;
