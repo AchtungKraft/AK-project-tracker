@@ -83,22 +83,12 @@ function getFirstName(fullName) {
 }
 
 // ── Resolve images for email (max 2) ─────────────────────────────────
-function collectImageUrls(attachments, latestComment) {
+// STRICT: Only images from the latest team comment. No request-level fallbacks.
+function collectImageUrls(latestComment) {
+  if (!latestComment?.photos?.length) return [];
   const urls = [];
-  // 1. Request-level image attachments (sorted by sort_order)
-  if (attachments?.length) {
-    const imageAttachments = attachments
-      .filter(a => a.attachment_type === 'image' && a.file_url)
-      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-    for (const a of imageAttachments) {
-      if (!urls.includes(a.file_url)) urls.push(a.file_url);
-    }
-  }
-  // 2. Images from latest team comment
-  if (latestComment?.photos?.length) {
-    for (const url of latestComment.photos) {
-      if (url && !urls.includes(url)) urls.push(url);
-    }
+  for (const url of latestComment.photos) {
+    if (url && !urls.includes(url)) urls.push(url);
   }
   return urls.slice(0, 2);
 }
@@ -262,9 +252,8 @@ Deno.serve(async (req) => {
             return Response.json({ message: 'No client contacts found' });
         }
 
-        // Fetch images from attachments
-        const attachments = await base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: request.id });
-        const imageUrls = collectImageUrls(attachments, latestTeamComment);
+        // Images: strictly from latest team comment only — no request-level fallbacks
+        const imageUrls = collectImageUrls(latestTeamComment);
         const imagesHtml = buildImagesHtml(imageUrls);
 
         const clientPortalBaseUrl = 'https://akclient.base44.app';
