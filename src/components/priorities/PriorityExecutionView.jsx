@@ -48,19 +48,47 @@ export default function PriorityExecutionView({
     return map;
   }, [allChecklistItems]);
 
+  const invalidateChecklists = () => {
+    queryClient.invalidateQueries({ queryKey: ['executionChecklist'] });
+    queryClient.invalidateQueries({ queryKey: ['taskChecklistItems'] });
+  };
+
   const toggleChecklistMutation = useMutation({
     mutationFn: (item) =>
       base44.entities.TaskChecklistItem.update(item.id, {
         is_complete: !item.is_complete,
         completed_at: !item.is_complete ? new Date().toISOString() : null,
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['executionChecklist'] }),
+    onSuccess: invalidateChecklists,
+  });
+
+  const updateChecklistTitleMutation = useMutation({
+    mutationFn: ({ id, title }) => base44.entities.TaskChecklistItem.update(id, { title }),
+    onSuccess: invalidateChecklists,
+  });
+
+  const deleteChecklistItemMutation = useMutation({
+    mutationFn: (id) => base44.entities.TaskChecklistItem.delete(id),
+    onSuccess: invalidateChecklists,
   });
 
   const handleToggleChecklistItem = useCallback((item) => {
     toggleChecklistMutation.mutate(item);
     toast.success(item.is_complete ? 'Unchecked' : 'Checked');
   }, [toggleChecklistMutation]);
+
+  const handleUpdateChecklistTitle = useCallback((id, title) => {
+    const trimmed = title.trim();
+    if (!trimmed) {
+      deleteChecklistItemMutation.mutate(id);
+    } else {
+      updateChecklistTitleMutation.mutate({ id, title: trimmed });
+    }
+  }, [updateChecklistTitleMutation, deleteChecklistItemMutation]);
+
+  const handleDeleteChecklistItem = useCallback((id) => {
+    deleteChecklistItemMutation.mutate(id);
+  }, [deleteChecklistItemMutation]);
 
   // ── Team map ──
   const teamMap = useMemo(() => {
@@ -171,6 +199,8 @@ export default function PriorityExecutionView({
                   checklistItems={checklistByTaskId[task.id] || []}
                   onToggleComplete={onToggleComplete}
                   onToggleChecklistItem={handleToggleChecklistItem}
+                  onUpdateChecklistTitle={handleUpdateChecklistTitle}
+                  onDeleteChecklistItem={handleDeleteChecklistItem}
                   onTaskClick={onTaskClick}
                   onUpdateDueDate={onUpdateDueDate}
                   onTogglePriority={onTogglePriority}

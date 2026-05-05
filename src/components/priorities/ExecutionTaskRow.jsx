@@ -1,8 +1,9 @@
 import React, { useState, useCallback } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Flame, CalendarDays, User } from "lucide-react";
+import { Flame, CalendarDays, User, Pencil, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isUrgentPriority } from "@/utils/taskPrioritySort";
 
@@ -13,11 +14,15 @@ export default function ExecutionTaskRow({
   checklistItems,
   onToggleComplete,
   onToggleChecklistItem,
+  onUpdateChecklistTitle,
+  onDeleteChecklistItem,
   onTaskClick,
   onUpdateDueDate,
   onTogglePriority,
   updateTaskMutation,
 }) {
+  const [editingItemId, setEditingItemId] = useState(null);
+  const [editingText, setEditingText] = useState("");
   const hasChecklist = checklistItems && checklistItems.length > 0;
   const dueDate = task.due_date ? new Date(task.due_date) : null;
   const isOverdue = dueDate && dueDate < new Date();
@@ -167,23 +172,63 @@ export default function ExecutionTaskRow({
         </div>
       </div>
 
-      {/* Checklist items — always visible, matching ProjectPrintView */}
+      {/* Checklist items — always visible, with inline edit + delete on hover */}
       {hasChecklist && checklistItems.map(item => (
-        <div key={item.id} className="flex items-start gap-2 py-[2px] ml-6">
+        <div key={item.id} className="flex items-center gap-2 py-[2px] ml-6 group/cl">
           <Checkbox
             checked={item.is_complete}
             onCheckedChange={() => onToggleChecklistItem(item)}
             className={cn(
-              "h-3 w-3 border border-gray-500 rounded-sm mt-0.5 shrink-0",
+              "h-3 w-3 border border-gray-500 rounded-sm shrink-0",
               "data-[state=checked]:bg-green-700 data-[state=checked]:border-green-700"
             )}
           />
-          <span className={cn(
-            "text-xs leading-snug",
-            item.is_complete ? "text-gray-600 line-through" : "text-gray-400"
-          )}>
-            {item.title}
-          </span>
+          {editingItemId === item.id ? (
+            <Input
+              autoFocus
+              value={editingText}
+              onChange={(e) => setEditingText(e.target.value)}
+              onBlur={() => {
+                if (onUpdateChecklistTitle) onUpdateChecklistTitle(item.id, editingText);
+                setEditingItemId(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); if (onUpdateChecklistTitle) onUpdateChecklistTitle(item.id, editingText); setEditingItemId(null); }
+                if (e.key === 'Escape') { e.preventDefault(); setEditingItemId(null); }
+              }}
+              className="flex-1 bg-gray-800/50 border-gray-700 text-white text-xs h-5 py-0 px-1"
+            />
+          ) : (
+            <span
+              onClick={() => { if (!item.is_complete) { setEditingItemId(item.id); setEditingText(item.title); } }}
+              className={cn(
+                "flex-1 text-xs leading-snug",
+                item.is_complete ? "text-gray-600 line-through" : "text-gray-400 cursor-pointer hover:text-gray-200"
+              )}
+            >
+              {item.title}
+            </span>
+          )}
+          {editingItemId !== item.id && (
+            <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover/cl:opacity-100 transition-opacity">
+              {!item.is_complete && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setEditingItemId(item.id); setEditingText(item.title); }}
+                  className="text-gray-600 hover:text-white p-0.5"
+                  title="Edit"
+                >
+                  <Pencil className="w-2.5 h-2.5" />
+                </button>
+              )}
+              <button
+                onClick={(e) => { e.stopPropagation(); if (onDeleteChecklistItem) onDeleteChecklistItem(item.id); }}
+                className="text-gray-600 hover:text-red-400 p-0.5"
+                title="Delete"
+              >
+                <Trash2 className="w-2.5 h-2.5" />
+              </button>
+            </div>
+          )}
         </div>
       ))}
     </div>
