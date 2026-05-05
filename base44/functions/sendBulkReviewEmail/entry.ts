@@ -71,14 +71,14 @@ function buildBulkReviewHtml({
 }) {
   return `<div style="max-width:580px;margin:0 auto;padding:36px 24px;background:#ffffff;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111;">
 
-  <!-- Project label -->
-  <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#999;">Project</div>
+  <!-- Greeting -->
+  <div style="font-size:15px;color:#333;line-height:1.5;">${greeting} ${introLine}</div>
+
+  <!-- Project -->
+  <div style="margin-top:20px;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#999;">Project</div>
   <div style="font-size:16px;font-weight:600;color:#111;margin-top:4px;">${projectName}</div>
 
-  <!-- Greeting + Single-line intro -->
-  <div style="margin-top:20px;font-size:15px;color:#333;line-height:1.5;">${greeting} ${introLine}</div>
-
-  <!-- Items -->
+  <!-- Items (comment-as-hero per item) -->
   ${itemsHtml}
 
   <!-- Next Step (inline) -->
@@ -205,9 +205,9 @@ Deno.serve(async (req) => {
             });
 
             const textBody = [
-                `PROJECT: ${project.name}`,
-                '',
                 `${greeting} ${introLine}`,
+                '',
+                `Project: ${project.name}`,
                 '',
                 '---',
                 '',

@@ -162,15 +162,15 @@ function buildReviewEmailHtml({
 
   return `<div style="max-width:580px;margin:0 auto;padding:36px 24px;background:#ffffff;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111;">
 
-  <!-- Project label -->
-  <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#999;">Project</div>
+  <!-- Greeting -->
+  <div style="font-size:15px;color:#333;line-height:1.5;">${greeting} ${introLine}</div>
+
+  <!-- Project -->
+  <div style="margin-top:20px;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#999;">Project</div>
   <div style="font-size:16px;font-weight:600;color:#111;margin-top:4px;">${projectName}</div>
 
   <!-- Request Title -->
   <div style="font-size:24px;font-weight:700;color:#111;margin-top:16px;line-height:1.3;">${requestTitle}</div>
-
-  <!-- Greeting + Single-line intro -->
-  <div style="margin-top:20px;font-size:15px;color:#333;line-height:1.5;">${greeting} ${introLine}</div>
 
   <!-- Comment Hero -->
   <div style="margin-top:24px;padding-top:20px;border-top:1px solid #eee;">
@@ -181,12 +181,11 @@ function buildReviewEmailHtml({
   ${descriptionBlock}
 
   <!-- Action Items -->
-  <div style="margin-top:28px;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#999;margin-bottom:10px;">What We Need From You</div>
-  <ul style="margin:0 0 0 0;padding-left:20px;color:#333;font-size:15px;line-height:1.5;">
+  <ul style="margin-top:28px;margin-bottom:0;padding-left:20px;color:#333;font-size:15px;line-height:1.5;">
 ${actionItems.map(item => `    <li style="margin:0 0 7px 0;">${item}</li>`).join('\n')}
   </ul>
 
-  <!-- Next Step (inline) -->
+  <!-- Next Step -->
   <div style="margin-top:24px;font-size:14px;color:#555;line-height:1.5;">${nextStep}</div>
 
   <!-- CTA Button -->
@@ -344,10 +343,10 @@ Deno.serve(async (req) => {
 
             // Plain text version
             const textBody = [
-                `PROJECT: ${project.name}`,
-                `Review Requested: ${request.title}`,
-                '',
                 `${greeting} ${introLine}`,
+                '',
+                `Project: ${project.name}`,
+                request.title,
                 '',
                 '---',
                 '',
@@ -355,7 +354,6 @@ Deno.serve(async (req) => {
                 '',
                 description ? description : '',
                 '',
-                'What We Need From You:',
                 ...actionItems.map(item => `- ${item}`),
                 '',
                 nextStep,
