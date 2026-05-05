@@ -4,7 +4,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { sortChecklistItems } from "@/components/tasks/checklistHelpers";
 import { toast } from "sonner";
 import ExecutionTaskRow from "./ExecutionTaskRow";
+import ProjectTypeGroupHeader from "./ProjectTypeGroupHeader";
 import { sortTasksByPriority } from "@/utils/taskPrioritySort";
+import { groupProjectsByType } from "@/utils/projectTypeGroups";
 
 function resolveCategoryName(catId, categories) {
   const cat = categories.find(c => c.id === catId);
@@ -15,6 +17,7 @@ function resolveCategoryName(catId, categories) {
 export default function PriorityExecutionView({
   tasks,
   projects,
+  projectTypes = [],
   teamMembers,
   categories,
   statuses,
@@ -111,42 +114,49 @@ export default function PriorityExecutionView({
     [teamMembers]
   );
 
-  // ── Build Project → Category → Tasks ──
-  const groupedData = useMemo(() => {
-    const filtered = tasks.filter(t => {
+  // ── Build ProjectType → Project → Category → Tasks ──
+  const filteredTasks = useMemo(() => {
+    return tasks.filter(t => {
       if (projectFilter !== 'all' && t.project_id !== projectFilter) return false;
       if (assignedFilter !== 'all' && t.assigned_team_member_id !== assignedFilter) return false;
       return true;
     });
+  }, [tasks, projectFilter, assignedFilter]);
 
-    const projectMap = {};
-    filtered.forEach(task => {
+  // All projects that have tasks (for filter dropdown, before project filter applied)
+  const allProjectsWithTasks = useMemo(() => {
+    const pids = new Set(tasks.map(t => t.project_id));
+    return projects.filter(p => pids.has(p.id)).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }, [tasks, projects]);
+
+  // Projects with tasks after filtering (for type grouping)
+  const filteredProjectsWithTasks = useMemo(() => {
+    const pids = new Set(filteredTasks.map(t => t.project_id));
+    return projects.filter(p => pids.has(p.id));
+  }, [projects, filteredTasks]);
+
+  const typeGroups = useMemo(() => groupProjectsByType(filteredProjectsWithTasks, projectTypes), [filteredProjectsWithTasks, projectTypes]);
+
+  // Build tasks grouped by project then category
+  const tasksByProject = useMemo(() => {
+    const map = {};
+    filteredTasks.forEach(task => {
       const pid = task.project_id || 'no-project';
-      if (!projectMap[pid]) {
-        projectMap[pid] = { project: projects.find(p => p.id === pid), buckets: {} };
-      }
+      if (!map[pid]) map[pid] = {};
       const catName = resolveCategoryName(task.category_id, categories) || 'Uncategorized';
-      if (!projectMap[pid].buckets[catName]) projectMap[pid].buckets[catName] = [];
-      projectMap[pid].buckets[catName].push(task);
+      if (!map[pid][catName]) map[pid][catName] = [];
+      map[pid][catName].push(task);
     });
+    // Sort categories and tasks within each
+    Object.keys(map).forEach(pid => {
+      Object.keys(map[pid]).forEach(cat => {
+        map[pid][cat] = sortTasksByPriority(map[pid][cat]);
+      });
+    });
+    return map;
+  }, [filteredTasks, categories]);
 
-    return Object.values(projectMap)
-      .sort((a, b) => (a.project?.name || '').localeCompare(b.project?.name || ''))
-      .map(pg => ({
-        ...pg,
-        sortedBuckets: Object.entries(pg.buckets)
-          .sort(([a], [b]) => {
-            if (a === 'Uncategorized') return 1;
-            if (b === 'Uncategorized') return -1;
-            return a.localeCompare(b);
-          })
-          .map(([name, tasks]) => [name, sortTasksByPriority(tasks)]),
-      }));
-  }, [tasks, projects, categories, projectFilter, assignedFilter]);
-
-  const totalCount = groupedData.reduce(
-    (sum, pg) => sum + pg.sortedBuckets.reduce((s, [, t]) => s + t.length, 0), 0
-  );
+  const totalCount = filteredTasks.length;
 
   if (tasks.length === 0) {
     return <p className="text-gray-500 text-center py-8">No active priority tasks.</p>;
@@ -161,8 +171,8 @@ export default function PriorityExecutionView({
           onChange={e => setProjectFilter(e.target.value)}
           className="bg-transparent border border-gray-700 text-gray-400 text-xs rounded px-1.5 py-1 focus:outline-none max-w-[200px]"
         >
-          <option value="all">All Projects ({projectsWithTasks.length})</option>
-          {projectsWithTasks.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          <option value="all">All Projects ({allProjectsWithTasks.length})</option>
+          {allProjectsWithTasks.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
         <select
           value={assignedFilter}
@@ -177,40 +187,69 @@ export default function PriorityExecutionView({
         </span>
       </div>
 
-      {groupedData.map(pg => (
-        <div key={pg.project?.id || 'none'} className="mb-6">
-          <h1 className="text-lg font-bold border-b-2 border-gray-400 pb-1 mb-3 text-gray-100">
-            {pg.project?.name || 'No Project'}
-          </h1>
+      {typeGroups.map(typeGroup => {
+        // Count tasks in this type group
+        const typeTaskCount = typeGroup.projects.reduce((sum, p) => {
+          const cats = tasksByProject[p.id];
+          if (!cats) return sum;
+          return sum + Object.values(cats).reduce((s, arr) => s + arr.length, 0);
+        }, 0);
+        if (typeTaskCount === 0) return null;
 
-          {pg.sortedBuckets.map(([bucketName, bucketTasks]) => (
-            <div key={bucketName} className="mb-4">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 border-b border-white/10 pb-1 mb-1">
-                {bucketName}
-                <span className="text-gray-600 font-normal ml-2">({bucketTasks.length})</span>
-              </h2>
+        return (
+          <ProjectTypeGroupHeader
+            key={typeGroup.typeId}
+            typeName={typeGroup.typeName}
+            typeColor={typeGroup.typeColor}
+            taskCount={typeTaskCount}
+          >
+            {typeGroup.projects.map(project => {
+              const cats = tasksByProject[project.id];
+              if (!cats) return null;
+              const sortedCats = Object.entries(cats).sort(([a], [b]) => {
+                if (a === 'Uncategorized') return 1;
+                if (b === 'Uncategorized') return -1;
+                return a.localeCompare(b);
+              });
 
-              {bucketTasks.map(task => (
-                <ExecutionTaskRow
-                  key={task.id}
-                  task={task}
-                  assigneeName={teamMap[task.assigned_team_member_id]}
-                  teamMembers={teamMembers}
-                  checklistItems={checklistByTaskId[task.id] || []}
-                  onToggleComplete={onToggleComplete}
-                  onToggleChecklistItem={handleToggleChecklistItem}
-                  onUpdateChecklistTitle={handleUpdateChecklistTitle}
-                  onDeleteChecklistItem={handleDeleteChecklistItem}
-                  onTaskClick={onTaskClick}
-                  onUpdateDueDate={onUpdateDueDate}
-                  onTogglePriority={onTogglePriority}
-                  updateTaskMutation={updateTaskMutation}
-                />
-              ))}
-            </div>
-          ))}
-        </div>
-      ))}
+              return (
+                <div key={project.id} className="mb-6 ml-2">
+                  <h1 className="text-lg font-bold border-b-2 border-gray-400 pb-1 mb-3 text-gray-100">
+                    {project.name}
+                  </h1>
+
+                  {sortedCats.map(([catName, catTasks]) => (
+                    <div key={catName} className="mb-4">
+                      <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 border-b border-white/10 pb-1 mb-1">
+                        {catName}
+                        <span className="text-gray-600 font-normal ml-2">({catTasks.length})</span>
+                      </h2>
+
+                      {catTasks.map(task => (
+                        <ExecutionTaskRow
+                          key={task.id}
+                          task={task}
+                          assigneeName={teamMap[task.assigned_team_member_id]}
+                          teamMembers={teamMembers}
+                          checklistItems={checklistByTaskId[task.id] || []}
+                          onToggleComplete={onToggleComplete}
+                          onToggleChecklistItem={handleToggleChecklistItem}
+                          onUpdateChecklistTitle={handleUpdateChecklistTitle}
+                          onDeleteChecklistItem={handleDeleteChecklistItem}
+                          onTaskClick={onTaskClick}
+                          onUpdateDueDate={onUpdateDueDate}
+                          onTogglePriority={onTogglePriority}
+                          updateTaskMutation={updateTaskMutation}
+                        />
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </ProjectTypeGroupHeader>
+        );
+      })}
     </div>
   );
 }

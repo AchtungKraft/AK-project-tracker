@@ -2,7 +2,9 @@ import React, { useState, useMemo } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, Plus, User, Zap, Clock, Printer } from "lucide-react";
 import TaskCard from "@/components/project/TaskCard";
 import TaskQuickPreview from "./TaskQuickPreview";
+import ProjectTypeGroupHeader from "./ProjectTypeGroupHeader";
 import { sortTasksByPriority } from "@/utils/taskPrioritySort";
+import { groupProjectsByType } from "@/utils/projectTypeGroups";
 
 // ── urgency helpers ──
 function getSubBucket(task) {
@@ -246,36 +248,58 @@ function ProjectBlock({ project, tasks, sp, teamMembers, buckets }) {
 }
 
 // ── Main ProjectFirstView ──
-export default function ProjectFirstView({ tasks, projects, sp, teamMembers }) {
+export default function ProjectFirstView({ tasks, projects, projectTypes = [], sp, teamMembers }) {
   const bucketsByProjectId = sp.bucketsByProjectId || {};
 
-  const projectGroups = useMemo(() => {
-    const byProject = {};
+  // Group tasks by project
+  const tasksByProjectId = useMemo(() => {
+    const m = {};
     tasks.forEach(t => {
-      if (!byProject[t.project_id]) byProject[t.project_id] = [];
-      byProject[t.project_id].push(t);
+      if (!m[t.project_id]) m[t.project_id] = [];
+      m[t.project_id].push(t);
     });
+    return m;
+  }, [tasks]);
 
-    return Object.entries(byProject)
-      .map(([pid, ptasks]) => {
-        const project = projects.find(p => p.id === pid) || { id: pid, name: "Unknown" };
-        return { project, tasks: ptasks };
-      })
-      .sort((a, b) => b.tasks.length - a.tasks.length);
-  }, [tasks, projects]);
+  // Get projects that have tasks
+  const projectsWithTasks = useMemo(() => {
+    const pids = new Set(tasks.map(t => t.project_id));
+    return projects.filter(p => pids.has(p.id));
+  }, [projects, tasks]);
+
+  // Group by project type
+  const typeGroups = useMemo(() => groupProjectsByType(projectsWithTasks, projectTypes), [projectsWithTasks, projectTypes]);
 
   return (
-    <div className="space-y-0">
-      {projectGroups.map(({ project, tasks: ptasks }) => (
-        <ProjectBlock
-          key={project.id}
-          project={project}
-          tasks={ptasks}
-          sp={sp}
-          teamMembers={teamMembers}
-          buckets={bucketsByProjectId[project.id] || []}
-        />
-      ))}
+    <div className="space-y-2">
+      {typeGroups.map(typeGroup => {
+        const typeTaskCount = typeGroup.projects.reduce((sum, p) => (sum + (tasksByProjectId[p.id]?.length || 0)), 0);
+        if (typeTaskCount === 0) return null;
+
+        return (
+          <ProjectTypeGroupHeader
+            key={typeGroup.typeId}
+            typeName={typeGroup.typeName}
+            typeColor={typeGroup.typeColor}
+            taskCount={typeTaskCount}
+          >
+            {typeGroup.projects.map(project => {
+              const ptasks = tasksByProjectId[project.id];
+              if (!ptasks?.length) return null;
+              return (
+                <ProjectBlock
+                  key={project.id}
+                  project={project}
+                  tasks={ptasks}
+                  sp={sp}
+                  teamMembers={teamMembers}
+                  buckets={bucketsByProjectId[project.id] || []}
+                />
+              );
+            })}
+          </ProjectTypeGroupHeader>
+        );
+      })}
     </div>
   );
 }

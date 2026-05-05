@@ -773,6 +773,7 @@ export default function PriorityDashboard() {
               <PriorityExecutionView
                 tasks={activePriorityTasks}
                 projects={projects}
+                projectTypes={projectTypes}
                 teamMembers={teamMembers}
                 categories={categories}
                 statuses={statuses}
@@ -791,6 +792,7 @@ export default function PriorityDashboard() {
               <ShopPriorityView
                 tasks={activePriorityTasks}
                 projects={projects}
+                projectTypes={projectTypes}
                 categories={categories}
                 teamMembers={teamMembers}
                 statuses={statuses}

@@ -228,8 +228,8 @@ function ProjectGroup({ project, tasks, sp, memberId }) {
 }
 
 // ── person column (primary board column) ──
-function PersonColumn({ name, initials, tasks, projects, sp, memberId }) {
-  // Group tasks by project
+function PersonColumn({ name, initials, tasks, projects, projectTypes = [], sp, memberId }) {
+  // Group tasks by project, then order by project type sort_order
   const projectGroups = useMemo(() => {
     const byProject = {};
     tasks.forEach(t => {
@@ -239,10 +239,11 @@ function PersonColumn({ name, initials, tasks, projects, sp, memberId }) {
     return Object.entries(byProject)
       .map(([pid, ptasks]) => {
         const project = projects.find(p => p.id === pid) || { id: pid, name: "Unknown" };
-        return { project, tasks: ptasks };
+        const pt = projectTypes.find(t => t.id === project.project_type_id);
+        return { project, tasks: ptasks, typeSortOrder: pt?.sort_order ?? 9999, typeName: pt?.name || '' };
       })
-      .sort((a, b) => b.tasks.length - a.tasks.length);
-  }, [tasks, projects]);
+      .sort((a, b) => a.typeSortOrder - b.typeSortOrder || a.project.name.localeCompare(b.project.name));
+  }, [tasks, projects, projectTypes]);
 
   const overdueCount = tasks.filter(t => getSubBucket(t) === "overdue").length;
 
@@ -281,7 +282,7 @@ function PersonColumn({ name, initials, tasks, projects, sp, memberId }) {
 
 // ── main view ──
 export default function ShopPriorityView({
-  tasks, projects, categories, teamMembers, statuses,
+  tasks, projects, projectTypes = [], categories, teamMembers, statuses,
   commentCountByTaskId, allTaskComments, partsProgressByTaskId,
   updateTaskMutation,
   onTaskClick, onToggleComplete, onUpdateDueDate, onUpdateStartDate, onTogglePriority,
@@ -475,6 +476,7 @@ export default function ShopPriorityView({
                     initials={col.initials}
                     tasks={col.tasks}
                     projects={projects}
+                    projectTypes={projectTypes}
                     sp={sp}
                     memberId={col.id}
                   />
@@ -487,6 +489,7 @@ export default function ShopPriorityView({
         <ProjectFirstView
           tasks={filteredTasks}
           projects={projects}
+          projectTypes={projectTypes}
           sp={sp}
           teamMembers={teamMembers}
         />
