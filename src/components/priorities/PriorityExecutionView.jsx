@@ -104,11 +104,6 @@ export default function PriorityExecutionView({
   const [projectFilter, setProjectFilter] = useState('all');
   const [assignedFilter, setAssignedFilter] = useState('all');
 
-  const projectsWithTasks = useMemo(() => {
-    const ids = new Set(tasks.map(t => t.project_id));
-    return projects.filter(p => ids.has(p.id)).sort((a, b) => a.name.localeCompare(b.name));
-  }, [tasks, projects]);
-
   const activeTeamMembers = useMemo(() =>
     teamMembers.filter(tm => tm.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
     [teamMembers]
