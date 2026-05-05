@@ -103,15 +103,30 @@ function collectImageUrls(attachments, latestComment) {
   return urls.slice(0, 2);
 }
 
+function getImageContextLine(visibleCount, totalCount) {
+  if (!visibleCount) return '';
+  if (totalCount > visibleCount) {
+    return `We've included ${visibleCount} of ${totalCount} new design variations for your review.`;
+  }
+  if (totalCount <= 2) {
+    return 'Here are the latest design variations for your review.';
+  }
+  return 'We\'ve included a selection of new design variations for your review.';
+}
+
 function buildImagesHtml(imageUrls, totalAvailable) {
   if (!imageUrls?.length) return '';
+  const contextLine = getImageContextLine(imageUrls.length, totalAvailable);
+  const contextHtml = contextLine
+    ? `<div style="margin-top:16px;font-size:14px;color:#555;line-height:1.5;">${contextLine}</div>`
+    : '';
   const imgs = imageUrls.map(url =>
     `<img src="${url}" style="width:100%;max-width:560px;height:auto;display:block;margin-top:12px;border-radius:6px;" />`
   ).join('\n');
   const overflow = totalAvailable > 2
     ? `\n<div style="font-size:13px;color:#666;margin-top:8px;">View the full set in the review link below.</div>`
     : '';
-  return `<div style="margin-top:16px;">\n${imgs}${overflow}\n</div>`;
+  return `${contextHtml}\n<div style="margin-top:8px;">\n${imgs}${overflow}\n</div>`;
 }
 
 // ── Context-aware action items ───────────────────────────────────────
@@ -175,8 +190,15 @@ function buildReviewEmailHtml({
   <!-- Comment Hero -->
   <div style="margin-top:24px;padding-top:20px;border-top:1px solid #eee;">
     <div style="font-size:18px;font-weight:600;color:#111;line-height:1.5;">${commentHtml}</div>
-    ${imagesHtml}
   </div>
+
+  <!-- CTA #1 (primary action, immediately after comment) -->
+  <div style="margin-top:24px;">
+    <a href="${ctaUrl}" style="display:inline-block;background:#cc0000;color:#fff;padding:12px 20px;border-radius:6px;font-weight:600;font-size:15px;text-decoration:none;">${ctaText}</a>
+  </div>
+
+  <!-- Images (supporting, after CTA) -->
+  ${imagesHtml}
 
   ${descriptionBlock}
 
@@ -188,7 +210,7 @@ ${actionItems.map(item => `    <li style="margin:0 0 7px 0;">${item}</li>`).join
   <!-- Next Step -->
   <div style="margin-top:24px;font-size:14px;color:#555;line-height:1.5;">${nextStep}</div>
 
-  <!-- CTA Button -->
+  <!-- CTA #2 (bottom) -->
   <div style="margin-top:28px;">
     <a href="${ctaUrl}" style="display:inline-block;background:#cc0000;color:#fff;padding:12px 20px;border-radius:6px;font-weight:600;font-size:15px;text-decoration:none;">${ctaText}</a>
   </div>
