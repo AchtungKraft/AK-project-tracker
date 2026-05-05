@@ -131,11 +131,8 @@ function buildEmailHtml({
     sections.push(`<p style="color:#666;font-size:14px;font-family:Arial,sans-serif;">Your portal code: <strong>${clientSlug}</strong></p>`);
   }
 
-  // Respond-in-portal note
-  sections.push(`<p style="color:#999;font-size:13px;font-style:italic;margin-top:24px;font-family:Arial,sans-serif;">For detailed feedback, please use the portal. You can also reply directly to this email.</p>`);
-
   // Closing
-  sections.push(`<p style="color:#666;font-family:Arial,sans-serif;">${BRAND.closing}</p>`);
+  sections.push(`<p style="color:#666;font-family:Arial,sans-serif;margin-top:32px;">${BRAND.closing}<br><span style="font-size:13px;color:#999;">Precision builds. Clear communication.</span></p>`);
 
   return `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">${sections.join('\n')}</div>`;
 }

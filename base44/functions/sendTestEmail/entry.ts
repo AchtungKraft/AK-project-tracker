@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
         const savedTemplate = templates[0];
 
         const defaultTemplates = {
-            needs_review: { subject: "Achtung Kraft // REVIEW NEEDED: {request_title}", body_intro: "You have a new item that requires your review:", button_text: "VIEW & APPROVE REQUEST" },
+            needs_review: { subject: "Review Requested: {request_title} — {project_name}", body_intro: "We've completed an update on your project and need your input before moving forward.", button_text: "Review & Submit Feedback" },
             bulk_review: { subject: "Achtung Kraft // {item_count} ITEMS NEED YOUR REVIEW: {project_name}", body_intro: "You have {item_count} item(s) that need your review:", button_text: "VIEW ALL ITEMS" },
             journal_entry: { subject: "Achtung Kraft // New Update: {headline}", body_intro: "There's a new update on your project:", button_text: "VIEW FULL UPDATE" },
             status_update: { subject: "Achtung Kraft // Request Update: {request_title}", body_intro: "The request has been updated.", button_text: "VIEW REQUEST" },

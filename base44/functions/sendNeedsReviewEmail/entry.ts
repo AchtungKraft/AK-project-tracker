@@ -1,19 +1,16 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-// Default templates
+// Default template values (overridable via EmailTemplate entity)
 const DEFAULT_TEMPLATES = {
     needs_review: {
-        subject: "Achtung Kraft // REVIEW NEEDED: {request_title}",
-        body_intro: "You have an item that requires your review:",
-        body_intro_repost: "We've made updates and would like you to review the latest version:",
-        button_text: "VIEW & APPROVE REQUEST",
-        closing_text: "— Achtung Kraft Projects",
+        subject: "Review Requested: {request_title} — {project_name}",
+        button_text: "Review & Submit Feedback",
     }
 };
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Helper to get latest internal team comment (client-visible only)
+// ── Latest client-visible internal team comment ──────────────────────
 function getLatestTeamComment(comments) {
   if (!comments?.length) return null;
   return comments
@@ -25,37 +22,26 @@ function getLatestTeamComment(comments) {
     .sort((a, b) => new Date(b.created_date) - new Date(a.created_date))[0] || null;
 }
 
-// ── HTML → readable email text converter ──────────────────────────────
+// ── HTML → plain text converter ──────────────────────────────────────
 function convertHtmlToEmailText(html) {
   if (!html || typeof html !== 'string') return '';
   let text = html;
-  text = text.replace(/<h[1-4][^>]*>([\s\S]*?)<\/h[1-4]>/gi, (_, content) => {
-    const clean = content.replace(/<[^>]*>/g, '').trim();
-    return '\n\n' + clean.toUpperCase() + '\n';
-  });
-  text = text.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_, content) => {
-    const clean = content.replace(/<[^>]*>/g, '').trim();
-    return '• ' + clean + '\n';
-  });
+  text = text.replace(/<h[1-4][^>]*>([\s\S]*?)<\/h[1-4]>/gi, (_, c) => '\n\n' + c.replace(/<[^>]*>/g, '').trim() + '\n');
+  text = text.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_, c) => '• ' + c.replace(/<[^>]*>/g, '').trim() + '\n');
   text = text.replace(/<\/?(?:ul|ol)[^>]*>/gi, '\n');
-  text = text.replace(/<\/p>/gi, '\n\n');
-  text = text.replace(/<p[^>]*>/gi, '');
-  text = text.replace(/<br\s*\/?>/gi, '\n');
+  text = text.replace(/<\/p>/gi, '\n\n').replace(/<p[^>]*>/gi, '').replace(/<br\s*\/?>/gi, '\n');
   text = text.replace(/<[^>]*>/g, '');
-  text = text.replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-    .replace(/&mdash;/g, '—').replace(/&ndash;/g, '–');
-  text = text.replace(/[ \t]+/g, ' ');
-  text = text.split('\n').map(line => line.trim()).join('\n');
-  text = text.replace(/\n{3,}/g, '\n\n');
+  text = text.replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+  text = text.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&mdash;/g, '—').replace(/&ndash;/g, '–');
+  text = text.replace(/[ \t]+/g, ' ').split('\n').map(l => l.trim()).join('\n').replace(/\n{3,}/g, '\n\n');
   return text.trim();
 }
 
+// ── Comment → email-safe HTML ────────────────────────────────────────
 function convertHtmlToEmailHtml(html) {
   if (!html || typeof html !== 'string') return '';
   let safe = html;
-  safe = safe.replace(/<script[\s\S]*?<\/script>/gi, '');
-  safe = safe.replace(/<style[\s\S]*?<\/style>/gi, '');
+  safe = safe.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '');
   safe = safe.replace(/<h2([^>]*)>/gi, '<h2$1 style="margin:12px 0 4px 0;font-size:16px;color:#fff;">');
   safe = safe.replace(/<h3([^>]*)>/gi, '<h3$1 style="margin:10px 0 4px 0;font-size:14px;color:#e5e5e5;">');
   safe = safe.replace(/<ul([^>]*)>/gi, '<ul$1 style="margin:4px 0;padding-left:20px;color:#e5e5e5;">');
@@ -65,25 +51,12 @@ function convertHtmlToEmailHtml(html) {
   return safe;
 }
 
-function formatLinksForEmailText(links) {
-  if (!Array.isArray(links) || links.length === 0) return '';
-  return '\nLinks:\n' + links.map(l => `- ${l.name || l.url}: ${l.url}`).join('\n') + '\n';
-}
-
 function formatLinksForEmailHtml(links) {
   if (!Array.isArray(links) || links.length === 0) return '';
   const items = links.map(l =>
     `<li style="margin:2px 0;"><a href="${l.url}" style="color:#60a5fa;text-decoration:underline;">${l.name || l.url}</a>${l.description ? ' — ' + l.description : ''}</li>`
   );
   return `<div style="margin-top:10px;"><p style="margin:0 0 4px 0;font-weight:bold;color:#fff;font-size:12px;">Links:</p><ul style="margin:0;padding-left:20px;">${items.join('')}</ul></div>`;
-}
-
-function getCommentEmailText(comment) {
-  if (!comment) return '';
-  if (comment.content_html?.trim()) {
-    return convertHtmlToEmailText(comment.content_html) + formatLinksForEmailText(comment.links);
-  }
-  return comment.content_fallback?.trim() || comment.body?.trim() || '';
 }
 
 function getCommentEmailHtml(comment) {
@@ -95,14 +68,25 @@ function getCommentEmailHtml(comment) {
   return text ? `<p style="margin:0;line-height:1.5;color:#e5e5e5;white-space:pre-wrap;">${text}</p>` : '';
 }
 
+function getCommentEmailText(comment) {
+  if (!comment) return '';
+  if (comment.content_html?.trim()) return convertHtmlToEmailText(comment.content_html);
+  return comment.content_fallback?.trim() || comment.body?.trim() || '';
+}
+
 function replacePlaceholders(text, data) {
     if (!text) return '';
     return text
         .replace(/{project_name}/g, data.project_name || '')
         .replace(/{request_title}/g, data.request_title || '')
-        .replace(/{request_body}/g, data.request_body || '')
         .replace(/{client_name}/g, data.client_name || '')
         .replace(/{client_slug}/g, data.client_slug || '');
+}
+
+// ── Extract first name from full name ────────────────────────────────
+function getFirstName(fullName) {
+  if (!fullName || typeof fullName !== 'string') return null;
+  return fullName.trim().split(/\s+/)[0] || null;
 }
 
 Deno.serve(async (req) => {
@@ -125,6 +109,12 @@ Deno.serve(async (req) => {
             return Response.json({ message: 'Request is archived - no email sent' });
         }
 
+        // VALIDATION: Block send if title is missing
+        if (!request.title || !request.title.trim()) {
+            console.error(`Request ${requestId} has no title - blocking email send`);
+            return Response.json({ error: 'Request title is required to send email' }, { status: 400 });
+        }
+
         // Fetch comments
         const comments = await base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: request.id });
         const latestTeamComment = getLatestTeamComment(comments);
@@ -134,7 +124,7 @@ Deno.serve(async (req) => {
         const project = projects[0];
         if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
-        // Fetch email template
+        // Fetch email template (subject + button text overridable)
         const templates = await base44.asServiceRole.entities.EmailTemplate.filter({ template_key: 'needs_review' });
         const savedTemplate = templates[0];
         const defaultTpl = DEFAULT_TEMPLATES.needs_review;
@@ -157,6 +147,47 @@ Deno.serve(async (req) => {
         }
 
         const clientPortalBaseUrl = 'https://akclient.base44.app';
+
+        // Template values
+        const subjectTemplate = savedTemplate?.subject_template || defaultTpl.subject;
+        const buttonText = savedTemplate?.button_text || defaultTpl.button_text;
+
+        // Description with professional fallback
+        const description = request.body?.trim() || 'This item has been prepared for your review.';
+
+        // Opening line
+        const openingLine = "We've completed an update on your project and need your input before moving forward.";
+
+        // Action block (always included)
+        const actionBlockHtml = `
+<div style="margin:24px 0 16px 0;">
+  <p style="margin:0 0 8px 0;font-weight:bold;color:#333;font-family:Arial,sans-serif;">What We Need From You:</p>
+  <ul style="margin:0;padding-left:20px;color:#555;font-family:Arial,sans-serif;line-height:1.8;">
+    <li>Review the item</li>
+    <li>Confirm if it meets your expectations</li>
+    <li>Share any changes you'd like us to make</li>
+  </ul>
+</div>`;
+
+        // Next step block (always included)
+        const nextStepHtml = `
+<div style="margin:16px 0 24px 0;padding:14px 16px;background:#f7f7f7;border-radius:4px;">
+  <p style="margin:0;color:#555;font-family:Arial,sans-serif;font-size:14px;">
+    <strong style="color:#333;">Next Step:</strong> Once we receive your feedback, we'll either refine further or proceed to the next phase of the build.
+  </p>
+</div>`;
+
+        // Comment block — use existing comment or professional fallback
+        let commentBlockHtml;
+        if (latestTeamComment) {
+            commentBlockHtml = getCommentEmailHtml(latestTeamComment);
+        } else {
+            commentBlockHtml = `<p style="margin:0;line-height:1.5;color:#e5e5e5;">No additional notes at this time.</p>`;
+        }
+
+        const commentText = latestTeamComment
+            ? getCommentEmailText(latestTeamComment)
+            : 'No additional notes at this time.';
 
         // Send personalized email to each client
         const results = [];
@@ -188,50 +219,66 @@ Deno.serve(async (req) => {
                 continue;
             }
 
-            // Template values
+            // VALIDATION: Block send if CTA URL is missing
+            if (!requestDetailUrl) {
+                console.error(`No CTA URL for contact ${contact.id} - blocking email send`);
+                results.push({ contact: contact.email, success: false, error: 'no_cta_url' });
+                continue;
+            }
+
+            // Greeting — use first name with fallback
+            const firstName = getFirstName(contact.name);
+            const greeting = firstName ? `Hi ${firstName},` : 'Hi,';
+
             const placeholderData = {
                 project_name: project.name,
                 request_title: request.title,
-                request_body: request.body || 'No description provided.',
                 client_name: contact.name,
                 client_slug: clientSlug,
             };
 
-            const subjectTemplate = savedTemplate?.subject_template || defaultTpl.subject;
-            const bodyIntro = isRepost 
-                ? (savedTemplate?.body_intro_repost || defaultTpl.body_intro_repost)
-                : (savedTemplate?.body_intro || defaultTpl.body_intro);
-            const buttonText = savedTemplate?.button_text || defaultTpl.button_text;
-
             const subject = replacePlaceholders(subjectTemplate, placeholderData);
-            const intro = replacePlaceholders(bodyIntro, placeholderData);
 
-            // Content block
-            const contentBlockHtml = `<h3 style="margin:0 0 8px 0;color:#c00;">${request.title}</h3><p style="margin:0;color:#333;white-space:pre-wrap;">${request.body || 'No description provided.'}</p>`;
+            // Content block — clean, light styling
+            const contentBlockHtml = `
+<p style="margin:0 0 4px 0;font-weight:bold;color:#333;font-size:16px;font-family:Arial,sans-serif;">${request.title}</p>
+<p style="margin:0;color:#555;white-space:pre-wrap;line-height:1.6;font-family:Arial,sans-serif;">${description}</p>`;
 
-            // Comment block
-            const commentBlockHtml = latestTeamComment ? getCommentEmailHtml(latestTeamComment) : null;
+            // Assemble linksBlockHtml with action + next step blocks
+            const composedLinksBlock = actionBlockHtml + nextStepHtml;
 
-            // Plain text fallback
+            // Plain text version — clean structure, no HTML artifacts
             const textBody = [
                 `PROJECT: ${project.name}`,
-                `REVIEW NEEDED: ${request.title}`,
+                `Review Requested: ${request.title}`,
                 '',
-                `Hi ${contact.name},`,
+                greeting,
                 '',
-                intro,
+                openingLine,
+                '',
+                '---',
                 '',
                 request.title,
-                request.body || 'No description provided.',
+                description,
                 '',
-                latestTeamComment ? `Latest Update From Ächtung Kraft:\n---------------------------------\n${getCommentEmailText(latestTeamComment)}\n` : '',
-                `View and approve the request here:\n${requestDetailUrl}`,
+                `Latest Update From Achtung Kraft:`,
+                commentText,
+                '',
+                'What We Need From You:',
+                '- Review the item',
+                '- Confirm if it meets your expectations',
+                '- Share any changes you\'d like us to make',
+                '',
+                'Next Step:',
+                'Once we receive your feedback, we\'ll either refine further or proceed to the next phase of the build.',
+                '',
+                `${buttonText}:`,
+                requestDetailUrl,
                 '',
                 clientSlug ? `Your portal code: ${clientSlug}` : '',
                 '',
-                'Please respond directly in the portal — replies to this email are not monitored.',
-                '',
                 '— Achtung Kraft Projects',
+                'Precision builds. Clear communication.',
             ].filter(Boolean).join('\n');
 
             // Send via centralized sender
@@ -242,10 +289,12 @@ Deno.serve(async (req) => {
                     subject,
                     emailType: 'needs_review',
                     projectName: project.name,
-                    headline: `REVIEW NEEDED: ${request.title}`,
-                    introText: intro,
+                    headline: `Review Requested: ${request.title}`,
+                    greeting,
+                    introText: openingLine,
                     contentBlockHtml,
                     commentBlockHtml,
+                    linksBlockHtml: composedLinksBlock,
                     ctaUrl: requestDetailUrl,
                     ctaText: buttonText,
                     clientSlug: clientSlug || null,
