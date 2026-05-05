@@ -11,9 +11,7 @@ export default function ProjectTypeGroupHeader({ typeName, typeColor, taskCount,
 
   const handlePrintGroup = (e) => {
     e.stopPropagation();
-    projectIds.forEach(id => {
-      window.open(`/projectprintview?id=${id}`, '_blank');
-    });
+    window.open(`/projectprintview?ids=${projectIds.join(',')}`, '_blank');
   };
 
   return (
