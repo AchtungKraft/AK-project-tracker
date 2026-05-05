@@ -109,7 +109,7 @@ function buildImagesHtml(imageUrls, totalAvailable) {
     `<img src="${url}" style="width:100%;max-width:560px;height:auto;display:block;margin-top:12px;border-radius:6px;" />`
   ).join('\n');
   const overflow = totalAvailable > 2
-    ? `\n<p style="font-size:13px;color:#666;margin-top:8px;">Additional images available in the full review</p>`
+    ? `\n<div style="font-size:13px;color:#666;margin-top:8px;">View the full set in the review link below.</div>`
     : '';
   return `<div style="margin-top:16px;">\n${imgs}${overflow}\n</div>`;
 }
@@ -138,76 +138,60 @@ function getActionItems(requestType) {
   ];
 }
 
-// ── Priority label resolver ──────────────────────────────────────────
-function getPriorityLabel(requestType) {
-  const approvalTypes = ['design_review', 'deliverable_review', 'budget_review'];
-  if (approvalTypes.includes(requestType)) return 'Approval Required';
-  return 'Review Required';
-}
-
 // ── Build complete editorial HTML layout ─────────────────────────────
 function buildReviewEmailHtml({
   projectName, requestTitle, description,
-  greeting, openingLine, priorityLabel, imagesHtml,
+  greeting, openingLine, imagesHtml,
   commentHtml, actionItems, nextStep,
   ctaUrl, ctaText, clientSlug,
 }) {
   return `<div style="max-width:580px;margin:0 auto;padding:36px 24px;background:#ffffff;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111;">
 
-  <!-- Project Header -->
-  <p style="margin:0 0 16px 0;font-size:14px;font-weight:600;letter-spacing:0.08em;color:#cc0000;text-transform:uppercase;">PROJECT: ${projectName}</p>
-
-  <!-- Priority Label -->
-  <p style="margin:0 0 8px 0;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#cc0000;">${priorityLabel}</p>
+  <!-- Project label -->
+  <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#999;">Project</div>
+  <div style="font-size:16px;font-weight:600;color:#111;margin-top:4px;">${projectName}</div>
 
   <!-- Request Title -->
-  <h1 style="margin:0 0 10px 0;font-size:23px;font-weight:700;color:#111;line-height:1.3;">${requestTitle}</h1>
+  <div style="font-size:24px;font-weight:700;color:#111;margin-top:16px;line-height:1.3;">${requestTitle}</div>
 
   <!-- Greeting + Opening -->
-  <p style="margin:0 0 6px 0;color:#333;font-size:15px;line-height:1.5;">${greeting}</p>
-  <p style="margin:0 0 12px 0;color:#333;font-size:15px;line-height:1.5;">${openingLine}</p>
+  <div style="margin-top:20px;font-size:15px;color:#333;line-height:1.5;">${greeting}</div>
+  <div style="margin-top:6px;font-size:15px;color:#333;line-height:1.5;">${openingLine}</div>
 
   <!-- Priority Line -->
-  <p style="margin:0 0 28px 0;font-size:15px;color:#111;font-weight:500;">Your input is required to proceed with this phase of the build.</p>
+  <div style="margin-top:12px;font-size:15px;color:#111;font-weight:500;">Your input is required to proceed with this phase of the build.</div>
 
   <!-- Description -->
-  <p style="margin:0 0 0 0;color:#333;font-size:15px;line-height:1.5;white-space:pre-wrap;">${description}</p>
+  <div style="margin-top:10px;font-size:15px;color:#444;line-height:1.5;white-space:pre-wrap;">${description}</div>
 
-  <!-- Images -->
-  ${imagesHtml}
-
-  <!-- spacer after description + images -->
-  <div style="margin-top:28px;"></div>
-
-  <!-- Latest Update -->
-  <p style="margin:0 0 10px 0;font-size:12px;font-weight:600;letter-spacing:0.08em;color:#888;text-transform:uppercase;">Latest Update</p>
-  <div style="margin:0 0 28px 0;color:#333;font-size:15px;line-height:1.5;">${commentHtml}</div>
+  <!-- Review Block -->
+  <div style="margin-top:32px;padding-top:24px;border-top:1px solid #eee;">
+    <div style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#999;margin-bottom:10px;">Review Notes</div>
+    <div style="font-size:16px;color:#111;line-height:1.6;font-weight:500;margin-bottom:16px;">${commentHtml}</div>
+    ${imagesHtml}
+  </div>
 
   <!-- Action Items -->
-  <p style="margin:28px 0 10px 0;font-size:12px;font-weight:600;letter-spacing:0.08em;color:#888;text-transform:uppercase;">What We Need From You</p>
-  <ul style="margin:0 0 28px 0;padding-left:20px;color:#333;font-size:15px;line-height:1.5;">
+  <div style="margin-top:28px;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#999;margin-bottom:10px;">What We Need From You</div>
+  <ul style="margin:0 0 0 0;padding-left:20px;color:#333;font-size:15px;line-height:1.5;">
 ${actionItems.map(item => `    <li style="margin:0 0 7px 0;">${item}</li>`).join('\n')}
   </ul>
 
-  <!-- Next Step -->
-  <p style="margin:28px 0 10px 0;font-size:12px;font-weight:600;letter-spacing:0.08em;color:#888;text-transform:uppercase;">Next Step</p>
-  <p style="margin:0 0 28px 0;color:#333;font-size:15px;line-height:1.5;">${nextStep}</p>
+  <!-- Next Step (inline) -->
+  <div style="margin-top:24px;font-size:14px;color:#555;line-height:1.5;">${nextStep}</div>
 
   <!-- CTA Button -->
-  <div style="margin:28px 0 16px 0;">
-    <a href="${ctaUrl}" style="display:inline-block;background-color:#cc0000;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:6px;font-weight:600;font-size:15px;">${ctaText}</a>
+  <div style="margin-top:28px;">
+    <a href="${ctaUrl}" style="display:inline-block;background:#cc0000;color:#fff;padding:12px 20px;border-radius:6px;font-weight:600;font-size:15px;text-decoration:none;">${ctaText}</a>
   </div>
-  <p style="margin:0 0 0 0;font-size:13px;color:#666;">
-    Direct link: <a href="${ctaUrl}" style="color:#666;text-decoration:underline;word-break:break-all;">${ctaUrl}</a>
-  </p>
 
-  ${clientSlug ? `<p style="margin:16px 0 0 0;font-size:13px;color:#666;">Your portal code: <strong>${clientSlug}</strong></p>` : ''}
+  <!-- Direct Link -->
+  <div style="font-size:13px;color:#666;margin-top:16px;">Direct link: <a href="${ctaUrl}" style="color:#666;text-decoration:underline;word-break:break-all;">${ctaUrl}</a></div>
+
+  ${clientSlug ? `<div style="font-size:13px;color:#666;margin-top:12px;">Your portal code: <strong>${clientSlug}</strong></div>` : ''}
 
   <!-- Sign-off -->
-  <div style="margin-top:32px;">
-    <p style="margin:0;color:#666;font-size:13px;">— Achtung Kraft Projects</p>
-    <p style="margin:3px 0 0 0;color:#999;font-size:12px;">Precision builds. Clear communication.</p>
-  </div>
+  <div style="margin-top:32px;font-size:13px;color:#666;">— Achtung Kraft Projects<br/>Precision builds. Clear communication.</div>
 
 </div>`;
 }
@@ -275,11 +259,10 @@ Deno.serve(async (req) => {
         const description = request.body?.trim() || 'This item has been prepared for your review.';
         const openingLine = "We've completed an update on your project and need your input before moving forward.";
         const actionItems = getActionItems(request.request_type);
-        const priorityLabel = getPriorityLabel(request.request_type);
-        const nextStep = "Once we receive your feedback, we'll either refine further or proceed to the next phase of the build.";
+        const nextStep = "Once we receive your feedback, we'll finalize the direction and move into the next phase.";
 
         // Comment content
-        const noCommentFallback = "We've prepared updated materials for your review.";
+        const noCommentFallback = "We've prepared materials for your review.";
         const commentHtml = getCommentHtml(latestTeamComment)
             || `<p style="margin:0;color:#333;font-size:15px;line-height:1.5;">${noCommentFallback}</p>`;
         const commentText = latestTeamComment
@@ -336,7 +319,6 @@ Deno.serve(async (req) => {
                 description,
                 greeting,
                 openingLine,
-                priorityLabel,
                 imagesHtml,
                 commentHtml,
                 actionItems,
