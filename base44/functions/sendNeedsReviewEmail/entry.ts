@@ -89,56 +89,49 @@ function buildReviewEmailHtml({
   actionItems, nextStep,
   ctaUrl, ctaText, clientSlug,
 }) {
-  return `<div style="max-width:600px;margin:0 auto;padding:32px 24px;background:#ffffff;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#111;">
+  return `<div style="max-width:580px;margin:0 auto;padding:36px 24px;background:#ffffff;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111;">
 
   <!-- Project Header -->
-  <p style="margin:0 0 4px 0;font-size:12px;font-weight:700;letter-spacing:1.5px;color:#cc0000;text-transform:uppercase;">PROJECT: ${projectName}</p>
-  <div style="width:40px;height:2px;background:#cc0000;margin:8px 0 28px 0;"></div>
+  <p style="margin:0 0 16px 0;font-size:14px;font-weight:600;letter-spacing:0.08em;color:#cc0000;text-transform:uppercase;">PROJECT: ${projectName}</p>
 
   <!-- Request Title -->
-  <h1 style="margin:0 0 24px 0;font-size:22px;font-weight:700;color:#111;line-height:1.3;">Review Requested: ${requestTitle}</h1>
+  <h1 style="margin:0 0 10px 0;font-size:23px;font-weight:700;color:#111;line-height:1.3;">${requestTitle}</h1>
 
   <!-- Greeting + Opening -->
-  <p style="margin:0 0 6px 0;color:#111;font-size:15px;line-height:1.6;">${greeting}</p>
-  <p style="margin:0 0 28px 0;color:#444;font-size:15px;line-height:1.6;">${openingLine}</p>
+  <p style="margin:0 0 6px 0;color:#333;font-size:15px;line-height:1.5;">${greeting}</p>
+  <p style="margin:0 0 28px 0;color:#333;font-size:15px;line-height:1.5;">${openingLine}</p>
 
-  <!-- Request Content -->
-  <p style="margin:0 0 4px 0;font-size:17px;font-weight:600;color:#111;">${requestTitle}</p>
-  <p style="margin:0 0 28px 0;color:#555;font-size:15px;line-height:1.7;white-space:pre-wrap;">${description}</p>
-
-  <!-- Divider -->
-  <div style="border-top:1px solid #e5e5e5;margin:0 0 24px 0;"></div>
+  <!-- Description -->
+  <p style="margin:0 0 28px 0;color:#333;font-size:15px;line-height:1.5;white-space:pre-wrap;">${description}</p>
 
   <!-- Latest Update -->
-  <p style="margin:0 0 8px 0;font-size:13px;font-weight:600;letter-spacing:0.5px;color:#999;text-transform:uppercase;">Latest Update</p>
-  <div style="margin:0 0 28px 0;color:#444;font-size:15px;line-height:1.6;">${commentHtml}</div>
-
-  <!-- Divider -->
-  <div style="border-top:1px solid #e5e5e5;margin:0 0 24px 0;"></div>
+  <p style="margin:28px 0 10px 0;font-size:12px;font-weight:600;letter-spacing:0.08em;color:#888;text-transform:uppercase;">Latest Update</p>
+  <div style="margin:0 0 28px 0;color:#333;font-size:15px;line-height:1.5;">${commentHtml}</div>
 
   <!-- Action Items -->
-  <p style="margin:0 0 10px 0;font-size:15px;font-weight:600;color:#111;">What We Need From You:</p>
-  <ul style="margin:0 0 24px 0;padding-left:20px;color:#444;font-size:15px;line-height:2;">
-${actionItems.map(item => `    <li>${item}</li>`).join('\n')}
+  <p style="margin:28px 0 10px 0;font-size:12px;font-weight:600;letter-spacing:0.08em;color:#888;text-transform:uppercase;">What We Need From You</p>
+  <ul style="margin:0 0 28px 0;padding-left:20px;color:#333;font-size:15px;line-height:1.5;">
+${actionItems.map(item => `    <li style="margin:0 0 7px 0;">${item}</li>`).join('\n')}
   </ul>
 
   <!-- Next Step -->
-  <p style="margin:0 0 32px 0;color:#888;font-size:14px;line-height:1.6;"><strong style="color:#666;">Next Step:</strong> ${nextStep}</p>
+  <p style="margin:28px 0 10px 0;font-size:12px;font-weight:600;letter-spacing:0.08em;color:#888;text-transform:uppercase;">Next Step</p>
+  <p style="margin:0 0 28px 0;color:#333;font-size:15px;line-height:1.5;">${nextStep}</p>
 
   <!-- CTA Button -->
-  <div style="text-align:center;margin:0 0 12px 0;">
-    <a href="${ctaUrl}" style="display:inline-block;background-color:#cc0000;color:#ffffff;padding:14px 36px;text-decoration:none;border-radius:6px;font-weight:700;font-size:16px;">${ctaText}</a>
+  <div style="margin:28px 0 16px 0;">
+    <a href="${ctaUrl}" style="display:inline-block;background-color:#cc0000;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:6px;font-weight:600;font-size:15px;">${ctaText}</a>
   </div>
-  <p style="text-align:center;margin:0 0 28px 0;font-size:13px;color:#aaa;">
-    Direct link: <a href="${ctaUrl}" style="color:#aaa;text-decoration:underline;word-break:break-all;">${ctaUrl}</a>
+  <p style="margin:0 0 0 0;font-size:13px;color:#666;">
+    Direct link: <a href="${ctaUrl}" style="color:#666;text-decoration:underline;word-break:break-all;">${ctaUrl}</a>
   </p>
 
-  ${clientSlug ? `<p style="margin:0 0 28px 0;font-size:13px;color:#aaa;">Your portal code: <strong style="color:#666;">${clientSlug}</strong></p>` : ''}
+  ${clientSlug ? `<p style="margin:16px 0 0 0;font-size:13px;color:#666;">Your portal code: <strong>${clientSlug}</strong></p>` : ''}
 
   <!-- Sign-off -->
-  <div style="border-top:1px solid #e5e5e5;padding-top:20px;margin-top:8px;">
-    <p style="margin:0;color:#666;font-size:14px;">— Achtung Kraft Projects</p>
-    <p style="margin:4px 0 0 0;color:#aaa;font-size:12px;">Precision builds. Clear communication.</p>
+  <div style="margin-top:32px;">
+    <p style="margin:0;color:#666;font-size:13px;">— Achtung Kraft Projects</p>
+    <p style="margin:3px 0 0 0;color:#999;font-size:12px;">Precision builds. Clear communication.</p>
   </div>
 
 </div>`;
