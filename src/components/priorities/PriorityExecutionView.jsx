@@ -5,6 +5,7 @@ import { sortChecklistItems } from "@/components/tasks/checklistHelpers";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { Printer } from "lucide-react";
 import ExecutionTaskRow from "./ExecutionTaskRow";
 import ProjectTypeGroupHeader from "./ProjectTypeGroupHeader";
 import { sortTasksByPriority } from "@/utils/taskPrioritySort";
@@ -199,6 +200,7 @@ export default function PriorityExecutionView({
             typeName={typeGroup.typeName}
             typeColor={typeGroup.typeColor}
             taskCount={typeTaskCount}
+            projectIds={typeGroup.projects.filter(p => tasksByProject[p.id]).map(p => p.id)}
           >
             {typeGroup.projects.map(project => {
               const cats = tasksByProject[project.id];
@@ -211,11 +213,20 @@ export default function PriorityExecutionView({
 
               return (
                 <div key={project.id} className="mb-6 ml-2">
-                  <h1 className="text-lg font-bold border-b-2 border-gray-400 pb-1 mb-3 text-gray-100">
-                    <Link to={createPageUrl("ProjectDetail") + "?id=" + project.id} className="hover:text-red-400 hover:underline transition-colors">
-                      {project.name}
-                    </Link>
-                  </h1>
+                  <div className="flex items-center gap-2 border-b-2 border-gray-400 pb-1 mb-3">
+                    <h1 className="text-lg font-bold text-gray-100 flex-1 min-w-0">
+                      <Link to={createPageUrl("ProjectDetail") + "?id=" + project.id} className="hover:text-red-400 hover:underline transition-colors">
+                        {project.name}
+                      </Link>
+                    </h1>
+                    <button
+                      onClick={() => window.open(`/projectprintview?id=${project.id}`, '_blank')}
+                      className="text-[10px] text-gray-500 hover:text-white transition-colors shrink-0 px-1.5 py-0.5 rounded hover:bg-gray-800"
+                      title="Print checklist"
+                    >
+                      <Printer className="w-3 h-3" />
+                    </button>
+                  </div>
 
                   {sortedCats.map(([catName, catTasks]) => (
                     <div key={catName} className="mb-4">

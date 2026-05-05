@@ -290,6 +290,7 @@ export default function ProjectFirstView({ tasks, projects, projectTypes = [], s
             typeName={typeGroup.typeName}
             typeColor={typeGroup.typeColor}
             taskCount={typeTaskCount}
+            projectIds={typeGroup.projects.filter(p => tasksByProjectId[p.id]?.length).map(p => p.id)}
           >
             {typeGroup.projects.map(project => {
               const ptasks = tasksByProjectId[project.id];
