@@ -176,7 +176,7 @@ function buildReviewEmailHtml({
 
   <!-- Section break + instruction -->
   <div style="margin-top:28px;border-top:1px solid #e5e5e5;padding-top:20px;">
-    <div style="font-size:16px;font-weight:600;color:#111;margin-bottom:10px;">Review the following and share your feedback:</div>
+    <div style="font-size:18px;font-weight:600;color:#cc0000;margin-bottom:10px;">Review the following and share your feedback &gt;&gt;&gt;</div>
     <div style="border-top:1px solid #e5e5e5;margin-bottom:14px;"></div>
   </div>
 
@@ -358,7 +358,7 @@ Deno.serve(async (req) => {
                 '',
                 '---',
                 '',
-                'Review the following and share your feedback:',
+                'Review the following and share your feedback >>>',
                 '',
                 commentText,
                 '',
