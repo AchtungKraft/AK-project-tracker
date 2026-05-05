@@ -4,8 +4,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/components/mobile/useIsMobile";
+import { getNextSortOrder, updateChecklistOrder } from "./checklistHelpers";
 
 /**
  * Execution-first checklist: checkbox + label only.
@@ -17,8 +19,12 @@ import { cn } from "@/lib/utils";
  */
 export default function ExecutionChecklistSection({ taskId, variant = "full" }) {
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   const inputRef = useRef(null);
   const [newItemTitle, setNewItemTitle] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editingText, setEditingText] = useState("");
+  const [isReordering, setIsReordering] = useState(false);
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['taskChecklistItems', 'task', taskId],
@@ -51,12 +57,11 @@ export default function ExecutionChecklistSection({ taskId, variant = "full" }) 
 
   const createMutation = useMutation({
     mutationFn: (title) => {
-      const maxOrder = items.reduce((m, i) => Math.max(m, i.sort_order || 0), 0);
       return base44.entities.TaskChecklistItem.create({
         task_id: taskId,
         title,
         is_complete: false,
-        sort_order: maxOrder + 10,
+        sort_order: getNextSortOrder(items),
         visibility: "internal",
       });
     },
@@ -66,6 +71,57 @@ export default function ExecutionChecklistSection({ taskId, variant = "full" }) 
       inputRef.current?.focus();
     },
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => base44.entities.TaskChecklistItem.delete(id),
+    onSuccess: invalidateChecklist,
+  });
+
+  const updateTitleMutation = useMutation({
+    mutationFn: ({ id, title }) => base44.entities.TaskChecklistItem.update(id, { title }),
+    onSuccess: invalidateChecklist,
+  });
+
+  const startEdit = (item) => {
+    setEditingId(item.id);
+    setEditingText(item.title);
+  };
+
+  const saveEdit = (itemId) => {
+    const trimmed = editingText.trim();
+    setEditingId(null);
+    if (!trimmed) {
+      deleteMutation.mutate(itemId);
+    } else {
+      const original = items.find(i => i.id === itemId);
+      if (original && trimmed !== original.title) {
+        updateTitleMutation.mutate({ id: itemId, title: trimmed });
+      }
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditingText("");
+  };
+
+  const incompleteItems = useMemo(
+    () => items.filter(i => !i.is_complete).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+    [items]
+  );
+
+  const handleMove = async (itemId, direction) => {
+    const idx = incompleteItems.findIndex(i => i.id === itemId);
+    if (idx < 0) return;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= incompleteItems.length) return;
+    setIsReordering(true);
+    const newOrder = [...incompleteItems.map(i => i.id)];
+    [newOrder[idx], newOrder[swapIdx]] = [newOrder[swapIdx], newOrder[idx]];
+    await updateChecklistOrder(taskId, newOrder, items);
+    invalidateChecklist();
+    setIsReordering(false);
+  };
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter") {
@@ -132,32 +188,95 @@ export default function ExecutionChecklistSection({ taskId, variant = "full" }) 
         </div>
       )}
 
-      {/* Checklist rows — entire row is clickable toggle target */}
+      {/* Checklist rows — checkbox toggles, text clicks to edit */}
       <div className="space-y-0">
-        {sortedItems.map((item) => (
-          <label
-            key={item.id}
-            role="button"
-            onClick={(e) => { e.preventDefault(); toggleMutation.mutate({ id: item.id, is_complete: !item.is_complete }); }}
-            className={cn(
-              "flex items-center gap-3 py-2 px-3 -mx-3 rounded cursor-pointer transition-colors select-none",
-              "hover:bg-gray-800/50 active:bg-gray-800/70",
-              "min-h-[40px]"
-            )}
-          >
-            <Checkbox
-              checked={item.is_complete}
-              tabIndex={-1}
-              className="shrink-0 pointer-events-none"
-            />
-            <span className={cn(
-              "text-sm leading-snug flex-1",
-              item.is_complete ? "line-through text-gray-500" : "text-gray-200"
-            )}>
-              {item.title}
-            </span>
-          </label>
-        ))}
+        {sortedItems.map((item) => {
+          const incIdx = incompleteItems.findIndex(i => i.id === item.id);
+          const isFirst = incIdx === 0;
+          const isLast = incIdx === incompleteItems.length - 1;
+          const showReorder = !item.is_complete && incompleteItems.length > 1;
+
+          return (
+            <div
+              key={item.id}
+              className={cn(
+                "flex items-center gap-3 py-2 px-3 -mx-3 rounded transition-colors group/cl",
+                "hover:bg-gray-800/50",
+                "min-h-[40px]"
+              )}
+            >
+              <Checkbox
+                checked={item.is_complete}
+                onCheckedChange={(checked) =>
+                  toggleMutation.mutate({ id: item.id, is_complete: !!checked })
+                }
+                className="shrink-0"
+              />
+              {editingId === item.id ? (
+                <Input
+                  autoFocus
+                  value={editingText}
+                  onChange={(e) => setEditingText(e.target.value)}
+                  onBlur={() => saveEdit(item.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); saveEdit(item.id); }
+                    if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
+                  }}
+                  className="flex-1 bg-gray-800/50 border-gray-700 text-white text-sm h-7 py-0"
+                />
+              ) : (
+                <span
+                  onClick={() => !item.is_complete && startEdit(item)}
+                  className={cn(
+                    "text-sm leading-snug flex-1",
+                    item.is_complete
+                      ? "line-through text-gray-500"
+                      : "text-gray-200 cursor-pointer hover:text-white"
+                  )}
+                >
+                  {item.title}
+                </span>
+              )}
+              {/* Hover actions: edit, reorder, delete */}
+              {editingId !== item.id && (
+                <div className={cn(
+                  "flex items-center gap-0.5 shrink-0",
+                  isMobile ? "opacity-100" : "opacity-0 group-hover/cl:opacity-100",
+                  "transition-opacity"
+                )}>
+                  {!item.is_complete && (
+                    <Button type="button" variant="ghost" size="icon"
+                      onClick={() => startEdit(item)}
+                      className="h-6 w-6 text-gray-500 hover:text-white hover:bg-gray-700">
+                      <Pencil className="w-3 h-3" />
+                    </Button>
+                  )}
+                  {showReorder && (
+                    <>
+                      <Button type="button" variant="ghost" size="icon"
+                        disabled={isFirst || isReordering}
+                        onClick={() => handleMove(item.id, 'up')}
+                        className="h-6 w-6 text-gray-500 hover:text-white hover:bg-gray-700 disabled:opacity-30">
+                        <ArrowUp className="w-3 h-3" />
+                      </Button>
+                      <Button type="button" variant="ghost" size="icon"
+                        disabled={isLast || isReordering}
+                        onClick={() => handleMove(item.id, 'down')}
+                        className="h-6 w-6 text-gray-500 hover:text-white hover:bg-gray-700 disabled:opacity-30">
+                        <ArrowDown className="w-3 h-3" />
+                      </Button>
+                    </>
+                  )}
+                  <Button type="button" variant="ghost" size="icon"
+                    onClick={() => deleteMutation.mutate(item.id)}
+                    className="h-6 w-6 text-gray-500 hover:text-red-400 hover:bg-red-950/30">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          );
+        })}
 
         {sortedItems.length === 0 && (
           <p className="text-sm text-gray-500 py-2">No checklist items yet</p>
