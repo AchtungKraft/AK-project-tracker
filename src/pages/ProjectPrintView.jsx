@@ -361,20 +361,53 @@ export default function ProjectPrintView() {
         {/* === ASSIGNED VIEW === */}
         {viewMode === 'assigned' && (
           <div className="mb-6">
-            {assignedSections.map((section) => (
-              <div key={section.memberId} className="mb-6">
-                <h2 className="text-sm font-bold uppercase tracking-wider text-gray-800 border-b-2 border-gray-400 pb-1 mb-2">
-                  {section.name}
-                  <span className="text-gray-400 font-normal ml-2">({section.tasks.length})</span>
-                </h2>
-                <div className="space-y-0">
-                  {section.tasks.map((task) => (
-                    <PrintTaskRow key={task.id} task={task} teamMap={teamMap} formatDate={formatDate} isOverdue={isOverdue} isUrgent={isUrgentPriority(task)}
-                      taskPartLinksByTaskId={taskPartLinksByTaskId} checklistItemsByTaskId={checklistItemsByTaskId} />
-                  ))}
+            {assignedSections.map((section) => {
+              // In multi-project mode, sub-group tasks by project under each person
+              const tasksByProject = isMultiProject
+                ? (() => {
+                    const byPid = {};
+                    section.tasks.forEach(t => {
+                      if (!byPid[t.project_id]) byPid[t.project_id] = [];
+                      byPid[t.project_id].push(t);
+                    });
+                    return projectIds
+                      .filter(pid => byPid[pid]?.length > 0)
+                      .map(pid => ({ project: projectMap[pid] || { name: 'Unknown' }, tasks: byPid[pid] }));
+                  })()
+                : null;
+
+              return (
+                <div key={section.memberId} className="mb-6">
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-gray-800 border-b-2 border-gray-400 pb-1 mb-2">
+                    {section.name}
+                    <span className="text-gray-400 font-normal ml-2">({section.tasks.length})</span>
+                  </h2>
+                  {tasksByProject ? (
+                    tasksByProject.map(({ project: proj, tasks }) => (
+                      <div key={proj.id || proj.name} className="mb-3">
+                        <h3 className="text-xs font-semibold text-gray-600 border-b border-gray-200 pb-0.5 mb-1 ml-1">
+                          {proj.name}
+                          <span className="text-gray-400 font-normal ml-1">({tasks.length})</span>
+                        </h3>
+                        <div className="space-y-0">
+                          {tasks.map((task) => (
+                            <PrintTaskRow key={task.id} task={task} teamMap={teamMap} formatDate={formatDate} isOverdue={isOverdue} isUrgent={isUrgentPriority(task)}
+                              taskPartLinksByTaskId={taskPartLinksByTaskId} checklistItemsByTaskId={checklistItemsByTaskId} />
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="space-y-0">
+                      {section.tasks.map((task) => (
+                        <PrintTaskRow key={task.id} task={task} teamMap={teamMap} formatDate={formatDate} isOverdue={isOverdue} isUrgent={isUrgentPriority(task)}
+                          taskPartLinksByTaskId={taskPartLinksByTaskId} checklistItemsByTaskId={checklistItemsByTaskId} />
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
