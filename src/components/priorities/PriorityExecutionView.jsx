@@ -3,6 +3,8 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { sortChecklistItems } from "@/components/tasks/checklistHelpers";
 import { toast } from "sonner";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import ExecutionTaskRow from "./ExecutionTaskRow";
 import ProjectTypeGroupHeader from "./ProjectTypeGroupHeader";
 import { sortTasksByPriority } from "@/utils/taskPrioritySort";
@@ -210,7 +212,9 @@ export default function PriorityExecutionView({
               return (
                 <div key={project.id} className="mb-6 ml-2">
                   <h1 className="text-lg font-bold border-b-2 border-gray-400 pb-1 mb-3 text-gray-100">
-                    {project.name}
+                    <Link to={createPageUrl("ProjectDetail") + "?id=" + project.id} className="hover:text-red-400 hover:underline transition-colors">
+                      {project.name}
+                    </Link>
                   </h1>
 
                   {sortedCats.map(([catName, catTasks]) => (

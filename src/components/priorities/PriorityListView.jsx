@@ -2,6 +2,8 @@ import React, { useMemo } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { MessageSquare, Package, FolderKanban, Flame } from "lucide-react";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { sortTasksByPriority, isUrgentPriority, isFuturePriority } from "@/utils/taskPrioritySort";
@@ -131,9 +133,16 @@ export default function PriorityListView({
           {/* Project header */}
           <div className="flex items-center gap-2 px-3 py-2 bg-gray-800/40 border-b border-gray-700/50">
             <FolderKanban className="w-4 h-4 text-red-400/70 shrink-0" />
-            <span className="text-sm font-semibold text-gray-200 truncate">
-              {group.project?.name || 'No Project'}
-            </span>
+            {group.project ? (
+              <Link
+                to={createPageUrl("ProjectDetail") + "?id=" + group.project.id}
+                className="text-sm font-semibold text-gray-200 truncate hover:text-red-400 hover:underline transition-colors"
+              >
+                {group.project.name}
+              </Link>
+            ) : (
+              <span className="text-sm font-semibold text-gray-200 truncate">No Project</span>
+            )}
             {group.project?.client_name && (
               <span className="text-xs text-gray-500 truncate hidden sm:inline">
                 — {group.project.client_name}

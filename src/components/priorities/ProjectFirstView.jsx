@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, Plus, User, Zap, Clock, Printer } from "lucide-react";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import TaskCard from "@/components/project/TaskCard";
 import TaskQuickPreview from "./TaskQuickPreview";
 import ProjectTypeGroupHeader from "./ProjectTypeGroupHeader";
@@ -179,13 +181,19 @@ function ProjectBlock({ project, tasks, sp, teamMembers, buckets }) {
         <div className="flex items-center gap-1.5 w-full">
           <button
             onClick={() => setCollapsed(v => !v)}
-            className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
+            className="flex items-center gap-1 shrink-0"
           >
             {collapsed
-              ? <ChevronRight className="w-3 h-3 text-gray-500 shrink-0" />
-              : <ChevronDown className="w-3 h-3 text-gray-500 shrink-0" />}
-            <span className="text-xs font-bold text-gray-200 truncate">{project.name}</span>
+              ? <ChevronRight className="w-3 h-3 text-gray-500" />
+              : <ChevronDown className="w-3 h-3 text-gray-500" />}
           </button>
+          <Link
+            to={createPageUrl("ProjectDetail") + "?id=" + project.id}
+            className="text-xs font-bold text-gray-200 truncate hover:text-red-400 hover:underline transition-colors flex-1 min-w-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {project.name}
+          </Link>
           <span className="text-[9px] text-gray-600 shrink-0">
             {tasks.length} task{tasks.length !== 1 ? "s" : ""}
             {hasOverdue && <span className="text-red-500 ml-1">• {overdueCount} overdue</span>}
