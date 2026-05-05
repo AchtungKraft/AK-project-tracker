@@ -5,7 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ListChecks, ChevronDown, ChevronRight, Trash2, Loader2, ArrowUp, ArrowDown } from "lucide-react";
+import { ListChecks, ChevronDown, ChevronRight, Trash2, Loader2, ArrowUp, ArrowDown, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { getNextSortOrder, updateChecklistOrder } from "./checklistHelpers";
@@ -16,6 +16,8 @@ export default function TaskChecklistSection({ taskId }) {
   const inputRef = useRef(null);
   const [newItemTitle, setNewItemTitle] = useState("");
   const [manualCollapse, setManualCollapse] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editingText, setEditingText] = useState("");
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['taskChecklistItems', 'task', taskId],
@@ -74,6 +76,34 @@ export default function TaskChecklistSection({ taskId }) {
     mutationFn: (id) => base44.entities.TaskChecklistItem.delete(id),
     onSuccess: invalidateChecklist,
   });
+
+  const updateTitleMutation = useMutation({
+    mutationFn: ({ id, title }) => base44.entities.TaskChecklistItem.update(id, { title }),
+    onSuccess: invalidateChecklist,
+  });
+
+  const startEdit = (item) => {
+    setEditingId(item.id);
+    setEditingText(item.title);
+  };
+
+  const saveEdit = (itemId) => {
+    const trimmed = editingText.trim();
+    setEditingId(null);
+    if (!trimmed) {
+      deleteMutation.mutate(itemId);
+    } else {
+      const original = items.find(i => i.id === itemId);
+      if (original && trimmed !== original.title) {
+        updateTitleMutation.mutate({ id: itemId, title: trimmed });
+      }
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditingText("");
+  };
 
   const handleAddItem = () => {
     const trimmed = newItemTitle.trim();
@@ -169,58 +199,82 @@ export default function TaskChecklistSection({ taskId }) {
                     }
                     className="shrink-0"
                   />
-                  <span
-                    className={cn(
-                      "flex-1 text-sm break-words",
-                      item.is_complete
-                        ? "line-through text-gray-500"
-                        : "text-gray-200"
-                    )}
-                  >
-                    {item.title}
-                  </span>
-                  {/* Reorder controls — only for incomplete items */}
-                  {showReorder && (
-                    <div className={cn(
-                      "flex items-center gap-0.5 shrink-0",
-                      isMobile ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-                      "transition-opacity"
-                    )}>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        disabled={isFirst || isReordering}
-                        onClick={() => handleMove(item.id, 'up')}
-                        className="h-6 w-6 text-gray-500 hover:text-white hover:bg-gray-700 disabled:opacity-30"
-                      >
-                        <ArrowUp className="w-3 h-3" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        disabled={isLast || isReordering}
-                        onClick={() => handleMove(item.id, 'down')}
-                        className="h-6 w-6 text-gray-500 hover:text-white hover:bg-gray-700 disabled:opacity-30"
-                      >
-                        <ArrowDown className="w-3 h-3" />
-                      </Button>
-                    </div>
+                  {editingId === item.id ? (
+                    <Input
+                      autoFocus
+                      value={editingText}
+                      onChange={(e) => setEditingText(e.target.value)}
+                      onBlur={() => saveEdit(item.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); saveEdit(item.id); }
+                        if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
+                      }}
+                      className="flex-1 bg-gray-800/50 border-gray-700 text-white text-sm h-7 py-0"
+                    />
+                  ) : (
+                    <span
+                      onClick={() => !item.is_complete && startEdit(item)}
+                      className={cn(
+                        "flex-1 text-sm break-words",
+                        item.is_complete
+                          ? "line-through text-gray-500"
+                          : "text-gray-200 cursor-pointer hover:text-white"
+                      )}
+                    >
+                      {item.title}
+                    </span>
                   )}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => deleteMutation.mutate(item.id)}
-                    className={cn(
-                      "shrink-0 h-7 w-7 text-gray-500 hover:text-red-400 hover:bg-red-950/30",
-                      isMobile ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-                      "transition-opacity"
+                  {/* Action controls — edit, reorder, delete */}
+                  <div className={cn(
+                    "flex items-center gap-0.5 shrink-0",
+                    isMobile ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                    "transition-opacity"
+                  )}>
+                    {!item.is_complete && editingId !== item.id && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => startEdit(item)}
+                        className="h-6 w-6 text-gray-500 hover:text-white hover:bg-gray-700"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </Button>
                     )}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
+                    {showReorder && editingId !== item.id && (
+                      <>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          disabled={isFirst || isReordering}
+                          onClick={() => handleMove(item.id, 'up')}
+                          className="h-6 w-6 text-gray-500 hover:text-white hover:bg-gray-700 disabled:opacity-30"
+                        >
+                          <ArrowUp className="w-3 h-3" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          disabled={isLast || isReordering}
+                          onClick={() => handleMove(item.id, 'down')}
+                          className="h-6 w-6 text-gray-500 hover:text-white hover:bg-gray-700 disabled:opacity-30"
+                        >
+                          <ArrowDown className="w-3 h-3" />
+                        </Button>
+                      </>
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => deleteMutation.mutate(item.id)}
+                      className="h-6 w-6 text-gray-500 hover:text-red-400 hover:bg-red-950/30"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
                 </div>
               );
             })
