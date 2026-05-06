@@ -8,6 +8,7 @@ import KnowledgeBreadcrumb from "./KnowledgeBreadcrumb";
 import KnowledgeViewToolbar from "./KnowledgeViewToolbar";
 import KnowledgeListView from "./KnowledgeListView";
 import KnowledgeDetailDrawer from "./KnowledgeDetailDrawer";
+import SubsystemWorkspace from "./SubsystemWorkspace";
 
 const STORAGE_KEY = 'achtung_knowledge_explorer_state';
 
@@ -124,9 +125,9 @@ export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItem
         {/* Header */}
         <div className="flex items-center justify-between p-3 bg-black/40 backdrop-blur-xl border-b border-red-900/30">
           <div>
-            <h2 className="text-lg font-bold text-white">Knowledge Base</h2>
+            <h2 className="text-lg font-bold text-white">Subsystem Intelligence</h2>
             <p className="text-xs text-gray-400">
-              {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''} {selectedCategoryId ? 'in category' : 'total'}
+              {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''} {selectedCategoryId ? 'in subsystem' : 'total'}
             </p>
           </div>
           <Button onClick={onItemCreate} size="sm" className="bg-red-600 hover:bg-red-700 gap-2">
@@ -175,13 +176,22 @@ export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItem
             </div>
 
             <div className="flex-1 p-4 md:overflow-y-auto">
-              <KnowledgeListView
-                items={filteredItems}
-                categories={categories}
-                selectedCategoryId={selectedCategoryId}
-                showGrouping={showGrouping}
-                onItemClick={setSelectedItem}
-              />
+              {selectedCategoryId ? (
+                <SubsystemWorkspace
+                  items={filteredItems}
+                  categories={categories}
+                  categoryId={selectedCategoryId}
+                  onItemClick={setSelectedItem}
+                />
+              ) : (
+                <KnowledgeListView
+                  items={filteredItems}
+                  categories={categories}
+                  selectedCategoryId={selectedCategoryId}
+                  showGrouping={showGrouping}
+                  onItemClick={setSelectedItem}
+                />
+              )}
             </div>
           </div>
         </div>

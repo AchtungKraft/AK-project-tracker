@@ -40,7 +40,7 @@ export default function BuildKnowledge() {
                 <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">
                   BUILD KNOWLEDGE
                 </h1>
-                <p className="text-sm text-gray-400">Restoration procedures, guides, and operational intelligence</p>
+                <p className="text-sm text-gray-400">Subsystem intelligence — procedures, field observations, and operational knowledge</p>
               </div>
               <Button
                 onClick={async () => {
