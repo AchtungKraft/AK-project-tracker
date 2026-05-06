@@ -4,7 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Pencil, Clock, Tag, ExternalLink, Package, ListChecks, FileText, Image, Pin, Crown, Link2, AlertOctagon, ArrowRight, Plus, ListOrdered, StickyNote, AlertTriangle, Lightbulb } from "lucide-react";
+import { Pencil, Clock, Tag, ExternalLink, Package, ListChecks, FileText, Image, Pin, Crown, Link2, AlertOctagon, ArrowRight, Plus, ListOrdered, StickyNote, AlertTriangle, Lightbulb, Camera } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { POST_TYPE_CONFIG } from "./KnowledgeFeedCard";
@@ -13,15 +13,7 @@ import KnowledgeProjectNotes from "./KnowledgeProjectNotes";
 import KnowledgeLegacyContent from "./KnowledgeLegacyContent";
 import ProcedureEntryTimeline from "./ProcedureEntryTimeline";
 import ProcedureEntryEditor from "./ProcedureEntryEditor";
-
-function SectionLabel({ icon: Icon, title, count, color }) {
-  return (
-    <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2 flex items-center gap-1.5">
-      <Icon className={cn("w-3.5 h-3.5", color)} /> {title}
-      {count !== undefined && <span className="text-gray-600">({count})</span>}
-    </h3>
-  );
-}
+import ImageLightbox from "./ImageLightbox";
 
 function getCoverImage(item) {
   if (item.cover_image_url) return item.cover_image_url;
@@ -30,17 +22,18 @@ function getCoverImage(item) {
   return null;
 }
 
-const ADD_ENTRY_OPTIONS = [
-  { type: "step", label: "Add Step", icon: ListOrdered },
-  { type: "note", label: "Add Observation", icon: StickyNote },
-  { type: "issue", label: "Add Issue", icon: AlertTriangle },
-  { type: "reference", label: "Add Reference", icon: FileText },
-  { type: "tip", label: "Add Tip", icon: Lightbulb },
+const QUICK_ADD = [
+  { type: "step", label: "Step", icon: ListOrdered },
+  { type: "note", label: "Observation", icon: StickyNote },
+  { type: "issue", label: "Issue", icon: AlertTriangle },
+  { type: "tip", label: "Tip", icon: Lightbulb },
+  { type: "media", label: "Photos", icon: Camera },
 ];
 
 export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdit }) {
   const [entryEditorOpen, setEntryEditorOpen] = useState(false);
-  const [showAddMenu, setShowAddMenu] = useState(false);
+  const [entryEditorType, setEntryEditorType] = useState("step");
+  const [coverLightbox, setCoverLightbox] = useState(false);
 
   const { data: taskLinks = [] } = useQuery({
     queryKey: ['knowledgeTaskLinks_detail', item?.id],
@@ -72,33 +65,17 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
   const linkedTasks = tasks.filter(t => taskLinks.some(l => l.task_id === t.id));
   const hasHtmlContent = item.content_html && item.content_html !== '<p><br></p>';
   const hasLegacyContent = item.content_blocks?.length > 0;
-  const imageUrls = item.image_urls || [];
-  const legacyMediaUrls = item.media_urls || [];
-  const allImages = [...imageUrls, ...legacyMediaUrls];
   const coverImg = getCoverImage(item);
-  const isMasterProcedure = item.is_master_procedure;
 
-  // Parent procedure
-  const parentProcedure = item.parent_procedure_id
-    ? allItems.find(i => i.id === item.parent_procedure_id)
-    : null;
-
-  // Superseded-by item
-  const supersededBy = item.superseded_by_id
-    ? allItems.find(i => i.id === item.superseded_by_id)
-    : null;
-
-  // Related posts
-  const relatedPosts = allItems.filter(i =>
-    i.id !== item.id &&
-    !i.is_obsolete &&
-    (i.category_id === item.category_id || i.subcategory_id === item.subcategory_id)
-  ).slice(0, 6);
-
-  // Has entries (new model) or legacy content (old model)?
+  const supersededBy = item.superseded_by_id ? allItems.find(i => i.id === item.superseded_by_id) : null;
+  const parentProcedure = item.parent_procedure_id ? allItems.find(i => i.id === item.parent_procedure_id) : null;
   const hasEntries = entries.length > 0;
-  // Show legacy inline content only if no entries exist (backward compat)
   const showLegacyContent = !hasEntries && (hasHtmlContent || hasLegacyContent);
+
+  const openEntryEditor = (type) => {
+    setEntryEditorType(type);
+    setEntryEditorOpen(true);
+  };
 
   return (
     <>
@@ -106,263 +83,216 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
         <SheetContent className="bg-gray-900 text-white w-full sm:max-w-2xl overflow-y-auto flex flex-col p-0">
           <SheetHeader className="sr-only">
             <SheetTitle>{item.title}</SheetTitle>
-            <SheetDescription>Knowledge post detail view</SheetDescription>
+            <SheetDescription>Procedure detail</SheetDescription>
           </SheetHeader>
 
-          {/* IMAGE-FIRST: Cover */}
-          {coverImg && (
-            <div className="w-full h-48 md:h-56 overflow-hidden bg-gray-800 shrink-0">
-              <img src={coverImg} alt="" className="w-full h-full object-cover" />
-            </div>
-          )}
+          {/* ===== LIGHTWEIGHT HEADER ===== */}
+          <div className="shrink-0">
+            {/* Cover image — tap to zoom */}
+            {coverImg && (
+              <button onClick={() => setCoverLightbox(true)} className="w-full h-40 md:h-48 overflow-hidden bg-gray-800 block">
+                <img src={coverImg} alt="" className="w-full h-full object-cover hover:scale-[1.02] transition-transform" />
+              </button>
+            )}
 
-          {/* Header */}
-          <div className="p-4 pb-3 shrink-0">
-            {/* Badges row */}
-            <div className="flex flex-wrap items-center gap-2 mb-2">
-              {isMasterProcedure && (
-                <Badge className="bg-red-900/50 text-red-300 text-[10px] gap-1 border-0">
-                  <Crown className="w-2.5 h-2.5" /> PROCEDURE
-                </Badge>
-              )}
-              {item.is_pinned && !isMasterProcedure && (
-                <Badge className="bg-amber-900/40 text-amber-300 text-[10px] gap-1 border-0">
-                  <Pin className="w-2.5 h-2.5" /> PINNED
-                </Badge>
-              )}
-              <Badge className="text-[10px] border-0 bg-gray-800 text-gray-300 gap-1">
-                <span className={cn("w-1.5 h-1.5 rounded-full", config.dot)} />
-                {config.label}
-              </Badge>
-              {hasEntries && (
-                <Badge className="text-[10px] border-0 bg-gray-800 text-gray-400">{entries.length} entr{entries.length === 1 ? 'y' : 'ies'}</Badge>
-              )}
+            <div className="px-4 pt-3 pb-2">
+              {/* Obsolete banner */}
               {item.is_obsolete && (
-                <Badge className="bg-gray-700/60 text-gray-400 text-[10px] gap-1 border-0">
-                  <AlertOctagon className="w-2.5 h-2.5" /> OBSOLETE
-                </Badge>
+                <div className="rounded-md bg-amber-950/30 border border-amber-900/40 px-3 py-2 mb-2 flex items-center gap-2 text-xs text-amber-300">
+                  <AlertOctagon className="w-3.5 h-3.5 shrink-0" /> Obsolete
+                  {supersededBy && <span className="text-gray-400 ml-1">→ {supersededBy.title}</span>}
+                </div>
               )}
-              {item.status === 'draft' && <Badge variant="outline" className="border-yellow-600/50 text-yellow-500 text-xs">Draft</Badge>}
-              {item.status === 'archived' && <Badge variant="outline" className="border-gray-600/50 text-gray-500 text-xs">Archived</Badge>}
-            </div>
 
-            {/* Obsolete notice */}
-            {item.is_obsolete && (
-              <div className="rounded-lg bg-amber-950/30 border border-amber-900/40 p-3 mb-2">
-                <p className="text-xs text-amber-300 font-medium flex items-center gap-1.5">
-                  <AlertOctagon className="w-3.5 h-3.5" /> This post has been marked obsolete
-                </p>
-                {supersededBy && (
-                  <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
-                    <ArrowRight className="w-3 h-3" /> Replaced by: <span className="text-red-400 font-medium">{supersededBy.title}</span>
-                  </p>
+              {/* Category + status line */}
+              <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
+                {cat && (
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                    {cat.name}{subcat ? ` › ${subcat.name}` : ''}
+                  </span>
                 )}
+                {item.is_master_procedure && <Badge className="bg-red-900/50 text-red-300 text-[9px] gap-0.5 border-0 h-4"><Crown className="w-2 h-2" /> PROCEDURE</Badge>}
+                {item.is_pinned && !item.is_master_procedure && <Badge className="bg-amber-900/40 text-amber-300 text-[9px] gap-0.5 border-0 h-4"><Pin className="w-2 h-2" /> PINNED</Badge>}
+                {item.status === 'draft' && <Badge variant="outline" className="border-yellow-600/40 text-yellow-500 text-[9px] h-4">Draft</Badge>}
               </div>
-            )}
 
-            {/* Category breadcrumb */}
-            {cat && (
-              <p className="text-xs text-gray-500 mb-1">
-                <span className="w-2 h-2 inline-block rounded-full mr-1" style={{ backgroundColor: cat.color }} />
-                {cat.name}{subcat ? ` › ${subcat.name}` : ''}
-              </p>
-            )}
+              {/* Title */}
+              <h2 className="text-xl font-bold text-white leading-tight">{item.title}</h2>
+              {item.summary && <p className="text-gray-400 text-sm mt-1 leading-snug">{item.summary}</p>}
 
-            <h2 className="text-xl md:text-2xl font-bold text-white leading-tight">{item.title}</h2>
-            {item.summary && <p className="text-gray-400 text-sm mt-1.5">{item.summary}</p>}
-
-            {/* Parent procedure link */}
-            {parentProcedure && (
-              <div className="mt-2 flex items-center gap-1.5 text-xs text-gray-500">
-                <Link2 className="w-3 h-3" />
-                <span>Part of:</span>
-                <span className="text-red-400 font-medium">{parentProcedure.title}</span>
+              {/* Compact meta row — vehicle tags, parts count, date */}
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                {item.vehicle_tags?.map(tag => (
+                  <Badge key={tag} variant="outline" className="text-[9px] border-gray-700 text-gray-400 gap-0.5 py-0 h-[18px]">
+                    <Tag className="w-2 h-2" /> {tag}
+                  </Badge>
+                ))}
+                {hasEntries && (
+                  <span className="text-[10px] text-gray-500">{entries.length} entr{entries.length === 1 ? 'y' : 'ies'}</span>
+                )}
+                <span className="text-[10px] text-gray-600 flex items-center gap-0.5 ml-auto">
+                  <Clock className="w-2.5 h-2.5" />
+                  {item.updated_date ? format(new Date(item.updated_date), 'MMM d, yyyy') : ''}
+                </span>
               </div>
-            )}
 
-            {/* Vehicle tags + meta */}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-gray-500 mt-3">
-              {item.vehicle_tags?.map(tag => (
-                <Badge key={tag} variant="outline" className="text-[10px] border-gray-700 text-gray-300 gap-0.5 py-0 h-5">
-                  <Tag className="w-2.5 h-2.5" /> {tag}
-                </Badge>
-              ))}
-              <span className="flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                {item.updated_date ? format(new Date(item.updated_date), 'MMM d, yyyy') : 'N/A'}
-              </span>
-              {item.created_by && <span className="text-gray-600">by {item.created_by.split('@')[0]}</span>}
+              {parentProcedure && (
+                <div className="mt-1.5 flex items-center gap-1 text-[10px] text-gray-500">
+                  <Link2 className="w-2.5 h-2.5" /> Part of: <span className="text-red-400">{parentProcedure.title}</span>
+                </div>
+              )}
             </div>
+
+            {/* Quick-add strip — always visible below header */}
+            <div className="px-4 pb-3 flex gap-1.5 overflow-x-auto scrollbar-hide">
+              {QUICK_ADD.map(qa => {
+                const QIcon = qa.icon;
+                return (
+                  <button key={qa.type} onClick={() => openEntryEditor(qa.type)}
+                    className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white text-xs transition-colors active:scale-95">
+                    <QIcon className="w-3.5 h-3.5" /> {qa.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="border-t border-gray-800/60" />
           </div>
 
-          {/* Body */}
-          <div className="flex-1 overflow-y-auto px-4 pb-4">
+          {/* ===== PRIMARY CONTENT: TIMELINE ===== */}
+          <div className="flex-1 overflow-y-auto px-4 pt-3 pb-4">
 
-            {/* ===== ENTRY TIMELINE (new model) ===== */}
-            {(hasEntries || isMasterProcedure) && (
-              <section className="mb-5">
-                <SectionLabel
-                  icon={ListOrdered}
-                  title={isMasterProcedure ? "Procedure Entries" : "Entries"}
-                  count={entries.length}
-                  color="text-red-400"
-                />
-                <ProcedureEntryTimeline procedureId={item.id} />
-              </section>
+            {/* Entry Timeline */}
+            {(hasEntries || item.is_master_procedure) && (
+              <ProcedureEntryTimeline procedureId={item.id} />
             )}
 
-            {/* ===== LEGACY CONTENT (backward compat — shows only if no entries) ===== */}
+            {/* Legacy content fallback */}
             {showLegacyContent && (
-              <>
-                {hasHtmlContent && (
-                  <section className="mb-5">
-                    <SectionLabel icon={FileText} title="Content (Legacy)" color="text-gray-400" />
-                    <div
-                      className="prose prose-sm prose-invert max-w-none text-gray-200 
-                        [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-white
-                        [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-white
-                        [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-white
-                        [&_a]:text-blue-400 [&_a]:underline
-                        [&_img]:rounded-lg [&_img]:my-3 [&_img]:max-w-full
-                        [&_blockquote]:border-l-red-600 [&_blockquote]:text-gray-400
-                        [&_code]:bg-gray-800 [&_code]:text-red-400 [&_code]:px-1 [&_code]:rounded
-                        [&_pre]:bg-gray-800 [&_pre]:rounded-lg [&_pre]:p-3"
-                      dangerouslySetInnerHTML={{ __html: item.content_html }}
-                    />
-                  </section>
+              <div className="mb-4">
+                {hasHtmlContent ? (
+                  <div className="prose prose-sm prose-invert max-w-none text-gray-200
+                    [&_a]:text-blue-400 [&_a]:underline [&_img]:rounded-lg [&_img]:my-3 [&_img]:max-w-full
+                    [&_blockquote]:border-l-red-600 [&_blockquote]:text-gray-400
+                    [&_code]:bg-gray-800 [&_code]:text-red-400 [&_code]:px-1 [&_code]:rounded"
+                    dangerouslySetInnerHTML={{ __html: item.content_html }}
+                  />
+                ) : (
+                  <KnowledgeLegacyContent item={item} />
                 )}
-                {!hasHtmlContent && hasLegacyContent && (
-                  <section className="mb-5">
-                    <KnowledgeLegacyContent item={item} />
-                  </section>
-                )}
-              </>
+              </div>
             )}
 
-            {!hasEntries && !showLegacyContent && !isMasterProcedure && (
-              <p className="text-gray-500 text-sm italic mb-5">No content yet. Add an entry to get started.</p>
+            {!hasEntries && !showLegacyContent && !item.is_master_procedure && (
+              <div className="text-center py-8">
+                <ListOrdered className="w-6 h-6 mx-auto mb-1.5 text-gray-600" />
+                <p className="text-sm text-gray-500">No entries yet</p>
+                <p className="text-xs text-gray-600">Tap a button above to add your first step</p>
+              </div>
             )}
 
-            {/* Gallery Images (container-level) */}
-            {allImages.length > 0 && (
-              <section className="mb-5">
-                <SectionLabel icon={Image} title="Photos" count={allImages.length} color="text-purple-400" />
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {allImages.map((url, i) => (
-                    <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                      <img src={url} alt="" className="rounded-lg h-32 w-full object-cover bg-gray-800 hover:opacity-90 transition-opacity" />
-                    </a>
-                  ))}
-                </div>
-              </section>
-            )}
+            {/* ===== SECONDARY: Context sections ===== */}
+            <div className="mt-4 space-y-4">
+              {/* Container-level gallery */}
+              {(item.image_urls?.length > 0 || item.media_urls?.length > 0) && (
+                <ContainerImages images={[...(item.image_urls || []), ...(item.media_urls || [])]} />
+              )}
 
-            {/* Reference URL (container-level) */}
-            {item.reference_url && (
-              <section className="mb-5">
-                <SectionLabel icon={ExternalLink} title="Reference" color="text-blue-400" />
+              {/* Reference URL */}
+              {item.reference_url && (
                 <a href={item.reference_url} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-2 p-3 rounded-lg bg-gray-800/40 border border-gray-700/50 hover:bg-gray-800 transition-colors">
-                  <ExternalLink className="w-4 h-4 text-blue-400 shrink-0" />
-                  <span className="text-sm text-blue-400 truncate">{item.reference_url}</span>
+                  className="flex items-center gap-2 p-2.5 rounded-lg bg-gray-800/30 hover:bg-gray-800/50 transition-colors text-xs">
+                  <ExternalLink className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                  <span className="text-blue-400 truncate">{item.reference_url}</span>
                 </a>
-              </section>
-            )}
+              )}
 
-            {/* Attachments */}
-            {item.attachments?.length > 0 && (
-              <section className="mb-5">
-                <SectionLabel icon={FileText} title="Attachments" count={item.attachments.length} color="text-red-400" />
+              {/* Attachments */}
+              {item.attachments?.length > 0 && (
                 <div className="space-y-1">
                   {item.attachments.map(att => (
                     <a key={att.id} href={att.url} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-2 p-2 rounded-lg bg-gray-800/40 border border-gray-700/50 hover:bg-gray-800 transition-colors">
-                      <FileText className="w-4 h-4 text-red-400 shrink-0" />
-                      <span className="text-sm text-gray-200">{att.name}</span>
+                      className="flex items-center gap-2 p-2 rounded-lg bg-gray-800/30 hover:bg-gray-800/50 transition-colors text-xs">
+                      <FileText className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                      <span className="text-gray-300">{att.name}</span>
                     </a>
                   ))}
                 </div>
-              </section>
-            )}
+              )}
 
-            <hr className="border-gray-700/50 mb-4" />
+              <KnowledgePartLinks knowledgeItemId={item.id} />
 
-            {/* Related Parts */}
-            <KnowledgePartLinks knowledgeItemId={item.id} />
-
-            {/* Related Tasks */}
-            {linkedTasks.length > 0 && (
-              <section className="mb-5">
-                <SectionLabel icon={ListChecks} title="Related Tasks" count={linkedTasks.length} color="text-green-400" />
-                <div className="space-y-1">
-                  {linkedTasks.map(task => (
-                    <div key={task.id} className="flex items-center gap-2 p-2 rounded-lg bg-gray-800/40 border border-gray-700/50">
-                      <ListChecks className="w-4 h-4 text-green-400 shrink-0" />
-                      <span className="text-sm text-gray-200 flex-1 truncate">{task.name}</span>
-                    </div>
-                  ))}
+              {linkedTasks.length > 0 && (
+                <div>
+                  <h4 className="text-[10px] font-bold uppercase tracking-widest text-gray-600 mb-1.5 flex items-center gap-1">
+                    <ListChecks className="w-3 h-3" /> Tasks ({linkedTasks.length})
+                  </h4>
+                  <div className="space-y-1">
+                    {linkedTasks.map(task => (
+                      <div key={task.id} className="flex items-center gap-2 p-2 rounded-lg bg-gray-800/30 text-sm text-gray-300">
+                        <ListChecks className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                        <span className="truncate">{task.name}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </section>
-            )}
+              )}
 
-            {/* Project Notes */}
-            <KnowledgeProjectNotes knowledgeItemId={item.id} />
-
-            {/* Related posts */}
-            {relatedPosts.length > 0 && (
-              <section className="mb-5">
-                <SectionLabel icon={Link2} title="Related" count={relatedPosts.length} color="text-gray-400" />
-                <div className="space-y-1">
-                  {relatedPosts.map(sib => (
-                    <div key={sib.id} className="flex items-center gap-2 p-2 rounded-lg bg-gray-800/40 border border-gray-700/50">
-                      <FileText className="w-4 h-4 text-gray-400 shrink-0" />
-                      <span className="text-sm text-gray-200 flex-1 truncate">{sib.title}</span>
-                      {sib.is_master_procedure && <Crown className="w-3 h-3 text-red-400 shrink-0" />}
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
+              <KnowledgeProjectNotes knowledgeItemId={item.id} />
+            </div>
           </div>
 
-          {/* Footer — ADDITIVE workflow */}
-          <div className="shrink-0 bg-gray-900 border-t border-red-900/30 p-3 space-y-2">
-            {/* Add Entry quick actions — always visible */}
-            {showAddMenu && (
-              <div className="grid grid-cols-2 gap-2">
-                {ADD_ENTRY_OPTIONS.map(opt => {
-                  const Icon = opt.icon;
-                  return (
-                    <Button key={opt.type} variant="outline" size="sm"
-                      onClick={() => { setShowAddMenu(false); setEntryEditorOpen(true); }}
-                      className="border-gray-700 text-gray-300 gap-2 h-10 justify-start text-xs">
-                      <Icon className="w-3.5 h-3.5" /> {opt.label}
-                    </Button>
-                  );
-                })}
-              </div>
-            )}
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={onClose} className="border-gray-700 h-11 text-base px-6">Close</Button>
-              <Button onClick={() => setShowAddMenu(m => !m)} className="flex-1 bg-red-600 hover:bg-red-700 gap-2 h-11 text-base">
-                <Plus className="w-4 h-4" /> Add Entry
-              </Button>
-              <Button variant="ghost" onClick={() => onEdit(item)} className="h-11 px-3 text-gray-400 hover:text-white" title="Edit container metadata">
-                <Pencil className="w-4 h-4" />
-              </Button>
-            </div>
+          {/* ===== FOOTER ===== */}
+          <div className="shrink-0 bg-gray-900 border-t border-gray-800 p-3 flex items-center gap-2">
+            <Button variant="outline" onClick={onClose} className="border-gray-700 h-10 px-5">Close</Button>
+            <Button onClick={() => openEntryEditor("step")} className="flex-1 bg-red-600 hover:bg-red-700 gap-2 h-10">
+              <Plus className="w-4 h-4" /> Add Entry
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => onEdit(item)} className="h-10 w-10 text-gray-500 hover:text-white" title="Edit metadata">
+              <Pencil className="w-4 h-4" />
+            </Button>
           </div>
         </SheetContent>
       </Sheet>
 
-      {/* Entry Editor Sheet */}
+      {/* Cover lightbox */}
+      {coverLightbox && coverImg && (
+        <ImageLightbox images={[coverImg]} initialIndex={0} onClose={() => setCoverLightbox(false)} />
+      )}
+
+      {/* Entry Editor */}
       <ProcedureEntryEditor
         procedureId={item.id}
         procedureTitle={item.title}
         existingEntryCount={entries.length}
         isOpen={entryEditorOpen}
         onClose={() => setEntryEditorOpen(false)}
+        initialEntryType={entryEditorType}
       />
+    </>
+  );
+}
+
+// Lightweight container images section
+function ContainerImages({ images }) {
+  const [lightbox, setLightbox] = useState(null);
+  if (!images.length) return null;
+  return (
+    <>
+      <div>
+        <h4 className="text-[10px] font-bold uppercase tracking-widest text-gray-600 mb-1.5 flex items-center gap-1">
+          <Image className="w-3 h-3" /> Container Photos ({images.length})
+        </h4>
+        <div className="flex gap-1.5 overflow-x-auto scrollbar-hide pb-1">
+          {images.map((url, i) => (
+            <button key={i} onClick={() => setLightbox({ images, index: i })} className="shrink-0 rounded-lg overflow-hidden bg-gray-800 hover:ring-2 hover:ring-blue-500/50 transition-all">
+              <img src={url} alt="" loading="lazy" className="h-20 w-24 object-cover" />
+            </button>
+          ))}
+        </div>
+      </div>
+      {lightbox && <ImageLightbox images={lightbox.images} initialIndex={lightbox.index} onClose={() => setLightbox(null)} />}
     </>
   );
 }

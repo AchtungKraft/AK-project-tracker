@@ -8,7 +8,7 @@ import { BookOpen, Plus, AlertTriangle, Package, X, Lightbulb, FileText, Chevron
 import { cn } from "@/lib/utils";
 import { TYPE_CONFIG } from "./KnowledgeListView";
 import { getCoverImage, getExcerpt } from "./KnowledgeFeedCard";
-import ProcedureEntryTimeline from "./ProcedureEntryTimeline";
+import ExecutionTimeline from "./ExecutionTimeline";
 import { toast } from "sonner";
 
 const TASK_ICON_MAP = {
@@ -112,8 +112,8 @@ function KnowledgeItemCard({ item, link, onRemove, partLinks, parts }) {
       {expanded && (
         <div className="px-3 pb-3 border-t border-gray-700/30 pt-2 ml-6 space-y-2">
           {excerpt && <p className="text-xs text-gray-400">{excerpt}</p>}
-          {/* Procedure entries */}
-          <ProcedureEntryTimeline procedureId={item.id} />
+          {/* Procedure entries — execution mode */}
+          <ExecutionTimeline procedureId={item.id} />
           {/* Legacy: known issues */}
           {item.known_issues?.length > 0 && (
             <div className="space-y-1">
