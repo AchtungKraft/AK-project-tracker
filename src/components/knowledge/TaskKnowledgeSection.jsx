@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BookOpen, Plus, AlertTriangle, Package, X, Lightbulb, Image, FileText, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { TYPE_CONFIG } from "./KnowledgeListView";
+import { TYPE_CONFIG } from "./KnowledgeListView"; // Re-exported POST_TYPE_CONFIG
 
 // Local icon/color mapping for task knowledge cards (decoupled from list view)
 const TASK_ICON_MAP = {

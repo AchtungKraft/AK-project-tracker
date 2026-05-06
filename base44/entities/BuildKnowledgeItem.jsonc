@@ -24,6 +24,36 @@
       "default": "procedure",
       "description": "Content type classification"
     },
+    "post_type": {
+      "type": "string",
+      "enum": [
+        "procedure",
+        "observation",
+        "known_issue",
+        "reference",
+        "tip"
+      ],
+      "default": "procedure",
+      "description": "Operational post classification for feed filtering"
+    },
+    "is_pinned": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this entry is pinned to top of its subsystem feed"
+    },
+    "is_master_procedure": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this is a master/canonical procedure for its subsystem"
+    },
+    "parent_procedure_id": {
+      "type": "string",
+      "description": "Optional reference to a master procedure this post is attached to"
+    },
+    "cover_image_url": {
+      "type": "string",
+      "description": "Primary cover image URL displayed prominently in cards and detail view"
+    },
     "category_id": {
       "type": "string",
       "description": "Reference to PartCategory (shared taxonomy)"
