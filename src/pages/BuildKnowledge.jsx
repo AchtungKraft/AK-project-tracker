@@ -2,8 +2,7 @@ import React, { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RefreshCw, BookOpen, ClipboardList, AlertTriangle, FileText, Plus } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 import KnowledgeExplorerLayout from "@/components/knowledge/KnowledgeExplorerLayout";
 import KnowledgeItemEditor from "@/components/knowledge/KnowledgeItemEditor";
@@ -37,10 +36,8 @@ export default function BuildKnowledge() {
           <div className="max-w-7xl mx-auto space-y-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">
-                  BUILD KNOWLEDGE
-                </h1>
-                <p className="text-sm text-gray-400">Subsystem intelligence — procedures, field observations, and operational knowledge</p>
+                <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">BUILD KNOWLEDGE</h1>
+                <p className="text-sm text-gray-400">Operational knowledge feed — field notes, procedures, and build intelligence</p>
               </div>
               <Button
                 onClick={async () => {

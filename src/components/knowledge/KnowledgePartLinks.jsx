@@ -46,7 +46,7 @@ export default function KnowledgePartLinks({ knowledgeItemId }) {
             <div key={link.id} className="flex items-center gap-3 p-2 rounded-lg bg-gray-800/40 border border-gray-700/50">
               <Package className="w-4 h-4 text-gray-500 shrink-0" />
               <div className="flex-1 min-w-0">
-                <span className="text-sm text-white">{part.name}</span>
+                <span className="text-sm text-white">{part.part_name || part.name}</span>
                 {link.install_notes && (
                   <p className="text-xs text-gray-400">{link.install_notes}</p>
                 )}

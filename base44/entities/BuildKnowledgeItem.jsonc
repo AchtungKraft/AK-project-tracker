@@ -4,7 +4,7 @@
   "properties": {
     "title": {
       "type": "string",
-      "description": "Title of the knowledge item"
+      "description": "Headline of the knowledge entry"
     },
     "slug": {
       "type": "string",
@@ -43,6 +43,21 @@
       "type": "string",
       "description": "Brief summary shown in lists and search results"
     },
+    "content_html": {
+      "type": "string",
+      "description": "Rich HTML content from WYSIWYG editor \u2014 primary content field"
+    },
+    "image_urls": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Uploaded image gallery URLs"
+    },
+    "reference_url": {
+      "type": "string",
+      "description": "Single optional reference URL (vendor docs, YouTube, OEM PDF, forum thread)"
+    },
     "content_blocks": {
       "type": "array",
       "items": {
@@ -76,7 +91,7 @@
           }
         }
       },
-      "description": "Ordered array of content blocks forming the document body"
+      "description": "Legacy content blocks \u2014 preserved for backward compatibility"
     },
     "known_issues": {
       "type": "array",
@@ -106,7 +121,7 @@
           }
         }
       },
-      "description": "Known issues and resolutions"
+      "description": "Legacy known issues \u2014 preserved for backward compatibility"
     },
     "tips": {
       "type": "array",
@@ -124,7 +139,7 @@
           }
         }
       },
-      "description": "Pro tips and tribal knowledge"
+      "description": "Legacy tips \u2014 preserved for backward compatibility"
     },
     "warnings": {
       "type": "array",
@@ -147,7 +162,7 @@
           }
         }
       },
-      "description": "Safety and procedural warnings"
+      "description": "Legacy warnings \u2014 preserved for backward compatibility"
     },
     "attachments": {
       "type": "array",
@@ -175,7 +190,7 @@
       "items": {
         "type": "string"
       },
-      "description": "Media asset URLs (images, video thumbnails)"
+      "description": "Legacy media asset URLs"
     },
     "version": {
       "type": "number",
@@ -216,7 +231,6 @@
     }
   },
   "required": [
-    "title",
-    "type"
+    "title"
   ]
 }

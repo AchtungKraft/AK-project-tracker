@@ -1,93 +1,86 @@
 import React, { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronRight, ClipboardList, BookOpen, AlertTriangle, FileText, CheckSquare, Lightbulb, File, Package, Tag } from "lucide-react";
+import { ChevronDown, ChevronRight, Tag, Package, Image, Clock, FileText } from "lucide-react";
 import { format } from "date-fns";
 
+// Exported so detail drawer can still reference it
 const TYPE_CONFIG = {
-  procedure: { icon: ClipboardList, label: "Procedure", color: "bg-blue-600/20 text-blue-400", dot: "bg-blue-500" },
-  guide: { icon: BookOpen, label: "Guide", color: "bg-emerald-600/20 text-emerald-400", dot: "bg-emerald-500" },
-  issue: { icon: AlertTriangle, label: "Issue", color: "bg-amber-600/20 text-amber-400", dot: "bg-amber-500" },
-  reference: { icon: FileText, label: "Reference", color: "bg-purple-600/20 text-purple-400", dot: "bg-purple-500" },
-  checklist: { icon: CheckSquare, label: "Checklist", color: "bg-cyan-600/20 text-cyan-400", dot: "bg-cyan-500" },
-  tip: { icon: Lightbulb, label: "Tip", color: "bg-yellow-600/20 text-yellow-400", dot: "bg-yellow-500" },
-  document: { icon: File, label: "Document", color: "bg-gray-600/20 text-gray-400", dot: "bg-gray-500" },
+  procedure: { label: "Procedure", dot: "bg-blue-500" },
+  guide: { label: "Guide", dot: "bg-emerald-500" },
+  issue: { label: "Issue", dot: "bg-amber-500" },
+  reference: { label: "Reference", dot: "bg-purple-500" },
+  checklist: { label: "Checklist", dot: "bg-cyan-500" },
+  tip: { label: "Tip", dot: "bg-yellow-500" },
+  document: { label: "Document", dot: "bg-gray-500" },
 };
 
 export { TYPE_CONFIG };
 
-function KnowledgeRow({ item, onItemClick }) {
+function getExcerpt(item) {
+  if (item.summary) return item.summary;
+  if (item.content_html) {
+    const text = item.content_html.replace(/<[^>]*>/g, '').trim();
+    return text.length > 120 ? text.slice(0, 120) + '…' : text;
+  }
+  return null;
+}
+
+function getPreviewImage(item) {
+  if (item.image_urls?.length > 0) return item.image_urls[0];
+  if (item.media_urls?.length > 0) return item.media_urls[0];
+  const imgBlock = item.content_blocks?.find(b => b.type === 'image');
+  if (imgBlock?.data?.url) return imgBlock.data.url;
+  return null;
+}
+
+function KnowledgeCard({ item, onItemClick }) {
   const config = TYPE_CONFIG[item.type] || TYPE_CONFIG.document;
-  const Icon = config.icon;
-  const blockCount = item.content_blocks?.length || 0;
-  const warningCount = item.warnings?.length || 0;
-  const issueCount = item.known_issues?.length || 0;
-  const tipCount = item.tips?.length || 0;
+  const excerpt = getExcerpt(item);
+  const previewImg = getPreviewImage(item);
+  const imageCount = (item.image_urls?.length || 0) + (item.media_urls?.length || 0);
 
   return (
     <div
       onClick={() => onItemClick(item)}
-      className="flex flex-col md:flex-row md:items-center gap-3 p-3 bg-gray-900/30 rounded-lg border border-gray-800 hover:border-red-900/50 transition-all cursor-pointer group"
+      className="flex gap-3 p-3 bg-gray-900/40 rounded-lg border border-gray-800 hover:border-red-900/50 transition-all cursor-pointer group"
     >
-      {/* Icon + Info */}
-      <div className="flex items-start gap-3 flex-1 min-w-0">
-        <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center shrink-0", config.color)}>
-          <Icon className="w-5 h-5" />
+      {/* Thumbnail */}
+      {previewImg && (
+        <div className="w-20 h-20 shrink-0 rounded-lg overflow-hidden bg-gray-800">
+          <img src={previewImg} alt="" className="w-full h-full object-cover" />
         </div>
-        <div className="flex-1 min-w-0 space-y-1">
-          <div className="flex items-start gap-2 flex-wrap">
+      )}
+
+      {/* Content */}
+      <div className="flex-1 min-w-0 flex flex-col justify-between">
+        <div>
+          <div className="flex items-start gap-2 mb-0.5">
             <h4 className="text-white text-sm font-medium line-clamp-1 flex-1 group-hover:text-red-400 transition-colors">
               {item.title}
             </h4>
-            {item.status === 'draft' && (
-              <Badge variant="outline" className="border-yellow-600/50 text-yellow-500 text-[10px] shrink-0">Draft</Badge>
-            )}
-            {item.status === 'archived' && (
-              <Badge variant="outline" className="border-gray-600/50 text-gray-500 text-[10px] shrink-0">Archived</Badge>
-            )}
+            {item.status === 'draft' && <Badge variant="outline" className="border-yellow-600/50 text-yellow-500 text-[10px] shrink-0">Draft</Badge>}
           </div>
-          {item.summary && (
-            <p className="text-xs text-gray-400 line-clamp-1">{item.summary}</p>
-          )}
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge className={cn("text-[10px] px-1.5 py-0 h-4", config.color)}>{config.label}</Badge>
-            {item.vehicle_tags?.length > 0 && (
-              <span className="flex items-center gap-1 text-[10px] text-gray-500">
-                <Tag className="w-3 h-3" />
-                {item.vehicle_tags.slice(0, 3).join(', ')}
-              </span>
-            )}
-          </div>
+          {excerpt && <p className="text-xs text-gray-400 line-clamp-2 mb-1">{excerpt}</p>}
         </div>
-      </div>
 
-      {/* Stats — mirrors Parts Tracker column layout */}
-      <div className="flex justify-around md:justify-end md:gap-4 text-xs shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-gray-800">
-        <div className="text-center min-w-[50px]">
-          <div className="text-gray-500 mb-0.5">Blocks</div>
-          <div className="text-white font-semibold">{blockCount || '—'}</div>
-        </div>
-        <div className="text-center min-w-[50px]">
-          <div className="text-gray-500 mb-0.5">Warnings</div>
-          <div className={cn("font-semibold", warningCount > 0 ? "text-amber-400" : "text-gray-600")}>
-            {warningCount || '—'}
-          </div>
-        </div>
-        <div className="text-center min-w-[50px]">
-          <div className="text-gray-500 mb-0.5">Issues</div>
-          <div className={cn("font-semibold", issueCount > 0 ? "text-red-400" : "text-gray-600")}>
-            {issueCount || '—'}
-          </div>
-        </div>
-        <div className="text-center min-w-[50px]">
-          <div className="text-gray-500 mb-0.5">Tips</div>
-          <div className={cn("font-semibold", tipCount > 0 ? "text-yellow-400" : "text-gray-600")}>
-            {tipCount || '—'}
-          </div>
-        </div>
-        <div className="text-center min-w-[50px]">
-          <div className="text-gray-500 mb-0.5">Version</div>
-          <div className="text-gray-300">v{item.version || 1}</div>
+        {/* Meta row */}
+        <div className="flex items-center gap-3 flex-wrap text-[10px] text-gray-500">
+          <span className="flex items-center gap-1">
+            <span className={cn("w-1.5 h-1.5 rounded-full", config.dot)} />
+            {config.label}
+          </span>
+          {item.vehicle_tags?.length > 0 && (
+            <span className="flex items-center gap-0.5"><Tag className="w-2.5 h-2.5" />{item.vehicle_tags.slice(0, 2).join(', ')}</span>
+          )}
+          {imageCount > 0 && (
+            <span className="flex items-center gap-0.5"><Image className="w-2.5 h-2.5" />{imageCount}</span>
+          )}
+          <span className="flex items-center gap-0.5">
+            <Clock className="w-2.5 h-2.5" />
+            {item.updated_date ? format(new Date(item.updated_date), 'MMM d') : '—'}
+          </span>
+          {item.created_by && <span className="text-gray-600">{item.created_by.split('@')[0]}</span>}
         </div>
       </div>
     </div>
@@ -96,14 +89,10 @@ function KnowledgeRow({ item, onItemClick }) {
 
 export default function KnowledgeListView({ items, categories, selectedCategoryId, showGrouping, onItemClick }) {
   const [expandedGroups, setExpandedGroups] = useState({});
+  const toggleGroup = (key) => setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
 
-  const toggleGroup = (key) => {
-    setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  // Build hierarchical groups mirroring PartsListView
   const groups = useMemo(() => {
-    if (!showGrouping) return [{ label: 'All Items', items, color: '#6B7280', children: [] }];
+    if (!showGrouping) return [{ label: 'All Entries', items, color: '#6B7280', children: [] }];
 
     const parentCats = categories.filter(c => !c.parent_id && c.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     const result = [];
@@ -147,12 +136,12 @@ export default function KnowledgeListView({ items, categories, selectedCategoryI
             {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
             <div className="w-3 h-3 rounded" style={{ backgroundColor: group.color }} />
             <span className="text-sm font-medium text-white flex-1 text-left">{group.label}</span>
-            <span className="text-xs text-gray-400">{total} item{total !== 1 ? 's' : ''}</span>
+            <span className="text-xs text-gray-400">{total}</span>
           </button>
         )}
         {isExpanded && (
           <div className="space-y-2 mb-3">
-            {group.items.map(item => <KnowledgeRow key={item.id} item={item} onItemClick={onItemClick} />)}
+            {group.items.map(item => <KnowledgeCard key={item.id} item={item} onItemClick={onItemClick} />)}
             {group.children.map(child => renderGroup(child, level + 1))}
           </div>
         )}
@@ -164,8 +153,8 @@ export default function KnowledgeListView({ items, categories, selectedCategoryI
     return (
       <div className="text-center py-12 text-gray-500">
         <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
-        <p>No knowledge items found</p>
-        <p className="text-xs mt-1">Create your first item to get started</p>
+        <p>No knowledge entries yet</p>
+        <p className="text-xs mt-1">Create your first entry to get started</p>
       </div>
     );
   }

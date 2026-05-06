@@ -4,9 +4,20 @@ import { base44 } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BookOpen, Plus, AlertTriangle, Package, X, Lightbulb, Image, FolderOpen, ChevronDown, ChevronRight } from "lucide-react";
+import { BookOpen, Plus, AlertTriangle, Package, X, Lightbulb, Image, FileText, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TYPE_CONFIG } from "./KnowledgeListView";
+
+// Local icon/color mapping for task knowledge cards (decoupled from list view)
+const TASK_ICON_MAP = {
+  procedure: { icon: BookOpen, color: "text-blue-400" },
+  guide: { icon: BookOpen, color: "text-emerald-400" },
+  issue: { icon: AlertTriangle, color: "text-amber-400" },
+  reference: { icon: FileText, color: "text-purple-400" },
+  checklist: { icon: BookOpen, color: "text-cyan-400" },
+  tip: { icon: Lightbulb, color: "text-yellow-400" },
+  document: { icon: FileText, color: "text-gray-400" },
+};
 import { toast } from "sonner";
 
 function InlineWarnings({ warnings }) {
@@ -61,11 +72,12 @@ function InlineTips({ tips }) {
 function KnowledgeItemCard({ item, link, onRemove }) {
   const [expanded, setExpanded] = useState(false);
   const config = TYPE_CONFIG[item.type] || TYPE_CONFIG.document;
-  const Icon = config.icon;
+  const iconMap = TASK_ICON_MAP[item.type] || TASK_ICON_MAP.document;
+  const Icon = iconMap.icon;
   const hasWarnings = item.warnings?.length > 0;
   const hasIssues = item.known_issues?.length > 0;
   const hasTips = item.tips?.length > 0;
-  const mediaCount = (item.media_urls?.length || 0) + (item.content_blocks?.filter(b => ['image', 'gallery', 'video'].includes(b.type)).length || 0);
+  const mediaCount = (item.image_urls?.length || 0) + (item.media_urls?.length || 0);
 
   return (
     <div className="rounded-lg bg-gray-800/40 border border-gray-700/50 mb-1.5 overflow-hidden">
@@ -74,11 +86,11 @@ function KnowledgeItemCard({ item, link, onRemove }) {
         <button onClick={() => setExpanded(!expanded)} className="mt-0.5 shrink-0">
           {expanded ? <ChevronDown className="w-3.5 h-3.5 text-gray-500" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-500" />}
         </button>
-        <Icon className={cn("w-4 h-4 mt-0.5 shrink-0", config.color.split(' ')[1])} />
+        <Icon className={cn("w-4 h-4 mt-0.5 shrink-0", iconMap.color)} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-sm font-medium text-white truncate">{item.title}</span>
-            <Badge className={cn("text-[10px] px-1 py-0 h-4", config.color)}>{config.label}</Badge>
+            <Badge className="text-[10px] px-1 py-0 h-4 bg-gray-700/50 text-gray-300">{config.label}</Badge>
           </div>
           {/* Inline stat chips */}
           <div className="flex flex-wrap gap-1.5 mt-1">
@@ -171,11 +183,12 @@ export default function TaskKnowledgeSection({ taskId }) {
             </SelectTrigger>
             <SelectContent>
               {availableItems.map(item => {
-                const config = TYPE_CONFIG[item.type] || TYPE_CONFIG.document;
+                const iconCfg = TASK_ICON_MAP[item.type] || TASK_ICON_MAP.document;
+                const ItemIcon = iconCfg.icon;
                 return (
                   <SelectItem key={item.id} value={item.id}>
                     <span className="flex items-center gap-2">
-                      <config.icon className="w-3 h-3" />
+                      <ItemIcon className="w-3 h-3" />
                       {item.title}
                     </span>
                   </SelectItem>
