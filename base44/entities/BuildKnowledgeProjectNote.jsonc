@@ -1,0 +1,46 @@
+{
+  "name": "BuildKnowledgeProjectNote",
+  "type": "object",
+  "properties": {
+    "knowledge_item_id": {
+      "type": "string",
+      "description": "Reference to BuildKnowledgeItem"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project"
+    },
+    "note": {
+      "type": "string",
+      "description": "Project-specific observation or note"
+    },
+    "photos": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Photo URLs documenting the observation"
+    },
+    "technician_id": {
+      "type": "string",
+      "description": "Reference to TeamMember who made the observation"
+    },
+    "discovery_type": {
+      "type": "string",
+      "enum": [
+        "observation",
+        "deviation",
+        "issue",
+        "improvement",
+        "tip"
+      ],
+      "default": "observation",
+      "description": "Type of project-specific note"
+    }
+  },
+  "required": [
+    "knowledge_item_id",
+    "project_id",
+    "note"
+  ]
+}

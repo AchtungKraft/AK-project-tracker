@@ -12,6 +12,7 @@ import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import PurchaseOrders from './pages/PurchaseOrders';
 import ProjectPrintView from './pages/ProjectPrintView';
 import PersonPrintView from './pages/PersonPrintView';
+import BuildKnowledge from './pages/BuildKnowledge';
 import ClientPage from './pages/ClientPage';
 // VendorPOBuilder page removed — vendor PO creation is now inline in GlobalNeedToOrder
 
@@ -69,6 +70,11 @@ const AuthenticatedApp = () => {
       <Route path="/projectprintview" element={<ProjectPrintView />} />
       <Route path="/personprintview" element={<PersonPrintView />} />
       <Route path="/clientpage" element={<ClientPage />} />
+      <Route path="/buildknowledge" element={
+        <LayoutWrapper currentPageName="BuildKnowledge">
+          <BuildKnowledge />
+        </LayoutWrapper>
+      } />
       <Route path="/purchaseorders" element={
         <LayoutWrapper currentPageName="PurchaseOrders">
           <PurchaseOrders />

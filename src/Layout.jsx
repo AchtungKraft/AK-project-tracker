@@ -18,6 +18,7 @@ import {
   Layers,
   Receipt,
   ShoppingCart,
+  BookOpen,
 } from "lucide-react";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
@@ -153,6 +154,7 @@ const getNavigationSections = () => {
         { title: "Team Priorities", url: createPageUrl("PriorityDashboard"), icon: Flame },
         { title: "Client Portal", url: createPageUrl("ClientPortalHub"), icon: Building2 },
         { title: "Portal Stats", url: createPageUrl("PortalStatsEmbed"), icon: BarChart3 },
+        { title: "Build Knowledge", url: "/buildknowledge", icon: BookOpen },
       ],
     },
     {

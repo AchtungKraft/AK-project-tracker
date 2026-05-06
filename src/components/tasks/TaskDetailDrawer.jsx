@@ -19,6 +19,7 @@ import { createPageUrl } from "@/utils";
 import TaskCommentsSection from "./TaskCommentsSection";
 import ExecutionChecklistSection from "./ExecutionChecklistSection";
 import TaskPartsSection from "./TaskPartsSection";
+import TaskKnowledgeSection from "@/components/knowledge/TaskKnowledgeSection";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { getMobileInputClass, getMobileTextareaClass, getMobileSelectClass } from "@/components/mobile/MobileFormStyles";
 import { TASK_CACHE_KEYS } from "./useTaskInteraction";
@@ -506,6 +507,13 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
 
           {/* ── CLIENT FEEDBACK ── */}
           <ClientFeedbackLinks taskId={task?.id} />
+
+          <hr className="border-gray-700/50 mb-4" />
+
+          {/* ── BUILD KNOWLEDGE ── */}
+          <section className="mb-3">
+            <TaskKnowledgeSection taskId={task?.id} />
+          </section>
 
           <hr className="border-gray-700/50 mb-4" />
 

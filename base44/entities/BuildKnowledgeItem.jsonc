@@ -1,0 +1,222 @@
+{
+  "name": "BuildKnowledgeItem",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Title of the knowledge item"
+    },
+    "slug": {
+      "type": "string",
+      "description": "URL-friendly slug for the item"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "procedure",
+        "guide",
+        "issue",
+        "reference",
+        "checklist",
+        "tip",
+        "document"
+      ],
+      "default": "procedure",
+      "description": "Content type classification"
+    },
+    "category_id": {
+      "type": "string",
+      "description": "Reference to PartCategory (shared taxonomy)"
+    },
+    "subcategory_id": {
+      "type": "string",
+      "description": "Reference to PartCategory child (shared taxonomy)"
+    },
+    "vehicle_tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Vehicle model/make tags for filtering (e.g. E9, 911, 356)"
+    },
+    "summary": {
+      "type": "string",
+      "description": "Brief summary shown in lists and search results"
+    },
+    "content_blocks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "text",
+              "heading",
+              "checklist",
+              "image",
+              "gallery",
+              "pdf",
+              "link",
+              "warning",
+              "note",
+              "video",
+              "file",
+              "step"
+            ]
+          },
+          "order": {
+            "type": "number"
+          },
+          "data": {
+            "type": "object"
+          }
+        }
+      },
+      "description": "Ordered array of content blocks forming the document body"
+    },
+    "known_issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ]
+          },
+          "resolution": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Known issues and resolutions"
+    },
+    "tips": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Pro tips and tribal knowledge"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "caution",
+              "warning",
+              "danger"
+            ]
+          }
+        }
+      },
+      "description": "Safety and procedural warnings"
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "File attachments (PDFs, documents)"
+    },
+    "media_urls": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Media asset URLs (images, video thumbnails)"
+    },
+    "version": {
+      "type": "number",
+      "default": 1,
+      "description": "Version number, incremented on significant edits"
+    },
+    "changelog": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number"
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "author": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Version history changelog"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "published",
+        "archived"
+      ],
+      "default": "draft",
+      "description": "Publication status"
+    }
+  },
+  "required": [
+    "title",
+    "type"
+  ]
+}

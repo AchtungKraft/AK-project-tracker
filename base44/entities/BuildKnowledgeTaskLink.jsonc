@@ -1,0 +1,32 @@
+{
+  "name": "BuildKnowledgeTaskLink",
+  "type": "object",
+  "properties": {
+    "knowledge_item_id": {
+      "type": "string",
+      "description": "Reference to BuildKnowledgeItem"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Reference to Task"
+    },
+    "relevance": {
+      "type": "string",
+      "enum": [
+        "primary",
+        "reference",
+        "related"
+      ],
+      "default": "primary",
+      "description": "How relevant this knowledge item is to the task"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Why this knowledge item is linked"
+    }
+  },
+  "required": [
+    "knowledge_item_id",
+    "task_id"
+  ]
+}
