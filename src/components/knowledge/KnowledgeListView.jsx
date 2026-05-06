@@ -1,22 +1,20 @@
 import React, { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { FileText, Crown, Pin } from "lucide-react";
+import { FileText, Crown } from "lucide-react";
 import KnowledgeFeedCard, { POST_TYPE_CONFIG } from "./KnowledgeFeedCard";
 
-// Re-export for TaskKnowledgeSection backward compat
 export { POST_TYPE_CONFIG as TYPE_CONFIG };
 
 /**
- * Feed-first list:
- * 1. Pinned master procedures at top
- * 2. Other pinned items
- * 3. Everything else newest-first
+ * Feed layout:
+ * 1. MASTER PROCEDURES section — dedicated header, always expanded
+ * 2. PINNED section
+ * 3. RECENT FIELD NOTES — everything else newest-first
  * 
- * Items attached to a master procedure are grouped underneath it.
+ * Child posts grouped under their master procedure.
  */
 export default function KnowledgeListView({ items, categories, selectedCategoryId, showGrouping, onItemClick }) {
-  // Fetch relationship counts for chips
   const { data: allPartLinks = [] } = useQuery({
     queryKey: ['allKnowledgePartLinks'],
     queryFn: () => base44.entities.BuildKnowledgePartLink.list(),
@@ -26,6 +24,11 @@ export default function KnowledgeListView({ items, categories, selectedCategoryI
     queryKey: ['allKnowledgeTaskLinks'],
     queryFn: () => base44.entities.BuildKnowledgeTaskLink.list(),
     staleTime: 60000,
+  });
+  const { data: allParts = [] } = useQuery({
+    queryKey: ['parts_for_knowledge'],
+    queryFn: () => base44.entities.Part.list(),
+    staleTime: 120000,
   });
 
   const partLinksByItem = useMemo(() => {
@@ -46,45 +49,35 @@ export default function KnowledgeListView({ items, categories, selectedCategoryI
     return map;
   }, [allTaskLinks]);
 
-  // Sort: pinned masters → pinned → newest first
-  const sortedItems = useMemo(() => {
+  // Separate into sections
+  const { masterGroups, pinnedItems, recentItems } = useMemo(() => {
+    const masterIds = new Set();
     const masters = [];
     const pinned = [];
     const regular = [];
 
     items.forEach(item => {
-      if (item.is_master_procedure) masters.push(item);
+      if (item.is_master_procedure) { masters.push(item); masterIds.add(item.id); }
       else if (item.is_pinned) pinned.push(item);
       else regular.push(item);
     });
 
-    // Masters sorted by updated, pinned by updated, regular by updated (newest first — already sorted from API)
-    return [...masters, ...pinned, ...regular];
-  }, [items]);
-
-  // Group items by master procedure
-  const { masterGroups, ungrouped } = useMemo(() => {
-    const masterIds = new Set(sortedItems.filter(i => i.is_master_procedure).map(i => i.id));
-    const groups = {};
-    const ungroupedItems = [];
-
-    sortedItems.forEach(item => {
-      if (item.is_master_procedure) {
-        if (!groups[item.id]) groups[item.id] = { master: item, children: [] };
-        else groups[item.id].master = item;
-      } else if (item.parent_procedure_id && masterIds.has(item.parent_procedure_id)) {
-        if (!groups[item.parent_procedure_id]) groups[item.parent_procedure_id] = { master: null, children: [] };
-        groups[item.parent_procedure_id].children.push(item);
-      } else {
-        ungroupedItems.push(item);
-      }
+    // Build master groups with children
+    const groups = masters.map(master => {
+      const children = items
+        .filter(i => i.parent_procedure_id === master.id && !i.is_master_procedure)
+        .sort((a, b) => new Date(b.updated_date || 0) - new Date(a.updated_date || 0));
+      return { master, children };
     });
 
-    return {
-      masterGroups: Object.values(groups).filter(g => g.master),
-      ungrouped: ungroupedItems,
-    };
-  }, [sortedItems]);
+    // Filter regular items that are NOT children of a master
+    const childIds = new Set();
+    groups.forEach(g => g.children.forEach(c => childIds.add(c.id)));
+    const filteredRegular = regular.filter(i => !childIds.has(i.id));
+    const filteredPinned = pinned.filter(i => !childIds.has(i.id));
+
+    return { masterGroups: groups, pinnedItems: filteredPinned, recentItems: filteredRegular };
+  }, [items]);
 
   if (items.length === 0) {
     return (
@@ -96,35 +89,73 @@ export default function KnowledgeListView({ items, categories, selectedCategoryI
     );
   }
 
-  const renderCard = (item) => (
+  const renderCard = (item, compact) => (
     <KnowledgeFeedCard
       key={item.id}
       item={item}
       onItemClick={onItemClick}
       partLinks={partLinksByItem[item.id]}
       taskLinks={taskLinksByItem[item.id]}
+      parts={allParts}
+      compact={compact}
     />
   );
 
   return (
-    <div className="space-y-3">
-      {/* Master procedure groups */}
-      {masterGroups.map(group => (
-        <div key={group.master.id}>
-          {renderCard(group.master)}
-          {group.children.length > 0 && (
-            <div className="ml-3 md:ml-5 mt-1 border-l-2 border-red-900/30 pl-3 space-y-2">
-              <p className="text-[10px] uppercase tracking-widest text-gray-600 font-semibold pt-1">
-                Linked Field Posts
-              </p>
-              {group.children.map(child => renderCard(child))}
+    <div className="space-y-6">
+      {/* MASTER PROCEDURES SECTION */}
+      {masterGroups.length > 0 && (
+        <section>
+          <div className="flex items-center gap-2 mb-3 pb-2 border-b border-red-900/30">
+            <Crown className="w-4 h-4 text-red-400" />
+            <h3 className="text-xs font-bold uppercase tracking-widest text-red-400">Master Procedures</h3>
+            <span className="text-[10px] text-gray-600">{masterGroups.length}</span>
+          </div>
+          <div className="space-y-4">
+            {masterGroups.map(group => (
+              <div key={group.master.id}>
+                {renderCard(group.master)}
+                {group.children.length > 0 && (
+                  <div className="ml-4 md:ml-6 mt-2 border-l-2 border-red-900/30 pl-3 space-y-2">
+                    <p className="text-[10px] uppercase tracking-widest text-gray-600 font-semibold">
+                      Field Intelligence ({group.children.length})
+                    </p>
+                    {group.children.map(child => renderCard(child, true))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* PINNED SECTION */}
+      {pinnedItems.length > 0 && (
+        <section>
+          <div className="flex items-center gap-2 mb-3 pb-2 border-b border-amber-900/30">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-amber-400">Pinned</h3>
+            <span className="text-[10px] text-gray-600">{pinnedItems.length}</span>
+          </div>
+          <div className="space-y-3">
+            {pinnedItems.map(item => renderCard(item))}
+          </div>
+        </section>
+      )}
+
+      {/* RECENT FIELD NOTES */}
+      {recentItems.length > 0 && (
+        <section>
+          {(masterGroups.length > 0 || pinnedItems.length > 0) && (
+            <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-800">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500">Recent Field Notes</h3>
+              <span className="text-[10px] text-gray-600">{recentItems.length}</span>
             </div>
           )}
-        </div>
-      ))}
-
-      {/* Ungrouped items */}
-      {ungrouped.map(item => renderCard(item))}
+          <div className="space-y-3">
+            {recentItems.map(item => renderCard(item))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

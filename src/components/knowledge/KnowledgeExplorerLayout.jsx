@@ -54,6 +54,31 @@ export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItem
     queryFn: () => base44.entities.BuildKnowledgeItem.list('-updated_date'),
   });
 
+  // Fetch parts + part links for weighted search
+  const { data: allParts = [] } = useQuery({
+    queryKey: ['parts_for_knowledge'],
+    queryFn: () => base44.entities.Part.list(),
+    staleTime: 120000,
+  });
+  const { data: allPartLinks = [] } = useQuery({
+    queryKey: ['allKnowledgePartLinks'],
+    queryFn: () => base44.entities.BuildKnowledgePartLink.list(),
+    staleTime: 60000,
+  });
+
+  // Map item IDs to part names for search
+  const partNamesByItemId = useMemo(() => {
+    const map = {};
+    allPartLinks.forEach(link => {
+      const part = allParts.find(p => p.id === link.part_id);
+      if (part) {
+        if (!map[link.knowledge_item_id]) map[link.knowledge_item_id] = [];
+        map[link.knowledge_item_id].push((part.part_name || part.name || '').toLowerCase());
+      }
+    });
+    return map;
+  }, [allPartLinks, allParts]);
+
   // Category path for breadcrumb
   const categoryPath = useMemo(() => {
     if (!selectedCategoryId || categories.length === 0) return [];
@@ -99,20 +124,29 @@ export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItem
         const itemPostType = item.post_type || item.type || 'procedure';
         if (itemPostType !== postTypeFilter) return false;
       }
-      // Search — priority: title > tags > summary > content
+      // Weighted search: title > tags > parts > category > post_type > summary > content
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
-        const matchTitle = item.title?.toLowerCase().includes(term);
-        const matchTags = item.vehicle_tags?.some(t => t.toLowerCase().includes(term));
-        const matchSummary = item.summary?.toLowerCase().includes(term);
-        if (matchTitle || matchTags || matchSummary) return true;
-        // Fallback to content search (lower priority)
+        if (item.title?.toLowerCase().includes(term)) return true;
+        if (item.vehicle_tags?.some(t => t.toLowerCase().includes(term))) return true;
+        // Search related part names
+        const itemParts = partNamesByItemId[item.id] || [];
+        if (itemParts.some(name => name.includes(term))) return true;
+        // Category name match
+        const cat = categories.find(c => c.id === item.category_id);
+        if (cat?.name?.toLowerCase().includes(term)) return true;
+        // Post type match
+        const postType = item.post_type || item.type || '';
+        if (postType.replace('_', ' ').includes(term)) return true;
+        // Summary
+        if (item.summary?.toLowerCase().includes(term)) return true;
+        // Fallback: body content (stripped of tags)
         const matchContent = item.content_html?.replace(/<[^>]*>/g, '').toLowerCase().includes(term);
         return matchContent;
       }
       return true;
     });
-  }, [items, selectedCategoryId, searchTerm, postTypeFilter, categories]);
+  }, [items, selectedCategoryId, searchTerm, postTypeFilter, categories, partNamesByItemId]);
 
   const handleCategorySelect = (categoryId) => {
     setSelectedCategoryId(categoryId);

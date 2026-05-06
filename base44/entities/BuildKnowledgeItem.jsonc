@@ -22,7 +22,7 @@
         "document"
       ],
       "default": "procedure",
-      "description": "Content type classification"
+      "description": "Legacy content type classification"
     },
     "post_type": {
       "type": "string",
@@ -54,6 +54,20 @@
       "type": "string",
       "description": "Primary cover image URL displayed prominently in cards and detail view"
     },
+    "is_obsolete": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this post is outdated and should not be referenced"
+    },
+    "superseded_by_id": {
+      "type": "string",
+      "description": "ID of the knowledge item that replaces this one"
+    },
+    "last_referenced_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this post was last referenced from a task or project"
+    },
     "category_id": {
       "type": "string",
       "description": "Reference to PartCategory (shared taxonomy)"
@@ -67,7 +81,7 @@
       "items": {
         "type": "string"
       },
-      "description": "Vehicle model/make tags for filtering (e.g. E9, 911, 356)"
+      "description": "Vehicle model/make tags for filtering"
     },
     "summary": {
       "type": "string",
@@ -75,7 +89,7 @@
     },
     "content_html": {
       "type": "string",
-      "description": "Rich HTML content from WYSIWYG editor \u2014 primary content field"
+      "description": "Rich HTML content from WYSIWYG editor"
     },
     "image_urls": {
       "type": "array",
@@ -86,7 +100,7 @@
     },
     "reference_url": {
       "type": "string",
-      "description": "Single optional reference URL (vendor docs, YouTube, OEM PDF, forum thread)"
+      "description": "Single optional reference URL"
     },
     "content_blocks": {
       "type": "array",
@@ -121,7 +135,7 @@
           }
         }
       },
-      "description": "Legacy content blocks \u2014 preserved for backward compatibility"
+      "description": "Legacy content blocks"
     },
     "known_issues": {
       "type": "array",
@@ -151,7 +165,7 @@
           }
         }
       },
-      "description": "Legacy known issues \u2014 preserved for backward compatibility"
+      "description": "Legacy known issues"
     },
     "tips": {
       "type": "array",
@@ -169,7 +183,7 @@
           }
         }
       },
-      "description": "Legacy tips \u2014 preserved for backward compatibility"
+      "description": "Legacy tips"
     },
     "warnings": {
       "type": "array",
@@ -192,7 +206,7 @@
           }
         }
       },
-      "description": "Legacy warnings \u2014 preserved for backward compatibility"
+      "description": "Legacy warnings"
     },
     "attachments": {
       "type": "array",
@@ -213,7 +227,7 @@
           }
         }
       },
-      "description": "File attachments (PDFs, documents)"
+      "description": "File attachments"
     },
     "media_urls": {
       "type": "array",
@@ -225,7 +239,7 @@
     "version": {
       "type": "number",
       "default": 1,
-      "description": "Version number, incremented on significant edits"
+      "description": "Version number"
     },
     "changelog": {
       "type": "array",

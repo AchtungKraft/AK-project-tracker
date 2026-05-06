@@ -4,7 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Pencil, Clock, Tag, ExternalLink, Package, ListChecks, FileText, Image, Pin, Crown, Link2 } from "lucide-react";
+import { Pencil, Clock, Tag, ExternalLink, Package, ListChecks, FileText, Image, Pin, Crown, Link2, AlertOctagon, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { POST_TYPE_CONFIG } from "./KnowledgeFeedCard";
@@ -69,12 +69,24 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
     ? allItems.find(i => i.id === item.parent_procedure_id)
     : null;
 
-  // Sibling posts in same category
-  const siblingItems = allItems.filter(i =>
+  // Superseded-by item
+  const supersededBy = item.superseded_by_id
+    ? allItems.find(i => i.id === item.superseded_by_id)
+    : null;
+
+  // Related posts — group by type for better rails
+  const relatedPosts = allItems.filter(i =>
     i.id !== item.id &&
     !childPosts.some(c => c.id === i.id) &&
+    !i.is_obsolete &&
     (i.category_id === item.category_id || i.subcategory_id === item.subcategory_id)
-  ).slice(0, 5);
+  ).slice(0, 8);
+
+  const relatedProcedures = relatedPosts.filter(i => (i.post_type || i.type) === 'procedure' || i.is_master_procedure);
+  const relatedNotes = relatedPosts.filter(i => {
+    const pt = i.post_type || i.type;
+    return pt !== 'procedure' && !i.is_master_procedure;
+  });
 
   return (
     <Sheet open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -109,9 +121,28 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
               <span className={cn("w-1.5 h-1.5 rounded-full", config.dot)} />
               {config.label}
             </Badge>
+            {item.is_obsolete && (
+              <Badge className="bg-gray-700/60 text-gray-400 text-[10px] gap-1 border-0">
+                <AlertOctagon className="w-2.5 h-2.5" /> OBSOLETE
+              </Badge>
+            )}
             {item.status === 'draft' && <Badge variant="outline" className="border-yellow-600/50 text-yellow-500 text-xs">Draft</Badge>}
             {item.status === 'archived' && <Badge variant="outline" className="border-gray-600/50 text-gray-500 text-xs">Archived</Badge>}
           </div>
+
+          {/* Obsolete / superseded notice */}
+          {item.is_obsolete && (
+            <div className="rounded-lg bg-amber-950/30 border border-amber-900/40 p-3 mb-2">
+              <p className="text-xs text-amber-300 font-medium flex items-center gap-1.5">
+                <AlertOctagon className="w-3.5 h-3.5" /> This post has been marked obsolete
+              </p>
+              {supersededBy && (
+                <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                  <ArrowRight className="w-3 h-3" /> Replaced by: <span className="text-red-400 font-medium">{supersededBy.title}</span>
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Category breadcrumb */}
           {cat && (
@@ -241,20 +272,34 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
             </section>
           )}
 
-          {/* Child posts (for master procedures) */}
+          {/* Child posts timeline (for master procedures) */}
           {childPosts.length > 0 && (
             <section className="mb-5">
-              <SectionLabel icon={Link2} title="Linked Field Posts" count={childPosts.length} color="text-red-400" />
-              <div className="space-y-1">
-                {childPosts.map(child => (
-                  <div key={child.id} className="flex items-center gap-2 p-2 rounded-lg bg-gray-800/40 border border-gray-700/50">
-                    <FileText className="w-4 h-4 text-red-400 shrink-0" />
-                    <span className="text-sm text-gray-200 flex-1 truncate">{child.title}</span>
-                    <Badge className="text-[9px] bg-gray-700/50 text-gray-400 border-0">
-                      {(POST_TYPE_CONFIG[child.post_type || child.type] || POST_TYPE_CONFIG.procedure).label}
-                    </Badge>
-                  </div>
-                ))}
+              <SectionLabel icon={Link2} title="Field Intelligence Timeline" count={childPosts.length} color="text-red-400" />
+              <div className="border-l-2 border-red-900/30 ml-2 pl-3 space-y-3">
+                {childPosts
+                  .sort((a, b) => new Date(b.updated_date || 0) - new Date(a.updated_date || 0))
+                  .map(child => {
+                    const childConfig = POST_TYPE_CONFIG[child.post_type || child.type] || POST_TYPE_CONFIG.procedure;
+                    return (
+                      <div key={child.id} className="relative">
+                        <div className="absolute -left-[19px] top-1.5 w-2.5 h-2.5 rounded-full bg-gray-800 border-2 border-red-800" />
+                        <div className="p-2 rounded-lg bg-gray-800/40 border border-gray-700/50">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="text-sm text-gray-200 font-medium flex-1 truncate">{child.title}</span>
+                            <Badge className="text-[9px] bg-gray-700/50 text-gray-400 border-0">{childConfig.label}</Badge>
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                            <Clock className="w-2.5 h-2.5" />
+                            {child.updated_date ? format(new Date(child.updated_date), 'MMM d, yyyy') : '—'}
+                            {child.created_by && <span>· {child.created_by.split('@')[0]}</span>}
+                          </div>
+                          {child.summary && <p className="text-xs text-gray-400 mt-1 line-clamp-2">{child.summary}</p>}
+                        </div>
+                      </div>
+                    );
+                  })
+                }
               </div>
             </section>
           )}
@@ -262,12 +307,28 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
           {/* Project Notes */}
           <KnowledgeProjectNotes knowledgeItemId={item.id} />
 
-          {/* Related posts in same subsystem */}
-          {siblingItems.length > 0 && (
+          {/* Related Procedures */}
+          {relatedProcedures.length > 0 && (
             <section className="mb-5">
-              <SectionLabel icon={FileText} title="Related Posts" count={siblingItems.length} color="text-gray-400" />
+              <SectionLabel icon={Crown} title="Related Procedures" count={relatedProcedures.length} color="text-blue-400" />
               <div className="space-y-1">
-                {siblingItems.map(sib => (
+                {relatedProcedures.map(sib => (
+                  <div key={sib.id} className="flex items-center gap-2 p-2 rounded-lg bg-gray-800/40 border border-gray-700/50">
+                    <FileText className="w-4 h-4 text-blue-400 shrink-0" />
+                    <span className="text-sm text-gray-200 flex-1 truncate">{sib.title}</span>
+                    {sib.is_master_procedure && <Crown className="w-3 h-3 text-red-400 shrink-0" />}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Related Field Notes */}
+          {relatedNotes.length > 0 && (
+            <section className="mb-5">
+              <SectionLabel icon={FileText} title="Related Field Notes" count={relatedNotes.length} color="text-gray-400" />
+              <div className="space-y-1">
+                {relatedNotes.map(sib => (
                   <div key={sib.id} className="flex items-center gap-2 p-2 rounded-lg bg-gray-800/40 border border-gray-700/50">
                     <FileText className="w-4 h-4 text-gray-400 shrink-0" />
                     <span className="text-sm text-gray-200 flex-1 truncate">{sib.title}</span>

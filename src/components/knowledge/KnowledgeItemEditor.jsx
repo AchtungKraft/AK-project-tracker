@@ -9,9 +9,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, X, Plus, Upload, Image as ImageIcon, Pin, Crown } from "lucide-react";
+import { Loader2, X, Plus, Upload, Image as ImageIcon, Pin, Crown, AlertOctagon } from "lucide-react";
 import { toast } from "sonner";
 import ReactQuill from "react-quill";
+import RelatedPostSuggestions from "./RelatedPostSuggestions";
 
 const QUILL_MODULES = {
   toolbar: [
@@ -44,6 +45,7 @@ export default function KnowledgeItemEditor({ item, isOpen, onClose, categories 
     content_html: "", image_urls: [], reference_url: "",
     status: "draft", is_pinned: false, is_master_procedure: false,
     parent_procedure_id: "", cover_image_url: "",
+    is_obsolete: false, superseded_by_id: "",
   });
   const [tagInput, setTagInput] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -77,6 +79,8 @@ export default function KnowledgeItemEditor({ item, isOpen, onClose, categories 
         is_master_procedure: item.is_master_procedure || false,
         parent_procedure_id: item.parent_procedure_id || "",
         cover_image_url: item.cover_image_url || "",
+        is_obsolete: item.is_obsolete || false,
+        superseded_by_id: item.superseded_by_id || "",
       });
     } else {
       setForm({
@@ -85,6 +89,7 @@ export default function KnowledgeItemEditor({ item, isOpen, onClose, categories 
         content_html: "", image_urls: [], reference_url: "",
         status: "draft", is_pinned: false, is_master_procedure: false,
         parent_procedure_id: "", cover_image_url: "",
+        is_obsolete: false, superseded_by_id: "",
       });
     }
   }, [item]);
@@ -375,6 +380,44 @@ export default function KnowledgeItemEditor({ item, isOpen, onClose, categories 
               placeholder="https://... (vendor docs, YouTube, forum, OEM PDF)"
               className="bg-gray-800 border-gray-700 text-white" />
           </div>
+
+          {/* Governance: Obsolete / Superseded */}
+          <div className="rounded-lg border border-gray-700/50 p-3 space-y-3">
+            <p className="text-[10px] uppercase tracking-widest text-gray-500 font-semibold">Lifecycle</p>
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Switch checked={form.is_obsolete} onCheckedChange={v => setForm(f => ({ ...f, is_obsolete: v }))} />
+                <Label className="text-gray-300 text-xs flex items-center gap-1"><AlertOctagon className="w-3 h-3" /> Obsolete</Label>
+              </div>
+            </div>
+            {form.is_obsolete && allItems.length > 0 && (
+              <div>
+                <Label className="text-gray-400 text-xs">Superseded By (optional)</Label>
+                <Select value={form.superseded_by_id} onValueChange={v => setForm(f => ({ ...f, superseded_by_id: v }))}>
+                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                    <SelectValue placeholder="Select replacement post..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={null}>None</SelectItem>
+                    {allItems.filter(i => i.id !== item?.id && !i.is_obsolete).map(i => (
+                      <SelectItem key={i.id} value={i.id}>{i.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+
+          {/* Related Post Suggestions (duplicate prevention) */}
+          {isNew && (
+            <RelatedPostSuggestions
+              title={form.title}
+              categoryId={form.category_id}
+              vehicleTags={form.vehicle_tags}
+              allItems={allItems}
+              currentItemId={item?.id}
+            />
+          )}
         </div>
 
         {/* Footer — large touch targets */}
