@@ -4,10 +4,11 @@ import { base44 } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BookOpen, Plus, AlertTriangle, Package, X, Lightbulb, FileText, ChevronDown, ChevronRight, Crown, Image, AlertOctagon } from "lucide-react";
+import { BookOpen, Plus, AlertTriangle, Package, X, Lightbulb, FileText, ChevronDown, ChevronRight, Crown, Image, AlertOctagon, ListOrdered } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TYPE_CONFIG } from "./KnowledgeListView";
 import { getCoverImage, getExcerpt } from "./KnowledgeFeedCard";
+import ProcedureEntryTimeline from "./ProcedureEntryTimeline";
 import { toast } from "sonner";
 
 const TASK_ICON_MAP = {
@@ -107,10 +108,13 @@ function KnowledgeItemCard({ item, link, onRemove, partLinks, parts }) {
         </Button>
       </div>
 
-      {/* Expanded: full context */}
+      {/* Expanded: procedure entries + legacy content */}
       {expanded && (
         <div className="px-3 pb-3 border-t border-gray-700/30 pt-2 ml-6 space-y-2">
           {excerpt && <p className="text-xs text-gray-400">{excerpt}</p>}
+          {/* Procedure entries */}
+          <ProcedureEntryTimeline procedureId={item.id} />
+          {/* Legacy: known issues */}
           {item.known_issues?.length > 0 && (
             <div className="space-y-1">
               {item.known_issues.slice(0, 2).map(issue => (
@@ -124,6 +128,7 @@ function KnowledgeItemCard({ item, link, onRemove, partLinks, parts }) {
               ))}
             </div>
           )}
+          {/* Legacy: tips */}
           {item.tips?.length > 0 && (
             <div className="space-y-1">
               {item.tips.slice(0, 2).map(tip => (

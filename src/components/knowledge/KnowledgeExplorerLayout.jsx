@@ -180,7 +180,7 @@ export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItem
           </div>
           <Button onClick={onItemCreate} size="sm" className="bg-red-600 hover:bg-red-700 gap-2 h-10 px-4 text-sm">
             <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Add Post</span>
+            <span className="hidden sm:inline">New Procedure</span>
           </Button>
         </div>
 

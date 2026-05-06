@@ -163,9 +163,7 @@ export default function KnowledgeItemEditor({ item, isOpen, onClose, categories 
     setForm(f => ({ ...f, image_urls: f.image_urls.filter((_, i) => i !== index) }));
   };
 
-  const postTypeLabel = isNew
-    ? `Add ${POST_TYPES.find(p => p.value === form.post_type)?.label || 'Post'}`
-    : `Update ${POST_TYPES.find(p => p.value === form.post_type)?.label || 'Post'}`;
+  const postTypeLabel = isNew ? 'Create Procedure' : 'Save Changes';
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -173,8 +171,11 @@ export default function KnowledgeItemEditor({ item, isOpen, onClose, categories 
         <SheetHeader className="p-4 pb-2">
           <SheetDescription className="sr-only">Create or update a knowledge post</SheetDescription>
           <SheetTitle className="text-white text-lg">
-            {isNew ? 'NEW FIELD POST' : `UPDATE: ${item?.title}`}
+            {isNew ? 'NEW PROCEDURE' : `EDIT: ${item?.title}`}
           </SheetTitle>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {isNew ? 'Create a procedure container — add entries inside it after saving' : 'Edit procedure metadata and settings'}
+          </p>
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-4 space-y-4 pb-4">

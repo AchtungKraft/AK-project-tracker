@@ -1,0 +1,51 @@
+{
+  "name": "ProcedureEntry",
+  "type": "object",
+  "properties": {
+    "procedure_id": {
+      "type": "string",
+      "description": "Reference to BuildKnowledgeItem (the master procedure container)"
+    },
+    "headline": {
+      "type": "string",
+      "description": "Entry headline / title"
+    },
+    "entry_type": {
+      "type": "string",
+      "enum": [
+        "step",
+        "note",
+        "issue",
+        "reference",
+        "tip",
+        "media"
+      ],
+      "default": "step",
+      "description": "Lightweight entry type classification"
+    },
+    "content_html": {
+      "type": "string",
+      "description": "Rich HTML content from WYSIWYG editor"
+    },
+    "image_urls": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Photo gallery for this entry"
+    },
+    "reference_url": {
+      "type": "string",
+      "description": "Optional reference URL"
+    },
+    "order_index": {
+      "type": "number",
+      "default": 0,
+      "description": "Display order within the procedure"
+    }
+  },
+  "required": [
+    "procedure_id",
+    "headline"
+  ]
+}
