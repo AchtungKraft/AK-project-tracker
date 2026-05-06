@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Loader2, X, Plus } from "lucide-react";
 import { toast } from "sonner";
-import KnowledgeBlockEditor from "./KnowledgeBlockEditor";
+import KnowledgeBlockEditor from "@/components/knowledge/KnowledgeBlockEditor";
 
 const TYPES = [
   { value: "procedure", label: "Procedure" },

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BookOpen, Plus, ExternalLink, AlertTriangle, Package, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { TYPE_CONFIG } from "./KnowledgeItemList";
+import { TYPE_CONFIG } from "./KnowledgeListView";
 import { toast } from "sonner";
 
 export default function TaskKnowledgeSection({ taskId }) {
