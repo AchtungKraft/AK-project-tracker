@@ -24,12 +24,9 @@ function buildWelcomeHtml({
     projectName, greeting, introText,
     ctaUrl, ctaText, portalCode,
 }) {
-    const portalCodeBlock = portalCode ? `
-  <div style="margin-top:28px;padding-top:20px;border-top:1px solid #e5e5e5;">
-    <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#999;">Portal Code</div>
-    <div style="margin-top:8px;font-size:28px;font-weight:700;color:#111;">${portalCode}</div>
-    <div style="margin-top:6px;font-size:13px;color:#888;">Use this code to access your project portal.</div>
-  </div>` : '';
+    const clientIdLine = portalCode
+      ? `<div style="font-size:20px;font-weight:700;color:#111;line-height:1.4;">Your Client ID &rarr; ${portalCode}</div>`
+      : '';
 
     return `<div style="max-width:580px;margin:0 auto;padding:36px 24px;background:#ffffff;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111;">
 
@@ -51,8 +48,15 @@ function buildWelcomeHtml({
     <a href="${ctaUrl}" style="display:inline-block;background:#cc0000;color:#fff;padding:12px 20px;border-radius:6px;font-weight:600;font-size:15px;text-decoration:none;">${ctaText}</a>
   </div>
 
-  <!-- Portal Code -->
-  ${portalCodeBlock}
+  <!-- Client Portal Access -->
+  <div style="margin-top:32px;padding-top:24px;border-top:1px solid #e5e5e5;">
+    <div style="font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#111;">Client Portal Access</div>
+    <div style="margin-top:8px;font-size:14px;color:#555;line-height:1.5;">Use this code to access your project portal.</div>
+    <div style="margin-top:16px;">
+      <div style="font-size:20px;font-weight:700;color:#111;line-height:1.4;">Direct link &rarr; <a href="${ctaUrl}" style="color:#111;text-decoration:underline;text-underline-offset:3px;">${ctaUrl}</a></div>
+      ${clientIdLine}
+    </div>
+  </div>
 
   <!-- What You Can Do -->
   <div style="margin-top:28px;padding-top:20px;border-top:1px solid #e5e5e5;">
@@ -65,11 +69,8 @@ function buildWelcomeHtml({
     </ul>
   </div>
 
-  <!-- Direct Link -->
-  <div style="font-size:13px;color:#666;margin-top:24px;">Direct link: <a href="${ctaUrl}" style="color:#666;text-decoration:underline;word-break:break-all;">${ctaUrl}</a></div>
-
   <!-- Sign-off -->
-  <div style="margin-top:32px;font-size:13px;color:#666;">— Achtung Kraft Projects<br/>Precision builds. Clear communication.</div>
+  <div style="margin-top:32px;font-size:13px;color:#666;">&mdash; Achtung Kraft Projects<br/>Precision builds. Clear communication.</div>
 
 </div>`;
 }
@@ -136,14 +137,21 @@ Deno.serve(async (req) => {
             '',
             introText,
             '',
+            '---',
+            '',
+            'CLIENT PORTAL ACCESS',
+            'Use this code to access your project portal.',
+            '',
+            `Direct link → ${clientPortalBaseUrl}`,
+            clientSlug ? `Your Client ID → ${clientSlug}` : '',
+            '',
+            '---',
+            '',
             'What You Can Do:',
             '- View project updates and progress',
             '- Review and approve design submissions',
             '- Provide feedback and request changes',
             '- Track project milestones',
-            '',
-            clientSlug ? `Your Portal Code: ${clientSlug}\nUse this code to access your project portal.\n` : '',
-            `Access your portal here:\n${clientPortalBaseUrl}`,
             '',
             '— Achtung Kraft Projects',
             'Precision builds. Clear communication.',
