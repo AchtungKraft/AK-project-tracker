@@ -25,7 +25,7 @@ function buildWelcomeHtml({
     ctaUrl, ctaText, portalCode,
 }) {
     const clientIdLine = portalCode
-      ? `<div style="margin-top:8px;font-size:22px;font-weight:700;color:#cc0000;line-height:1.4;">Your Client ID &rarr; ${portalCode}</div>`
+      ? `<div style="margin-top:8px;font-size:22px;font-weight:700;line-height:1.4;"><span style="color:#111;">Your Client ID &rarr;</span> <span style="color:#cc0000;">${portalCode}</span></div>`
       : '';
 
     return `<div style="max-width:580px;margin:0 auto;padding:36px 24px;background:#ffffff;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111;">
