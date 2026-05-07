@@ -25,7 +25,7 @@ function buildWelcomeHtml({
     ctaUrl, ctaText, portalCode,
 }) {
     const clientIdLine = portalCode
-      ? `<div style="font-size:20px;font-weight:700;color:#111;line-height:1.4;">Your Client ID &rarr; ${portalCode}</div>`
+      ? `<div style="margin-top:8px;font-size:22px;font-weight:700;color:#cc0000;line-height:1.4;">Your Client ID &rarr; ${portalCode}</div>`
       : '';
 
     return `<div style="max-width:580px;margin:0 auto;padding:36px 24px;background:#ffffff;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111;">
@@ -53,7 +53,7 @@ function buildWelcomeHtml({
     <div style="font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#111;">Client Portal Access</div>
     <div style="margin-top:8px;font-size:14px;color:#555;line-height:1.5;">Use this code to access your project portal.</div>
     <div style="margin-top:16px;">
-      <div style="font-size:20px;font-weight:700;color:#111;line-height:1.4;">Direct link &rarr; <a href="${ctaUrl}" style="color:#111;text-decoration:underline;text-underline-offset:3px;">${ctaUrl}</a></div>
+      <a href="${ctaUrl}" style="font-size:22px;font-weight:700;color:#cc0000;line-height:1.4;text-decoration:none;">${ctaUrl}</a>
       ${clientIdLine}
     </div>
   </div>
