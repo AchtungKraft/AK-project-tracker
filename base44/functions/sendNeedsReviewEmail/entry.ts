@@ -37,11 +37,16 @@ function stripHtmlToText(html) {
 function sanitizeHtmlForEmail(html) {
   if (!html || typeof html !== 'string') return '';
   let safe = html;
+  // Strip scripts and styles
   safe = safe.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '');
+  // Headings
   safe = safe.replace(/<h2([^>]*)>/gi, '<h2$1 style="margin:10px 0 4px 0;font-size:15px;color:#222;">');
   safe = safe.replace(/<h3([^>]*)>/gi, '<h3$1 style="margin:8px 0 4px 0;font-size:14px;color:#333;">');
-  safe = safe.replace(/<ul([^>]*)>/gi, '<ul$1 style="margin:4px 0;padding-left:20px;color:#444;">');
-  safe = safe.replace(/<li([^>]*)>/gi, '<li$1 style="margin:2px 0;color:#444;">');
+  // Lists — apply email-safe spacing; preserve nesting hierarchy
+  safe = safe.replace(/<ol([^>]*)>/gi, '<ol$1 style="margin:12px 0;padding-left:32px;">');
+  safe = safe.replace(/<ul([^>]*)>/gi, '<ul$1 style="margin:12px 0;padding-left:28px;">');
+  safe = safe.replace(/<li([^>]*)>/gi, '<li$1 style="margin-bottom:10px;line-height:1.6;color:#444;">');
+  // Paragraphs
   safe = safe.replace(/<p([^>]*)>/gi, '<p$1 style="margin:4px 0;color:#444;line-height:1.6;">');
   return safe;
 }

@@ -3,9 +3,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 const DEFAULT_TEMPLATES = {
     welcome: {
         subject: "Achtung Kraft // Welcome to {project_name} Project Portal",
-        body_intro: "Welcome! You've been given access to the project portal.",
         button_text: "ACCESS YOUR PORTAL",
-        closing_text: "— Achtung Kraft Projects",
     }
 };
 
@@ -15,6 +13,65 @@ function replacePlaceholders(text, data) {
         .replace(/{project_name}/g, data.project_name || '')
         .replace(/{client_name}/g, data.client_name || '')
         .replace(/{client_slug}/g, data.client_slug || '');
+}
+
+function getFirstName(fullName) {
+    if (!fullName || typeof fullName !== 'string') return null;
+    return fullName.trim().split(/\s+/)[0] || null;
+}
+
+function buildWelcomeHtml({
+    projectName, greeting, introText,
+    ctaUrl, ctaText, portalCode,
+}) {
+    const portalCodeBlock = portalCode ? `
+  <div style="margin-top:28px;padding-top:20px;border-top:1px solid #e5e5e5;">
+    <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#999;">Portal Code</div>
+    <div style="margin-top:8px;font-size:28px;font-weight:700;color:#111;">${portalCode}</div>
+    <div style="margin-top:6px;font-size:13px;color:#888;">Use this code to access your project portal.</div>
+  </div>` : '';
+
+    return `<div style="max-width:580px;margin:0 auto;padding:36px 24px;background:#ffffff;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111;">
+
+  <!-- Greeting -->
+  <div style="font-size:15px;color:#333;line-height:1.5;">${greeting}</div>
+
+  <!-- Project label -->
+  <div style="margin-top:20px;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#999;">Project</div>
+  <div style="font-size:20px;font-weight:700;color:#111;margin-top:4px;">${projectName}</div>
+
+  <!-- Title -->
+  <div style="font-size:36px;line-height:1.1;font-weight:700;color:#111;margin-top:28px;">Welcome to Your<br/>Project Portal</div>
+
+  <!-- Intro -->
+  <div style="margin-top:16px;font-size:15px;color:#555;line-height:1.6;">${introText}</div>
+
+  <!-- CTA -->
+  <div style="margin-top:28px;">
+    <a href="${ctaUrl}" style="display:inline-block;background:#cc0000;color:#fff;padding:12px 20px;border-radius:6px;font-weight:600;font-size:15px;text-decoration:none;">${ctaText}</a>
+  </div>
+
+  <!-- Portal Code -->
+  ${portalCodeBlock}
+
+  <!-- What You Can Do -->
+  <div style="margin-top:28px;padding-top:20px;border-top:1px solid #e5e5e5;">
+    <div style="font-size:15px;font-weight:600;color:#111;margin-bottom:8px;">What You Can Do</div>
+    <ul style="margin:0;padding-left:20px;line-height:1.8;color:#333;font-size:14px;">
+      <li>View project updates and progress</li>
+      <li>Review and approve design submissions</li>
+      <li>Provide feedback and request changes</li>
+      <li>Track project milestones</li>
+    </ul>
+  </div>
+
+  <!-- Direct Link -->
+  <div style="font-size:13px;color:#666;margin-top:24px;">Direct link: <a href="${ctaUrl}" style="color:#666;text-decoration:underline;word-break:break-all;">${ctaUrl}</a></div>
+
+  <!-- Sign-off -->
+  <div style="margin-top:32px;font-size:13px;color:#666;">— Achtung Kraft Projects<br/>Precision builds. Clear communication.</div>
+
+</div>`;
 }
 
 Deno.serve(async (req) => {
@@ -49,7 +106,6 @@ Deno.serve(async (req) => {
         const defaultTpl = DEFAULT_TEMPLATES.welcome;
 
         const subjectTemplate = savedTemplate?.subject_template || defaultTpl.subject;
-        const bodyIntroTemplate = savedTemplate?.body_intro || defaultTpl.body_intro;
         const buttonText = savedTemplate?.button_text || defaultTpl.button_text;
 
         const clientPortalBaseUrl = 'https://akclient.base44.app';
@@ -57,30 +113,29 @@ Deno.serve(async (req) => {
 
         const placeholderData = { project_name: project.name, client_name: contact.name, client_slug: clientSlug };
         const subject = replacePlaceholders(subjectTemplate, placeholderData);
-        const bodyIntro = replacePlaceholders(bodyIntroTemplate, placeholderData);
 
-        // Welcome-specific content block
-        const contentBlockHtml = `
-<h3 style="margin:0 0 8px 0;color:#1e40af;">What You Can Do</h3>
-<ul style="margin:8px 0;padding-left:20px;color:#374151;">
-    <li>View project updates and progress</li>
-    <li>Review and approve design submissions</li>
-    <li>Provide feedback and request changes</li>
-    <li>Track project milestones</li>
-</ul>`;
+        const firstName = getFirstName(contact.name);
+        const greeting = firstName ? `Hi ${firstName},` : 'Hi,';
+        const introText = 'You now have access to your Ächtung Kraft project portal where you can review updates, approvals, and project progress.';
 
-        // Portal code callout (separate from slug display)
-        const portalCodeHtml = clientSlug ? `
-<div style="background-color:#fef3c7;border-left:4px solid #f59e0b;padding:16px;margin:20px 0;">
-    <h3 style="margin:0 0 8px 0;color:#92400e;">Your Portal Code</h3>
-    <p style="margin:0;font-size:18px;font-weight:bold;color:#78350f;">${clientSlug}</p>
-    <p style="margin:8px 0 0 0;color:#92400e;font-size:14px;">Use this code to access your project portal.</p>
-</div>` : '';
+        const rawHtml = buildWelcomeHtml({
+            projectName: project.name,
+            greeting,
+            introText,
+            ctaUrl: clientPortalBaseUrl,
+            ctaText: buttonText,
+            portalCode: clientSlug || null,
+        });
 
         const textBody = [
+            greeting,
+            '',
             `PROJECT: ${project.name}`,
+            '',
             'Welcome to Your Project Portal',
-            '', `Hi ${contact.name},`, '', bodyIntro, '',
+            '',
+            introText,
+            '',
             'What You Can Do:',
             '- View project updates and progress',
             '- Review and approve design submissions',
@@ -90,26 +145,15 @@ Deno.serve(async (req) => {
             clientSlug ? `Your Portal Code: ${clientSlug}\nUse this code to access your project portal.\n` : '',
             `Access your portal here:\n${clientPortalBaseUrl}`,
             '',
-            'Bookmark this link for easy access to your project portal anytime.',
-            '',
-            'If you have any questions, feel free to reach out.',
             '— Achtung Kraft Projects',
+            'Precision builds. Clear communication.',
         ].filter(Boolean).join('\n');
 
-        // Use centralized sender — welcome emails use a blue-themed content block instead of red
-        // We pass the portal code block as additional HTML via linksBlockHtml slot
         const sendResponse = await base44.functions.invoke('sendClientEmail', {
             to: contact.email,
-            contactName: contact.name,
             subject,
             emailType: 'welcome',
-            projectName: project.name,
-            headline: 'Welcome to Your Project Portal',
-            introText: bodyIntro,
-            contentBlockHtml,
-            linksBlockHtml: portalCodeHtml,
-            ctaUrl: clientPortalBaseUrl,
-            ctaText: buttonText,
+            rawHtml,
             textBody,
             projectId,
         });

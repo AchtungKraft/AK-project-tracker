@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Loader2, Archive, CheckCircle2, AlertCircle, Plus, ExternalLink, X, Trash2, RotateCw, FileText, Pencil, Upload, Eye } from "lucide-react";
+import { ArrowLeft, Loader2, Archive, CheckCircle2, AlertCircle, Plus, ExternalLink, X, Trash2, RotateCw, FileText, Pencil, Upload, Eye, ChevronRight } from "lucide-react";
 import useFileUploader from "../components/clientportal/useFileUploader";
 import FileUploadStatusList from "../components/clientportal/FileUploadStatusList";
 import { NotFoundState, RateLimitState, UnknownErrorState } from "@/components/feedback/FeedbackErrorStates";
@@ -429,7 +429,18 @@ export default function ClientFeedbackDetail() {
                       </Button>
                     )}
                   </div>
-                  {project && <p className={cn("text-gray-400", isMobile ? "text-xs" : "text-sm")}>{project.name}</p>}
+                  {project && (
+                    <button
+                      onClick={() => navigate(createPageUrl("ProjectDetail") + "?id=" + project.id + "&tab=clientportal")}
+                      className={cn(
+                        "text-gray-400 hover:text-gray-200 transition-colors inline-flex items-center gap-1 group",
+                        isMobile ? "text-xs" : "text-sm"
+                      )}
+                    >
+                      {project.name}
+                      <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </button>
+                  )}
                 </>
               )}
             </div>
