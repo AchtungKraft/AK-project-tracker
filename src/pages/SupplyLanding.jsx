@@ -25,7 +25,8 @@ import {
 } from "@/components/ui/table";
 import {
   Layers, Search, RefreshCw, AlertTriangle, CheckCircle2,
-  Package, ChevronRight, ArrowUpDown, Trash2, Eye, Loader2, ShieldAlert
+  Package, ChevronRight, ArrowUpDown, Trash2, Eye, Loader2, ShieldAlert,
+  ChevronDown
 } from "lucide-react";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 import SupplyHardResetPanel from "@/components/supply/SupplyHardResetPanel.jsx";
@@ -34,6 +35,7 @@ import { toast } from "sonner";
 import { useWiringAudit } from "@/components/dev/wiringAudit";
 import GlobalActionQueue from "@/components/supply/GlobalActionQueue";
 import { useSupplyAction } from "@/components/supply/useSupplyAction";
+import ProjectRow from "@/components/supply/SupplyProjectRow";
 
 /**
  * SupplyLanding - Portfolio Overview (Screen 1)
@@ -55,6 +57,7 @@ export default function SupplyLanding() {
   const [vendorFilter, setVendorFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [selectedItems, setSelectedItems] = useState(new Set());
+  const [showInactive, setShowInactive] = useState(false);
   const supplyAction = useSupplyAction({ showSuccessToast: true });
 
   // Check admin status
@@ -101,13 +104,41 @@ export default function SupplyLanding() {
   const portfolio = portfolioData?.portfolio || {};
   const projects = portfolioData?.projects || [];
 
-  // Sort projects (filtering done server-side now)
-  const sortedProjects = useMemo(() => {
-    const sorted = [...projects];
-    sorted.sort((a, b) => {
+  // Supply activity helpers
+  const hasSupplyActivity = (p) => {
+    return (
+      (p.total_commitments || 0) > 0 ||
+      (p.needs_order_count || 0) > 0 ||
+      (p.ready_to_install_count || 0) > 0 ||
+      (p.alert_count || 0) > 0
+    );
+  };
+
+  const getSupplyPriorityScore = (p) => {
+    const toOrder = p.needs_order_count || 0;
+    const alerts = p.alert_count || 0;
+    const items = p.total_commitments || 0;
+    const install = p.install_percent || 0;
+    return (toOrder * 1000) + (alerts * 500) + (items * 50) + install;
+  };
+
+  // Sort projects: active first, then by selected metric, inactive last
+  const { activeProjects, inactiveProjects } = useMemo(() => {
+    const active = [];
+    const inactive = [];
+
+    for (const p of projects) {
+      if (hasSupplyActivity(p)) {
+        active.push(p);
+      } else {
+        inactive.push(p);
+      }
+    }
+
+    const sortFn = (a, b) => {
       switch (sortBy) {
         case 'exposure':
-          return (b.total_exposure || 0) - (a.total_exposure || 0);
+          return (getSupplyPriorityScore(b)) - (getSupplyPriorityScore(a));
         case 'coverage':
           return (a.coverage_percent || 0) - (b.coverage_percent || 0);
         case 'install':
@@ -115,10 +146,14 @@ export default function SupplyLanding() {
         case 'commitments':
           return (b.total_commitments || 0) - (a.total_commitments || 0);
         default:
-          return 0;
+          return getSupplyPriorityScore(b) - getSupplyPriorityScore(a);
       }
-    });
-    return sorted;
+    };
+
+    active.sort(sortFn);
+    inactive.sort((a, b) => (a.project_name || '').localeCompare(b.project_name || ''));
+
+    return { activeProjects: active, inactiveProjects: inactive };
   }, [projects, sortBy]);
 
   const handleRefresh = async () => {
@@ -259,7 +294,7 @@ export default function SupplyLanding() {
                         <ArrowUpDown className="w-4 h-4 mr-2" /><SelectValue placeholder="Sort" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="exposure">Highest Exposure</SelectItem>
+                        <SelectItem value="exposure">Supply Priority</SelectItem>
                         <SelectItem value="coverage">Lowest Coverage</SelectItem>
                         <SelectItem value="install">Most Installed</SelectItem>
                         <SelectItem value="commitments">Most Items</SelectItem>
@@ -364,85 +399,56 @@ export default function SupplyLanding() {
             <CardContent className="p-0">
               {isLoading ? (
                 <div className="p-8 text-center text-gray-500">Loading portfolio data...</div>
-              ) : sortedProjects.length === 0 ? (
+              ) : activeProjects.length === 0 && inactiveProjects.length === 0 ? (
                 <div className="p-8 text-center text-gray-500">No projects match your filters</div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-gray-800 hover:bg-transparent">
-                      <TableHead className="text-gray-400">Project</TableHead>
-                      <TableHead className="text-gray-400 text-center">Items</TableHead>
-                      <TableHead className="text-gray-400 text-center">Coverage</TableHead>
-                      <TableHead className="text-gray-400 text-right">To Order</TableHead>
-                      <TableHead className="text-gray-400 text-center">Install %</TableHead>
-                      <TableHead className="text-gray-400 text-center">Status</TableHead>
-                      <TableHead className="w-10"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sortedProjects.map(project => (
-                      <TableRow
-                        key={project.project_id}
-                        className="border-gray-800 hover:bg-gray-800/30 cursor-pointer"
-                        onClick={() => handleProjectClick(project.project_id)}
+                <>
+                  {/* Active Projects Table */}
+                  {activeProjects.length > 0 && (
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-gray-800 hover:bg-transparent">
+                          <TableHead className="text-gray-400">Project</TableHead>
+                          <TableHead className="text-gray-400 text-center">Items</TableHead>
+                          <TableHead className="text-gray-400 text-center">Coverage</TableHead>
+                          <TableHead className="text-gray-400 text-right">To Order</TableHead>
+                          <TableHead className="text-gray-400 text-center">Install %</TableHead>
+                          <TableHead className="text-gray-400 text-center">Status</TableHead>
+                          <TableHead className="w-10"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {activeProjects.map(project => (
+                          <ProjectRow key={project.project_id} project={project} onClick={handleProjectClick} getCoverageColor={getCoverageColor} />
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+
+                  {/* Inactive Projects Collapsible */}
+                  {inactiveProjects.length > 0 && (
+                    <div className="border-t border-gray-800">
+                      <button
+                        onClick={() => setShowInactive(!showInactive)}
+                        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-800/20 transition-colors"
                       >
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            {project.featured_image_url && (
-                              <div className="w-10 h-10 bg-gray-800 rounded overflow-hidden flex-shrink-0">
-                                <img src={project.featured_image_url} alt="" className="w-full h-full object-cover" />
-                              </div>
-                            )}
-                            <div>
-                              <p className="text-white font-medium">{project.project_name}</p>
-                              <p className="text-xs text-gray-500">{project.client_name}</p>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span className="text-white">{project.total_commitments || 0}</span>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span className={getCoverageColor(project.coverage_percent)}>
-                            {project.coverage_percent || 0}%
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <span className={project.needs_order_count > 0 ? 'text-purple-400' : 'text-gray-400'}>
-                            {project.needs_order_count || 0}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex items-center gap-2 justify-center">
-                            <Progress value={project.install_percent || 0} className="w-16 h-2" />
-                            <span className="text-xs text-gray-400">{project.install_percent || 0}%</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            {project.needs_order_count > 0 && (
-                              <Badge variant="outline" className="border-purple-600 text-purple-400 text-xs">
-                                <Package className="w-3 h-3 mr-1" />
-                                Order
-                              </Badge>
-                            )}
-                            {project.ready_to_install_count > 0 && (
-                              <Badge variant="outline" className="border-green-600 text-green-400 text-xs">
-                                Install
-                              </Badge>
-                            )}
-                            {!project.needs_order_count && !project.ready_to_install_count && project.total_commitments > 0 && (
-                              <CheckCircle2 className="w-4 h-4 text-green-500" />
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <ChevronRight className="w-4 h-4 text-gray-500" />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                        <span className="text-sm text-gray-500">
+                          Inactive Projects ({inactiveProjects.length})
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${showInactive ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showInactive && (
+                        <Table>
+                          <TableBody>
+                            {inactiveProjects.map(project => (
+                              <ProjectRow key={project.project_id} project={project} onClick={handleProjectClick} getCoverageColor={getCoverageColor} muted />
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
