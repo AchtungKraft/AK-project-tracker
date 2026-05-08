@@ -42,13 +42,83 @@ function sanitizeHtmlForEmail(html) {
   // Headings
   safe = safe.replace(/<h2([^>]*)>/gi, '<h2$1 style="margin:10px 0 4px 0;font-size:15px;color:#222;">');
   safe = safe.replace(/<h3([^>]*)>/gi, '<h3$1 style="margin:8px 0 4px 0;font-size:14px;color:#333;">');
-  // Lists — apply email-safe spacing; preserve nesting hierarchy
+
+  // ── Quill ql-indent → nested list conversion ──
+  // Quill emits flat <li class="ql-indent-N"> instead of nested <ol>/<ul>.
+  // We convert these into real nested lists so email clients render indentation.
+  safe = safe.replace(/<ol([^>]*)>([\s\S]*?)<\/ol>/gi, (match, olAttrs, inner) => {
+    return '<ol' + olAttrs + '>' + convertQuillIndents(inner, 'ol') + '</ol>';
+  });
+  safe = safe.replace(/<ul([^>]*)>([\s\S]*?)<\/ul>/gi, (match, ulAttrs, inner) => {
+    return '<ul' + ulAttrs + '>' + convertQuillIndents(inner, 'ul') + '</ul>';
+  });
+
+  // Lists — apply email-safe spacing
   safe = safe.replace(/<ol([^>]*)>/gi, '<ol$1 style="margin:12px 0;padding-left:32px;">');
   safe = safe.replace(/<ul([^>]*)>/gi, '<ul$1 style="margin:12px 0;padding-left:28px;">');
-  safe = safe.replace(/<li([^>]*)>/gi, '<li$1 style="margin-bottom:10px;line-height:1.6;color:#444;">');
+  safe = safe.replace(/<li([^>]*)>/gi, (match, attrs) => {
+    // Don't double-add style if we already inlined it during nesting
+    if (/style=/i.test(attrs)) return match;
+    return '<li' + attrs + ' style="margin-bottom:10px;line-height:1.6;color:#444;">';
+  });
   // Paragraphs
   safe = safe.replace(/<p([^>]*)>/gi, '<p$1 style="margin:4px 0;color:#444;line-height:1.6;">');
   return safe;
+}
+
+// Convert flat Quill ql-indent-N list items into properly nested sublists
+function convertQuillIndents(listInner, listTag) {
+  // Parse all <li ...>...</li> items
+  const liRegex = /<li([^>]*)>([\s\S]*?)<\/li>/gi;
+  const items = [];
+  let m;
+  while ((m = liRegex.exec(listInner)) !== null) {
+    const attrs = m[1];
+    const content = m[2];
+    // Extract indent level from class="ql-indent-N"
+    const indentMatch = /ql-indent-(\d+)/.exec(attrs);
+    const level = indentMatch ? parseInt(indentMatch[1], 0) : 0;
+    // Clean ql-indent class from attrs
+    const cleanAttrs = attrs.replace(/\s*class\s*=\s*"[^"]*ql-indent-\d+[^"]*"/gi, '').replace(/\s*class\s*=\s*""/g, '');
+    items.push({ level, content, attrs: cleanAttrs });
+  }
+
+  if (items.length === 0) return listInner;
+  // Check if any items actually use ql-indent
+  if (!items.some(it => it.level > 0)) return listInner;
+
+  // Build nested HTML
+  let result = '';
+  let currentLevel = 0;
+  const subListStyle = listTag === 'ol'
+    ? ' style="margin:4px 0 4px 0;padding-left:28px;list-style-type:lower-alpha;"'
+    : ' style="margin:4px 0 4px 0;padding-left:28px;list-style-type:circle;"';
+  const liStyle = ' style="margin-bottom:10px;line-height:1.6;color:#444;"';
+
+  for (const item of items) {
+    while (item.level > currentLevel) {
+      result += `<${listTag}${subListStyle}>`;
+      currentLevel++;
+    }
+    while (item.level < currentLevel) {
+      result += `</${listTag}></li>`;
+      currentLevel--;
+    }
+    result += `<li${liStyle}>${item.content}`;
+    // Don't close </li> yet — a nested sublist may follow
+    // We'll check the next item
+    const nextItem = items[items.indexOf(item) + 1];
+    if (!nextItem || nextItem.level <= item.level) {
+      result += '</li>';
+    }
+  }
+  // Close any remaining open levels
+  while (currentLevel > 0) {
+    result += `</${listTag}></li>`;
+    currentLevel--;
+  }
+
+  return result;
 }
 
 function getCommentHtml(comment) {
