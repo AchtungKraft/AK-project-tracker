@@ -8,10 +8,9 @@ import { createPageUrl } from "@/utils";
 import { Printer, Plus } from "lucide-react";
 import ExecutionTaskRow from "./ExecutionTaskRow";
 import ProjectTypeGroupHeader from "./ProjectTypeGroupHeader";
-import ExecutionInlineTaskCreator from "./ExecutionInlineTaskCreator";
+import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 import { sortTasksByPriority } from "@/utils/taskPrioritySort";
 import { groupProjectsByType } from "@/utils/projectTypeGroups";
-import { useTaskStatuses } from "@/components/tasks/useTaskDropdownData";
 
 function resolveCategoryName(catId, categories) {
   const cat = categories.find(c => c.id === catId);
@@ -105,9 +104,8 @@ export default function PriorityExecutionView({
     return m;
   }, [teamMembers]);
 
-  // ── Inline creator state (only one open at a time) ──
-  const [creatorOpenForProject, setCreatorOpenForProject] = useState(null);
-  const { defaultStatusId } = useTaskStatuses();
+  // ── Create task modal state ──
+  const [createTaskForProjectId, setCreateTaskForProjectId] = useState(null);
 
   // ── Filters ──
   const [projectFilter, setProjectFilter] = useState('all');
@@ -226,7 +224,7 @@ export default function PriorityExecutionView({
                       </Link>
                     </h1>
                     <button
-                      onClick={() => setCreatorOpenForProject(prev => prev === project.id ? null : project.id)}
+                      onClick={() => setCreateTaskForProjectId(project.id)}
                       className="text-[10px] text-green-500 hover:text-green-300 transition-colors shrink-0 px-1.5 py-0.5 rounded hover:bg-gray-800 flex items-center gap-0.5 no-print"
                       title="Add task to this project"
                     >
@@ -241,17 +239,6 @@ export default function PriorityExecutionView({
                       <Printer className="w-3 h-3" />
                     </button>
                   </div>
-
-                  {creatorOpenForProject === project.id && (
-                    <ExecutionInlineTaskCreator
-                      projectId={project.id}
-                      teamMembers={teamMembers}
-                      statuses={statuses}
-                      defaultStatusId={defaultStatusId}
-                      onCreated={() => {/* keep open for rapid entry */}}
-                      onCancel={() => setCreatorOpenForProject(null)}
-                    />
-                  )}
 
                   {sortedCats.map(([catName, catTasks]) => (
                     <div key={catName} className="mb-4">
@@ -285,6 +272,15 @@ export default function PriorityExecutionView({
           </ProjectTypeGroupHeader>
         );
       })}
+
+      {/* Create Task Modal */}
+      {createTaskForProjectId && (
+        <CreateTaskModal
+          projectId={createTaskForProjectId}
+          defaultIsPriority={true}
+          onClose={() => setCreateTaskForProjectId(null)}
+        />
+      )}
     </div>
   );
 }
