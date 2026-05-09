@@ -5,11 +5,13 @@ import { sortChecklistItems } from "@/components/tasks/checklistHelpers";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Printer } from "lucide-react";
+import { Printer, Plus } from "lucide-react";
 import ExecutionTaskRow from "./ExecutionTaskRow";
 import ProjectTypeGroupHeader from "./ProjectTypeGroupHeader";
+import ExecutionInlineTaskCreator from "./ExecutionInlineTaskCreator";
 import { sortTasksByPriority } from "@/utils/taskPrioritySort";
 import { groupProjectsByType } from "@/utils/projectTypeGroups";
+import { useTaskStatuses } from "@/components/tasks/useTaskDropdownData";
 
 function resolveCategoryName(catId, categories) {
   const cat = categories.find(c => c.id === catId);
@@ -102,6 +104,10 @@ export default function PriorityExecutionView({
     teamMembers.forEach(tm => { m[tm.id] = tm.full_name; });
     return m;
   }, [teamMembers]);
+
+  // ── Inline creator state (only one open at a time) ──
+  const [creatorOpenForProject, setCreatorOpenForProject] = useState(null);
+  const { defaultStatusId } = useTaskStatuses();
 
   // ── Filters ──
   const [projectFilter, setProjectFilter] = useState('all');
@@ -220,6 +226,14 @@ export default function PriorityExecutionView({
                       </Link>
                     </h1>
                     <button
+                      onClick={() => setCreatorOpenForProject(prev => prev === project.id ? null : project.id)}
+                      className="text-[10px] text-green-500 hover:text-green-300 transition-colors shrink-0 px-1.5 py-0.5 rounded hover:bg-gray-800 flex items-center gap-0.5 no-print"
+                      title="Add task to this project"
+                    >
+                      <Plus className="w-3 h-3" />
+                      Add Task
+                    </button>
+                    <button
                       onClick={() => window.open(`/projectprintview?id=${project.id}`, '_blank')}
                       className="text-[10px] text-gray-500 hover:text-white transition-colors shrink-0 px-1.5 py-0.5 rounded hover:bg-gray-800"
                       title="Print checklist"
@@ -227,6 +241,17 @@ export default function PriorityExecutionView({
                       <Printer className="w-3 h-3" />
                     </button>
                   </div>
+
+                  {creatorOpenForProject === project.id && (
+                    <ExecutionInlineTaskCreator
+                      projectId={project.id}
+                      teamMembers={teamMembers}
+                      statuses={statuses}
+                      defaultStatusId={defaultStatusId}
+                      onCreated={() => {/* keep open for rapid entry */}}
+                      onCancel={() => setCreatorOpenForProject(null)}
+                    />
+                  )}
 
                   {sortedCats.map(([catName, catTasks]) => (
                     <div key={catName} className="mb-4">
