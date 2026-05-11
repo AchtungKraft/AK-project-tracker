@@ -188,34 +188,10 @@ export default function PriorityCalendarView({
     return primaryGroups;
   };
 
-  // Use parent handlers if provided, otherwise fallback to local implementation
-  const handleToggleComplete = parentToggleComplete || (async (task) => {
-    const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
-    const completedStatus = taskStatuses.find(s => {
-      const label = s.label.toLowerCase();
-      return label.includes('complete') || label.includes('done');
-    });
-
-    const isCurrentlyComplete = task.status_id === completedStatus?.id;
-    
-    if (isCurrentlyComplete) {
-      const firstStatus = taskStatuses.find(s => s.id !== completedStatus?.id);
-      if (firstStatus) {
-        await updateTaskMutation.mutateAsync({
-          id: task.id,
-          data: { status_id: firstStatus.id, completed_date: null }
-        });
-        toast.success('Task reopened');
-      }
-    } else {
-      if (completedStatus) {
-        await updateTaskMutation.mutateAsync({
-          id: task.id,
-          data: { status_id: completedStatus.id, completed_date: new Date().toISOString() }
-        });
-        toast.success('Task completed');
-      }
-    }
+  // CANONICAL: Use parent handler only — no local fallback for completion
+  // All completion MUST route through beginTaskCompletion via the provider
+  const handleToggleComplete = parentToggleComplete || (() => {
+    console.warn('[TASK CONTRACT] PriorityCalendarView: No onToggleComplete handler provided. Completion blocked.');
   });
 
   const handleUpdateDueDate = parentUpdateDueDate || (async (task, dueDate) => {

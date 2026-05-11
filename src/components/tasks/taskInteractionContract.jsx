@@ -1,5 +1,5 @@
 /**
- * TASK INTERACTION CONTRACT v2.0
+ * TASK INTERACTION CONTRACT v3.0
  * 
  * This file defines the enforcement rules for task UI consistency.
  * 
@@ -12,6 +12,11 @@
  * 6. All grouping MUST use useTaskGrouping
  * 7. Calendar views MUST exclude tasks without start_date AND due_date
  * 8. All mutations MUST include timestamp for race condition prevention
+ * 9. ALL task completions MUST route through beginTaskCompletion()
+ *    Flow: Checklist → Uninstalled Parts → Time Entry → Final Mutation
+ * 10. NO component may directly set status_id to a completed status
+ * 11. Kanban drag-to-completed-lane MUST intercept and call beginTaskCompletion()
+ * 12. isCompletingTask guard prevents double-completion
  * 
  * STATE INTEGRITY RULES:
  * - normalizeTask() must be applied after fetch and before cache write
@@ -138,7 +143,7 @@ export const TASK_CACHE_KEYS = [
  * Task interaction contract summary
  */
 export const CONTRACT_SUMMARY = `
-TASK INTERACTION CONTRACT v2.0
+TASK INTERACTION CONTRACT v3.0
 
 STATE INTEGRITY:
 ✓ normalizeTask() after fetch and before cache write
@@ -146,8 +151,17 @@ STATE INTEGRITY:
 ✓ Mutation timestamps for race condition prevention
 ✓ useTaskGrouping subscribes to state events
 
+COMPLETION FLOW (CANONICAL):
+✓ ALL completions route through beginTaskCompletion()
+✓ Flow: Checklist → Uninstalled Parts → Time Entry → Final Mutation
+✓ isCompletingTask guard prevents double-completion
+✓ Kanban drag-to-completed intercepted
+✓ Reopen preserves actual_hours/completed_date
+
 ALLOWED:
 ✓ useTaskInteraction() for all mutations
+✓ beginTaskCompletion() for all task completions
+✓ toggleComplete() for checkbox (handles both complete + reopen)
 ✓ TaskActionFooter in all modals/drawers
 ✓ TaskInlineControlBar for inline controls
 ✓ useTaskGrouping for calendar/kanban views
@@ -160,6 +174,9 @@ FORBIDDEN:
 ✗ Custom inline control implementations
 ✗ Manual grouping logic outside useTaskGrouping
 ✗ Tasks without dates in calendar views
+✗ Directly setting status_id to completed status
+✗ Local CompleteTaskConfirm modals (use TaskCompletionModal via provider)
+✗ Forked completion flows or inline completion hacks
 `;
 
 export default {

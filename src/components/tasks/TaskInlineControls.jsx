@@ -7,7 +7,6 @@ import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import PriorityRemoveConfirm from "./PriorityRemoveConfirm";
-import CompleteTaskConfirm from "./CompleteTaskConfirm";
 
 /**
  * TaskInlineControls
@@ -31,9 +30,8 @@ export default function TaskInlineControls({
   const isMobile = useIsMobile();
   const [dueDateOpen, setDueDateOpen] = useState(false);
   const [startDateOpen, setStartDateOpen] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(null); // 'due' | 'start' | 'priority' | 'complete'
+  const [isUpdating, setIsUpdating] = useState(null); // 'due' | 'start' | 'priority'
   const [showPriorityConfirm, setShowPriorityConfirm] = useState(false);
-  const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
 
   const handleDueDateChange = async (date) => {
     if (!onUpdateDueDate) return;
@@ -86,29 +84,12 @@ export default function TaskInlineControls({
     }
   };
 
+  // CANONICAL: Delegate all completion to the provider's toggleComplete
   const handleToggleComplete = (e) => {
     e.stopPropagation();
     if (!onToggleComplete) return;
-    
-    // If completing (not already complete), show confirmation
-    if (!isCompleted) {
-      setShowCompleteConfirm(true);
-      return;
-    }
-    
-    // If reopening, do immediately
-    setIsUpdating('complete');
-    onToggleComplete(task).finally(() => setIsUpdating(null));
-  };
-
-  const handleConfirmComplete = async () => {
-    setIsUpdating('complete');
-    try {
-      await onToggleComplete(task);
-    } finally {
-      setIsUpdating(null);
-      setShowCompleteConfirm(false);
-    }
+    // toggleComplete handles both completion (with full flow) and reopen
+    onToggleComplete(task);
   };
 
   const buttonSize = compact || isMobile ? 'h-7 w-7' : 'h-8 w-8';
@@ -288,14 +269,6 @@ export default function TaskInlineControls({
         isLoading={isUpdating === 'priority'}
       />
 
-      {/* Complete Task Confirmation */}
-      <CompleteTaskConfirm
-        isOpen={showCompleteConfirm}
-        onClose={() => setShowCompleteConfirm(false)}
-        onConfirm={handleConfirmComplete}
-        taskName={task.name}
-        isLoading={isUpdating === 'complete'}
-      />
     </div>
   );
 }

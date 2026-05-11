@@ -13,9 +13,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon, Loader2, Trash2, UserPlus } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useTaskInteractionContext } from "./TaskInteractionProvider";
 
 export default function TaskDetailModal({ task, onClose, projectId }) {
   const queryClient = useQueryClient();
+  const taskInteraction = useTaskInteractionContext();
   const [user, setUser] = useState(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -108,6 +110,12 @@ export default function TaskDetailModal({ task, onClose, projectId }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    // CANONICAL: Intercept status change to "completed" — route through completion flow
+    if (taskInteraction?.isCompletedStatusId && formData.status_id !== task.status_id && taskInteraction.isCompletedStatusId(formData.status_id)) {
+      taskInteraction.beginTaskCompletion(task);
+      onClose();
+      return;
+    }
     updateMutation.mutate(formData);
   };
 

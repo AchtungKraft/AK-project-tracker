@@ -23,6 +23,7 @@ import TaskKnowledgeSection from "@/components/knowledge/TaskKnowledgeSection";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { getMobileInputClass, getMobileTextareaClass, getMobileSelectClass } from "@/components/mobile/MobileFormStyles";
 import { TASK_CACHE_KEYS } from "./useTaskInteraction";
+import { useTaskInteractionContext } from "./TaskInteractionProvider";
 import TaskCompletionModal from "./TaskCompletionModal";
 import TimeEstimateInput, { formatHours } from "./TimeEstimateInput";
 import {
@@ -131,6 +132,8 @@ const getCategoryPath = (categoryId, categories) => {
 export default function TaskDetailDrawer({ task, onClose, projectId }) {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
+  // CANONICAL: Use provider if available for completions
+  const taskInteraction = useTaskInteractionContext();
   const [user, setUser] = useState(null);
   const [editing, setEditing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -259,8 +262,14 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
 
   const handleSubmit = useCallback((e) => {
     e.preventDefault();
+    // CANONICAL: Intercept status change to "completed" — route through completion flow
+    if (taskInteraction?.isCompletedStatusId && formData.status_id !== task?.status_id && taskInteraction.isCompletedStatusId(formData.status_id)) {
+      taskInteraction.beginTaskCompletion(task);
+      setEditing(false);
+      return;
+    }
     updateMutation.mutate(formData);
-  }, [formData, updateMutation]);
+  }, [formData, updateMutation, task, taskInteraction]);
 
   const handleDeleteClick = useCallback(() => {
     setShowDeleteConfirm(true);
@@ -602,8 +611,15 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           ) : (
             <div className="flex flex-col gap-2">
               <Button
-                onClick={() => setShowCompleteConfirm(true)}
-                disabled={!completedStatus}
+                onClick={() => {
+                  // CANONICAL: Use provider's beginTaskCompletion if available
+                  if (taskInteraction?.beginTaskCompletion) {
+                    taskInteraction.beginTaskCompletion(task);
+                  } else {
+                    setShowCompleteConfirm(true);
+                  }
+                }}
+                disabled={!completedStatus || taskInteraction?.isCompletingTask}
                 className={cn(
                   "w-full h-11 min-h-[44px] text-white gap-2 transition-all bg-red-600 hover:bg-red-500",
                   checklistItems.length > 0 && incompleteChecklistCount === 0

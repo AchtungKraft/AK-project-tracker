@@ -12,6 +12,7 @@ import TaskDetailDrawer from "../tasks/TaskDetailDrawer";
 import CreateTaskModal from "../tasks/CreateTaskModal";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { cn } from "@/lib/utils";
+import { useTaskInteractionContext } from "@/components/tasks/TaskInteractionProvider";
 
 // Helper to get full category path
 const getCategoryPath = (categoryId, categories) => {
@@ -36,6 +37,9 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
   const [selectedTask, setSelectedTask] = useState(null);
   const [groupBy, setGroupBy] = useState('buckets');
   const [subGroupBy, setSubGroupBy] = useState('status');
+
+  // Access canonical completion flow from context (if available)
+  const taskInteraction = useTaskInteractionContext();
 
   // Use shared data from parent when available to avoid redundant API calls
   const {
@@ -136,46 +140,11 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
     },
   });
 
+  // CANONICAL: Route all completion through the shared provider
   const handleToggleComplete = (task) => {
-    // Look for completed status - try multiple patterns
-    const completedStatus = taskStatuses.find(s => {
-      const label = s.label.toLowerCase();
-      return label.includes('complete') || label.includes('done') || label === 'completed' || label === 'done';
-    });
-    
-    const todoStatus = taskStatuses.find(s => {
-      const label = s.label.toLowerCase();
-      return label.includes('to do') || label === 'todo' || label === 'to-do';
-    });
-    
-    if (!completedStatus) {
-      toast.error('No completed status found. Please create a status like "Done" or "Completed".');
-      return;
+    if (taskInteraction) {
+      taskInteraction.toggleComplete(task);
     }
-
-    const currentStatus = statuses.find(s => s.id === task.status_id);
-    const isCurrentlyCompleted = currentStatus && (
-      currentStatus.label.toLowerCase().includes('complete') || 
-      currentStatus.label.toLowerCase().includes('done') ||
-      currentStatus.id === completedStatus.id
-    );
-    
-    const newStatusId = isCurrentlyCompleted ? (todoStatus?.id || taskStatuses[0]?.id) : completedStatus.id;
-    
-    // Add completed_date when marking as complete, remove when reopening
-    // Also remove is_priority flag when completing
-    const updateData = {
-      status_id: newStatusId,
-      completed_date: isCurrentlyCompleted ? null : new Date().toISOString(),
-      is_priority: isCurrentlyCompleted ? task.is_priority : false
-    };
-    
-    updateTaskMutation.mutate({
-      taskId: task.id,
-      data: updateData
-    });
-    
-    toast.success(isCurrentlyCompleted ? 'Task reopened' : 'Task completed');
   };
 
   const sortedBuckets = [...buckets].sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -334,6 +303,15 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
       const targetGroupId = destination.droppableId;
       
       if (groupBy === 'status') {
+        // CANONICAL: Intercept drag to completed lane
+        const targetIsCompleted = completedStatus && (targetGroupId === completedStatus.id);
+        if (targetIsCompleted && taskInteraction) {
+          const draggedTask = allTasks.find(t => t.id === taskId);
+          if (draggedTask) {
+            taskInteraction.beginTaskCompletion(draggedTask);
+            return; // Don't directly mutate — let the modal flow handle it
+          }
+        }
         updateTaskMutation.mutate({
           taskId,
           data: { status_id: targetGroupId === 'no-status' ? '' : targetGroupId }

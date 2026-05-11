@@ -40,6 +40,9 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
   const [pendingPriorityRemoval, setPendingPriorityRemoval] = useState(null);
   const [pendingChecklistCompletion, setPendingChecklistCompletion] = useState(null);
   const [pendingUninstalledPartsCompletion, setPendingUninstalledPartsCompletion] = useState(null);
+  
+  // Double-completion guard
+  const [isCompletingTask, setIsCompletingTask] = useState(false);
 
   // ═══════════════════════════════════════════════════════════════
   // DATA FETCHING
@@ -263,15 +266,20 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
 
   const executeCompletion = useCallback(async (task, actualHours = null) => {
     if (completedStatus) {
-      const updates = {
-        status_id: completedStatus.id,
-        completed_date: new Date().toISOString(),
-      };
-      if (actualHours != null) {
-        updates.actual_hours = actualHours;
+      setIsCompletingTask(true);
+      try {
+        const updates = {
+          status_id: completedStatus.id,
+          completed_date: new Date().toISOString(),
+        };
+        if (actualHours != null) {
+          updates.actual_hours = actualHours;
+        }
+        await updateTask(task.id, updates);
+        toast.success('Task completed');
+      } finally {
+        setIsCompletingTask(false);
       }
-      await updateTask(task.id, updates);
-      toast.success('Task completed');
     }
   }, [completedStatus, updateTask]);
 
@@ -307,10 +315,40 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
     setPendingTimeCompletion({ task, incompleteChecklistCount: 0 });
   }, [countUninstalledCommitments]);
 
+  /**
+   * beginTaskCompletion — CANONICAL entry point for ALL task completions.
+   * 
+   * EVERY surface that completes a task MUST call this function.
+   * Flow: Checklist check → Uninstalled parts check → Time entry modal → Final mutation
+   * 
+   * For reopening completed tasks, call toggleComplete instead.
+   */
+  const beginTaskCompletion = useCallback(async (task) => {
+    // Guard against double-completion
+    if (isCompletingTask) return;
+    if (!completedStatus) {
+      toast.error('No completed status found');
+      return;
+    }
+    // Already complete? Ignore — use toggleComplete for reopen
+    if (task.status_id === completedStatus.id) return;
+
+    // Step 1: Check for incomplete checklist items
+    const checklistItems = await base44.entities.TaskChecklistItem.filter({ task_id: task.id });
+    const incompleteCount = checklistItems.filter(i => !i.is_complete).length;
+    if (incompleteCount > 0) {
+      setPendingChecklistCompletion({ task, incompleteCount });
+      return;
+    }
+    // Step 2: Proceed to uninstalled parts check → time modal
+    await proceedToUninstalledCheck(task);
+  }, [isCompletingTask, completedStatus, proceedToUninstalledCheck]);
+
   const toggleComplete = useCallback(async (task, skipChecklistCheck = false) => {
     const isCurrentlyComplete = task.status_id === completedStatus?.id;
 
     if (isCurrentlyComplete) {
+      // REOPEN — preserves actual_hours/completed_date history per contract
       const firstStatus = taskStatuses.find(s => s.id !== completedStatus?.id);
       if (firstStatus) {
         await updateTask(task.id, {
@@ -320,24 +358,16 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
         toast.success('Task reopened');
       }
     } else {
-      if (!skipChecklistCheck) {
-        // Check for incomplete checklist items before completing
-        const checklistItems = await base44.entities.TaskChecklistItem.filter({ task_id: task.id });
-        const incompleteCount = checklistItems.filter(i => !i.is_complete).length;
-        if (incompleteCount > 0) {
-          setPendingChecklistCompletion({ task, incompleteCount });
-          return { requiresConfirmation: true };
-        }
-      }
-      // Checklist passed — now check for uninstalled parts warning
-      await proceedToUninstalledCheck(task);
+      // Delegate to canonical completion flow
+      await beginTaskCompletion(task);
     }
-  }, [completedStatus, taskStatuses, updateTask, proceedToUninstalledCheck]);
+  }, [completedStatus, taskStatuses, updateTask, beginTaskCompletion]);
 
-  // Also handle checklist completion -> time modal with count info
-  const proceedToTimeModal = useCallback((task, incompleteChecklistCount = 0) => {
-    setPendingTimeCompletion({ task, incompleteChecklistCount });
-  }, []);
+  // Helper for status-change interception: is this a "completed" status?
+  const isCompletedStatusId = useCallback((statusId) => {
+    if (!completedStatus) return false;
+    return statusId === completedStatus.id;
+  }, [completedStatus]);
 
   const confirmChecklistCompletion = useCallback(async () => {
     if (!pendingChecklistCompletion) return;
@@ -432,10 +462,12 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
     // Task Mutations
     updateTask,
     deleteTask,
+    beginTaskCompletion,
     toggleComplete,
     togglePriority,
     updateDueDate,
     updateStartDate,
+    isCompletedStatusId,
 
     // Priority Confirmation State
     pendingPriorityRemoval,
@@ -468,6 +500,7 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
     // Mutation States
     isUpdating: updateTaskMutation.isPending,
     isDeleting: deleteTaskMutation.isPending,
+    isCompletingTask,
   };
 }
 
