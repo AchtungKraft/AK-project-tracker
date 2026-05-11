@@ -146,20 +146,20 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
               )}
             </div>
 
-            {/* Execution mode trigger + Quick-add strip */}
-            <div className="px-4 pb-3 flex gap-1.5 overflow-x-auto scrollbar-hide">
+            {/* Execution mode trigger + Quick-add strip — large touch targets */}
+            <div className="px-4 pb-3 flex gap-2 overflow-x-auto scrollbar-hide">
               {hasEntries && (
                 <button onClick={() => setExecutionMode(true)}
-                  className="shrink-0 flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition-colors active:scale-95">
-                  <Play className="w-3.5 h-3.5" /> Execute
+                  className="shrink-0 flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors active:scale-95">
+                  <Play className="w-4 h-4" /> Execute
                 </button>
               )}
               {QUICK_ADD.map(qa => {
                 const QIcon = qa.icon;
                 return (
                   <button key={qa.type} onClick={() => openEntryEditor(qa.type)}
-                    className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white text-xs transition-colors active:scale-95">
-                    <QIcon className="w-3.5 h-3.5" /> {qa.label}
+                    className="shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white text-sm transition-colors active:scale-95">
+                    <QIcon className="w-4 h-4" /> {qa.label}
                   </button>
                 );
               })}
@@ -251,19 +251,20 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
             </div>
           </div>
 
-          {/* ===== FOOTER ===== */}
-          <div className="shrink-0 bg-gray-900 border-t border-gray-800 p-3 flex items-center gap-2">
-            <Button variant="outline" onClick={onClose} className="border-gray-700 h-10 px-5">Close</Button>
+          {/* ===== FOOTER — large touch targets for shop floor ===== */}
+          <div className="shrink-0 bg-gray-900 border-t border-gray-800 p-3 flex items-center gap-2"
+            style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+            <Button variant="outline" onClick={onClose} className="border-gray-700 h-12 px-4 text-sm">Close</Button>
             {hasEntries && (
-              <Button onClick={() => setExecutionMode(true)} className="bg-blue-600 hover:bg-blue-700 gap-2 h-10">
+              <Button onClick={() => setExecutionMode(true)} className="bg-blue-600 hover:bg-blue-700 gap-2 h-12 text-sm">
                 <Play className="w-4 h-4" /> Execute
               </Button>
             )}
-            <Button onClick={() => openEntryEditor("step")} className="flex-1 bg-red-600 hover:bg-red-700 gap-2 h-10">
+            <Button onClick={() => openEntryEditor("step")} className="flex-1 bg-red-600 hover:bg-red-700 gap-2 h-12 text-sm">
               <Plus className="w-4 h-4" /> Add Entry
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => onEdit(item)} className="h-10 w-10 text-gray-500 hover:text-white" title="Edit metadata">
-              <Pencil className="w-4 h-4" />
+            <Button variant="ghost" size="icon" onClick={() => onEdit(item)} className="h-12 w-12 text-gray-500 hover:text-white" title="Edit metadata">
+              <Pencil className="w-5 h-5" />
             </Button>
           </div>
         </SheetContent>

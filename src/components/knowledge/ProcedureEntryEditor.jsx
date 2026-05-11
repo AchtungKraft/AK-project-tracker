@@ -260,10 +260,11 @@ export default function ProcedureEntryEditor({ procedureId, procedureTitle, exis
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="shrink-0 bg-gray-900 border-t border-gray-800 p-3 flex gap-2">
-          <Button variant="outline" onClick={onClose} className="border-gray-700 h-10 flex-1">Cancel</Button>
-          <Button onClick={handleSave} disabled={saveMutation.isPending} className="bg-red-600 hover:bg-red-700 h-10 flex-1 gap-2">
+        {/* Footer — large touch targets */}
+        <div className="shrink-0 bg-gray-900 border-t border-gray-800 p-3 flex gap-2"
+          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+          <Button variant="outline" onClick={onClose} className="border-gray-700 h-12 flex-1 text-sm">Cancel</Button>
+          <Button onClick={handleSave} disabled={saveMutation.isPending} className="bg-red-600 hover:bg-red-700 h-12 flex-1 gap-2 text-sm">
             {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
             Add Entry
           </Button>

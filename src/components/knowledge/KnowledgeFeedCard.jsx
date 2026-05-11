@@ -36,7 +36,7 @@ function getExcerpt(item) {
 
 export { getCoverImage, getExcerpt };
 
-export default function KnowledgeFeedCard({ item, onItemClick, partLinks, taskLinks, parts, compact }) {
+export default function KnowledgeFeedCard({ item, onItemClick, partLinks, taskLinks, parts, compact, entryCount }) {
   const postType = item.post_type || item.type || 'procedure';
   const config = POST_TYPE_CONFIG[postType] || POST_TYPE_CONFIG.procedure;
   const coverImg = getCoverImage(item);
@@ -170,6 +170,9 @@ export default function KnowledgeFeedCard({ item, onItemClick, partLinks, taskLi
               <span className={cn("w-1.5 h-1.5 rounded-full", config.dot)} />
               {config.label}
             </span>
+            {typeof entryCount === 'number' && entryCount > 0 && (
+              <span className="flex items-center gap-0.5">{entryCount} step{entryCount !== 1 ? 's' : ''}</span>
+            )}
             {imageCount > 0 && (
               <span className="flex items-center gap-0.5"><Image className="w-2.5 h-2.5" /> {imageCount} photo{imageCount !== 1 ? 's' : ''}</span>
             )}

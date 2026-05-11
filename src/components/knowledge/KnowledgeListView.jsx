@@ -30,6 +30,20 @@ export default function KnowledgeListView({ items, categories, selectedCategoryI
     queryFn: () => base44.entities.Part.list(),
     staleTime: 120000,
   });
+  const { data: allEntries = [] } = useQuery({
+    queryKey: ['allProcedureEntries'],
+    queryFn: () => base44.entities.ProcedureEntry.list(),
+    staleTime: 60000,
+  });
+
+  // Entry count per item
+  const entryCountByItem = useMemo(() => {
+    const map = {};
+    allEntries.forEach(e => {
+      if (e.procedure_id) map[e.procedure_id] = (map[e.procedure_id] || 0) + 1;
+    });
+    return map;
+  }, [allEntries]);
 
   const partLinksByItem = useMemo(() => {
     const map = {};
@@ -98,6 +112,7 @@ export default function KnowledgeListView({ items, categories, selectedCategoryI
       taskLinks={taskLinksByItem[item.id]}
       parts={allParts}
       compact={compact}
+      entryCount={entryCountByItem[item.id]}
     />
   );
 

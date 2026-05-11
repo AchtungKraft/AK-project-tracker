@@ -10,6 +10,7 @@ import KnowledgeCategoryTree from "./KnowledgeCategoryTree";
 import KnowledgeBreadcrumb from "./KnowledgeBreadcrumb";
 import KnowledgeListView from "./KnowledgeListView";
 import KnowledgeDetailDrawer from "./KnowledgeDetailDrawer";
+import SubsystemContextPanel from "./SubsystemContextPanel";
 
 const STORAGE_KEY = 'achtung_knowledge_explorer_state';
 
@@ -65,6 +66,12 @@ export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItem
     queryFn: () => base44.entities.BuildKnowledgePartLink.list(),
     staleTime: 60000,
   });
+  // Fetch procedure entries for entry headline search
+  const { data: allEntries = [] } = useQuery({
+    queryKey: ['allProcedureEntries'],
+    queryFn: () => base44.entities.ProcedureEntry.list(),
+    staleTime: 60000,
+  });
 
   // Map item IDs to part names for search
   const partNamesByItemId = useMemo(() => {
@@ -78,6 +85,17 @@ export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItem
     });
     return map;
   }, [allPartLinks, allParts]);
+
+  // Map item IDs to entry headlines for deep search
+  const entryHeadlinesByItemId = useMemo(() => {
+    const map = {};
+    allEntries.forEach(entry => {
+      if (!entry.procedure_id) return;
+      if (!map[entry.procedure_id]) map[entry.procedure_id] = [];
+      if (entry.headline) map[entry.procedure_id].push(entry.headline.toLowerCase());
+    });
+    return map;
+  }, [allEntries]);
 
   // Category path for breadcrumb
   const categoryPath = useMemo(() => {
@@ -124,7 +142,7 @@ export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItem
         const itemPostType = item.post_type || item.type || 'procedure';
         if (itemPostType !== postTypeFilter) return false;
       }
-      // Weighted search: title > tags > parts > category > post_type > summary > content
+      // Weighted search: title > tags > parts > entry headlines > category > post_type > summary > content
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
         if (item.title?.toLowerCase().includes(term)) return true;
@@ -132,6 +150,11 @@ export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItem
         // Search related part names
         const itemParts = partNamesByItemId[item.id] || [];
         if (itemParts.some(name => name.includes(term))) return true;
+        // Search entry headlines (deep search into procedure steps)
+        const headlines = entryHeadlinesByItemId[item.id] || [];
+        if (headlines.some(h => h.includes(term))) return true;
+        // Known issues title match
+        if (item.known_issues?.some(ki => ki.title?.toLowerCase().includes(term))) return true;
         // Category name match
         const cat = categories.find(c => c.id === item.category_id);
         if (cat?.name?.toLowerCase().includes(term)) return true;
@@ -146,7 +169,7 @@ export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItem
       }
       return true;
     });
-  }, [items, selectedCategoryId, searchTerm, postTypeFilter, categories, partNamesByItemId]);
+  }, [items, selectedCategoryId, searchTerm, postTypeFilter, categories, partNamesByItemId, entryHeadlinesByItemId]);
 
   const handleCategorySelect = (categoryId) => {
     setSelectedCategoryId(categoryId);
@@ -172,13 +195,14 @@ export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItem
       <div className="flex flex-col bg-black/20 rounded-xl border border-red-900/30 md:h-[calc(100vh-8rem)] md:overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between gap-3 p-3 md:p-4 bg-black/40 backdrop-blur-xl border-b border-red-900/30">
-          <div className="flex-1">
-            <h2 className="text-lg font-bold text-white">Execution Intelligence</h2>
-            <p className="text-xs text-gray-400">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg font-bold text-white truncate">Execution Intelligence</h2>
+            <p className="text-[11px] text-gray-400">
               {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''} {selectedCategoryId ? 'in subsystem' : 'total'}
+              {searchTerm && ` · searching "${searchTerm}"`}
             </p>
           </div>
-          <Button onClick={onItemCreate} size="sm" className="bg-red-600 hover:bg-red-700 gap-2 h-10 px-4 text-sm">
+          <Button onClick={onItemCreate} size="sm" className="bg-red-600 hover:bg-red-700 gap-2 h-11 px-4 text-sm shrink-0">
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">New Procedure</span>
           </Button>
@@ -220,7 +244,7 @@ export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItem
                 <Input
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  placeholder="Search posts..."
+                  placeholder="Search procedures, parts, steps..."
                   className="pl-8 bg-gray-900/50 border-gray-700 text-white h-9 text-sm"
                 />
               </div>
@@ -238,7 +262,16 @@ export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItem
               <span className="text-xs text-gray-500">{filteredItems.length}</span>
             </div>
 
-            <div className="flex-1 p-3 md:p-4 md:overflow-y-auto">
+            <div className="flex-1 p-3 md:p-4 md:overflow-y-auto space-y-4">
+              {/* Subsystem workspace context — shows related parts, tasks, photos */}
+              {selectedCategoryId && !searchTerm && (
+                <SubsystemContextPanel
+                  categoryId={selectedCategoryId}
+                  categories={categories}
+                  items={items}
+                />
+              )}
+
               <KnowledgeListView
                 items={filteredItems}
                 categories={categories}
