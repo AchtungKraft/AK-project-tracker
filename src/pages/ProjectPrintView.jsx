@@ -16,25 +16,31 @@ function PrintTaskRow({ task, teamMap, formatDate, isOverdue, isUrgent, taskPart
       <div className="flex items-start gap-2 py-1 border-b border-gray-100">
         <div className="w-4 h-4 border-2 border-gray-400 rounded-sm mt-0.5 shrink-0" />
         <div className="flex-1 min-w-0">
-          <div className={`text-sm leading-snug ${task.is_priority ? 'font-bold' : ''}`}>
-            {task.is_priority && <Flame className="inline-block w-3.5 h-3.5 mr-1 text-red-500 align-text-bottom" fill="none" strokeWidth={2} />}
-            {task.name}
+          <div className="flex items-start justify-between gap-2">
+            <div className={`text-sm leading-snug ${task.is_priority ? 'font-bold' : ''}`}>
+              {task.is_priority && <Flame className="inline-block w-3.5 h-3.5 mr-1 text-red-500 align-text-bottom" fill="none" strokeWidth={2} />}
+              {task.name}
+            </div>
+            <div className="flex items-baseline gap-2 shrink-0">
+              <div className="text-xs text-gray-500 w-20 text-right truncate">
+                {teamMap[task.assigned_team_member_id] || "—"}
+              </div>
+              <div className={`text-xs w-12 text-right ${isOverdue(task.due_date) ? "font-bold" : "text-gray-500"}`}>
+                {formatDate(task.due_date) || "—"}
+              </div>
+            </div>
           </div>
-          {task.description && (
-            <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{task.description}</div>
-          )}
-        </div>
-        <TaskTimePrintFields
-          estimatedHours={task.estimated_hours}
-          actualHours={task.actual_hours}
-          isCompleted={isCompleted || !!task.completed_date}
-          inline
-        />
-        <div className="text-xs text-gray-500 shrink-0 w-20 text-right truncate">
-          {teamMap[task.assigned_team_member_id] || "—"}
-        </div>
-        <div className={`text-xs shrink-0 w-12 text-right ${isOverdue(task.due_date) ? "font-bold" : "text-gray-500"}`}>
-          {formatDate(task.due_date) || "—"}
+          <div className="flex items-start justify-between gap-2">
+            {task.description ? (
+              <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{task.description}</div>
+            ) : <div />}
+            <TaskTimePrintFields
+              estimatedHours={task.estimated_hours}
+              actualHours={task.actual_hours}
+              isCompleted={isCompleted || !!task.completed_date}
+              inline
+            />
+          </div>
         </div>
       </div>
       <PrintTaskPartsProgress taskId={task.id} taskPartLinksByTaskId={taskPartLinksByTaskId} />
