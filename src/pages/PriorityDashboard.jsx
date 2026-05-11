@@ -28,6 +28,8 @@ import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
 import PriorityCalendarView from "../components/priorities/PriorityCalendarView";
 import ShopPriorityView from "../components/priorities/ShopPriorityView";
 import PriorityRemoveConfirm from "../components/tasks/PriorityRemoveConfirm";
+import CompleteTaskConfirm from "../components/tasks/CompleteTaskConfirm";
+import UninstalledPartsWarning from "../components/tasks/UninstalledPartsWarning";
 import PriorityListView from "../components/priorities/PriorityListView";
 import PriorityExecutionView from "../components/priorities/PriorityExecutionView";
 import { useSavedProjectViews } from "@/components/common/useSavedProjectViews";
@@ -56,6 +58,15 @@ export default function PriorityDashboard() {
     handleUpdateStartDate,
     handleTogglePriority,
     handleConfirmRemovePriority,
+    handleToggleComplete: taskDataToggleComplete,
+    isUpdating,
+    // Completion orchestration state
+    pendingChecklistCompletion,
+    confirmChecklistCompletion,
+    cancelChecklistCompletion,
+    pendingUninstalledPartsCompletion,
+    confirmUninstalledPartsCompletion,
+    cancelUninstalledPartsCompletion,
   } = useTaskData({ priorityOnly: true });
 
   // Wrapped priority toggle that handles confirmation flow
@@ -323,42 +334,9 @@ export default function PriorityDashboard() {
     return primaryGroups;
   }, [activePriorityTasks, primaryGroupBy, secondaryGroupBy, projects, categories, statuses, teamMembers]);
 
-  const handleToggleComplete = async (task) => {
-    const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
-    const completedStatus = taskStatuses.find(s => {
-      const label = s.label.toLowerCase();
-      return label.includes('complete') || label.includes('done');
-    });
-
-    const isCurrentlyComplete = task.status_id === completedStatus?.id;
-    
-    if (isCurrentlyComplete) {
-      // Reopen task - set to first non-complete status
-      const firstStatus = taskStatuses.find(s => s.id !== completedStatus?.id);
-      if (firstStatus) {
-        await updateTaskMutation.mutateAsync({
-          id: task.id,
-          data: {
-            status_id: firstStatus.id,
-            completed_date: null,
-          }
-        });
-        toast.success('Task reopened');
-      }
-    } else {
-      // Complete task
-      if (completedStatus) {
-        await updateTaskMutation.mutateAsync({
-          id: task.id,
-          data: {
-            status_id: completedStatus.id,
-            completed_date: new Date().toISOString(),
-          }
-        });
-        toast.success('Task completed');
-      }
-    }
-  };
+  // Use the orchestrated completion handler from useTaskData
+  // (includes checklist enforcement + uninstalled parts warning)
+  const handleToggleComplete = taskDataToggleComplete;
 
   const isMobile = useIsMobile();
   
@@ -1005,6 +983,26 @@ export default function PriorityDashboard() {
         onClose={() => setPendingPriorityTask(null)}
         onConfirm={handleConfirmPriorityRemoval}
         taskName={pendingPriorityTask?.name}
+      />
+
+      {/* Checklist Completion Confirmation */}
+      <CompleteTaskConfirm
+        isOpen={!!pendingChecklistCompletion}
+        onClose={cancelChecklistCompletion}
+        onConfirm={confirmChecklistCompletion}
+        taskName={pendingChecklistCompletion?.task?.name}
+        incompleteChecklistCount={pendingChecklistCompletion?.incompleteCount || 0}
+        isLoading={isUpdating}
+      />
+
+      {/* Uninstalled Parts Warning on Completion */}
+      <UninstalledPartsWarning
+        isOpen={!!pendingUninstalledPartsCompletion}
+        onClose={cancelUninstalledPartsCompletion}
+        onConfirm={confirmUninstalledPartsCompletion}
+        taskName={pendingUninstalledPartsCompletion?.task?.name}
+        uninstalledCount={pendingUninstalledPartsCompletion?.uninstalledCount || 0}
+        isLoading={isUpdating}
       />
     </>
   );

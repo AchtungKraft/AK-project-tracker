@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
@@ -192,30 +192,97 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
     },
   });
 
+  // ═══════════════════════════════════════════════════════════════
+  // COMPLETION ORCHESTRATION STATE
+  // Checklist enforcement + Uninstalled parts warning
+  // ═══════════════════════════════════════════════════════════════
+  const [pendingChecklistCompletion, setPendingChecklistCompletion] = useState(null);
+  const [pendingUninstalledPartsCompletion, setPendingUninstalledPartsCompletion] = useState(null);
+
+  const executeCompletion = useCallback(async (task) => {
+    if (completedStatus) {
+      const mutationTimestamp = Date.now();
+      await updateTaskMutation.mutateAsync({
+        id: task.id,
+        data: { status_id: completedStatus.id, completed_date: new Date().toISOString() },
+        mutationTimestamp,
+      });
+      toast.success('Task completed');
+    }
+  }, [completedStatus, updateTaskMutation]);
+
+  const countUninstalledCommitments = useCallback(async (task) => {
+    const links = await base44.entities.TaskPartLink.filter({ task_id: task.id });
+    if (links.length === 0) return 0;
+    const commitmentIds = [...new Set(links.map(l => l.commitment_id).filter(Boolean))];
+    if (commitmentIds.length === 0) return 0;
+    const commitments = await base44.entities.PartCommitment.filter({ id: commitmentIds });
+    return commitments.filter(c => {
+      const remaining = Math.max(0, (c.reserved_from_stock ?? 0) - (c.qty_installed ?? 0));
+      const status = (c.commitment_status || '').toLowerCase();
+      return remaining > 0 && status !== 'cancelled' && status !== 'installed';
+    }).length;
+  }, []);
+
+  const proceedToUninstalledCheck = useCallback(async (task) => {
+    const count = await countUninstalledCommitments(task);
+    if (count > 0) {
+      setPendingUninstalledPartsCompletion({ task, uninstalledCount: count });
+      return;
+    }
+    await executeCompletion(task);
+  }, [countUninstalledCommitments, executeCompletion]);
+
+  const confirmChecklistCompletion = useCallback(async () => {
+    if (!pendingChecklistCompletion) return;
+    const { task } = pendingChecklistCompletion;
+    setPendingChecklistCompletion(null);
+    await proceedToUninstalledCheck(task);
+  }, [pendingChecklistCompletion, proceedToUninstalledCheck]);
+
+  const cancelChecklistCompletion = useCallback(() => {
+    setPendingChecklistCompletion(null);
+  }, []);
+
+  const confirmUninstalledPartsCompletion = useCallback(async () => {
+    if (!pendingUninstalledPartsCompletion) return;
+    const { task } = pendingUninstalledPartsCompletion;
+    setPendingUninstalledPartsCompletion(null);
+    await executeCompletion(task);
+  }, [pendingUninstalledPartsCompletion, executeCompletion]);
+
+  const cancelUninstalledPartsCompletion = useCallback(() => {
+    setPendingUninstalledPartsCompletion(null);
+  }, []);
+
   // Handler functions
-  const handleToggleComplete = async (task) => {
+  const handleToggleComplete = useCallback(async (task) => {
     const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
     const isCurrentlyComplete = task.status_id === completedStatus?.id;
     
     if (isCurrentlyComplete) {
       const firstStatus = taskStatuses.find(s => s.id !== completedStatus?.id);
       if (firstStatus) {
+        const mutationTimestamp = Date.now();
         await updateTaskMutation.mutateAsync({
           id: task.id,
-          data: { status_id: firstStatus.id, completed_date: null }
+          data: { status_id: firstStatus.id, completed_date: null },
+          mutationTimestamp,
         });
         toast.success('Task reopened');
       }
     } else {
-      if (completedStatus) {
-        await updateTaskMutation.mutateAsync({
-          id: task.id,
-          data: { status_id: completedStatus.id, completed_date: new Date().toISOString() }
-        });
-        toast.success('Task completed');
+      // Step 1: Check for incomplete checklist items
+      const checklistItems = await base44.entities.TaskChecklistItem.filter({ task_id: task.id });
+      const incompleteCount = checklistItems.filter(i => !i.is_complete).length;
+      if (incompleteCount > 0) {
+        setPendingChecklistCompletion({ task, incompleteCount });
+        return;
       }
+      // Step 2: Check for uninstalled parts
+      await proceedToUninstalledCheck(task);
     }
-  };
+  }, [statuses, completedStatus, updateTaskMutation, proceedToUninstalledCheck]);
 
   const handleUpdateDueDate = async (task, dueDate) => {
     const mutationTimestamp = Date.now();
@@ -289,6 +356,7 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
     
     // Loading states
     isLoading: tasksLoading,
+    isUpdating: updateTaskMutation.isPending,
     
     // Mutation
     updateTaskMutation,
@@ -300,6 +368,14 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
     handleUpdateStartDate,
     handleTogglePriority,
     handleConfirmRemovePriority,
+
+    // Completion orchestration state (for mounting confirmation modals)
+    pendingChecklistCompletion,
+    confirmChecklistCompletion,
+    cancelChecklistCompletion,
+    pendingUninstalledPartsCompletion,
+    confirmUninstalledPartsCompletion,
+    cancelUninstalledPartsCompletion,
   };
 }
 

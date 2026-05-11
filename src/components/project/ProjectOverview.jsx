@@ -25,6 +25,8 @@ import ShopPriorityView from "../priorities/ShopPriorityView";
 import { useTaskData } from "../tasks/useTaskData";
 import TaskDetailDrawer from "../tasks/TaskDetailDrawer";
 import PriorityRemoveConfirm from "../tasks/PriorityRemoveConfirm";
+import CompleteTaskConfirm from "../tasks/CompleteTaskConfirm";
+import UninstalledPartsWarning from "../tasks/UninstalledPartsWarning";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { cn } from "@/lib/utils";
 import { computePartsProgressByTaskId } from "@/utils/taskPartsProgress";
@@ -75,6 +77,14 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
     handleTogglePriority,
     handleConfirmRemovePriority,
     updateTask,
+    isUpdating,
+    // Completion orchestration state
+    pendingChecklistCompletion,
+    confirmChecklistCompletion,
+    cancelChecklistCompletion,
+    pendingUninstalledPartsCompletion,
+    confirmUninstalledPartsCompletion,
+    cancelUninstalledPartsCompletion,
   } = useTaskData({ scope: 'project', projectId });
   
   // Use tasks from useTaskData as source of truth (not stale sharedData)
@@ -543,6 +553,26 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
         onClose={() => setPendingPriorityTask(null)}
         onConfirm={handleConfirmPriorityRemoval}
         taskName={pendingPriorityTask?.name}
+      />
+
+      {/* Checklist Completion Confirmation */}
+      <CompleteTaskConfirm
+        isOpen={!!pendingChecklistCompletion}
+        onClose={cancelChecklistCompletion}
+        onConfirm={confirmChecklistCompletion}
+        taskName={pendingChecklistCompletion?.task?.name}
+        incompleteChecklistCount={pendingChecklistCompletion?.incompleteCount || 0}
+        isLoading={isUpdating}
+      />
+
+      {/* Uninstalled Parts Warning on Completion */}
+      <UninstalledPartsWarning
+        isOpen={!!pendingUninstalledPartsCompletion}
+        onClose={cancelUninstalledPartsCompletion}
+        onConfirm={confirmUninstalledPartsCompletion}
+        taskName={pendingUninstalledPartsCompletion?.task?.name}
+        uninstalledCount={pendingUninstalledPartsCompletion?.uninstalledCount || 0}
+        isLoading={isUpdating}
       />
     </>
   );
