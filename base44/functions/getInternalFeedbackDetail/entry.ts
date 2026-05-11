@@ -37,9 +37,9 @@ async function runBatched(tasks, batchSize = 3, delay = 150) {
   return results;
 }
 
-// ── Short-term response cache (10s for feedback detail) ──────────
+// ── Short-term response cache (30s for feedback detail) ──────────
 const cache = new Map();
-function getCached(key, ttl = 10000) {
+function getCached(key, ttl = 30000) {
   const item = cache.get(key);
   if (!item) return null;
   if (Date.now() - item.timestamp > ttl) { cache.delete(key); return null; }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,20 +14,13 @@ import { toast } from "sonner";
 import { useTaskCategories, useTaskStatuses, useAssignableTeamMembers } from "../tasks/useTaskDropdownData";
 import { TaskCategorySelect, TaskStatusSelect, TaskAssigneeSelect } from "../tasks/TaskDropdownSelects";
 
-export default function CreateTaskFromApprovalModal({ open, onClose, projectId, requestId, approval, userId }) {
+export default function CreateTaskFromApprovalModal({ open, onClose, projectId, requestId, requestTitle, approval, userId }) {
   const queryClient = useQueryClient();
 
-  const { data: request } = useQuery({
-    queryKey: ['clientFeedbackRequest', requestId],
-    queryFn: () => base44.entities.ClientFeedbackRequest.filter({ id: requestId }),
-    select: (data) => data[0],
-    enabled: !!requestId,
-  });
-
-  // Use shared hooks for dropdown data
-  const { categories } = useTaskCategories();
-  const { statuses, defaultStatusId } = useTaskStatuses();
-  const { teamMembers } = useAssignableTeamMembers();
+  // Use shared hooks for dropdown data — gated by open prop
+  const { categories } = useTaskCategories(open);
+  const { statuses, defaultStatusId } = useTaskStatuses(open);
+  const { teamMembers } = useAssignableTeamMembers(open);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -47,17 +40,16 @@ export default function CreateTaskFromApprovalModal({ open, onClose, projectId, 
   }, [defaultStatusId, formData.status_id]);
 
   useEffect(() => {
-    if (request) {
+    if (open && requestTitle) {
       const approvalNote = approval?.note ? `\n\nApproval Note: ${approval.note}` : '';
-      const feedbackLink = `\n\nClient Feedback Request: ${window.location.origin}/feedback/${requestId}`;
       
       setFormData(prev => ({
         ...prev,
-        name: `[Client Approved] ${request.title}`,
-        description: `Created from approved client feedback request.${approvalNote}${feedbackLink}`,
+        name: `[Client Approved] ${requestTitle}`,
+        description: `Created from approved client feedback request.${approvalNote}`,
       }));
     }
-  }, [request, approval, requestId]);
+  }, [open, requestTitle, approval]);
 
   const createTaskMutation = useMutation({
     mutationFn: (data) => base44.entities.Task.create(data),
@@ -70,9 +62,8 @@ export default function CreateTaskFromApprovalModal({ open, onClose, projectId, 
         created_by_user_id: userId,
       });
 
+      queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['allTasks'] });
-      queryClient.invalidateQueries({ queryKey: ['feedbackTaskLinks'] });
       toast.success('Task created from approval');
       onClose();
     },

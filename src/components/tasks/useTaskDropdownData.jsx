@@ -11,7 +11,9 @@ export function useTaskCategories(enabled = true) {
     queryKey: ['taskCategories'],
     queryFn: () => base44.entities.TaskCategory.list(),
     enabled,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
+    gcTime: 15 * 60_000,
+    refetchOnMount: false,
   });
 
   // Build hierarchical list: parents first, then their children, all sorted by sort_order
@@ -47,7 +49,9 @@ export function useTaskStatuses(enabled = true) {
     queryKey: ['taskStatuses'],
     queryFn: () => base44.entities.StatusList.list(),
     enabled,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
+    gcTime: 15 * 60_000,
+    refetchOnMount: false,
   });
 
   const sortedStatuses = useMemo(() => {
@@ -71,7 +75,9 @@ export function useAssignableTeamMembers(enabled = true) {
     queryKey: ['teamMembers'],
     queryFn: () => base44.entities.TeamMember.list(),
     enabled,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
+    gcTime: 15 * 60_000,
+    refetchOnMount: false,
   });
 
   const sortedMembers = useMemo(() => {

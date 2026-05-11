@@ -674,10 +674,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         const response = await base44.functions.invoke('publicClientDecision', payload);
         if (response.data?.success) {
           // Invalidate client portal specific queries
-          queryClient.invalidateQueries({ queryKey: ['clientFeedbackComments', requestId] });
-          queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions', requestId] });
-          queryClient.invalidateQueries({ queryKey: ['clientFeedbackAttachments', requestId] });
-          queryClient.invalidateQueries({ queryKey: ['clientFeedbackRequest', requestId] });
+          // Scoped invalidation for client portal queries
           if (token || slug) {
             queryClient.invalidateQueries({ queryKey: ['clientRequestDetail', token, slug, requestId] });
           }

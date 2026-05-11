@@ -64,16 +64,20 @@ export default function ClientFeedbackDetail() {
   const { data: user, isLoading: isLoadingUser } = useQuery({
     queryKey: ['currentUser'],
     queryFn: () => base44.auth.me(),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   // Single consolidated API call for all feedback detail data
   const { data: feedbackDetail, isLoading: isLoadingDetail, isFetching, error: fetchError, refetch } = useQuery({
     queryKey: ['internalFeedbackDetail', requestId, projectId],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const response = await base44.functions.invoke('getInternalFeedbackDetail', { requestId, projectId });
+      // Abort check — if navigated away, don't process stale response
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
       const result = response.data;
       // Normalize backend error responses into thrown errors for react-query
       if (result && result.success === false && result.error) {
@@ -84,11 +88,13 @@ export default function ClientFeedbackDetail() {
       return result;
     },
     enabled: !!requestId,
-    staleTime: 30_000,
-    gcTime: 300_000,
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
     refetchOnMount: true,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: (failureCount, error) => {
+      if (error?.name === 'AbortError') return false;
       // Auto-retry rate limit errors up to 3 times
       if (error?.errorType === 'RATE_LIMIT' && failureCount < 3) return true;
       // Don't retry NOT_FOUND or other errors
@@ -143,12 +149,17 @@ export default function ClientFeedbackDetail() {
   const assignableContacts = feedbackDetail?.assignableContacts || [];
   const primaryClientSlug = feedbackDetail?.primaryClientSlug;
 
+  // Stabilize array references BEFORE they're used in requestLinks/requestState/canonicalState
+  const stableComments = useMemo(() => comments, [JSON.stringify(comments.map(c => c.id + (c.updated_date || '')))]);
+  const stableDecisions = useMemo(() => decisions, [JSON.stringify(decisions.map(d => d.id + (d.updated_date || '')))]);
+  const stableAttachments = useMemo(() => attachments, [JSON.stringify(attachments.map(a => a.id + (a.updated_date || '')))]);
+
   const updateRequestMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.ClientFeedbackRequest.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
-      // Also invalidate hub queries so attention board reflects review_state changes
-      queryClient.invalidateQueries({ queryKey: ['allFeedbackRequests'] });
+      // Soft-invalidate hub queries — mark stale but don't force refetch
+      queryClient.invalidateQueries({ queryKey: ['allFeedbackRequests'], refetchType: 'none' });
     }
   });
 
@@ -166,13 +177,6 @@ export default function ClientFeedbackDetail() {
       }
     );
   };
-
-  const createAttachmentMutation = useMutation({
-    mutationFn: (data) => base44.entities.ClientFeedbackAttachment.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
-    }
-  });
 
   const submitDecisionMutation = useMutation({
     mutationFn: (payload) => base44.functions.invoke('publicClientDecision', payload),
@@ -325,11 +329,6 @@ export default function ClientFeedbackDetail() {
   const approveLabel = isStructuredReview(request?.request_type) ? 'Approve' : 'Confirm';
   const requestChangesLabel = 'Request Changes';
   
-  // Stabilize array references — only create new refs when content actually changes
-  const stableComments = useMemo(() => comments, [JSON.stringify(comments.map(c => c.id + (c.updated_date || '')))]);
-  const stableDecisions = useMemo(() => decisions, [JSON.stringify(decisions.map(d => d.id + (d.updated_date || '')))]);
-  const stableAttachments = useMemo(() => attachments, [JSON.stringify(attachments.map(a => a.id + (a.updated_date || '')))]);
-
   // Memoize the request object passed to thread to prevent unnecessary re-renders
   const threadRequest = useMemo(() => {
     if (!request) return null;
@@ -935,6 +934,7 @@ export default function ClientFeedbackDetail() {
         }}
         projectId={projectId}
         requestId={requestId}
+        requestTitle={request?.title}
         approval={selectedApproval}
         userId={user.id} />
 
