@@ -1,0 +1,9 @@
+{
+  "name": "\u00c4chtung Kraft Project Tracker",
+  "site": {
+    "installCommand": "npm install",
+    "buildCommand": "npm run build",
+    "serveCommand": "npm run dev",
+    "outputDirectory": "./dist"
+  }
+}
