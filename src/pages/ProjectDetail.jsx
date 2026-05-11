@@ -212,13 +212,6 @@ export default function ProjectDetail() {
               Overview
             </TabsTrigger>
             <TabsTrigger 
-              value="tasks"
-              className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
-            >
-              <ListChecks className="w-4 h-4" />
-              Tasks
-            </TabsTrigger>
-            <TabsTrigger 
               value="journal"
               className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
             >
@@ -233,27 +226,6 @@ export default function ProjectDetail() {
               Client Portal
             </TabsTrigger>
             <TabsTrigger 
-              value="purchaseorders"
-              className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
-            >
-              <Package className="w-4 h-4" />
-              Purchase Orders
-            </TabsTrigger>
-            <TabsTrigger 
-              value="services"
-              className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
-            >
-              <Truck className="w-4 h-4" />
-              Services
-            </TabsTrigger>
-            <TabsTrigger 
-              value="pages"
-              className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
-            >
-              <FileText className="w-4 h-4" />
-              Pages
-            </TabsTrigger>
-            <TabsTrigger 
               value="supply"
               className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
               onClick={(e) => {
@@ -263,6 +235,27 @@ export default function ProjectDetail() {
             >
               <Layers className="w-4 h-4" />
               Supply
+            </TabsTrigger>
+            <TabsTrigger 
+              value="services"
+              className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
+            >
+              <Truck className="w-4 h-4" />
+              Services
+            </TabsTrigger>
+            <TabsTrigger 
+              value="purchaseorders"
+              className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
+            >
+              <Package className="w-4 h-4" />
+              POs
+            </TabsTrigger>
+            <TabsTrigger 
+              value="pages"
+              className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
+            >
+              <FileText className="w-4 h-4" />
+              Pages
             </TabsTrigger>
           </TabsList>
 
@@ -291,12 +284,6 @@ export default function ProjectDetail() {
                   <LayoutGrid className="w-4 h-4" /> Overview
                 </DropdownMenuItem>
                 <DropdownMenuItem 
-                  onClick={() => setActiveTab('tasks')}
-                  className={`gap-2 ${activeTab === 'tasks' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
-                >
-                  <ListChecks className="w-4 h-4" /> Tasks
-                </DropdownMenuItem>
-                <DropdownMenuItem 
                   onClick={() => setActiveTab('journal')}
                   className={`gap-2 ${activeTab === 'journal' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
                 >
@@ -309,10 +296,10 @@ export default function ProjectDetail() {
                   <Users className="w-4 h-4" /> Client Portal
                 </DropdownMenuItem>
                 <DropdownMenuItem 
-                  onClick={() => setActiveTab('purchaseorders')}
-                  className={`gap-2 ${activeTab === 'purchaseorders' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
+                  onClick={() => navigate(createPageUrl("ProjectSupplyManager") + `?project_id=${projectId}`)}
+                  className="gap-2 text-gray-300"
                 >
-                  <Package className="w-4 h-4" /> Purchase Orders
+                  <Layers className="w-4 h-4" /> Supply
                 </DropdownMenuItem>
                 <DropdownMenuItem 
                   onClick={() => setActiveTab('services')}
@@ -321,16 +308,16 @@ export default function ProjectDetail() {
                   <Truck className="w-4 h-4" /> Services
                 </DropdownMenuItem>
                 <DropdownMenuItem 
+                  onClick={() => setActiveTab('purchaseorders')}
+                  className={`gap-2 ${activeTab === 'purchaseorders' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
+                >
+                  <Package className="w-4 h-4" /> POs
+                </DropdownMenuItem>
+                <DropdownMenuItem 
                   onClick={() => setActiveTab('pages')}
                   className={`gap-2 ${activeTab === 'pages' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
                 >
                   <FileText className="w-4 h-4" /> Pages
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  onClick={() => navigate(createPageUrl("ProjectSupplyManager") + `?project_id=${projectId}`)}
-                  className="gap-2 text-gray-300"
-                >
-                  <Layers className="w-4 h-4" /> Supply
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
