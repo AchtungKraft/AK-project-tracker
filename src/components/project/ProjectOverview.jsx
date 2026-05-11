@@ -71,6 +71,7 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
   const {
     tasks: allProjectTasks,
     activeTasks,
+    completedStatus,
     commentCountByTaskId,
     handleToggleComplete,
     handleUpdateDueDate,
@@ -87,6 +88,12 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
     confirmUninstalledPartsCompletion,
     cancelUninstalledPartsCompletion,
   } = useTaskData({ scope: 'project', projectId });
+
+  // Completed tasks for execution view
+  const completedTasks = useMemo(() => {
+    if (!completedStatus) return [];
+    return allProjectTasks.filter(t => t.status_id === completedStatus.id);
+  }, [allProjectTasks, completedStatus]);
 
   // Data needed for Execution & Shop views
   const { data: allTaskPartLinks = [] } = useQuery({
@@ -424,6 +431,7 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
         {viewMode === 'execution' && (
           <PriorityExecutionView
             tasks={activeTasks}
+            completedTasks={completedTasks}
             projects={projectAsArray}
             projectTypes={projectTypesArray}
             teamMembers={teamMembers}

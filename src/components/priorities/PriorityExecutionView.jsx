@@ -8,6 +8,7 @@ import { createPageUrl } from "@/utils";
 import { buildProjectDetailUrl, SOURCES } from "@/lib/workspaceConfig";
 import { Printer, Plus, Settings2 } from "lucide-react";
 import ExecutionTaskRow from "./ExecutionTaskRow";
+import ExecutionCompletedSection from "./ExecutionCompletedSection";
 import ProjectTypeGroupHeader from "./ProjectTypeGroupHeader";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 import ManageBucketsModal from "@/components/project/ManageBucketsModal";
@@ -22,6 +23,7 @@ function resolveCategoryName(catId, categories) {
 
 export default function PriorityExecutionView({
   tasks,
+  completedTasks,
   projects,
   projectTypes = [],
   teamMembers,
@@ -283,6 +285,17 @@ export default function PriorityExecutionView({
           </ProjectTypeGroupHeader>
         );
       })}
+
+      {/* Completed Tasks Section */}
+      {completedTasks && completedTasks.length > 0 && (
+        <ExecutionCompletedSection
+          completedTasks={completedTasks}
+          categories={categories}
+          teamMembers={teamMembers}
+          onToggleComplete={onToggleComplete}
+          onTaskClick={onTaskClick}
+        />
+      )}
 
       {/* Create Task Modal */}
       {createTaskForProjectId && (
