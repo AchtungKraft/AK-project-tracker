@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,11 +20,14 @@ import ProjectKanban from "./ProjectKanban";
 import CompletedTasksSection from "./CompletedTasksSection";
 import TaskViewSwitcher from "../tasks/TaskViewSwitcher";
 import ProjectCalendarView from "./ProjectCalendarView";
+import PriorityExecutionView from "../priorities/PriorityExecutionView";
+import ShopPriorityView from "../priorities/ShopPriorityView";
 import { useTaskData } from "../tasks/useTaskData";
 import TaskDetailDrawer from "../tasks/TaskDetailDrawer";
 import PriorityRemoveConfirm from "../tasks/PriorityRemoveConfirm";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { cn } from "@/lib/utils";
+import { computePartsProgressByTaskId } from "@/utils/taskPartsProgress";
 
 export default function ProjectOverview({ project, projectId, sharedData = {} }) {
   const queryClient = useQueryClient();
@@ -77,6 +80,37 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
   
   // Use tasks from useTaskData as source of truth (not stale sharedData)
   const activeTasks = taskDataTasks;
+
+  // Data needed for Execution & Shop views
+  const { data: allTaskPartLinks = [] } = useQuery({
+    queryKey: ['taskPartLinks', 'project', projectId],
+    queryFn: () => base44.entities.TaskPartLink.list(),
+    enabled: viewMode === 'execution' || viewMode === 'shop',
+  });
+  const activeTaskIds = useMemo(() => activeTasks.map(t => t.id), [activeTasks]);
+  const partsProgressByTaskId = useMemo(
+    () => computePartsProgressByTaskId(allTaskPartLinks, new Set(activeTaskIds)),
+    [allTaskPartLinks, activeTaskIds]
+  );
+  const { data: allTaskComments = [] } = useQuery({
+    queryKey: ['allTaskComments', 'project', projectId],
+    queryFn: () => base44.entities.TaskComment.filter({ task_id: { $in: activeTaskIds } }),
+    enabled: activeTaskIds.length > 0 && (viewMode === 'execution' || viewMode === 'shop'),
+  });
+  const shopCommentCountByTaskId = useMemo(() => {
+    const map = {};
+    allTaskComments.forEach(c => { map[c.task_id] = (map[c.task_id] || 0) + 1; });
+    return map;
+  }, [allTaskComments]);
+  // Merge comment counts: useTaskData provides some, shop needs the full map
+  const mergedCommentCounts = useMemo(() => ({ ...commentCountByTaskId, ...shopCommentCountByTaskId }), [commentCountByTaskId, shopCommentCountByTaskId]);
+
+  // Single-project array for Execution/Shop views
+  const projectAsArray = useMemo(() => project ? [project] : [], [project]);
+  const projectTypesArray = useMemo(() => {
+    const pt = projectTypes.find(t => t.id === project?.project_type_id);
+    return pt ? [pt] : projectTypes;
+  }, [projectTypes, project]);
 
   // Wrapped priority toggle that handles confirmation flow
   const wrappedTogglePriority = async (task, skipConfirm = false) => {
@@ -342,14 +376,15 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
             onViewChange={(mode) => {
               setViewMode(mode);
               localStorage.setItem(`project_task_view_mode_${projectId}`, mode);
-            }} 
+            }}
+            showExecution
+            showShop
           />
         </div>
 
         {/* Task Views */}
-        {viewMode === 'card' ? (
+        {viewMode === 'card' && (
           <>
-            {/* Main Task Groups Board - pass inline control handlers */}
             <ProjectKanban 
               projectId={projectId} 
               sharedData={{
@@ -362,11 +397,10 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
                 showInlineControls: true,
               }} 
             />
-
-            {/* Completed Tasks Section */}
             <CompletedTasksSection projectId={projectId} sharedData={{ ...sharedData, tasks: activeTasks }} />
           </>
-        ) : (
+        )}
+        {viewMode === 'calendar' && (
           <ProjectCalendarView
             tasks={activeTasks}
             categories={categories}
@@ -378,6 +412,42 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
             onUpdateStartDate={handleUpdateStartDate}
             onTogglePriority={wrappedTogglePriority}
             commentCountByTaskId={commentCountByTaskId}
+          />
+        )}
+        {viewMode === 'execution' && (
+          <PriorityExecutionView
+            tasks={activeTasks}
+            projects={projectAsArray}
+            projectTypes={projectTypesArray}
+            teamMembers={teamMembers}
+            categories={categories}
+            statuses={statuses}
+            partsProgressByTaskId={partsProgressByTaskId}
+            commentCountByTaskId={mergedCommentCounts}
+            onToggleComplete={handleToggleComplete}
+            onTaskClick={setSelectedTask}
+            onUpdateDueDate={handleUpdateDueDate}
+            onTogglePriority={wrappedTogglePriority}
+            updateTaskMutation={{ mutateAsync: async ({ id, data }) => updateTask(id, data) }}
+          />
+        )}
+        {viewMode === 'shop' && (
+          <ShopPriorityView
+            tasks={activeTasks}
+            projects={projectAsArray}
+            projectTypes={projectTypesArray}
+            categories={categories}
+            teamMembers={teamMembers}
+            statuses={statuses}
+            commentCountByTaskId={mergedCommentCounts}
+            allTaskComments={allTaskComments}
+            partsProgressByTaskId={partsProgressByTaskId}
+            updateTaskMutation={{ mutateAsync: async ({ id, data }) => updateTask(id, data) }}
+            onTaskClick={setSelectedTask}
+            onToggleComplete={handleToggleComplete}
+            onUpdateDueDate={handleUpdateDueDate}
+            onUpdateStartDate={handleUpdateStartDate}
+            onTogglePriority={wrappedTogglePriority}
           />
         )}
 
