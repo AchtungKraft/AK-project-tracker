@@ -27,6 +27,7 @@ import TaskDetailDrawer from "../tasks/TaskDetailDrawer";
 import PriorityRemoveConfirm from "../tasks/PriorityRemoveConfirm";
 import CompleteTaskConfirm from "../tasks/CompleteTaskConfirm";
 import UninstalledPartsWarning from "../tasks/UninstalledPartsWarning";
+import TaskCompletionModal from "../tasks/TaskCompletionModal";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { cn } from "@/lib/utils";
 import { computePartsProgressByTaskId } from "@/utils/taskPartsProgress";
@@ -87,6 +88,9 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
     pendingUninstalledPartsCompletion,
     confirmUninstalledPartsCompletion,
     cancelUninstalledPartsCompletion,
+    pendingTimeCompletion,
+    confirmTimeCompletion,
+    cancelTimeCompletion,
   } = useTaskData({ scope: 'project', projectId });
 
   // Completed tasks for execution view
@@ -579,6 +583,16 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
         onConfirm={confirmUninstalledPartsCompletion}
         taskName={pendingUninstalledPartsCompletion?.task?.name}
         uninstalledCount={pendingUninstalledPartsCompletion?.uninstalledCount || 0}
+        isLoading={isUpdating}
+      />
+
+      {/* Time Completion Modal — final step before completion */}
+      <TaskCompletionModal
+        isOpen={!!pendingTimeCompletion}
+        onClose={cancelTimeCompletion}
+        onConfirm={confirmTimeCompletion}
+        task={pendingTimeCompletion?.task}
+        incompleteChecklistCount={pendingTimeCompletion?.incompleteChecklistCount || 0}
         isLoading={isUpdating}
       />
     </>

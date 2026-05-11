@@ -30,6 +30,7 @@ import ShopPriorityView from "../components/priorities/ShopPriorityView";
 import PriorityRemoveConfirm from "../components/tasks/PriorityRemoveConfirm";
 import CompleteTaskConfirm from "../components/tasks/CompleteTaskConfirm";
 import UninstalledPartsWarning from "../components/tasks/UninstalledPartsWarning";
+import TaskCompletionModal from "../components/tasks/TaskCompletionModal";
 import PriorityListView from "../components/priorities/PriorityListView";
 import PriorityExecutionView from "../components/priorities/PriorityExecutionView";
 import { useSavedProjectViews } from "@/components/common/useSavedProjectViews";
@@ -67,6 +68,9 @@ export default function PriorityDashboard() {
     pendingUninstalledPartsCompletion,
     confirmUninstalledPartsCompletion,
     cancelUninstalledPartsCompletion,
+    pendingTimeCompletion,
+    confirmTimeCompletion,
+    cancelTimeCompletion,
   } = useTaskData({ priorityOnly: true });
 
   // Wrapped priority toggle that handles confirmation flow
@@ -1002,6 +1006,16 @@ export default function PriorityDashboard() {
         onConfirm={confirmUninstalledPartsCompletion}
         taskName={pendingUninstalledPartsCompletion?.task?.name}
         uninstalledCount={pendingUninstalledPartsCompletion?.uninstalledCount || 0}
+        isLoading={isUpdating}
+      />
+
+      {/* Time Completion Modal — final step before completion */}
+      <TaskCompletionModal
+        isOpen={!!pendingTimeCompletion}
+        onClose={cancelTimeCompletion}
+        onConfirm={confirmTimeCompletion}
+        task={pendingTimeCompletion?.task}
+        incompleteChecklistCount={pendingTimeCompletion?.incompleteChecklistCount || 0}
         isLoading={isUpdating}
       />
     </>

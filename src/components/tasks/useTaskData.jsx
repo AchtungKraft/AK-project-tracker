@@ -198,13 +198,21 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
   // ═══════════════════════════════════════════════════════════════
   const [pendingChecklistCompletion, setPendingChecklistCompletion] = useState(null);
   const [pendingUninstalledPartsCompletion, setPendingUninstalledPartsCompletion] = useState(null);
+  const [pendingTimeCompletion, setPendingTimeCompletion] = useState(null);
 
-  const executeCompletion = useCallback(async (task) => {
+  const executeCompletion = useCallback(async (task, actualHours = null) => {
     if (completedStatus) {
       const mutationTimestamp = Date.now();
+      const updates = {
+        status_id: completedStatus.id,
+        completed_date: new Date().toISOString(),
+      };
+      if (actualHours != null) {
+        updates.actual_hours = actualHours;
+      }
       await updateTaskMutation.mutateAsync({
         id: task.id,
-        data: { status_id: completedStatus.id, completed_date: new Date().toISOString() },
+        data: updates,
         mutationTimestamp,
       });
       toast.success('Task completed');
@@ -230,8 +238,9 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
       setPendingUninstalledPartsCompletion({ task, uninstalledCount: count });
       return;
     }
-    await executeCompletion(task);
-  }, [countUninstalledCommitments, executeCompletion]);
+    // Show time completion modal instead of immediate completion
+    setPendingTimeCompletion({ task, incompleteChecklistCount: 0 });
+  }, [countUninstalledCommitments]);
 
   const confirmChecklistCompletion = useCallback(async () => {
     if (!pendingChecklistCompletion) return;
@@ -248,11 +257,24 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
     if (!pendingUninstalledPartsCompletion) return;
     const { task } = pendingUninstalledPartsCompletion;
     setPendingUninstalledPartsCompletion(null);
-    await executeCompletion(task);
-  }, [pendingUninstalledPartsCompletion, executeCompletion]);
+    // Show time completion modal after uninstalled parts confirmation
+    setPendingTimeCompletion({ task, incompleteChecklistCount: 0 });
+  }, [pendingUninstalledPartsCompletion]);
 
   const cancelUninstalledPartsCompletion = useCallback(() => {
     setPendingUninstalledPartsCompletion(null);
+  }, []);
+
+  // Time completion modal handlers
+  const confirmTimeCompletion = useCallback(async (actualHours) => {
+    if (!pendingTimeCompletion) return;
+    const { task } = pendingTimeCompletion;
+    setPendingTimeCompletion(null);
+    await executeCompletion(task, actualHours);
+  }, [pendingTimeCompletion, executeCompletion]);
+
+  const cancelTimeCompletion = useCallback(() => {
+    setPendingTimeCompletion(null);
   }, []);
 
   // Handler functions
@@ -376,6 +398,9 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
     pendingUninstalledPartsCompletion,
     confirmUninstalledPartsCompletion,
     cancelUninstalledPartsCompletion,
+    pendingTimeCompletion,
+    confirmTimeCompletion,
+    cancelTimeCompletion,
   };
 }
 
