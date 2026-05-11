@@ -39,7 +39,7 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
   const [infoExpanded, setInfoExpanded] = useState(false);
   // Persist view mode per project
   const [viewMode, setViewMode] = useState(() => {
-    return localStorage.getItem(`project_task_view_mode_${projectId}`) || 'card';
+    return localStorage.getItem(`project_task_view_mode_${projectId}`) || 'execution';
   });
   const [selectedTask, setSelectedTask] = useState(null);
   const [pendingPriorityTask, setPendingPriorityTask] = useState(null);
