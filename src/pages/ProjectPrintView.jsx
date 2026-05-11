@@ -133,11 +133,38 @@ export default function ProjectPrintView() {
     // Maintain the order of projectIds
     return projectIds
       .filter(pid => byProject[pid]?.length > 0)
-      .map(pid => ({
-        project: projects.find(p => p.id === pid) || { id: pid, name: 'Unknown' },
-        tasks: sortTasksByPriority(byProject[pid]),
-      }));
-  }, [isMultiProject, activeTasks, projectIds, projects]);
+      .map(pid => {
+        const projectBuckets = [...allBuckets]
+          .filter(b => b.project_id === pid)
+          .sort((a, b) => (a.order || 0) - (b.order || 0));
+        const tasks = byProject[pid];
+        const tasksByBucket = {};
+        const unbucketed = [];
+
+        tasks.forEach(t => {
+          if (t.kanban_bucket_id && projectBuckets.find(b => b.id === t.kanban_bucket_id)) {
+            if (!tasksByBucket[t.kanban_bucket_id]) tasksByBucket[t.kanban_bucket_id] = [];
+            tasksByBucket[t.kanban_bucket_id].push(t);
+          } else {
+            unbucketed.push(t);
+          }
+        });
+
+        const bucketSections = projectBuckets
+          .filter(b => tasksByBucket[b.id]?.length > 0)
+          .map(b => ({ name: b.name, tasks: sortTasksByPriority(tasksByBucket[b.id]) }));
+
+        if (unbucketed.length > 0) {
+          bucketSections.push({ name: projectBuckets.length > 0 ? "Unsorted" : "All Tasks", tasks: sortTasksByPriority(unbucketed) });
+        }
+
+        return {
+          project: projects.find(p => p.id === pid) || { id: pid, name: 'Unknown' },
+          tasks,
+          bucketSections,
+        };
+      });
+  }, [isMultiProject, activeTasks, projectIds, projects, allBuckets]);
 
   // Split into urgent and upcoming, then group by buckets within each (single-project mode)
   const { urgentSections, upcomingSections } = useMemo(() => {
@@ -313,12 +340,20 @@ export default function ProjectPrintView() {
                   {ps.project.client_name && <span className="text-gray-500 font-normal ml-2">— {ps.project.client_name}</span>}
                   <span className="text-gray-400 font-normal ml-2">({ps.tasks.length})</span>
                 </h2>
-                <div className="space-y-0">
-                  {ps.tasks.map((task) => (
-                    <PrintTaskRow key={task.id} task={task} teamMap={teamMap} formatDate={formatDate} isOverdue={isOverdue} isUrgent={isUrgentPriority(task)}
-                      taskPartLinksByTaskId={taskPartLinksByTaskId} checklistItemsByTaskId={checklistItemsByTaskId} />
-                  ))}
-                </div>
+                {ps.bucketSections.map((section) => (
+                  <div key={section.name} className="mb-4">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-gray-700 border-b border-gray-300 pb-1 mb-2">
+                      {section.name}
+                      <span className="text-gray-400 font-normal ml-2">({section.tasks.length})</span>
+                    </h3>
+                    <div className="space-y-0">
+                      {section.tasks.map((task) => (
+                        <PrintTaskRow key={task.id} task={task} teamMap={teamMap} formatDate={formatDate} isOverdue={isOverdue} isUrgent={isUrgentPriority(task)}
+                          taskPartLinksByTaskId={taskPartLinksByTaskId} checklistItemsByTaskId={checklistItemsByTaskId} />
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             ))
           ) : (
