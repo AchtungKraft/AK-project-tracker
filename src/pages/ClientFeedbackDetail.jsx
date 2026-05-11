@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -86,7 +86,7 @@ export default function ClientFeedbackDetail() {
     enabled: !!requestId,
     staleTime: 30_000,
     gcTime: 300_000,
-    refetchOnMount: 'always',
+    refetchOnMount: true,
     refetchOnWindowFocus: false,
     retry: (failureCount, error) => {
       // Auto-retry rate limit errors up to 3 times
@@ -279,7 +279,7 @@ export default function ClientFeedbackDetail() {
     setShowRequestDecisionForm(true);
   };
 
-  const handleSubmitRequestDecision = (payload) => {
+  const handleSubmitRequestDecision = useCallback((payload) => {
     if (payload.decision === 'changes_requested' && !payload.note?.trim()) {
       toast.error('Please provide a note explaining the requested changes');
       return;
@@ -294,44 +294,89 @@ export default function ClientFeedbackDetail() {
       ...payload,
       newImages: payload.newImages || reviewImageUploader.uploadedUrls
     });
-  };
+  }, [user, submitDecisionMutation, reviewImageUploader.uploadedUrls]);
 
-  const handleCommentAdded = () => {
+  const handleCommentAdded = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
-  };
+  }, [queryClient, requestId, projectId]);
 
 
   // Extract links from request body + structured links for preview grid (deduplicated against attachments)
   const requestLinks = useMemo(() => {
     if (!request) return [];
-    const attachmentUrls = attachments
+    const attachmentUrls = stableAttachments
       .filter(a => a.file_url || a.link_url)
       .map(a => a.file_url || a.link_url);
     return extractLinks(request.content_html, request.body, attachmentUrls, request.links);
-  }, [request?.content_html, request?.body, request?.links, attachments]);
+  }, [request?.content_html, request?.body, request?.links, stableAttachments]);
 
   // Memoize expensive calculations to prevent re-computation on every render
   const requestState = useMemo(() => {
-    return request ? getRequestState(request, decisions, attachments) : null;
-  }, [request?.id, request?.posted_at, decisions, attachments]);
+    return request ? getRequestState(request, stableDecisions, stableAttachments) : null;
+  }, [request?.id, request?.posted_at, stableDecisions, stableAttachments]);
 
   // Canonical state key for button logic (not dependent on request.status)
   const canonicalState = useMemo(() => {
-    return request ? getRequestStateCanonical(request, decisions, attachments) : null;
-  }, [request?.id, request?.posted_at, decisions, attachments]);
+    return request ? getRequestStateCanonical(request, stableDecisions, stableAttachments) : null;
+  }, [request?.id, request?.posted_at, stableDecisions, stableAttachments]);
   const canAct = canonicalState?.key === 'awaiting_review' || canonicalState?.key === 'changes_requested';
 
   // Determine button labels based on request type
   const approveLabel = isStructuredReview(request?.request_type) ? 'Approve' : 'Confirm';
   const requestChangesLabel = 'Request Changes';
   
+  // Stabilize array references — only create new refs when content actually changes
+  const stableComments = useMemo(() => comments, [JSON.stringify(comments.map(c => c.id + (c.updated_date || '')))]);
+  const stableDecisions = useMemo(() => decisions, [JSON.stringify(decisions.map(d => d.id + (d.updated_date || '')))]);
+  const stableAttachments = useMemo(() => attachments, [JSON.stringify(attachments.map(a => a.id + (a.updated_date || '')))]);
+
   // Memoize the request object passed to thread to prevent unnecessary re-renders
   const threadRequest = useMemo(() => {
     if (!request) return null;
-    return { ...request, comments, decisions, attachments };
-  }, [request, comments, decisions, attachments]);
+    return { ...request, comments: stableComments, decisions: stableDecisions, attachments: stableAttachments };
+  }, [request?.id, request?.updated_date, request?.posted_at, request?.status, request?.review_state, stableComments, stableDecisions, stableAttachments]);
 
 
+
+  // Stable callback handlers to prevent thread rerenders
+  const handleDeleteComment = useCallback(async (commentId) => {
+    try {
+      const commentAtts = attachments.filter(a => a.comment_id === commentId);
+      await Promise.all(commentAtts.map(a => base44.entities.ClientFeedbackAttachment.delete(a.id)));
+      await base44.entities.ClientFeedbackComment.delete(commentId);
+      queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
+      toast.success('Comment deleted');
+    } catch (error) {
+      toast.error('Failed to delete comment');
+    }
+  }, [attachments, queryClient, requestId, projectId]);
+
+  const handleDeleteDecision = useCallback(async (decisionIds) => {
+    try {
+      await Promise.all(decisionIds.map(id => base44.entities.ClientFeedbackDecision.delete(id)));
+      queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
+      toast.success('Decision deleted');
+    } catch (error) {
+      toast.error('Failed to delete decision');
+    }
+  }, [queryClient, requestId, projectId]);
+
+  const handleThreadImageClick = useCallback((url, allImages, idx) => {
+    setGalleryImages(allImages || []);
+    setGalleryIndex(idx || 0);
+    setSelectedImage(url);
+  }, []);
+
+  const handleGalleryOpen = useCallback((images, idx) => {
+    setGalleryImages(images);
+    setGalleryIndex(idx);
+    setSelectedImage(images[idx]);
+  }, []);
+
+  const handleCreateTaskFromApproval = useCallback((approval) => {
+    setSelectedApproval(approval);
+    setShowCreateTaskModal(true);
+  }, []);
 
   // Navigation handler - memoized
   const handleBack = useMemo(() => () => {
@@ -750,11 +795,7 @@ export default function ClientFeedbackDetail() {
                 assignableUsers={assignableUsers}
                 assignableContacts={assignableContacts}
                 queryKey={['internalFeedbackDetail', requestId, projectId]}
-                onImageClick={(images, idx) => {
-                  setGalleryImages(images);
-                  setGalleryIndex(idx);
-                  setSelectedImage(images[idx]);
-                }}
+                onImageClick={handleGalleryOpen}
               />
               {/* Show comments thread for ToDo list requests */}
               {threadRequest && (
@@ -763,34 +804,12 @@ export default function ClientFeedbackDetail() {
                   userId={user.id}
                   requestType={request.request_type}
                   onDecisionSubmit={handleSubmitRequestDecision}
-                  onDeleteComment={async (commentId) => {
-                    try {
-                      const commentAttachments = attachments.filter(a => a.comment_id === commentId);
-                      await Promise.all(commentAttachments.map(a => base44.entities.ClientFeedbackAttachment.delete(a.id)));
-                      await base44.entities.ClientFeedbackComment.delete(commentId);
-                      queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
-                      toast.success('Comment deleted');
-                    } catch (error) {
-                      toast.error('Failed to delete comment');
-                    }
-                  }}
-                  onDeleteDecision={async (decisionIds) => {
-                    try {
-                      await Promise.all(decisionIds.map(id => base44.entities.ClientFeedbackDecision.delete(id)));
-                      queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
-                      toast.success('Decision deleted');
-                    } catch (error) {
-                      toast.error('Failed to delete decision');
-                    }
-                  }}
+                  onDeleteComment={handleDeleteComment}
+                  onDeleteDecision={handleDeleteDecision}
                   isClientView={false}
                   accessRole={user?.role}
                   request={threadRequest}
-                  onImageClick={(url, allImages, idx) => {
-                    setGalleryImages(allImages || []);
-                    setGalleryIndex(idx || 0);
-                    setSelectedImage(url);
-                  }}
+                  onImageClick={handleThreadImageClick}
                 />
               )}
             </>
@@ -799,39 +818,14 @@ export default function ClientFeedbackDetail() {
               requestId={requestId}
               userId={user.id}
               requestType={request.request_type}
-              onCreateTask={(approval) => {
-                setSelectedApproval(approval);
-                setShowCreateTaskModal(true);
-              }}
+              onCreateTask={handleCreateTaskFromApproval}
               onDecisionSubmit={handleSubmitRequestDecision}
-              onDeleteComment={async (commentId) => {
-                try {
-                  const commentAttachments = attachments.filter(a => a.comment_id === commentId);
-                  await Promise.all(commentAttachments.map(a => base44.entities.ClientFeedbackAttachment.delete(a.id)));
-                  await base44.entities.ClientFeedbackComment.delete(commentId);
-                  queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
-                  toast.success('Comment deleted');
-                } catch (error) {
-                  toast.error('Failed to delete comment');
-                }
-              }}
-              onDeleteDecision={async (decisionIds) => {
-                try {
-                  await Promise.all(decisionIds.map(id => base44.entities.ClientFeedbackDecision.delete(id)));
-                  queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
-                  toast.success('Decision deleted');
-                } catch (error) {
-                  toast.error('Failed to delete decision');
-                }
-              }}
+              onDeleteComment={handleDeleteComment}
+              onDeleteDecision={handleDeleteDecision}
               isClientView={false}
               accessRole={user?.role}
               request={threadRequest}
-              onImageClick={(url, allImages, idx) => {
-                setGalleryImages(allImages || []);
-                setGalleryIndex(idx || 0);
-                setSelectedImage(url);
-              }}
+              onImageClick={handleThreadImageClick}
             />
           )}
 
@@ -946,15 +940,17 @@ export default function ClientFeedbackDetail() {
 
       }
 
-      <CreateLinkedTaskModal
-        open={showCreateLinkedTaskModal}
-        onClose={() => setShowCreateLinkedTaskModal(false)}
-        projectId={projectId}
-        feedbackRequestId={requestId}
-        feedbackRequestTitle={request?.title}
-        feedbackAttachments={attachments}
-        userId={user?.id}
-      />
+      {showCreateLinkedTaskModal && (
+        <CreateLinkedTaskModal
+          open={showCreateLinkedTaskModal}
+          onClose={() => setShowCreateLinkedTaskModal(false)}
+          projectId={projectId}
+          feedbackRequestId={requestId}
+          feedbackRequestTitle={request?.title}
+          feedbackAttachments={attachments}
+          userId={user?.id}
+        />
+      )}
 
       <ImageModal
         isOpen={!!selectedImage}
@@ -972,13 +968,15 @@ export default function ClientFeedbackDetail() {
         }}
       />
 
-      <EditRequestModal
-        open={showEditModal}
-        onClose={() => setShowEditModal(false)}
-        request={request}
-        onSave={handleEditSave}
-        isSaving={updateRequestMutation.isPending}
-      />
+      {showEditModal && (
+        <EditRequestModal
+          open={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          request={request}
+          onSave={handleEditSave}
+          isSaving={updateRequestMutation.isPending}
+        />
+      )}
     </>);
 
 }

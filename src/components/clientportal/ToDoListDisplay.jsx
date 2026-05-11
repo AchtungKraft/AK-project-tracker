@@ -436,7 +436,7 @@ export default function ToDoListDisplay({
                     <div className="flex gap-1.5 flex-wrap">
                       {newTaskImages.map((url, idx) => (
                         <div key={idx} className="relative w-12 h-12 rounded border border-gray-700 overflow-hidden group">
-                          <img src={url} alt="" className="w-full h-full object-cover" />
+                          <img src={url} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                           <button
                             onClick={() => setNewTaskImages(prev => prev.filter((_, i) => i !== idx))}
                             className="absolute top-0 right-0 bg-red-600 text-white p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"

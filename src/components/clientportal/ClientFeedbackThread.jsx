@@ -20,7 +20,7 @@ import LinkPreviewGrid from "@/components/shared/LinkPreviewGrid";
 import { extractLinks, convertStructuredLinks } from "@/utils/extractLinks";
 
 // ── CommentContentBlock: unified rendering with proper priority chain ──
-function CommentContentBlock({ comment, attachmentUrls = [] }) {
+const CommentContentBlock = React.memo(function CommentContentBlock({ comment, attachmentUrls = [] }) {
   if (!comment) return null;
   const c = normalizeFeedbackComment(comment);
   if (!c) return null;
@@ -78,7 +78,7 @@ function CommentContentBlock({ comment, attachmentUrls = [] }) {
       )}
     </>);
 
-}
+});
 
 // Memoized timeline event card to prevent unnecessary re-renders
 const TimelineEventCard = React.memo(function TimelineEventCard({
@@ -260,7 +260,7 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
                       `}
                     onClick={() => onImageClick(att.file_url, allImages, idx)}>
                     
-                      <img src={att.file_url} alt="" loading="lazy" className="w-full h-auto max-h-[70vh] object-contain" />
+                      <img src={att.file_url} alt="" loading="lazy" decoding="async" className="w-full h-auto max-h-[70vh] object-contain" />
 
                       <div className="absolute bottom-2 left-2 z-10">
                         {decision === 'approved' ?
@@ -296,7 +296,7 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
                     className="relative w-full bg-gray-800 rounded-lg border-2 border-gray-700 hover:border-gray-500 flex items-center justify-center overflow-hidden cursor-pointer transition-all"
                     onClick={() => onImageClick(att.file_url, allImages, idx)}>
                     
-                        <img src={att.file_url} alt="" loading="lazy" className="w-full h-auto max-h-[70vh] object-contain" />
+                        <img src={att.file_url} alt="" loading="lazy" decoding="async" className="w-full h-auto max-h-[70vh] object-contain" />
                       </div>
                     </div>);
 
@@ -360,7 +360,7 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
                         `}
                     onClick={() => onImageClick(att.file_url, allImages, idx)}>
                     
-                        <img src={att.file_url} alt="" loading="lazy" className="w-full h-auto max-h-[70vh] object-contain" />
+                        <img src={att.file_url} alt="" loading="lazy" decoding="async" className="w-full h-auto max-h-[70vh] object-contain" />
 
                         {canReview && isStructuredReview(requestType) &&
                     <div className="absolute top-2 right-2 z-10 flex items-center gap-2 bg-black/70 rounded px-2 py-1">
@@ -834,7 +834,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
               <div className="flex gap-2 mt-2 overflow-x-auto pb-2">
                   {reviewNewImages.map((url, idx) =>
                 <div key={idx} className="relative w-16 h-16 shrink-0 rounded-md overflow-hidden border border-gray-700">
-                      <img src={url} alt="" loading="lazy" className="w-full h-full object-cover" />
+                      <img src={url} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                       <button
                     onClick={() => setReviewNewImages((prev) => prev.filter((u) => u !== url))}
                     className="absolute top-0 right-0 bg-red-600 text-white p-0.5">

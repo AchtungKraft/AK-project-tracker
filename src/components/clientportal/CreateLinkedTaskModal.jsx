@@ -80,7 +80,7 @@ export default function CreateLinkedTaskModal({
       return newTask;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail'] });
+      queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', feedbackRequestId, projectId] });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       toast.success('Task created and linked to feedback request');
       handleClose();
@@ -236,6 +236,8 @@ export default function CreateLinkedTaskModal({
                     <img 
                       src={attachment.file_url} 
                       alt="" 
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover"
                     />
                     {selectedImageUrls.includes(attachment.file_url) && (
