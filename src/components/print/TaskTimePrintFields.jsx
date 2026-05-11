@@ -23,13 +23,36 @@ function formatHours(decimal) {
  *   estimatedHours - decimal number or null
  *   actualHours    - decimal number or null (filled when task is completed digitally)
  *   isCompleted    - boolean, whether task has been completed
- *   compact        - boolean, use single-line inline layout (default true)
+ *   inline         - boolean, render as inline shrink-0 block for row integration (default false)
+ *   compact        - boolean, use single-line block layout (default true, ignored when inline)
  */
-export default function TaskTimePrintFields({ estimatedHours, actualHours, isCompleted = false, compact = true }) {
+export default function TaskTimePrintFields({ estimatedHours, actualHours, isCompleted = false, inline = false, compact = true }) {
   const estDisplay = formatHours(estimatedHours);
   const actDisplay = formatHours(actualHours);
   const hasEstimate = estDisplay !== null;
   const hasActual = actDisplay !== null;
+
+  // Inline mode: sits inside the flex row next to assignee/date columns
+  if (inline) {
+    return (
+      <div className="flex items-baseline gap-2 shrink-0 text-xs print-time-fields">
+        {hasEstimate && (
+          <span className="text-gray-500 whitespace-nowrap">
+            Est: {estDisplay}
+          </span>
+        )}
+        {isCompleted && hasActual ? (
+          <span className="text-gray-500 whitespace-nowrap">
+            Act: {actDisplay}
+          </span>
+        ) : (
+          <span className="text-gray-400 whitespace-nowrap">
+            Act: <span className="inline-block border-b border-gray-400" style={{ minWidth: '70px' }}>&nbsp;</span>
+          </span>
+        )}
+      </div>
+    );
+  }
 
   if (compact) {
     return (

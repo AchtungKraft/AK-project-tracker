@@ -33,15 +33,16 @@ function PersonPrintBucketSection({ section, formatDate, isOverdue, isUrgent, ta
                   <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{task.description}</div>
                 )}
               </div>
+              <TaskTimePrintFields
+                estimatedHours={task.estimated_hours}
+                actualHours={task.actual_hours}
+                isCompleted={!!task.completed_date}
+                inline
+              />
               <div className={`text-xs shrink-0 w-12 text-right ${isOverdue(task.due_date) ? "font-bold" : "text-gray-500"}`}>
                 {formatDate(task.due_date) || "—"}
               </div>
             </div>
-            <TaskTimePrintFields
-              estimatedHours={task.estimated_hours}
-              actualHours={task.actual_hours}
-              isCompleted={!!task.completed_date}
-            />
             <PrintTaskPartsProgress taskId={task.id} taskPartLinksByTaskId={taskPartLinksByTaskId} />
             <PrintTaskChecklistItems taskId={task.id} checklistItemsByTaskId={checklistItemsByTaskId} />
           </div>

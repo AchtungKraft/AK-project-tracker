@@ -24,6 +24,12 @@ function PrintTaskRow({ task, teamMap, formatDate, isOverdue, isUrgent, taskPart
             <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{task.description}</div>
           )}
         </div>
+        <TaskTimePrintFields
+          estimatedHours={task.estimated_hours}
+          actualHours={task.actual_hours}
+          isCompleted={isCompleted || !!task.completed_date}
+          inline
+        />
         <div className="text-xs text-gray-500 shrink-0 w-20 text-right truncate">
           {teamMap[task.assigned_team_member_id] || "—"}
         </div>
@@ -31,11 +37,6 @@ function PrintTaskRow({ task, teamMap, formatDate, isOverdue, isUrgent, taskPart
           {formatDate(task.due_date) || "—"}
         </div>
       </div>
-      <TaskTimePrintFields
-        estimatedHours={task.estimated_hours}
-        actualHours={task.actual_hours}
-        isCompleted={isCompleted || !!task.completed_date}
-      />
       <PrintTaskPartsProgress taskId={task.id} taskPartLinksByTaskId={taskPartLinksByTaskId} />
       <PrintTaskChecklistItems taskId={task.id} checklistItemsByTaskId={checklistItemsByTaskId} />
     </div>
