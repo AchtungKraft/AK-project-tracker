@@ -437,6 +437,7 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
             teamMembers={teamMembers}
             categories={categories}
             statuses={statuses}
+            buckets={projectBuckets}
             partsProgressByTaskId={partsProgressByTaskId}
             commentCountByTaskId={mergedCommentCounts}
             onToggleComplete={handleToggleComplete}

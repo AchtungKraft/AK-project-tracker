@@ -29,6 +29,7 @@ export default function PriorityExecutionView({
   teamMembers,
   categories,
   statuses,
+  buckets = [],
   partsProgressByTaskId = {},
   commentCountByTaskId = {},
   onToggleComplete,
@@ -292,6 +293,7 @@ export default function PriorityExecutionView({
           completedTasks={completedTasks}
           categories={categories}
           teamMembers={teamMembers}
+          buckets={buckets}
           onToggleComplete={onToggleComplete}
           onTaskClick={onTaskClick}
         />
