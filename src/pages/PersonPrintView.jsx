@@ -5,6 +5,7 @@ import { Printer, Flame } from "lucide-react";
 import { filterActiveTasks } from "@/utils/getActivePriorityTasks";
 import PrintTaskChecklistItems from "@/components/print/PrintTaskChecklistItems";
 import PrintTaskPartsProgress from "@/components/print/PrintTaskPartsProgress";
+import TaskTimePrintFields from "@/components/print/TaskTimePrintFields";
 import { groupIncompleteByTaskId } from "@/components/tasks/checklistHelpers";
 import { groupTaskPartLinksByTaskId } from "@/utils/taskPartsProgress";
 import { sortTasksByPriority, isUrgentPriority } from "@/utils/taskPrioritySort";
@@ -36,6 +37,11 @@ function PersonPrintBucketSection({ section, formatDate, isOverdue, isUrgent, ta
                 {formatDate(task.due_date) || "—"}
               </div>
             </div>
+            <TaskTimePrintFields
+              estimatedHours={task.estimated_hours}
+              actualHours={task.actual_hours}
+              isCompleted={!!task.completed_date}
+            />
             <PrintTaskPartsProgress taskId={task.id} taskPartLinksByTaskId={taskPartLinksByTaskId} />
             <PrintTaskChecklistItems taskId={task.id} checklistItemsByTaskId={checklistItemsByTaskId} />
           </div>
