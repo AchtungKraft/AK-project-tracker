@@ -173,9 +173,9 @@ export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItem
         {/* Header */}
         <div className="flex items-center justify-between gap-3 p-3 md:p-4 bg-black/40 backdrop-blur-xl border-b border-red-900/30">
           <div className="flex-1">
-            <h2 className="text-lg font-bold text-white">Operational Feed</h2>
+            <h2 className="text-lg font-bold text-white">Execution Intelligence</h2>
             <p className="text-xs text-gray-400">
-              {filteredItems.length} post{filteredItems.length !== 1 ? 's' : ''} {selectedCategoryId ? 'in subsystem' : 'total'}
+              {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''} {selectedCategoryId ? 'in subsystem' : 'total'}
             </p>
           </div>
           <Button onClick={onItemCreate} size="sm" className="bg-red-600 hover:bg-red-700 gap-2 h-10 px-4 text-sm">

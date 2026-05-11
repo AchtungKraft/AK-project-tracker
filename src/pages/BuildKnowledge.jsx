@@ -37,7 +37,7 @@ export default function BuildKnowledge() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">BUILD KNOWLEDGE</h1>
-                <p className="text-sm text-gray-400">Procedure containers with additive entries — build knowledge incrementally</p>
+                <p className="text-sm text-gray-400">Operational execution intelligence — procedures, field notes, subsystem memory</p>
               </div>
               <Button
                 onClick={async () => {

@@ -4,7 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Pencil, Clock, Tag, ExternalLink, Package, ListChecks, FileText, Image, Pin, Crown, Link2, AlertOctagon, ArrowRight, Plus, ListOrdered, StickyNote, AlertTriangle, Lightbulb, Camera } from "lucide-react";
+import { Pencil, Clock, Tag, ExternalLink, Package, ListChecks, FileText, Image, Pin, Crown, Link2, AlertOctagon, ArrowRight, Plus, ListOrdered, StickyNote, AlertTriangle, Lightbulb, Camera, Play } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { POST_TYPE_CONFIG } from "./KnowledgeFeedCard";
@@ -14,6 +14,7 @@ import KnowledgeLegacyContent from "./KnowledgeLegacyContent";
 import ProcedureEntryTimeline from "./ProcedureEntryTimeline";
 import ProcedureEntryEditor from "./ProcedureEntryEditor";
 import ImageLightbox from "./ImageLightbox";
+import ExecutionModeView from "./ExecutionModeView";
 
 function getCoverImage(item) {
   if (item.cover_image_url) return item.cover_image_url;
@@ -34,6 +35,7 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
   const [entryEditorOpen, setEntryEditorOpen] = useState(false);
   const [entryEditorType, setEntryEditorType] = useState("step");
   const [coverLightbox, setCoverLightbox] = useState(false);
+  const [executionMode, setExecutionMode] = useState(false);
 
   const { data: taskLinks = [] } = useQuery({
     queryKey: ['knowledgeTaskLinks_detail', item?.id],
@@ -144,8 +146,14 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
               )}
             </div>
 
-            {/* Quick-add strip — always visible below header */}
+            {/* Execution mode trigger + Quick-add strip */}
             <div className="px-4 pb-3 flex gap-1.5 overflow-x-auto scrollbar-hide">
+              {hasEntries && (
+                <button onClick={() => setExecutionMode(true)}
+                  className="shrink-0 flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition-colors active:scale-95">
+                  <Play className="w-3.5 h-3.5" /> Execute
+                </button>
+              )}
               {QUICK_ADD.map(qa => {
                 const QIcon = qa.icon;
                 return (
@@ -246,6 +254,11 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
           {/* ===== FOOTER ===== */}
           <div className="shrink-0 bg-gray-900 border-t border-gray-800 p-3 flex items-center gap-2">
             <Button variant="outline" onClick={onClose} className="border-gray-700 h-10 px-5">Close</Button>
+            {hasEntries && (
+              <Button onClick={() => setExecutionMode(true)} className="bg-blue-600 hover:bg-blue-700 gap-2 h-10">
+                <Play className="w-4 h-4" /> Execute
+              </Button>
+            )}
             <Button onClick={() => openEntryEditor("step")} className="flex-1 bg-red-600 hover:bg-red-700 gap-2 h-10">
               <Plus className="w-4 h-4" /> Add Entry
             </Button>
@@ -270,6 +283,11 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
         onClose={() => setEntryEditorOpen(false)}
         initialEntryType={entryEditorType}
       />
+
+      {/* Execution Mode */}
+      {executionMode && (
+        <ExecutionModeView item={item} onClose={() => setExecutionMode(false)} />
+      )}
     </>
   );
 }

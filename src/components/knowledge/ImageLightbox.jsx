@@ -48,14 +48,17 @@ export default function ImageLightbox({ images, initialIndex = 0, onClose }) {
       )}
 
       <img src={images[index]} alt="" onClick={(e) => e.stopPropagation()}
-        className="max-h-[90vh] max-w-[95vw] object-contain rounded-lg select-none" />
+        className="max-h-[85vh] max-w-[95vw] object-contain rounded-lg select-none" />
 
       {images.length > 1 && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-1.5">
-          {images.map((_, i) => (
-            <button key={i} onClick={(e) => { e.stopPropagation(); setIndex(i); }}
-              className={cn("w-2 h-2 rounded-full transition-colors", i === index ? "bg-white" : "bg-white/30")} />
-          ))}
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
+          <span className="text-xs text-white/70 font-medium">{index + 1} / {images.length}</span>
+          <div className="flex gap-1.5">
+            {images.map((_, i) => (
+              <button key={i} onClick={(e) => { e.stopPropagation(); setIndex(i); }}
+                className={cn("w-2.5 h-2.5 rounded-full transition-colors", i === index ? "bg-white" : "bg-white/30")} />
+            ))}
+          </div>
         </div>
       )}
     </div>

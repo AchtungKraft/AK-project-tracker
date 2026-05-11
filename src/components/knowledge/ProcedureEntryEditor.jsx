@@ -50,6 +50,7 @@ export default function ProcedureEntryEditor({ procedureId, procedureTitle, exis
     reference_url: "",
     lifecycle_state: "active",
     part_ids: [],
+    group_label: "",
   });
   const [uploading, setUploading] = useState(false);
 
@@ -78,7 +79,7 @@ export default function ProcedureEntryEditor({ procedureId, procedureTitle, exis
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['procedureEntries', procedureId] });
       toast.success('Entry added');
-      setForm({ headline: "", entry_type: "step", content_html: "", image_urls: [], reference_url: "", lifecycle_state: "active", part_ids: [] });
+      setForm({ headline: "", entry_type: "step", content_html: "", image_urls: [], reference_url: "", lifecycle_state: "active", part_ids: [], group_label: "" });
       setPartSearch("");
       onClose();
     },
@@ -223,6 +224,16 @@ export default function ProcedureEntryEditor({ procedureId, procedureTitle, exis
               </div>
             )}
           </div>
+
+          {/* Group label — lightweight phase grouping */}
+          {form.entry_type === 'step' && (
+            <div>
+              <Label className="text-gray-400 text-xs">Phase Group (optional)</Label>
+              <Input value={form.group_label || ''} onChange={e => setForm(f => ({ ...f, group_label: e.target.value }))}
+                placeholder="e.g. Diagnosis, Removal, Installation, Testing"
+                className="bg-gray-800 border-gray-700 text-white text-sm h-9" />
+            </div>
+          )}
 
           {/* Reference URL */}
           {(form.entry_type === 'reference' || form.reference_url) && (

@@ -164,20 +164,19 @@ export default function KnowledgeFeedCard({ item, onItemClick, partLinks, taskLi
             )}
           </div>
 
-          {/* Meta row */}
+          {/* Meta row — field log style */}
           <div className="flex items-center gap-3 text-[10px] text-gray-500">
             <span className="flex items-center gap-1">
               <span className={cn("w-1.5 h-1.5 rounded-full", config.dot)} />
               {config.label}
             </span>
             {imageCount > 0 && (
-              <span className="flex items-center gap-0.5"><Image className="w-2.5 h-2.5" /> {imageCount}</span>
+              <span className="flex items-center gap-0.5"><Image className="w-2.5 h-2.5" /> {imageCount} photo{imageCount !== 1 ? 's' : ''}</span>
             )}
-            <span className="flex items-center gap-0.5">
+            <span className="flex items-center gap-0.5 ml-auto">
               <Clock className="w-2.5 h-2.5" />
-              {item.updated_date ? format(new Date(item.updated_date), 'MMM d') : '—'}
+              {item.updated_date ? format(new Date(item.updated_date), 'MMM d, yyyy') : '—'}
             </span>
-            {item.created_by && <span className="text-gray-600">{item.created_by.split('@')[0]}</span>}
           </div>
         </div>
       )}

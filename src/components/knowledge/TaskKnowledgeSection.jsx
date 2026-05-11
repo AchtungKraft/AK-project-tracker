@@ -4,11 +4,12 @@ import { base44 } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BookOpen, Plus, AlertTriangle, Package, X, Lightbulb, FileText, ChevronDown, ChevronRight, Crown, Image, AlertOctagon, ListOrdered } from "lucide-react";
+import { BookOpen, Plus, AlertTriangle, Package, X, Lightbulb, FileText, ChevronDown, ChevronRight, Crown, Image, AlertOctagon, ListOrdered, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TYPE_CONFIG } from "./KnowledgeListView";
 import { getCoverImage, getExcerpt } from "./KnowledgeFeedCard";
 import ExecutionTimeline from "./ExecutionTimeline";
+import ExecutionModeView from "./ExecutionModeView";
 import { toast } from "sonner";
 
 const TASK_ICON_MAP = {
@@ -41,8 +42,9 @@ function InlineWarnings({ warnings }) {
   );
 }
 
-function KnowledgeItemCard({ item, link, onRemove, partLinks, parts }) {
-  const [expanded, setExpanded] = useState(false);
+function KnowledgeItemCard({ item, link, onRemove, partLinks, parts, autoExpand = false }) {
+  const [expanded, setExpanded] = useState(autoExpand || item.is_master_procedure);
+  const [execMode, setExecMode] = useState(false);
   const postType = item.post_type || item.type || 'procedure';
   const config = TYPE_CONFIG[postType] || TYPE_CONFIG.procedure;
   const iconMap = TASK_ICON_MAP[postType] || TASK_ICON_MAP.document;
@@ -102,6 +104,10 @@ function KnowledgeItemCard({ item, link, onRemove, partLinks, parts }) {
           )}
           <InlineWarnings warnings={item.warnings} />
         </div>
+        <button onClick={() => setExecMode(true)} title="Execute procedure"
+          className="h-7 w-7 flex items-center justify-center rounded-md text-blue-400 hover:bg-blue-900/30 shrink-0 transition-colors">
+          <Play className="w-3.5 h-3.5" />
+        </button>
         <Button size="sm" variant="ghost" onClick={() => link && onRemove(link.id)}
           className="h-7 w-7 p-0 text-gray-500 hover:text-red-400 shrink-0">
           <X className="w-3 h-3" />
@@ -141,6 +147,8 @@ function KnowledgeItemCard({ item, link, onRemove, partLinks, parts }) {
           )}
         </div>
       )}
+      {/* Execution Mode overlay */}
+      {execMode && <ExecutionModeView item={item} onClose={() => setExecMode(false)} />}
     </div>
   );
 }
@@ -263,6 +271,7 @@ export default function TaskKnowledgeSection({ taskId }) {
             onRemove={(id) => removeLinkMutation.mutate(id)}
             partLinks={partLinksByItem[item.id]}
             parts={allParts}
+            autoExpand={sortedLinked.length <= 2}
           />
         );
       })}

@@ -210,21 +210,43 @@ export default function ProcedureEntryTimeline({ procedureId, compact = false, e
     setLightboxState({ images, index });
   };
 
+  // Track group labels
+  let lastGroupLabel = null;
+
   return (
     <>
       <div className="relative">
         {visible.map((entry) => {
           const isStep = (entry.entry_type || 'step') === 'step';
           if (isStep) stepCount++;
+          
+          // Group label separator
+          const groupLabel = entry.group_label || null;
+          let showGroupHeader = false;
+          if (groupLabel && groupLabel !== lastGroupLabel) {
+            showGroupHeader = true;
+          }
+          if (groupLabel) lastGroupLabel = groupLabel;
+
           return (
-            <EntryCard
-              key={entry.id}
-              entry={entry}
-              stepNumber={isStep ? stepCount : 0}
-              parts={parts}
-              onImageClick={handleImageClick}
-              compact={compact}
-            />
+            <React.Fragment key={entry.id}>
+              {showGroupHeader && (
+                <div className="flex items-center gap-2 pt-3 pb-2 ml-10 md:ml-12">
+                  <div className="h-px flex-1 bg-gray-700/50" />
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500 shrink-0 px-2">
+                    {groupLabel}
+                  </span>
+                  <div className="h-px flex-1 bg-gray-700/50" />
+                </div>
+              )}
+              <EntryCard
+                entry={entry}
+                stepNumber={isStep ? stepCount : 0}
+                parts={parts}
+                onImageClick={handleImageClick}
+                compact={compact}
+              />
+            </React.Fragment>
           );
         })}
         {/* Terminal dot */}

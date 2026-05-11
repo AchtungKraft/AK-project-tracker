@@ -42,6 +42,28 @@
       "type": "number",
       "default": 0,
       "description": "Display order within the procedure"
+    },
+    "lifecycle_state": {
+      "type": "string",
+      "enum": [
+        "active",
+        "pinned",
+        "critical",
+        "archived"
+      ],
+      "default": "active",
+      "description": "Entry-level lifecycle state for governance"
+    },
+    "part_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Part IDs referenced by this specific entry"
+    },
+    "group_label": {
+      "type": "string",
+      "description": "Lightweight phase grouping label (e.g. Diagnosis, Removal, Installation, Testing)"
     }
   },
   "required": [
