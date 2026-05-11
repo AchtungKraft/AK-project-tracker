@@ -6,6 +6,7 @@ import { filterActiveTasks } from "@/utils/getActivePriorityTasks";
 import PrintTaskChecklistItems from "@/components/print/PrintTaskChecklistItems";
 import PrintTaskPartsProgress from "@/components/print/PrintTaskPartsProgress";
 import TaskTimePrintFields from "@/components/print/TaskTimePrintFields";
+import PrintTimestamp from "@/components/print/PrintTimestamp";
 import { groupIncompleteByTaskId } from "@/components/tasks/checklistHelpers";
 import { groupTaskPartLinksByTaskId } from "@/utils/taskPartsProgress";
 import { sortTasksByPriority, isUrgentPriority } from "@/utils/taskPrioritySort";
@@ -261,7 +262,7 @@ export default function PersonPrintView() {
           {member.full_name}
         </h1>
         <div className="text-xs text-gray-500 mb-6">
-          Active Tasks • Printed {new Date().toLocaleDateString()}
+          Active Tasks • <PrintTimestamp inline />
           {` • ${activeTasks.length} task${activeTasks.length !== 1 ? "s" : ""}`}
           {(selectedTypes.length > 0 || statusFilter !== 'all') && ' • Filtered'}
         </div>
@@ -312,7 +313,7 @@ export default function PersonPrintView() {
 
         {/* Footer */}
         <div className="mt-8 pt-4 border-t border-gray-200 text-xs text-gray-400 text-center">
-          {member.full_name} • {activeTasks.length} tasks • {new Date().toLocaleDateString()}
+          {member.full_name} • {activeTasks.length} tasks • <PrintTimestamp inline />
         </div>
       </div>
     </>

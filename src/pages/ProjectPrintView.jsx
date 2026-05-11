@@ -6,6 +6,7 @@ import { filterActiveTasks } from "@/utils/getActivePriorityTasks";
 import PrintTaskChecklistItems from "@/components/print/PrintTaskChecklistItems";
 import PrintTaskPartsProgress from "@/components/print/PrintTaskPartsProgress";
 import TaskTimePrintFields from "@/components/print/TaskTimePrintFields";
+import PrintTimestamp from "@/components/print/PrintTimestamp";
 import { groupIncompleteByTaskId } from "@/components/tasks/checklistHelpers";
 import { groupTaskPartLinksByTaskId } from "@/utils/taskPartsProgress";
 import { sortTasksByPriority, isUrgentPriority } from "@/utils/taskPrioritySort";
@@ -287,7 +288,7 @@ export default function ProjectPrintView() {
               {projects.length} Projects
             </h1>
             <div className="text-xs text-gray-500 mb-6">
-              {projects.map(p => p.name).join(' • ')} • {viewMode === 'assigned' ? 'By Person' : 'By Priority'} • Printed {new Date().toLocaleDateString()}
+              {projects.map(p => p.name).join(' • ')} • {viewMode === 'assigned' ? 'By Person' : 'By Priority'} • <PrintTimestamp inline />
             </div>
           </>
         ) : (
@@ -296,8 +297,7 @@ export default function ProjectPrintView() {
               {project.name}
             </h1>
             <div className="text-xs text-gray-500 mb-6">
-              Active Tasks • {viewMode === 'assigned' ? 'By Person' : 'By Priority'} • Printed {new Date().toLocaleDateString()}
-              {project.client_name && ` • ${project.client_name}`}
+              Active Tasks • {viewMode === 'assigned' ? 'By Person' : 'By Priority'} • <PrintTimestamp userName={project.client_name} inline />
             </div>
           </>
         )}
@@ -430,7 +430,7 @@ export default function ProjectPrintView() {
 
         {/* Footer */}
         <div className="mt-8 pt-4 border-t border-gray-200 text-xs text-gray-400 text-center">
-          {isMultiProject ? `${projects.length} Projects` : project.name} • {activeTasks.length} tasks • {new Date().toLocaleDateString()}
+          {isMultiProject ? `${projects.length} Projects` : project.name} • {activeTasks.length} tasks • <PrintTimestamp inline />
         </div>
       </div>
     </>
