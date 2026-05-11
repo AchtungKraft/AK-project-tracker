@@ -208,6 +208,32 @@ export default function ProjectPrintView() {
     return m;
   }, [teamMembers]);
 
+  // Build bucket sections from a list of tasks scoped to a specific project (or all)
+  const buildBucketSections = (tasks, scopedBuckets) => {
+    const sorted = sortTasksByPriority(tasks);
+    const bucketsSorted = [...scopedBuckets].sort((a, b) => (a.order || 0) - (b.order || 0));
+    const tasksByBucket = {};
+    const unbucketed = [];
+
+    sorted.forEach(t => {
+      if (t.kanban_bucket_id && bucketsSorted.find(b => b.id === t.kanban_bucket_id)) {
+        if (!tasksByBucket[t.kanban_bucket_id]) tasksByBucket[t.kanban_bucket_id] = [];
+        tasksByBucket[t.kanban_bucket_id].push(t);
+      } else {
+        unbucketed.push(t);
+      }
+    });
+
+    const result = bucketsSorted
+      .filter(b => tasksByBucket[b.id]?.length > 0)
+      .map(b => ({ name: b.name, tasks: tasksByBucket[b.id] }));
+
+    if (unbucketed.length > 0) {
+      result.push({ name: bucketsSorted.length > 0 ? "Unsorted" : "All Tasks", tasks: unbucketed });
+    }
+    return result;
+  };
+
   // Assigned-to grouping: group sorted tasks by team member
   const assignedSections = useMemo(() => {
     const sorted = sortTasksByPriority(activeTasks);
@@ -410,7 +436,7 @@ export default function ProjectPrintView() {
         {viewMode === 'assigned' && (
           <div className="mb-6">
             {assignedSections.map((section) => {
-              // In multi-project mode, sub-group tasks by project under each person
+              // In multi-project mode, sub-group tasks by project, then by bucket within each project
               const tasksByProject = isMultiProject
                 ? (() => {
                     const byPid = {};
@@ -420,8 +446,20 @@ export default function ProjectPrintView() {
                     });
                     return projectIds
                       .filter(pid => byPid[pid]?.length > 0)
-                      .map(pid => ({ project: projectMap[pid] || { name: 'Unknown' }, tasks: byPid[pid] }));
+                      .map(pid => {
+                        const projBuckets = allBuckets.filter(b => b.project_id === pid);
+                        return {
+                          project: projectMap[pid] || { name: 'Unknown' },
+                          tasks: byPid[pid],
+                          bucketSections: buildBucketSections(byPid[pid], projBuckets),
+                        };
+                      });
                   })()
+                : null;
+
+              // Single-project: bucket grouping directly under the person
+              const singleBucketSections = !isMultiProject
+                ? buildBucketSections(section.tasks, allBuckets)
                 : null;
 
               return (
@@ -431,27 +469,47 @@ export default function ProjectPrintView() {
                     <span className="text-gray-400 font-normal ml-2">({section.tasks.length})</span>
                   </h2>
                   {tasksByProject ? (
-                    tasksByProject.map(({ project: proj, tasks }) => (
+                    tasksByProject.map(({ project: proj, bucketSections: bSections }) => (
                       <div key={proj.id || proj.name} className="mb-3">
                         <h3 className="text-sm font-bold text-gray-700 border-b border-gray-300 pb-1 mb-2 mt-3">
                           {proj.name}
-                          <span className="text-gray-400 font-normal ml-1">({tasks.length})</span>
+                          <span className="text-gray-400 font-normal ml-1">({bSections.reduce((s, b) => s + b.tasks.length, 0)})</span>
                         </h3>
+                        {bSections.map((bs) => (
+                          <div key={bs.name} className="mb-3 ml-2">
+                            {bSections.length > 1 && (
+                              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                                {bs.name}
+                                <span className="text-gray-400 font-normal ml-1">({bs.tasks.length})</span>
+                              </h4>
+                            )}
+                            <div className="space-y-0">
+                              {bs.tasks.map((task) => (
+                                <PrintTaskRow key={task.id} task={task} teamMap={teamMap} formatDate={formatDate} isOverdue={isOverdue} isUrgent={isUrgentPriority(task)}
+                                  taskPartLinksByTaskId={taskPartLinksByTaskId} checklistItemsByTaskId={checklistItemsByTaskId} />
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ))
+                  ) : (
+                    singleBucketSections.map((bs) => (
+                      <div key={bs.name} className="mb-3">
+                        {singleBucketSections.length > 1 && (
+                          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 ml-2">
+                            {bs.name}
+                            <span className="text-gray-400 font-normal ml-1">({bs.tasks.length})</span>
+                          </h4>
+                        )}
                         <div className="space-y-0">
-                          {tasks.map((task) => (
+                          {bs.tasks.map((task) => (
                             <PrintTaskRow key={task.id} task={task} teamMap={teamMap} formatDate={formatDate} isOverdue={isOverdue} isUrgent={isUrgentPriority(task)}
                               taskPartLinksByTaskId={taskPartLinksByTaskId} checklistItemsByTaskId={checklistItemsByTaskId} />
                           ))}
                         </div>
                       </div>
                     ))
-                  ) : (
-                    <div className="space-y-0">
-                      {section.tasks.map((task) => (
-                        <PrintTaskRow key={task.id} task={task} teamMap={teamMap} formatDate={formatDate} isOverdue={isOverdue} isUrgent={isUrgentPriority(task)}
-                          taskPartLinksByTaskId={taskPartLinksByTaskId} checklistItemsByTaskId={checklistItemsByTaskId} />
-                      ))}
-                    </div>
                   )}
                 </div>
               );
