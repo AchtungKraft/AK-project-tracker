@@ -81,7 +81,8 @@ export default function CreateLinkedTaskModal({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', feedbackRequestId, projectId] });
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      // Soft-invalidate tasks — mark stale but don't force refetch from this context
+      queryClient.invalidateQueries({ queryKey: ['tasks'], refetchType: 'none' });
       toast.success('Task created and linked to feedback request');
       handleClose();
     },

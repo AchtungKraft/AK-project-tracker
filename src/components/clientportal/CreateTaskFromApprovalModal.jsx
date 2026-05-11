@@ -63,7 +63,8 @@ export default function CreateTaskFromApprovalModal({ open, onClose, projectId, 
       });
 
       queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      // Soft-invalidate tasks — mark stale but don't force refetch from this context
+      queryClient.invalidateQueries({ queryKey: ['tasks'], refetchType: 'none' });
       toast.success('Task created from approval');
       onClose();
     },

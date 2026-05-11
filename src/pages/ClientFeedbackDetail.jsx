@@ -39,11 +39,17 @@ export default function ClientFeedbackDetail() {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const urlParams = new URLSearchParams(window.location.search);
-  const requestId = urlParams.get('id');
-  const projectId = urlParams.get('projectId');
-  const fromHub = urlParams.get('from') === 'hub';
-  const hubTab = urlParams.get('tab') || 'awaiting';
+
+  // Stabilize URL params — useMemo prevents re-parsing on every render
+  const { requestId, projectId, fromHub, hubTab } = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    return {
+      requestId: params.get('id'),
+      projectId: params.get('projectId'),
+      fromHub: params.get('from') === 'hub',
+      hubTab: params.get('tab') || 'awaiting',
+    };
+  }, [window.location.search]);
 
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
   const [selectedApproval, setSelectedApproval] = useState(null);
@@ -59,6 +65,22 @@ export default function ClientFeedbackDetail() {
 
   // Track if view has been logged this session to prevent duplicate tracking
   const viewTrackedRef = useRef(false);
+  const prevRequestIdRef = useRef(requestId);
+
+  // Reset view tracking when navigating to a different request (URL param change without unmount)
+  if (prevRequestIdRef.current !== requestId) {
+    prevRequestIdRef.current = requestId;
+    viewTrackedRef.current = false;
+  }
+
+  // LIFECYCLE: Cancel in-flight queries when requestId changes or component unmounts
+  // Prevents stale responses from previous requests being processed
+  useEffect(() => {
+    return () => {
+      // On unmount or requestId change, cancel any in-flight detail query
+      queryClient.cancelQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
+    };
+  }, [requestId, projectId, queryClient]);
 
   // Fetch user - separate from detail to allow progressive rendering
   const { data: user, isLoading: isLoadingUser } = useQuery({
@@ -90,7 +112,6 @@ export default function ClientFeedbackDetail() {
     enabled: !!requestId,
     staleTime: 60_000,
     gcTime: 10 * 60_000,
-    refetchOnMount: true,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: (failureCount, error) => {
@@ -153,6 +174,10 @@ export default function ClientFeedbackDetail() {
   const stableComments = useMemo(() => comments, [JSON.stringify(comments.map(c => c.id + (c.updated_date || '')))]);
   const stableDecisions = useMemo(() => decisions, [JSON.stringify(decisions.map(d => d.id + (d.updated_date || '')))]);
   const stableAttachments = useMemo(() => attachments, [JSON.stringify(attachments.map(a => a.id + (a.updated_date || '')))]);
+
+  // Ref for attachments used in callbacks — prevents callback recreation on every data refresh
+  const attachmentsRef = useRef(attachments);
+  attachmentsRef.current = attachments;
 
   const updateRequestMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.ClientFeedbackRequest.update(id, data),
@@ -340,7 +365,7 @@ export default function ClientFeedbackDetail() {
   // Stable callback handlers to prevent thread rerenders
   const handleDeleteComment = useCallback(async (commentId) => {
     try {
-      const commentAtts = attachments.filter(a => a.comment_id === commentId);
+      const commentAtts = attachmentsRef.current.filter(a => a.comment_id === commentId);
       await Promise.all(commentAtts.map(a => base44.entities.ClientFeedbackAttachment.delete(a.id)));
       await base44.entities.ClientFeedbackComment.delete(commentId);
       queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
@@ -348,7 +373,7 @@ export default function ClientFeedbackDetail() {
     } catch (error) {
       toast.error('Failed to delete comment');
     }
-  }, [attachments, queryClient, requestId, projectId]);
+  }, [queryClient, requestId, projectId]);
 
   const handleDeleteDecision = useCallback(async (decisionIds) => {
     try {
@@ -947,7 +972,7 @@ export default function ClientFeedbackDetail() {
           projectId={projectId}
           feedbackRequestId={requestId}
           feedbackRequestTitle={request?.title}
-          feedbackAttachments={attachments}
+          feedbackAttachments={stableAttachments}
           userId={user?.id}
         />
       )}
