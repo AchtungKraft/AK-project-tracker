@@ -69,7 +69,8 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
 
   // Use task data hook for all task operations - single source of truth
   const {
-    tasks: taskDataTasks,
+    tasks: allProjectTasks,
+    activeTasks,
     commentCountByTaskId,
     handleToggleComplete,
     handleUpdateDueDate,
@@ -86,9 +87,6 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
     confirmUninstalledPartsCompletion,
     cancelUninstalledPartsCompletion,
   } = useTaskData({ scope: 'project', projectId });
-  
-  // Use tasks from useTaskData as source of truth (not stale sharedData)
-  const activeTasks = taskDataTasks;
 
   // Data needed for Execution & Shop views
   const { data: allTaskPartLinks = [] } = useQuery({
@@ -398,7 +396,7 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
               projectId={projectId} 
               sharedData={{
                 ...sharedData,
-                tasks: activeTasks,
+                tasks: allProjectTasks,
                 commentCountByTaskId,
                 onUpdateDueDate: handleUpdateDueDate,
                 onUpdateStartDate: handleUpdateStartDate,
@@ -406,7 +404,7 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
                 showInlineControls: true,
               }} 
             />
-            <CompletedTasksSection projectId={projectId} sharedData={{ ...sharedData, tasks: activeTasks }} />
+            <CompletedTasksSection projectId={projectId} sharedData={{ ...sharedData, tasks: allProjectTasks }} />
           </>
         )}
         {viewMode === 'calendar' && (
