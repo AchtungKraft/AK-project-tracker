@@ -4,6 +4,7 @@ import PriorityRemoveConfirm from './PriorityRemoveConfirm';
 import DeleteTaskConfirm from './DeleteTaskConfirm';
 import CompleteTaskConfirm from './CompleteTaskConfirm';
 import UninstalledPartsWarning from './UninstalledPartsWarning';
+import TaskCompletionModal from './TaskCompletionModal';
 
 /**
  * TaskInteractionContext - Provider for task interaction state
@@ -99,6 +100,16 @@ export function TaskInteractionProvider({
         onConfirm={interaction.confirmUninstalledPartsCompletion}
         taskName={interaction.pendingUninstalledPartsCompletion?.task?.name}
         uninstalledCount={interaction.pendingUninstalledPartsCompletion?.uninstalledCount || 0}
+        isLoading={interaction.isUpdating}
+      />
+
+      {/* Time Completion Modal — final step before completion */}
+      <TaskCompletionModal
+        isOpen={!!interaction.pendingTimeCompletion}
+        onClose={interaction.cancelTimeCompletion}
+        onConfirm={interaction.confirmTimeCompletion}
+        task={interaction.pendingTimeCompletion?.task}
+        incompleteChecklistCount={interaction.pendingTimeCompletion?.incompleteChecklistCount || 0}
         isLoading={interaction.isUpdating}
       />
     </TaskInteractionContext.Provider>

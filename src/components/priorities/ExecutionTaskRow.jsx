@@ -3,7 +3,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Flame, CalendarDays, User, Pencil, Trash2 } from "lucide-react";
+import { Flame, CalendarDays, User, Pencil, Trash2, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isUrgentPriority } from "@/utils/taskPrioritySort";
 
@@ -163,6 +163,13 @@ export default function ExecutionTaskRow({
         <div className="text-xs text-gray-500 shrink-0 w-20 text-right truncate mt-0.5 hidden md:block">
           {assigneeName || "—"}
         </div>
+
+        {task.estimated_hours ? (
+          <div className="text-[10px] text-gray-600 shrink-0 mt-0.5 flex items-center gap-0.5 hidden md:flex" title={`Est: ${task.estimated_hours}h`}>
+            <Clock className="w-2.5 h-2.5" />
+            {task.estimated_hours < 1 ? `${Math.round(task.estimated_hours * 60)}m` : `${task.estimated_hours}h`}
+          </div>
+        ) : null}
 
         <div className={cn(
           "text-xs shrink-0 w-12 text-right mt-0.5",

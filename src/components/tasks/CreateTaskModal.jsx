@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { useTaskCategories, useTaskStatuses, useAssignableTeamMembers } from "./useTaskDropdownData";
 import { TaskCategorySelect, TaskStatusSelect, TaskAssigneeSelect } from "./TaskDropdownSelects";
 import ProjectSelect from "@/components/shared/ProjectSelect";
+import TimeEstimateInput from "./TimeEstimateInput";
 
 export default function CreateTaskModal({ onClose, projectId, defaultAssigneeId, defaultBucketId, defaultIsPriority = false }) {
   const queryClient = useQueryClient();
@@ -31,6 +32,7 @@ export default function CreateTaskModal({ onClose, projectId, defaultAssigneeId,
     start_date: "",
     due_date: "",
     is_priority: defaultIsPriority,
+    estimated_hours: null,
   });
 
   useEffect(() => {
@@ -198,6 +200,15 @@ export default function CreateTaskModal({ onClose, projectId, defaultAssigneeId,
               </Select>
             </div>
           )}
+
+          <div>
+            <Label className="text-gray-400">Estimated Time (hours)</Label>
+            <TimeEstimateInput
+              value={taskData.estimated_hours}
+              onChange={(v) => setTaskData({ ...taskData, estimated_hours: v })}
+              placeholder="e.g. 2.5"
+            />
+          </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>

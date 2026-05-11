@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { CalendarIcon, Loader2, UserPlus, ExternalLink, CheckCircle2 } from "lucide-react";
+import { CalendarIcon, Loader2, UserPlus, ExternalLink, CheckCircle2, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -23,7 +23,8 @@ import TaskKnowledgeSection from "@/components/knowledge/TaskKnowledgeSection";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { getMobileInputClass, getMobileTextareaClass, getMobileSelectClass } from "@/components/mobile/MobileFormStyles";
 import { TASK_CACHE_KEYS } from "./useTaskInteraction";
-import CompleteTaskConfirm from "./CompleteTaskConfirm";
+import TaskCompletionModal from "./TaskCompletionModal";
+import TimeEstimateInput, { formatHours } from "./TimeEstimateInput";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -142,6 +143,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
     status_id: "",
     start_date: "",
     due_date: "",
+    estimated_hours: null,
   });
 
   useEffect(() => {
@@ -159,6 +161,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
         status_id: task.status_id || "",
         start_date: task.start_date || "",
         due_date: task.due_date || "",
+        estimated_hours: task.estimated_hours ?? null,
       });
     }
   }, [task, projectId]);
@@ -300,10 +303,14 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
   );
 
   const completeMutation = useMutation({
-    mutationFn: () => base44.entities.Task.update(task.id, {
-      status_id: completedStatus?.id,
-      completed_date: new Date().toISOString(),
-    }),
+    mutationFn: (actualHours) => {
+      const updates = {
+        status_id: completedStatus?.id,
+        completed_date: new Date().toISOString(),
+      };
+      if (actualHours != null) updates.actual_hours = actualHours;
+      return base44.entities.Task.update(task.id, updates);
+    },
     onSuccess: () => {
       TASK_CACHE_KEYS.forEach(key => queryClient.invalidateQueries({ queryKey: key }));
       queryClient.invalidateQueries({ queryKey: ['myTasks'] });
@@ -368,6 +375,22 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
 
           {/* Description — immediately under title, tight to title */}
           {!editing && <DescriptionBlock text={task?.description} />}
+
+          {/* Time tracking display — lightweight metadata */}
+          {!editing && (task?.estimated_hours || task?.actual_hours) && (
+            <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+              <Clock className="w-3 h-3 shrink-0" />
+              {task.estimated_hours && <span>Est: {formatHours(task.estimated_hours)}</span>}
+              {task.actual_hours && <span>Actual: {formatHours(task.actual_hours)}</span>}
+              {task.estimated_hours && task.actual_hours && (() => {
+                const v = task.actual_hours - task.estimated_hours;
+                if (v === 0) return <span className="text-gray-500">On target</span>;
+                return <span className={v > 0 ? 'text-red-400' : 'text-green-400'}>
+                  {v > 0 ? '+' : ''}{formatHours(Math.abs(v))} {v > 0 ? 'over' : 'under'}
+                </span>;
+              })()}
+            </div>
+          )}
 
           {/* Breathing room before divider */}
           {!editing && <div className="mt-3" />}
@@ -450,6 +473,14 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                       {activeTeamMembers.map(m => <SelectItem key={m.id} value={m.id}>{m.full_name} {m.team_role && `(${m.team_role})`}</SelectItem>)}
                     </SelectContent>
                   </Select>
+                </div>
+                <div>
+                  <Label className="text-gray-400">Estimated Time (hours)</Label>
+                  <TimeEstimateInput
+                    value={formData.estimated_hours}
+                    onChange={(v) => setFormData({ ...formData, estimated_hours: v })}
+                    placeholder="e.g. 2.5"
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -552,6 +583,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                     project_id: task.project_id || projectId || "", category_id: task.category_id || "",
                     assigned_team_member_id: task.assigned_team_member_id || "", status_id: task.status_id || "",
                     start_date: task.start_date || "", due_date: task.due_date || "",
+                    estimated_hours: task.estimated_hours ?? null,
                   });
                 }}
                 className="flex-1 h-11 min-h-[44px] border-gray-700"
@@ -594,12 +626,12 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
       </SheetContent>
     </Sheet>
 
-    {/* Complete Task Confirmation */}
-    <CompleteTaskConfirm
+    {/* Complete Task Modal with Time Entry */}
+    <TaskCompletionModal
       isOpen={showCompleteConfirm}
       onClose={() => setShowCompleteConfirm(false)}
-      onConfirm={() => completeMutation.mutate()}
-      taskName={task?.name}
+      onConfirm={(actualHours) => completeMutation.mutate(actualHours)}
+      task={task}
       isLoading={completeMutation.isPending}
       incompleteChecklistCount={incompleteChecklistCount}
     />

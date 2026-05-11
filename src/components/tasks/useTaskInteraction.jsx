@@ -259,12 +259,18 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
   // PUBLIC API - Status Toggle
   // ═══════════════════════════════════════════════════════════════
 
-  const executeCompletion = useCallback(async (task) => {
+  const [pendingTimeCompletion, setPendingTimeCompletion] = useState(null);
+
+  const executeCompletion = useCallback(async (task, actualHours = null) => {
     if (completedStatus) {
-      await updateTask(task.id, {
+      const updates = {
         status_id: completedStatus.id,
         completed_date: new Date().toISOString(),
-      });
+      };
+      if (actualHours != null) {
+        updates.actual_hours = actualHours;
+      }
+      await updateTask(task.id, updates);
       toast.success('Task completed');
     }
   }, [completedStatus, updateTask]);
@@ -297,8 +303,9 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
       setPendingUninstalledPartsCompletion({ task, uninstalledCount: count });
       return { requiresConfirmation: true };
     }
-    await executeCompletion(task);
-  }, [countUninstalledCommitments, executeCompletion]);
+    // Show time completion modal instead of immediate completion
+    setPendingTimeCompletion({ task, incompleteChecklistCount: 0 });
+  }, [countUninstalledCommitments]);
 
   const toggleComplete = useCallback(async (task, skipChecklistCheck = false) => {
     const isCurrentlyComplete = task.status_id === completedStatus?.id;
@@ -327,6 +334,11 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
     }
   }, [completedStatus, taskStatuses, updateTask, proceedToUninstalledCheck]);
 
+  // Also handle checklist completion -> time modal with count info
+  const proceedToTimeModal = useCallback((task, incompleteChecklistCount = 0) => {
+    setPendingTimeCompletion({ task, incompleteChecklistCount });
+  }, []);
+
   const confirmChecklistCompletion = useCallback(async () => {
     if (!pendingChecklistCompletion) return;
     const { task } = pendingChecklistCompletion;
@@ -347,11 +359,24 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
     if (!pendingUninstalledPartsCompletion) return;
     const { task } = pendingUninstalledPartsCompletion;
     setPendingUninstalledPartsCompletion(null);
-    await executeCompletion(task);
-  }, [pendingUninstalledPartsCompletion, executeCompletion]);
+    // Show time completion modal after uninstalled parts confirmation
+    setPendingTimeCompletion({ task, incompleteChecklistCount: 0 });
+  }, [pendingUninstalledPartsCompletion]);
 
   const cancelUninstalledPartsCompletion = useCallback(() => {
     setPendingUninstalledPartsCompletion(null);
+  }, []);
+
+  // Time completion modal handlers
+  const confirmTimeCompletion = useCallback(async (actualHours) => {
+    if (!pendingTimeCompletion) return;
+    const { task } = pendingTimeCompletion;
+    setPendingTimeCompletion(null);
+    await executeCompletion(task, actualHours);
+  }, [pendingTimeCompletion, executeCompletion]);
+
+  const cancelTimeCompletion = useCallback(() => {
+    setPendingTimeCompletion(null);
   }, []);
 
   // ═══════════════════════════════════════════════════════════════
@@ -426,6 +451,11 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
     pendingUninstalledPartsCompletion,
     confirmUninstalledPartsCompletion,
     cancelUninstalledPartsCompletion,
+
+    // Time Completion Modal State
+    pendingTimeCompletion,
+    confirmTimeCompletion,
+    cancelTimeCompletion,
 
     // Drawer State
     activeTask,
