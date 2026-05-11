@@ -201,6 +201,7 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
   const [pendingTimeCompletion, setPendingTimeCompletion] = useState(null);
 
   const executeCompletion = useCallback(async (task, actualHours = null) => {
+    console.log('[useTaskData] executeCompletion called for:', task.name, 'actualHours:', actualHours);
     if (completedStatus) {
       const mutationTimestamp = Date.now();
       const updates = {
@@ -234,11 +235,13 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
 
   const proceedToUninstalledCheck = useCallback(async (task) => {
     const count = await countUninstalledCommitments(task);
+    console.log('[useTaskData] uninstalled count:', count, 'for task:', task.name);
     if (count > 0) {
       setPendingUninstalledPartsCompletion({ task, uninstalledCount: count });
       return;
     }
     // Show time completion modal instead of immediate completion
+    console.log('[useTaskData] Setting pendingTimeCompletion for:', task.name);
     setPendingTimeCompletion({ task, incompleteChecklistCount: 0 });
   }, [countUninstalledCommitments]);
 
@@ -267,6 +270,7 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
 
   // Time completion modal handlers
   const confirmTimeCompletion = useCallback(async (actualHours) => {
+    console.log('[useTaskData] confirmTimeCompletion called, actualHours:', actualHours);
     if (!pendingTimeCompletion) return;
     const { task } = pendingTimeCompletion;
     setPendingTimeCompletion(null);
@@ -279,6 +283,7 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
 
   // Handler functions
   const handleToggleComplete = useCallback(async (task) => {
+    console.log('[useTaskData] handleToggleComplete called for:', task.name, task.id);
     const taskStatuses = statuses.filter(s => s.scope === 'Task' && s.active);
     const isCurrentlyComplete = task.status_id === completedStatus?.id;
     
