@@ -188,7 +188,7 @@ function ProjectBlock({ project, tasks, sp, teamMembers, buckets }) {
               : <ChevronDown className="w-3 h-3 text-gray-500" />}
           </button>
           <Link
-            to={createPageUrl("ProjectDetail") + "?id=" + project.id}
+            to={createPageUrl("ProjectDetail") + "?id=" + project.id + "&view=execution"}
             className="text-xs font-bold text-gray-200 truncate hover:text-red-400 hover:underline transition-colors flex-1 min-w-0"
             onClick={(e) => e.stopPropagation()}
           >

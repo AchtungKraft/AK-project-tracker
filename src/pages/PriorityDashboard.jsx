@@ -675,7 +675,7 @@ export default function PriorityDashboard() {
                           <div>
                             {primaryGroupBy === 'project' && project ? (
                               <Link 
-                                to={createPageUrl("ProjectDetail") + "?id=" + project.id}
+                                to={createPageUrl("ProjectDetail") + "?id=" + project.id + "&view=execution"}
                                 className="hover:opacity-80 transition-opacity"
                               >
                                 <CardTitle className="text-lg hover:underline" style={{ color: primaryGroup.color }}>{primaryGroup.label}</CardTitle>

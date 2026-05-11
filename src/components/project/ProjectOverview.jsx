@@ -37,8 +37,10 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
 
   const [selectedImage, setSelectedImage] = useState(null);
   const [infoExpanded, setInfoExpanded] = useState(false);
-  // Persist view mode per project
+  // Persist view mode per project — URL param `view` overrides localStorage
   const [viewMode, setViewMode] = useState(() => {
+    const urlView = new URLSearchParams(window.location.search).get('view');
+    if (urlView) return urlView;
     return localStorage.getItem(`project_task_view_mode_${projectId}`) || 'execution';
   });
   const [selectedTask, setSelectedTask] = useState(null);

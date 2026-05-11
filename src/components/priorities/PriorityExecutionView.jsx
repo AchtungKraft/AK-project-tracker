@@ -221,7 +221,7 @@ export default function PriorityExecutionView({
                 <div key={project.id} className="mb-6 ml-2">
                   <div className="flex items-center gap-2 border-b-2 border-gray-400 pb-1 mb-3">
                     <h1 className="text-lg font-bold text-gray-100 flex-1 min-w-0">
-                      <Link to={createPageUrl("ProjectDetail") + "?id=" + project.id} className="hover:text-red-400 hover:underline transition-colors">
+                      <Link to={createPageUrl("ProjectDetail") + "?id=" + project.id + "&view=execution"} className="hover:text-red-400 hover:underline transition-colors">
                         {project.name}
                       </Link>
                     </h1>
