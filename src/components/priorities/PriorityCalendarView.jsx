@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ChevronLeft, ChevronRight, Calendar, FolderKanban, User, Tag, AlertCircle, Flame } from "lucide-react";
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, parseISO, isWithinInterval, isBefore } from "date-fns";
 import { createPageUrl } from "@/utils";
+import { buildProjectDetailUrl, SOURCES } from "@/lib/workspaceConfig";
 import TaskCard from "../project/TaskCard";
 import { toast } from "sonner";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
@@ -286,7 +287,7 @@ export default function PriorityCalendarView({
                     <div>
                       {calendarPrimaryGroup === 'project' && project ? (
                         <Link 
-                          to={createPageUrl("ProjectDetail") + "?id=" + project.id}
+                          to={buildProjectDetailUrl(project.id, { source: SOURCES.CALENDAR })}
                           className="text-sm font-semibold hover:underline"
                           style={{ color: primaryGroup.color }}
                         >

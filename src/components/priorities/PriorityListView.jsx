@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { MessageSquare, Package, FolderKanban, Flame } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { buildProjectDetailUrl, SOURCES } from "@/lib/workspaceConfig";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { sortTasksByPriority, isUrgentPriority, isFuturePriority } from "@/utils/taskPrioritySort";
@@ -135,7 +136,7 @@ export default function PriorityListView({
             <FolderKanban className="w-4 h-4 text-red-400/70 shrink-0" />
             {group.project ? (
               <Link
-                to={createPageUrl("ProjectDetail") + "?id=" + group.project.id}
+                to={buildProjectDetailUrl(group.project.id, { source: SOURCES.PRIORITIES })}
                 className="text-sm font-semibold text-gray-200 truncate hover:text-red-400 hover:underline transition-colors"
               >
                 {group.project.name}

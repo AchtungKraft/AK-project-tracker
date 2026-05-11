@@ -5,6 +5,7 @@ import { sortChecklistItems } from "@/components/tasks/checklistHelpers";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { buildProjectDetailUrl, SOURCES } from "@/lib/workspaceConfig";
 import { Printer, Plus, Settings2 } from "lucide-react";
 import ExecutionTaskRow from "./ExecutionTaskRow";
 import ProjectTypeGroupHeader from "./ProjectTypeGroupHeader";
@@ -221,7 +222,7 @@ export default function PriorityExecutionView({
                 <div key={project.id} className="mb-6 ml-2">
                   <div className="flex items-center gap-2 border-b-2 border-gray-400 pb-1 mb-3">
                     <h1 className="text-lg font-bold text-gray-100 flex-1 min-w-0">
-                      <Link to={createPageUrl("ProjectDetail") + "?id=" + project.id + "&view=execution"} className="hover:text-red-400 hover:underline transition-colors">
+                      <Link to={buildProjectDetailUrl(project.id, { source: SOURCES.PRIORITIES })} className="hover:text-red-400 hover:underline transition-colors">
                         {project.name}
                       </Link>
                     </h1>

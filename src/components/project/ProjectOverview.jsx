@@ -28,6 +28,7 @@ import PriorityRemoveConfirm from "../tasks/PriorityRemoveConfirm";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { cn } from "@/lib/utils";
 import { computePartsProgressByTaskId } from "@/utils/taskPartsProgress";
+import { resolveProjectOverviewView, persistProjectOverviewView } from "@/lib/workspaceConfig";
 
 export default function ProjectOverview({ project, projectId, sharedData = {} }) {
   const queryClient = useQueryClient();
@@ -37,12 +38,8 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
 
   const [selectedImage, setSelectedImage] = useState(null);
   const [infoExpanded, setInfoExpanded] = useState(false);
-  // Persist view mode per project — URL param `view` overrides localStorage
-  const [viewMode, setViewMode] = useState(() => {
-    const urlView = new URLSearchParams(window.location.search).get('view');
-    if (urlView) return urlView;
-    return localStorage.getItem(`project_task_view_mode_${projectId}`) || 'execution';
-  });
+  // Initialize view from URL > source context > localStorage > default
+  const [viewMode, setViewMode] = useState(() => resolveProjectOverviewView(projectId));
   const [selectedTask, setSelectedTask] = useState(null);
   const [pendingPriorityTask, setPendingPriorityTask] = useState(null);
   const [formData, setFormData] = useState({
@@ -377,7 +374,7 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
             viewMode={viewMode} 
             onViewChange={(mode) => {
               setViewMode(mode);
-              localStorage.setItem(`project_task_view_mode_${projectId}`, mode);
+              persistProjectOverviewView(projectId, mode);
             }}
             showExecution
             showShop

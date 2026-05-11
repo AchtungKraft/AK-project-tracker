@@ -21,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { createPageUrl } from "@/utils";
+import { buildProjectDetailUrl, SOURCES } from "@/lib/workspaceConfig";
 import { toast } from "sonner";
 import TaskCard from "../components/project/TaskCard";
 import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
@@ -35,6 +36,7 @@ import { useFilterState, PRIORITY_DEFAULTS } from "@/components/common/useFilter
 import { useTaskData } from "../components/tasks/useTaskData";
 import { computePartsProgressByTaskId } from "@/utils/taskPartsProgress";
 import { sortTasksByPriority, isUrgentPriority } from "@/utils/taskPrioritySort";
+import { resolvePriorityTab, persistPriorityTab } from "@/lib/workspaceConfig";
 
 export default function PriorityDashboard() {
   const queryClient = useQueryClient();
@@ -43,10 +45,7 @@ export default function PriorityDashboard() {
   const [secondaryGroupBy, setSecondaryGroupBy] = useState('category');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pendingPriorityTask, setPendingPriorityTask] = useState(null);
-  // Persist view mode in localStorage
-  const [activeTab, setActiveTab] = useState(() => {
-    return localStorage.getItem('priority_view_mode') || 'shop-view';
-  });
+  const [activeTab, setActiveTab] = useState(() => resolvePriorityTab());
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [sortDrawerOpen, setSortDrawerOpen] = useState(false);
   const [tempFilters, setTempFilters] = useState(null);
@@ -78,7 +77,7 @@ export default function PriorityDashboard() {
   // Persist view mode changes
   const handleTabChange = (tab) => {
     setActiveTab(tab);
-    localStorage.setItem('priority_view_mode', tab);
+    persistPriorityTab(tab);
   };
 
   // Unified filter state with URL/localStorage persistence
@@ -675,7 +674,7 @@ export default function PriorityDashboard() {
                           <div>
                             {primaryGroupBy === 'project' && project ? (
                               <Link 
-                                to={createPageUrl("ProjectDetail") + "?id=" + project.id + "&view=execution"}
+                                to={buildProjectDetailUrl(project.id, { source: SOURCES.PRIORITIES })}
                                 className="hover:opacity-80 transition-opacity"
                               >
                                 <CardTitle className="text-lg hover:underline" style={{ color: primaryGroup.color }}>{primaryGroup.label}</CardTitle>

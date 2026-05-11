@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { buildProjectDetailUrl, SOURCES } from "@/lib/workspaceConfig";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -32,7 +33,7 @@ export default function ProjectCard({ project, status, projectType, teamMembers,
   const handleMobileCardTap = (e) => {
     // Only trigger on mobile (check if it's a touch device and no buttons were clicked)
     if (window.innerWidth < 768 && !e.target.closest('button')) {
-      navigate(createPageUrl("ProjectDetail") + `?id=${project.id}`);
+      navigate(buildProjectDetailUrl(project.id, { source: SOURCES.DASHBOARD }));
     }
   };
 
@@ -158,7 +159,7 @@ export default function ProjectCard({ project, status, projectType, teamMembers,
 
           {/* Action Buttons - Hidden on mobile (whole card is tappable) */}
           <div className="hidden md:flex gap-2 pt-2 border-t border-gray-800">
-            <Link to={createPageUrl("ProjectDetail") + `?id=${project.id}`} className="flex-1">
+            <Link to={buildProjectDetailUrl(project.id, { source: SOURCES.DASHBOARD })} className="flex-1">
               <Button
                 variant="outline"
                 size="sm" className="bg-lime-600 text-white px-3 text-xs font-medium rounded-md inline-flex items-center justify-center whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border shadow-sm hover:text-accent-foreground h-8 w-full border-gray-700 hover:bg-red-950/30 hover:border-red-700 gap-2">

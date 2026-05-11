@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Flame, AlertTriangle, Zap, Clock, User, ChevronDown, ChevronRight, FolderKanban, Plus, Users, Layers, Printer } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { buildProjectDetailUrl, SOURCES } from "@/lib/workspaceConfig";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -191,7 +192,7 @@ function ProjectGroup({ project, tasks, sp, memberId }) {
               : <ChevronDown className="w-3 h-3 text-gray-500" />}
           </button>
           <Link
-            to={createPageUrl("ProjectDetail") + "?id=" + project.id + "&view=execution"}
+            to={buildProjectDetailUrl(project.id, { source: SOURCES.SHOP })}
             className="text-xs font-bold text-gray-200 truncate break-words hover:text-red-400 hover:underline transition-colors flex-1 min-w-0"
             onClick={(e) => e.stopPropagation()}
           >
