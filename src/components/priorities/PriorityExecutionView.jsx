@@ -5,10 +5,11 @@ import { sortChecklistItems } from "@/components/tasks/checklistHelpers";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Printer, Plus } from "lucide-react";
+import { Printer, Plus, Settings2 } from "lucide-react";
 import ExecutionTaskRow from "./ExecutionTaskRow";
 import ProjectTypeGroupHeader from "./ProjectTypeGroupHeader";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
+import ManageBucketsModal from "@/components/project/ManageBucketsModal";
 import { sortTasksByPriority } from "@/utils/taskPrioritySort";
 import { groupProjectsByType } from "@/utils/projectTypeGroups";
 
@@ -104,8 +105,9 @@ export default function PriorityExecutionView({
     return m;
   }, [teamMembers]);
 
-  // ── Create task modal state ──
+  // ── Modal state ──
   const [createTaskForProjectId, setCreateTaskForProjectId] = useState(null);
+  const [manageBucketsProjectId, setManageBucketsProjectId] = useState(null);
 
   // ── Filters ──
   const [projectFilter, setProjectFilter] = useState('all');
@@ -224,6 +226,14 @@ export default function PriorityExecutionView({
                       </Link>
                     </h1>
                     <button
+                      onClick={() => setManageBucketsProjectId(project.id)}
+                      className="text-[10px] text-gray-400 hover:text-white transition-colors shrink-0 px-1.5 py-0.5 rounded hover:bg-gray-800 flex items-center gap-0.5 no-print"
+                      title="Manage buckets for this project"
+                    >
+                      <Settings2 className="w-3 h-3" />
+                      Buckets
+                    </button>
+                    <button
                       onClick={() => setCreateTaskForProjectId(project.id)}
                       className="text-[10px] text-green-500 hover:text-green-300 transition-colors shrink-0 px-1.5 py-0.5 rounded hover:bg-gray-800 flex items-center gap-0.5 no-print"
                       title="Add task to this project"
@@ -279,6 +289,14 @@ export default function PriorityExecutionView({
           projectId={createTaskForProjectId}
           defaultIsPriority={true}
           onClose={() => setCreateTaskForProjectId(null)}
+        />
+      )}
+
+      {/* Manage Buckets Modal */}
+      {manageBucketsProjectId && (
+        <ManageBucketsModal
+          projectId={manageBucketsProjectId}
+          onClose={() => setManageBucketsProjectId(null)}
         />
       )}
     </div>
