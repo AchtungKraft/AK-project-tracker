@@ -31,11 +31,6 @@ export default function TaskTimePrintFields({ estimatedHours, actualHours, isCom
   const hasEstimate = estDisplay !== null;
   const hasActual = actDisplay !== null;
 
-  // Nothing to show if no estimate and task is open
-  if (!hasEstimate && !isCompleted) return null;
-  // Nothing to show if no estimate and completed but no actual recorded
-  if (!hasEstimate && !hasActual) return null;
-
   if (compact) {
     return (
       <div className="flex items-baseline gap-3 ml-6 py-0.5 text-xs print-time-fields">
