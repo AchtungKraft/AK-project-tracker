@@ -16,77 +16,56 @@ function formatHours(decimal) {
 }
 
 /**
- * Reusable print component for task time tracking.
- * Shows estimated time and either actual time (if completed) or a blank handwritten area.
+ * Compact production-style TIME module for printed task sheets.
+ *
+ * Layout:  TIME  3h  [        ]     (active task — box for handwritten actual)
+ *          TIME  3h / 2h 30m        (completed task — both values shown)
+ *          TIME  —   [        ]     (no estimate — dash + box)
  *
  * Props:
  *   estimatedHours - decimal number or null
- *   actualHours    - decimal number or null (filled when task is completed digitally)
- *   isCompleted    - boolean, whether task has been completed
- *   inline         - boolean, render as inline shrink-0 block for row integration (default false)
- *   compact        - boolean, use single-line block layout (default true, ignored when inline)
+ *   actualHours    - decimal number or null
+ *   isCompleted    - boolean
+ *   inline         - boolean (default true) — sits in a flex row
  */
-export default function TaskTimePrintFields({ estimatedHours, actualHours, isCompleted = false, inline = false, compact = true }) {
+export default function TaskTimePrintFields({ estimatedHours, actualHours, isCompleted = false, inline = true }) {
   const estDisplay = formatHours(estimatedHours);
   const actDisplay = formatHours(actualHours);
-  const hasEstimate = estDisplay !== null;
-  const hasActual = actDisplay !== null;
 
-  // Inline mode: sits inside the flex row next to assignee/date columns
-  if (inline) {
-    return (
-      <div className="flex items-baseline gap-2 shrink-0 text-xs print-time-fields">
-        {hasEstimate && (
-          <span className="text-gray-500 whitespace-nowrap">
-            Est: {estDisplay}
-          </span>
-        )}
-        {isCompleted && hasActual ? (
-          <span className="text-gray-500 whitespace-nowrap">
-            Act: {actDisplay}
-          </span>
-        ) : (
-          <span className="text-gray-400 whitespace-nowrap">
-            Act: <span className="inline-block border-b border-gray-400" style={{ minWidth: '70px' }}>&nbsp;</span>
-          </span>
-        )}
-      </div>
-    );
-  }
+  const completed = isCompleted && actDisplay;
 
-  if (compact) {
-    return (
-      <div className="flex items-baseline gap-3 ml-6 py-0.5 text-xs print-time-fields">
-        {hasEstimate && (
-          <span className="text-gray-600 font-medium whitespace-nowrap">
-            Est: {estDisplay}
-          </span>
-        )}
-        {isCompleted && hasActual ? (
-          <span className="text-gray-600 whitespace-nowrap">
-            Actual: {actDisplay}
-          </span>
-        ) : (
-          <span className="text-gray-500 whitespace-nowrap">
-            Actual: <span className="inline-block border-b border-gray-400" style={{ minWidth: '100px' }}>&nbsp;</span>
-          </span>
-        )}
-      </div>
-    );
-  }
-
-  // Vertical / spacious layout for card-style prints
   return (
-    <div className="ml-6 py-1 text-xs print-time-fields space-y-1">
-      {hasEstimate && (
-        <div className="text-gray-600 font-medium">Est: {estDisplay}</div>
-      )}
-      {isCompleted && hasActual ? (
-        <div className="text-gray-600">Actual: {actDisplay}</div>
+    <div
+      className="flex items-center gap-1 shrink-0 whitespace-nowrap"
+      style={{ width: 140, justifyContent: "flex-end" }}
+    >
+      {/* TIME label */}
+      <span
+        className="font-semibold uppercase tracking-wider text-gray-400"
+        style={{ fontSize: 7, letterSpacing: "0.08em" }}
+      >
+        time
+      </span>
+
+      {/* Estimate */}
+      <span className="text-gray-700 font-medium" style={{ fontSize: 10, minWidth: 28, textAlign: "right" }}>
+        {estDisplay || "—"}
+      </span>
+
+      {completed ? (
+        /* Completed: show slash + actual */
+        <>
+          <span className="text-gray-400" style={{ fontSize: 9 }}>/</span>
+          <span className="text-gray-700 font-medium" style={{ fontSize: 10 }}>
+            {actDisplay}
+          </span>
+        </>
       ) : (
-        <div className="text-gray-500">
-          Actual: <span className="inline-block border-b border-gray-400 ml-1" style={{ minWidth: '140px' }}>&nbsp;</span>
-        </div>
+        /* Active: bordered handwriting box */
+        <span
+          className="inline-block border border-gray-500"
+          style={{ width: 56, height: 14, verticalAlign: "middle" }}
+        />
       )}
     </div>
   );
