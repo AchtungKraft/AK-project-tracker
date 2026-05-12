@@ -15,23 +15,28 @@ export default function KnowledgeCategoryTree({
 }) {
   const [showEmpty, setShowEmpty] = React.useState(false);
 
-  // Count items per category (including descendants)
+  // Count items per category with recursive descendant aggregation.
+  // Each item is counted at its most specific category (subcategory_id if set, else category_id).
+  // Parents aggregate all descendant totals. Archived/obsolete items are excluded.
   const categoryCounts = useMemo(() => {
-    const counts = {};
+    // Direct counts — place each item at its deepest category only
+    const directCounts = {};
     items.forEach(item => {
-      if (item.category_id) counts[item.category_id] = (counts[item.category_id] || 0) + 1;
-      if (item.subcategory_id) counts[item.subcategory_id] = (counts[item.subcategory_id] || 0) + 1;
+      if (item.is_obsolete || item.status === 'archived') return;
+      const targetId = item.subcategory_id || item.category_id;
+      if (targetId) directCounts[targetId] = (directCounts[targetId] || 0) + 1;
     });
-    // Roll up to parents
-    const addDescendants = (categoryId) => {
+    // Recursive rollup — each node = own direct + all descendants
+    const rollup = {};
+    const computeRollup = (categoryId) => {
       const children = categories.filter(c => c.parent_id === categoryId);
-      let total = counts[categoryId] || 0;
-      children.forEach(child => { total += addDescendants(child.id); });
-      counts[categoryId] = total;
+      let total = directCounts[categoryId] || 0;
+      children.forEach(child => { total += computeRollup(child.id); });
+      rollup[categoryId] = total;
       return total;
     };
-    categories.filter(c => !c.parent_id).forEach(c => addDescendants(c.id));
-    return counts;
+    categories.filter(c => !c.parent_id).forEach(c => computeRollup(c.id));
+    return rollup;
   }, [items, categories]);
 
   const filteredCategories = useMemo(() => {
