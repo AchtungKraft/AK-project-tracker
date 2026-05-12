@@ -25,9 +25,8 @@ function getCoverImage(item) {
 
 const QUICK_ADD = [
   { type: "step", label: "Step", icon: ListOrdered },
-  { type: "note", label: "Observation", icon: StickyNote },
-  { type: "issue", label: "Issue", icon: AlertTriangle },
-  { type: "tip", label: "Tip", icon: Lightbulb },
+  { type: "note", label: "Note", icon: StickyNote },
+  { type: "issue", label: "Warning", icon: AlertTriangle },
   { type: "media", label: "Photos", icon: Camera },
 ];
 
@@ -82,75 +81,67 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
   return (
     <>
       <Sheet open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
-        <SheetContent className="bg-gray-900 text-white w-full sm:max-w-2xl overflow-y-auto flex flex-col p-0">
+        <SheetContent className="bg-gray-950 text-white w-full sm:max-w-2xl overflow-y-auto flex flex-col p-0">
           <SheetHeader className="sr-only">
             <SheetTitle>{item.title}</SheetTitle>
             <SheetDescription>Procedure detail</SheetDescription>
           </SheetHeader>
 
-          {/* ===== LIGHTWEIGHT HEADER ===== */}
+          {/* ===== CONDENSED HEADER ===== */}
           <div className="shrink-0">
             {/* Cover image — tap to zoom */}
             {coverImg && (
-              <button onClick={() => setCoverLightbox(true)} className="w-full h-40 md:h-48 overflow-hidden bg-gray-800 block">
-                <img src={coverImg} alt="" className="w-full h-full object-cover hover:scale-[1.02] transition-transform" />
+              <button onClick={() => setCoverLightbox(true)} className="w-full h-36 md:h-44 overflow-hidden bg-gray-900 block">
+                <img src={coverImg} alt="" className="w-full h-full object-cover" />
               </button>
             )}
 
             <div className="px-4 pt-3 pb-2">
               {/* Obsolete banner */}
               {item.is_obsolete && (
-                <div className="rounded-md bg-amber-950/30 border border-amber-900/40 px-3 py-2 mb-2 flex items-center gap-2 text-xs text-amber-300">
-                  <AlertOctagon className="w-3.5 h-3.5 shrink-0" /> Obsolete
-                  {supersededBy && <span className="text-gray-400 ml-1">→ {supersededBy.title}</span>}
+                <div className="flex items-center gap-1.5 text-xs text-amber-400 mb-1.5">
+                  <AlertOctagon className="w-3 h-3 shrink-0" /> Obsolete
+                  {supersededBy && <span className="text-gray-500">→ {supersededBy.title}</span>}
                 </div>
               )}
 
-              {/* Category + status line */}
-              <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
+              {/* Category line */}
+              <div className="flex items-center gap-2 text-[11px] text-gray-500 mb-0.5">
                 {cat && (
                   <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
                     {cat.name}{subcat ? ` › ${subcat.name}` : ''}
                   </span>
                 )}
-                {item.is_master_procedure && <Badge className="bg-red-900/50 text-red-300 text-[9px] gap-0.5 border-0 h-4"><Crown className="w-2 h-2" /> PROCEDURE</Badge>}
-                {item.is_pinned && !item.is_master_procedure && <Badge className="bg-amber-900/40 text-amber-300 text-[9px] gap-0.5 border-0 h-4"><Pin className="w-2 h-2" /> PINNED</Badge>}
-                {item.status === 'draft' && <Badge variant="outline" className="border-yellow-600/40 text-yellow-500 text-[9px] h-4">Draft</Badge>}
+                {item.is_master_procedure && <span className="text-red-400 text-[10px] font-semibold uppercase tracking-wide">Procedure</span>}
+                {item.status === 'draft' && <span className="text-yellow-500 text-[10px]">Draft</span>}
               </div>
 
               {/* Title */}
-              <h2 className="text-xl font-bold text-white leading-tight">{item.title}</h2>
-              {item.summary && <p className="text-gray-400 text-sm mt-1 leading-snug">{item.summary}</p>}
+              <h2 className="text-lg font-bold text-white leading-tight">{item.title}</h2>
+              {item.summary && <p className="text-gray-400 text-sm mt-0.5 leading-snug">{item.summary}</p>}
 
-              {/* Compact meta row — vehicle tags, parts count, date */}
-              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+              {/* Compact tags + meta */}
+              <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-gray-600 flex-wrap">
                 {item.vehicle_tags?.map(tag => (
-                  <Badge key={tag} variant="outline" className="text-[9px] border-gray-700 text-gray-400 gap-0.5 py-0 h-[18px]">
-                    <Tag className="w-2 h-2" /> {tag}
-                  </Badge>
+                  <span key={tag} className="px-1.5 py-0.5 rounded bg-gray-800/60 text-gray-400">{tag}</span>
                 ))}
-                {hasEntries && (
-                  <span className="text-[10px] text-gray-500">{entries.length} entr{entries.length === 1 ? 'y' : 'ies'}</span>
-                )}
-                <span className="text-[10px] text-gray-600 flex items-center gap-0.5 ml-auto">
-                  <Clock className="w-2.5 h-2.5" />
-                  {item.updated_date ? format(new Date(item.updated_date), 'MMM d, yyyy') : ''}
-                </span>
+                {hasEntries && <span>{entries.length} entries</span>}
+                <span className="ml-auto">{item.updated_date ? format(new Date(item.updated_date), 'MMM d') : ''}</span>
               </div>
 
               {parentProcedure && (
-                <div className="mt-1.5 flex items-center gap-1 text-[10px] text-gray-500">
+                <div className="mt-1 flex items-center gap-1 text-[10px] text-gray-500">
                   <Link2 className="w-2.5 h-2.5" /> Part of: <span className="text-red-400">{parentProcedure.title}</span>
                 </div>
               )}
             </div>
 
-            {/* Execution mode trigger + Quick-add strip — large touch targets */}
+            {/* Action strip — Execute prominent, quick-add secondary */}
             <div className="px-4 pb-3 flex gap-2 overflow-x-auto scrollbar-hide">
               {hasEntries && (
                 <button onClick={() => setExecutionMode(true)}
-                  className="shrink-0 flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors active:scale-95">
+                  className="shrink-0 flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-blue-600 text-white text-sm font-medium active:bg-blue-700 transition-colors">
                   <Play className="w-4 h-4" /> Execute
                 </button>
               )}
@@ -158,17 +149,17 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
                 const QIcon = qa.icon;
                 return (
                   <button key={qa.type} onClick={() => openEntryEditor(qa.type)}
-                    className="shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white text-sm transition-colors active:scale-95">
-                    <QIcon className="w-4 h-4" /> {qa.label}
+                    className="shrink-0 flex items-center gap-1.5 px-3.5 py-2.5 rounded-full bg-gray-800/60 text-gray-400 active:bg-gray-700 text-sm transition-colors">
+                    <QIcon className="w-3.5 h-3.5" /> {qa.label}
                   </button>
                 );
               })}
             </div>
 
-            <div className="border-t border-gray-800/60" />
+            <div className="border-t border-gray-800/40" />
           </div>
 
-          {/* ===== PRIMARY CONTENT: TIMELINE ===== */}
+          {/* ===== PRIMARY CONTENT ===== */}
           <div className="flex-1 overflow-y-auto px-4 pt-3 pb-4">
 
             {/* Entry Timeline */}
@@ -251,20 +242,15 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
             </div>
           </div>
 
-          {/* ===== FOOTER — large touch targets for shop floor ===== */}
-          <div className="shrink-0 bg-gray-900 border-t border-gray-800 p-3 flex items-center gap-2"
-            style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
-            <Button variant="outline" onClick={onClose} className="border-gray-700 h-12 px-4 text-sm">Close</Button>
-            {hasEntries && (
-              <Button onClick={() => setExecutionMode(true)} className="bg-blue-600 hover:bg-blue-700 gap-2 h-12 text-sm">
-                <Play className="w-4 h-4" /> Execute
-              </Button>
-            )}
-            <Button onClick={() => openEntryEditor("step")} className="flex-1 bg-red-600 hover:bg-red-700 gap-2 h-12 text-sm">
-              <Plus className="w-4 h-4" /> Add Entry
+          {/* ===== FOOTER — simplified: add dominant, edit subtle ===== */}
+          <div className="shrink-0 bg-gray-950 border-t border-gray-800/40 px-3 py-2.5 flex items-center gap-2"
+            style={{ paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom))' }}>
+            <Button variant="ghost" onClick={onClose} className="text-gray-500 h-11 px-3 text-sm">Close</Button>
+            <Button onClick={() => openEntryEditor("step")} className="flex-1 bg-red-600 hover:bg-red-700 gap-1.5 h-11 text-sm">
+              <Plus className="w-4 h-4" /> Add Step
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => onEdit(item)} className="h-12 w-12 text-gray-500 hover:text-white" title="Edit metadata">
-              <Pencil className="w-5 h-5" />
+            <Button variant="ghost" size="icon" onClick={() => onEdit(item)} className="h-11 w-11 text-gray-600 hover:text-white shrink-0">
+              <Pencil className="w-4 h-4" />
             </Button>
           </div>
         </SheetContent>

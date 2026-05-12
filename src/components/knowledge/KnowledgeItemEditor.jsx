@@ -163,18 +163,19 @@ export default function KnowledgeItemEditor({ item, isOpen, onClose, categories 
     setForm(f => ({ ...f, image_urls: f.image_urls.filter((_, i) => i !== index) }));
   };
 
-  const postTypeLabel = isNew ? 'Create Procedure' : 'Save Changes';
+  const postTypeLabel = isNew ? 'Create Procedure' : 'Update Procedure';
+  const [showAdvanced, setShowAdvancedEditor] = useState(!isNew);
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <SheetContent className="bg-gray-900 text-white w-full sm:max-w-2xl overflow-y-auto flex flex-col p-0">
+      <SheetContent className="bg-gray-950 text-white w-full sm:max-w-2xl overflow-y-auto flex flex-col p-0">
         <SheetHeader className="p-4 pb-2">
-          <SheetDescription className="sr-only">Create or update a knowledge post</SheetDescription>
+          <SheetDescription className="sr-only">Create or update a procedure</SheetDescription>
           <SheetTitle className="text-white text-lg">
-            {isNew ? 'NEW PROCEDURE' : `EDIT: ${item?.title}`}
+            {isNew ? 'New Procedure' : `Update: ${item?.title}`}
           </SheetTitle>
-          <p className="text-xs text-gray-400 mt-0.5">
-            {isNew ? 'Create a procedure container — add entries inside it after saving' : 'Edit procedure metadata and settings'}
+          <p className="text-xs text-gray-500 mt-0.5">
+            {isNew ? 'Create a procedure — add steps inside it after saving' : 'Update procedure details'}
           </p>
         </SheetHeader>
 
@@ -383,8 +384,8 @@ export default function KnowledgeItemEditor({ item, isOpen, onClose, categories 
           </div>
 
           {/* Governance: Obsolete / Superseded */}
-          <div className="rounded-lg border border-gray-700/50 p-3 space-y-3">
-            <p className="text-[10px] uppercase tracking-widest text-gray-500 font-semibold">Lifecycle</p>
+          <div className="rounded-lg border border-gray-800/50 p-3 space-y-3">
+            <p className="text-[10px] uppercase tracking-widest text-gray-600 font-semibold">Status</p>
             <div className="flex items-center gap-4 flex-wrap">
               <div className="flex items-center gap-2">
                 <Switch checked={form.is_obsolete} onCheckedChange={v => setForm(f => ({ ...f, is_obsolete: v }))} />
@@ -421,10 +422,10 @@ export default function KnowledgeItemEditor({ item, isOpen, onClose, categories 
           )}
         </div>
 
-        {/* Footer — large touch targets */}
-        <div className="shrink-0 bg-gray-900 border-t border-red-900/30 p-4 flex gap-3">
-          <Button variant="outline" onClick={onClose} className="flex-1 border-gray-700 h-11 text-base">Cancel</Button>
-          <Button onClick={handleSave} disabled={saveMutation.isPending} className="flex-1 bg-red-600 hover:bg-red-700 h-11 text-base">
+        {/* Footer */}
+        <div className="shrink-0 bg-gray-950 border-t border-gray-800/40 p-3 flex gap-2">
+          <Button variant="ghost" onClick={onClose} className="text-gray-500 h-11 px-4">Cancel</Button>
+          <Button onClick={handleSave} disabled={saveMutation.isPending} className="flex-1 bg-red-600 hover:bg-red-700 h-11 text-sm font-medium">
             {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : postTypeLabel}
           </Button>
         </div>

@@ -29,73 +29,55 @@ function EntryCard({ entry, stepNumber, parts, onImageClick, compact }) {
   const hasContent = entry.content_html && entry.content_html !== '<p><br></p>';
   const images = entry.image_urls || [];
   const isStep = entryType === 'step';
+  const isWarning = entryType === 'issue';
   const lifecycle = entry.lifecycle_state || 'active';
   const isArchived = lifecycle === 'archived';
-  const lifecycleBadge = LIFECYCLE_BADGE[lifecycle];
+  const isCritical = lifecycle === 'critical';
   const entryParts = (entry.part_ids || []).map(id => parts.find(p => p.id === id)).filter(Boolean);
 
   return (
-    <div className={cn("relative flex gap-0", isArchived && "opacity-50")}>
-      {/* Left rail — timeline connector */}
+    <div className={cn("relative flex gap-0", isArchived && "opacity-40")}>
+      {/* Left rail */}
       <div className="flex flex-col items-center shrink-0 w-10 md:w-12">
-        {/* Dot / Step Number */}
         {isStep ? (
-          <div className={cn("w-8 h-8 md:w-9 md:h-9 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0", config.rail)}>
+          <div className={cn("w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0", config.rail)}>
             {stepNumber}
           </div>
         ) : (
-          <div className={cn("w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-1", config.rail)}>
-            <Icon className="w-3 h-3 text-white" />
+          <div className={cn("w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-1", config.rail)}>
+            <Icon className="w-2.5 h-2.5 text-white" />
           </div>
         )}
-        {/* Connector line — extends down */}
-        <div className="flex-1 w-0.5 bg-gray-700/40 min-h-[8px]" />
+        <div className="flex-1 w-px bg-gray-800/50 min-h-[6px]" />
       </div>
 
-      {/* Content */}
-      <div className={cn("flex-1 min-w-0 pb-4", compact ? "pb-2" : "pb-4")}>
-        <div className={cn("rounded-lg overflow-hidden", config.bg)}>
+      {/* Content — lighter, no card bg for normal entries */}
+      <div className={cn("flex-1 min-w-0", compact ? "pb-2" : "pb-3")}>
+        <div className={cn(
+          "rounded-lg",
+          isWarning ? "bg-amber-950/10 px-2.5 py-2" :
+          isCritical ? "bg-red-950/10 px-2.5 py-2" :
+          "py-1"
+        )}>
           {/* Header */}
-          <div className={cn("px-3 pt-2.5", compact ? "pb-1.5" : "pb-2")}>
-            <div className="flex items-start gap-2">
-              <div className="flex-1 min-w-0">
-                <h4 className={cn("font-semibold text-white leading-snug", isStep ? "text-base" : "text-sm")}>
-                  {entry.headline}
-                </h4>
-                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                  {!isStep && (
-                    <span className={cn("text-[10px] font-medium uppercase tracking-wide", config.accent)}>
-                      {config.label}
-                    </span>
-                  )}
-                  <span className="text-[10px] text-gray-500 flex items-center gap-0.5">
-                    <Clock className="w-2.5 h-2.5" />
-                    {entry.created_date ? format(new Date(entry.created_date), 'MMM d · h:mm a') : '—'}
-                  </span>
-                  {entry.created_by && (
-                    <span className="text-[10px] text-gray-600">{entry.created_by.split('@')[0]}</span>
-                  )}
-                  {lifecycleBadge && (
-                    <Badge className={cn("text-[9px] gap-0.5 border-0 h-4", lifecycleBadge.cls)}>
-                      <lifecycleBadge.icon className="w-2 h-2" /> {lifecycleBadge.label}
-                    </Badge>
-                  )}
-                </div>
+          <div className="flex items-start gap-1.5">
+            <div className="flex-1 min-w-0">
+              <h4 className={cn("font-medium text-white leading-snug", isStep ? "text-[15px]" : "text-sm")}>
+                {entry.headline}
+              </h4>
+              <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-gray-600">
+                {!isStep && <span className={cn("font-medium uppercase tracking-wide", config.accent)}>{config.label}</span>}
+                {isCritical && <span className="text-red-400 font-semibold">CRITICAL</span>}
+                {entry.created_date && <span>{format(new Date(entry.created_date), 'MMM d')}</span>}
               </div>
             </div>
           </div>
 
           {/* Rich content */}
           {hasContent && (
-            <div className="px-3 pb-2">
-              <div
-                className="prose prose-sm prose-invert max-w-none text-gray-300 text-sm leading-relaxed
-                  [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:text-white [&_h2]:mt-2 [&_h2]:mb-1
-                  [&_h3]:text-xs [&_h3]:font-semibold [&_h3]:text-white
-                  [&_a]:text-blue-400 [&_a]:underline
-                  [&_img]:rounded-lg [&_img]:my-2 [&_img]:max-w-full
-                  [&_blockquote]:border-l-red-600 [&_blockquote]:text-gray-400 [&_blockquote]:pl-3 [&_blockquote]:ml-0
-                  [&_code]:bg-gray-800 [&_code]:text-red-400 [&_code]:px-1 [&_code]:rounded
+            <div className="mt-1.5">
+              <div className="prose prose-sm prose-invert max-w-none text-gray-300 text-sm leading-relaxed
+                  [&_a]:text-blue-400 [&_a]:underline [&_img]:rounded-lg [&_img]:my-2 [&_img]:max-w-full
                   [&_ul]:ml-4 [&_ol]:ml-4 [&_li]:text-gray-300
                   [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
                 dangerouslySetInnerHTML={{ __html: entry.content_html }}
@@ -103,44 +85,37 @@ function EntryCard({ entry, stepNumber, parts, onImageClick, compact }) {
             </div>
           )}
 
-          {/* Inline images — first-class */}
+          {/* Images */}
           {images.length > 0 && (
-            <div className="px-3 pb-2.5">
-              <div className={cn("grid gap-1.5", images.length === 1 ? "grid-cols-1" : images.length === 2 ? "grid-cols-2" : "grid-cols-3")}>
+            <div className="mt-2">
+              <div className={cn("grid gap-1.5", images.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
                 {images.map((url, i) => (
-                  <button key={i} onClick={() => onImageClick(images, i)} className="block rounded-lg overflow-hidden bg-gray-800 hover:ring-2 hover:ring-blue-500/50 transition-all">
+                  <button key={i} onClick={() => onImageClick(images, i)} className="block rounded-lg overflow-hidden bg-gray-900 active:opacity-90 transition-opacity">
                     <img src={url} alt="" loading="lazy"
-                      className={cn("w-full object-cover",
-                        images.length === 1 ? "h-48 md:h-64" : "h-28 md:h-36"
-                      )} />
+                      className={cn("w-full object-cover", images.length === 1 ? "h-44 md:h-56" : "h-28 md:h-36")} />
                   </button>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Entry-level parts */}
+          {/* Parts */}
           {entryParts.length > 0 && (
-            <div className="px-3 pb-2.5">
-              <div className="flex flex-wrap gap-1.5">
-                {entryParts.map(part => (
-                  <span key={part.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-800/60 text-[11px] text-gray-300">
-                    <Package className="w-3 h-3 text-gray-500" /> {part.part_name || part.name}
-                  </span>
-                ))}
-              </div>
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {entryParts.map(part => (
+                <span key={part.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-gray-400 bg-gray-800/40 rounded">
+                  <Package className="w-2.5 h-2.5" /> {part.part_name || part.name}
+                </span>
+              ))}
             </div>
           )}
 
-          {/* Reference URL */}
+          {/* Reference */}
           {entry.reference_url && (
-            <div className="px-3 pb-2.5">
-              <a href={entry.reference_url} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-2 p-2 rounded-md bg-gray-800/40 hover:bg-gray-800 transition-colors text-xs">
-                <ExternalLink className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                <span className="text-blue-400 truncate">{entry.reference_url}</span>
-              </a>
-            </div>
+            <a href={entry.reference_url} target="_blank" rel="noopener noreferrer"
+              className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-blue-400 hover:text-blue-300">
+              <ExternalLink className="w-3 h-3" /> Reference
+            </a>
           )}
         </div>
       </div>

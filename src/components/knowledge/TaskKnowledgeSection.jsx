@@ -223,7 +223,7 @@ export default function TaskKnowledgeSection({ taskId }) {
     <div>
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 flex items-center gap-1.5">
-          <BookOpen className="w-3.5 h-3.5" /> Build Knowledge
+          <BookOpen className="w-3.5 h-3.5" /> Procedures
         </h3>
         <Button size="sm" variant="ghost" onClick={() => setShowAdd(!showAdd)} className="text-gray-400 hover:text-white gap-1 h-7 text-xs px-2">
           <Plus className="w-3 h-3" /> Link

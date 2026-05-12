@@ -1,7 +1,7 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Pin, Crown, Tag, Image, Clock, Package, ListChecks, Link2, Archive, AlertOctagon } from "lucide-react";
+import { Crown, Clock } from "lucide-react";
 import { format } from "date-fns";
 
 const POST_TYPE_CONFIG = {
@@ -60,15 +60,14 @@ export default function KnowledgeFeedCard({ item, onItemClick, partLinks, taskLi
       onClick={() => onItemClick(item)}
       className={cn(
         "rounded-xl overflow-hidden border transition-all cursor-pointer group",
-        isObsolete ? "border-gray-700/50 bg-gray-900/30 opacity-60" :
-        isMaster ? "border-red-700/60 bg-gradient-to-b from-gray-900 to-gray-900/80 ring-1 ring-red-800/40" :
-        isPinned ? "border-amber-800/50 bg-gray-900/70" :
-        "border-gray-800 bg-gray-900/40 hover:border-red-900/50"
+        isObsolete ? "border-gray-800/40 bg-gray-900/20 opacity-50" :
+        isMaster ? "border-red-800/40 bg-gray-900/60" :
+        "border-gray-800/40 bg-gray-900/30 hover:bg-gray-900/50"
       )}
     >
-      {/* Cover Image — lazy loaded */}
+      {/* Cover Image */}
       {coverImg && !compact && (
-        <div className={cn("w-full overflow-hidden bg-gray-800", isMaster ? "h-44 md:h-56" : "h-36 md:h-44")}>
+        <div className={cn("w-full overflow-hidden bg-gray-900", isMaster ? "h-40 md:h-52" : "h-32 md:h-40")}>
           <img
             src={coverImg}
             alt=""
@@ -99,86 +98,52 @@ export default function KnowledgeFeedCard({ item, onItemClick, partLinks, taskLi
       {/* Full card content */}
       {!compact && (
         <div className="p-3 md:p-4">
-          {/* Status badges */}
-          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-            {isMaster && (
-              <Badge className="bg-red-900/60 text-red-200 text-[10px] gap-1 border-0 font-bold">
-                <Crown className="w-2.5 h-2.5" /> MASTER PROCEDURE
-              </Badge>
-            )}
-            {isPinned && !isMaster && (
-              <Badge className="bg-amber-900/40 text-amber-300 text-[10px] gap-1 border-0">
-                <Pin className="w-2.5 h-2.5" /> PINNED
-              </Badge>
-            )}
-            {isObsolete && (
-              <Badge className="bg-gray-700/60 text-gray-400 text-[10px] gap-1 border-0">
-                <AlertOctagon className="w-2.5 h-2.5" /> OBSOLETE
-              </Badge>
-            )}
-            {isArchived && (
-              <Badge className="bg-gray-700/60 text-gray-400 text-[10px] gap-1 border-0">
-                <Archive className="w-2.5 h-2.5" /> ARCHIVED
-              </Badge>
-            )}
-            {item.status === 'draft' && (
-              <Badge variant="outline" className="border-yellow-600/50 text-yellow-500 text-[9px] py-0 h-4">Draft</Badge>
-            )}
+          {/* Status — single line, minimal */}
+          <div className="flex items-center gap-1.5 mb-1 text-[10px]">
+            <span className={cn("w-1.5 h-1.5 rounded-full", config.dot)} />
+            <span className="text-gray-500">{config.label}</span>
+            {isMaster && <span className="text-red-400 font-semibold uppercase tracking-wide">Procedure</span>}
+            {isObsolete && <span className="text-gray-500">Obsolete</span>}
+            {isArchived && <span className="text-gray-500">Archived</span>}
+            {item.status === 'draft' && <span className="text-yellow-500">Draft</span>}
           </div>
 
           {/* Title */}
           <h3 className={cn(
             "font-semibold leading-snug mb-1 group-hover:text-red-400 transition-colors line-clamp-2",
             isMaster ? "text-base md:text-lg text-white" : "text-sm md:text-base text-white",
-            isObsolete && "line-through"
+            isObsolete && "line-through text-gray-500"
           )}>
             {item.title}
           </h3>
 
           {/* Excerpt */}
           {excerpt && (
-            <p className="text-xs md:text-sm text-gray-400 line-clamp-2 mb-2">{excerpt}</p>
+            <p className="text-xs text-gray-500 line-clamp-2 mb-2">{excerpt}</p>
           )}
 
-          {/* Relationship Chips — part NAMES, not counts */}
-          <div className="flex items-center gap-1.5 flex-wrap mb-2">
-            {item.vehicle_tags?.slice(0, 3).map(tag => (
-              <Badge key={tag} variant="outline" className="text-[10px] border-gray-700 text-gray-300 gap-0.5 py-0 h-5">
-                <Tag className="w-2.5 h-2.5" /> {tag}
-              </Badge>
-            ))}
-            {partNames.map(name => (
-              <Badge key={name} variant="outline" className="text-[10px] border-blue-900/50 text-blue-300 gap-0.5 py-0 h-5">
-                <Package className="w-2.5 h-2.5" /> {name}
-              </Badge>
-            ))}
-            {relatedTaskCount > 0 && (
-              <Badge variant="outline" className="text-[10px] border-gray-700 text-gray-300 gap-0.5 py-0 h-5">
-                <ListChecks className="w-2.5 h-2.5" /> {relatedTaskCount} task{relatedTaskCount !== 1 ? 's' : ''}
-              </Badge>
-            )}
-            {item.reference_url && (
-              <Badge variant="outline" className="text-[10px] border-gray-700 text-blue-400 gap-0.5 py-0 h-5">
-                <Link2 className="w-2.5 h-2.5" /> ref
-              </Badge>
-            )}
-          </div>
+          {/* Tags + parts — compact, no badge borders */}
+          {(item.vehicle_tags?.length > 0 || partNames.length > 0) && (
+            <div className="flex items-center gap-1 flex-wrap mb-2 text-[10px]">
+              {item.vehicle_tags?.slice(0, 3).map(tag => (
+                <span key={tag} className="px-1.5 py-0.5 rounded bg-gray-800/60 text-gray-400">{tag}</span>
+              ))}
+              {partNames.map(name => (
+                <span key={name} className="px-1.5 py-0.5 rounded bg-blue-900/20 text-blue-400">{name}</span>
+              ))}
+            </div>
+          )}
 
-          {/* Meta row — field log style */}
-          <div className="flex items-center gap-3 text-[10px] text-gray-500">
-            <span className="flex items-center gap-1">
-              <span className={cn("w-1.5 h-1.5 rounded-full", config.dot)} />
-              {config.label}
-            </span>
+          {/* Meta — minimal */}
+          <div className="flex items-center gap-2 text-[10px] text-gray-600">
             {typeof entryCount === 'number' && entryCount > 0 && (
-              <span className="flex items-center gap-0.5">{entryCount} step{entryCount !== 1 ? 's' : ''}</span>
+              <span>{entryCount} steps</span>
             )}
             {imageCount > 0 && (
-              <span className="flex items-center gap-0.5"><Image className="w-2.5 h-2.5" /> {imageCount} photo{imageCount !== 1 ? 's' : ''}</span>
+              <span>{imageCount} photos</span>
             )}
-            <span className="flex items-center gap-0.5 ml-auto">
-              <Clock className="w-2.5 h-2.5" />
-              {item.updated_date ? format(new Date(item.updated_date), 'MMM d, yyyy') : '—'}
+            <span className="ml-auto">
+              {item.updated_date ? format(new Date(item.updated_date), 'MMM d') : ''}
             </span>
           </div>
         </div>

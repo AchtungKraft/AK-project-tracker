@@ -1,128 +1,100 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
-  X, AlertTriangle, Lightbulb, Package, ExternalLink,
-  ListOrdered, StickyNote, Camera, FileText,
-  AlertOctagon, Pin, Crown, Tag
+  X, AlertTriangle, Package, ExternalLink,
+  ChevronUp, ChevronDown, Crown
 } from "lucide-react";
 import ImageLightbox from "./ImageLightbox";
 
-const ENTRY_TYPE_CONFIG = {
-  step:      { label: "Step",      icon: ListOrdered,   color: "bg-blue-600",    text: "text-blue-400" },
-  note:      { label: "Note",      icon: StickyNote,    color: "bg-emerald-600", text: "text-emerald-400" },
-  issue:     { label: "Issue",     icon: AlertTriangle, color: "bg-amber-600",   text: "text-amber-400" },
-  reference: { label: "Reference", icon: FileText,      color: "bg-purple-600",  text: "text-purple-400" },
-  tip:       { label: "Tip",       icon: Lightbulb,     color: "bg-yellow-600",  text: "text-yellow-400" },
-  media:     { label: "Media",     icon: Camera,        color: "bg-pink-600",    text: "text-pink-400" },
-};
-
+/**
+ * ExecutionStepCard — service-manual style, minimal chrome.
+ * No card backgrounds, no heavy borders. Clean procedural flow.
+ */
 function ExecutionStepCard({ entry, stepNumber, parts, onImageClick, isActive }) {
   const entryType = entry.entry_type || 'step';
-  const config = ENTRY_TYPE_CONFIG[entryType] || ENTRY_TYPE_CONFIG.step;
-  const Icon = config.icon;
   const isStep = entryType === 'step';
+  const isWarning = entryType === 'issue';
   const hasContent = entry.content_html && entry.content_html !== '<p><br></p>';
   const images = entry.image_urls || [];
   const entryParts = (entry.part_ids || []).map(id => parts.find(p => p.id === id)).filter(Boolean);
   const lifecycle = entry.lifecycle_state || 'active';
 
   return (
-    <div className={cn(
-      "rounded-xl border transition-all",
-      isActive ? "border-blue-600/60 bg-gray-800/80 ring-1 ring-blue-600/30" : "border-gray-700/40 bg-gray-800/40",
-      lifecycle === 'critical' && "border-red-600/60 ring-1 ring-red-600/30"
+    <div id={`exec-step-${entry.id}`} className={cn(
+      "scroll-mt-16 transition-colors",
+      isWarning && "bg-amber-950/15 rounded-lg -mx-1 px-1 py-1",
+      lifecycle === 'critical' && !isWarning && "bg-red-950/10 rounded-lg -mx-1 px-1 py-1"
     )}>
-      {/* Step header */}
-      <div className="p-4 pb-3">
-        <div className="flex items-start gap-3">
-          {isStep ? (
-            <div className={cn("w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold text-white shrink-0", config.color)}>
-              {stepNumber}
-            </div>
-          ) : (
-            <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5", config.color)}>
-              <Icon className="w-4 h-4 text-white" />
-            </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <h3 className={cn("font-bold text-white leading-snug", isStep ? "text-lg" : "text-base")}>
-              {entry.headline}
-            </h3>
-            {!isStep && (
-              <span className={cn("text-xs font-medium uppercase tracking-wide mt-0.5 inline-block", config.text)}>
-                {config.label}
-              </span>
-            )}
-            {lifecycle === 'critical' && (
-              <Badge className="bg-red-900/50 text-red-300 text-[10px] gap-0.5 border-0 ml-2">
-                <AlertOctagon className="w-2.5 h-2.5" /> CRITICAL
-              </Badge>
-            )}
-            {lifecycle === 'pinned' && (
-              <Badge className="bg-amber-900/40 text-amber-300 text-[10px] gap-0.5 border-0 ml-2">
-                <Pin className="w-2.5 h-2.5" /> PINNED
-              </Badge>
-            )}
-          </div>
-        </div>
+      {/* Step number + headline */}
+      <div className="flex items-start gap-3 mb-2">
+        {isStep ? (
+          <span className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm font-bold text-white shrink-0 mt-0.5">
+            {stepNumber}
+          </span>
+        ) : isWarning ? (
+          <span className="w-8 h-8 rounded-full bg-amber-600 flex items-center justify-center shrink-0 mt-0.5">
+            <AlertTriangle className="w-4 h-4 text-white" />
+          </span>
+        ) : (
+          <span className="w-1.5 h-1.5 rounded-full bg-gray-500 shrink-0 mt-3 ml-3 mr-[13px]" />
+        )}
+        <h3 className={cn(
+          "font-semibold leading-snug pt-1",
+          isStep ? "text-lg text-white" : isWarning ? "text-base text-amber-200" : "text-base text-gray-200"
+        )}>
+          {entry.headline}
+        </h3>
       </div>
 
-      {/* Rich content — large text for shop floor */}
+      {/* Content — clean prose, no card wrapper */}
       {hasContent && (
-        <div className="px-4 pb-3">
+        <div className="ml-11 mb-3">
           <div
-            className="prose prose-sm prose-invert max-w-none text-gray-200 text-base leading-relaxed
-              [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-white [&_h2]:mt-3 [&_h2]:mb-1
-              [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-white
+            className="prose prose-sm prose-invert max-w-none text-gray-300 text-[15px] leading-relaxed
               [&_a]:text-blue-400 [&_a]:underline
-              [&_img]:rounded-lg [&_img]:my-3 [&_img]:max-w-full
-              [&_blockquote]:border-l-red-600 [&_blockquote]:text-gray-400 [&_blockquote]:pl-3 [&_blockquote]:ml-0
-              [&_code]:bg-gray-800 [&_code]:text-red-400 [&_code]:px-1 [&_code]:rounded
-              [&_ul]:ml-4 [&_ol]:ml-4 [&_li]:text-gray-200 [&_li]:text-base
+              [&_img]:rounded-lg [&_img]:my-2 [&_img]:max-w-full
+              [&_blockquote]:border-l-2 [&_blockquote]:border-gray-600 [&_blockquote]:text-gray-400 [&_blockquote]:pl-3 [&_blockquote]:ml-0
+              [&_ul]:ml-4 [&_ol]:ml-4 [&_li]:text-gray-300
               [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
             dangerouslySetInnerHTML={{ __html: entry.content_html }}
           />
         </div>
       )}
 
-      {/* Large inline images */}
+      {/* Full-width images — primary execution assets */}
       {images.length > 0 && (
-        <div className="px-4 pb-3">
-          <div className={cn("grid gap-2", images.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
+        <div className={cn("mb-3", images.length === 1 ? "ml-11" : "ml-11")}>
+          <div className={cn("grid gap-1.5", images.length === 1 ? "" : "grid-cols-2")}>
             {images.map((url, i) => (
               <button key={i} onClick={() => onImageClick(images, i)}
-                className="block rounded-lg overflow-hidden bg-gray-900 hover:ring-2 hover:ring-blue-500/50 transition-all active:scale-[0.98]">
+                className="block rounded-lg overflow-hidden bg-gray-900 active:opacity-90 transition-opacity">
                 <img src={url} alt="" loading="lazy"
-                  className={cn("w-full object-cover", images.length === 1 ? "max-h-80" : "h-44")} />
+                  className={cn("w-full object-cover", images.length === 1 ? "max-h-[50vh]" : "h-40")} />
               </button>
             ))}
           </div>
         </div>
       )}
 
-      {/* Entry-level parts */}
+      {/* Parts — subtle chips */}
       {entryParts.length > 0 && (
-        <div className="px-4 pb-3">
-          <div className="flex flex-wrap gap-2">
-            {entryParts.map(part => (
-              <span key={part.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-700/60 text-sm text-gray-200">
-                <Package className="w-3.5 h-3.5 text-gray-400" /> {part.part_name || part.name}
-              </span>
-            ))}
-          </div>
+        <div className="ml-11 mb-2 flex flex-wrap gap-1.5">
+          {entryParts.map(part => (
+            <span key={part.id} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-gray-400 bg-gray-800/40 rounded">
+              <Package className="w-3 h-3" /> {part.part_name || part.name}
+            </span>
+          ))}
         </div>
       )}
 
-      {/* Reference URL */}
+      {/* Reference */}
       {entry.reference_url && (
-        <div className="px-4 pb-3">
+        <div className="ml-11 mb-2">
           <a href={entry.reference_url} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-2 p-3 rounded-lg bg-gray-700/40 hover:bg-gray-700/60 transition-colors">
-            <ExternalLink className="w-4 h-4 text-blue-400 shrink-0" />
-            <span className="text-blue-400 text-sm truncate">{entry.reference_url}</span>
+            className="inline-flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300">
+            <ExternalLink className="w-3 h-3" /> {entry.reference_url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]}
           </a>
         </div>
       )}
@@ -130,9 +102,13 @@ function ExecutionStepCard({ entry, stepNumber, parts, onImageClick, isActive })
   );
 }
 
+/**
+ * ExecutionModeView — full-screen service manual experience.
+ * No cards, no dashboard chrome, clean procedural flow.
+ */
 export default function ExecutionModeView({ item, onClose }) {
   const [lightboxState, setLightboxState] = useState(null);
-  const [activeIndex, setActiveIndex] = useState(0);
+  const contentRef = useRef(null);
 
   const { data: entries = [], isLoading } = useQuery({
     queryKey: ['procedureEntries', item?.id],
@@ -152,7 +128,6 @@ export default function ExecutionModeView({ item, onClose }) {
     staleTime: 120000,
   });
 
-  // Procedure-level parts
   const { data: procedurePartLinks = [] } = useQuery({
     queryKey: ['knowledgePartLinks', item?.id],
     queryFn: () => base44.entities.BuildKnowledgePartLink.filter({ knowledge_item_id: item.id }),
@@ -166,7 +141,6 @@ export default function ExecutionModeView({ item, onClose }) {
 
   const procedureParts = procedurePartLinks.map(l => allParts.find(p => p.id === l.part_id)).filter(Boolean);
 
-  // Filter and sort entries for execution
   const visible = useMemo(() => {
     const sorted = [...entries].sort((a, b) => {
       const orderDiff = (a.order_index || 0) - (b.order_index || 0);
@@ -183,111 +157,125 @@ export default function ExecutionModeView({ item, onClose }) {
       });
   }, [entries]);
 
-  // Keyboard navigation
+  // Collect groups for quick-jump
+  const groups = useMemo(() => {
+    const seen = [];
+    visible.forEach(e => {
+      if (e.group_label && !seen.find(g => g.label === e.group_label)) {
+        seen.push({ label: e.group_label, id: e.id });
+      }
+    });
+    return seen;
+  }, [visible]);
+
+  const [showJump, setShowJump] = useState(false);
+
   useEffect(() => {
-    const handler = (e) => {
-      if (e.key === 'Escape') onClose();
-    };
+    const handler = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
 
-  // Step counter for numbering
   let stepCount = 0;
 
   if (!item) return null;
 
+  const scrollToGroup = (entryId) => {
+    const el = document.getElementById(`exec-step-${entryId}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setShowJump(false);
+  };
+
   return (
     <>
-      <div className="fixed inset-0 z-[100] bg-black flex flex-col">
-        {/* Minimal header — large touch targets for shop floor */}
-        <div className="shrink-0 bg-gray-900/95 backdrop-blur-xl border-b border-gray-700/50 px-3 py-2.5 flex items-center gap-2">
+      <div className="fixed inset-0 z-[100] bg-gray-950 flex flex-col">
+        {/* Minimal header */}
+        <div className="shrink-0 bg-gray-950 border-b border-gray-800/40 px-4 py-2.5 flex items-center gap-3">
           <button onClick={onClose}
-            className="p-3 -m-1 rounded-xl hover:bg-gray-800 text-gray-400 hover:text-white transition-colors active:scale-95 shrink-0">
-            <X className="w-6 h-6" />
+            className="p-2 -m-1 rounded-lg text-gray-500 hover:text-white active:bg-gray-800 transition-colors shrink-0">
+            <X className="w-5 h-5" />
           </button>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5">
-              {item.is_master_procedure && <Crown className="w-3.5 h-3.5 text-red-400 shrink-0" />}
-              <h1 className="text-sm font-bold text-white truncate">{item.title}</h1>
-            </div>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Execution</span>
-              <span className="text-[10px] text-gray-600">·</span>
-              <span className="text-[10px] text-gray-500">
-                {visible.filter(e => (e.entry_type || 'step') === 'step').length} steps · {visible.length} total
-              </span>
-            </div>
+            <h1 className="text-sm font-semibold text-white truncate flex items-center gap-1.5">
+              {item.is_master_procedure && <Crown className="w-3 h-3 text-red-400 shrink-0" />}
+              {item.title}
+            </h1>
+            <span className="text-[10px] text-gray-600">
+              {visible.filter(e => (e.entry_type || 'step') === 'step').length} steps
+            </span>
           </div>
+
+          {/* Quick jump */}
+          {groups.length > 0 && (
+            <button onClick={() => setShowJump(!showJump)}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-gray-400 bg-gray-800/60 active:bg-gray-700 transition-colors shrink-0">
+              Jump {showJump ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+          )}
         </div>
 
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
-            {/* Procedure summary — minimal */}
+        {/* Quick jump panel */}
+        {showJump && groups.length > 0 && (
+          <div className="shrink-0 bg-gray-900/80 border-b border-gray-800/40 px-4 py-2 flex gap-2 overflow-x-auto scrollbar-hide">
+            {groups.map(g => (
+              <button key={g.id} onClick={() => scrollToGroup(g.id)}
+                className="shrink-0 px-3 py-1.5 rounded-full text-xs text-gray-300 bg-gray-800 active:bg-gray-700 transition-colors">
+                {g.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Scrollable content — service manual feel */}
+        <div ref={contentRef} className="flex-1 overflow-y-auto">
+          <div className="max-w-2xl mx-auto px-5 py-6">
+            {/* Summary */}
             {item.summary && (
-              <p className="text-gray-400 text-sm leading-relaxed border-l-2 border-gray-700 pl-3 mb-6">
-                {item.summary}
-              </p>
+              <p className="text-gray-400 text-sm leading-relaxed mb-6">{item.summary}</p>
             )}
 
-            {/* Procedure-level warnings (legacy) */}
+            {/* Procedure warnings */}
             {item.warnings?.length > 0 && (
-              <div className="space-y-2 mb-4">
+              <div className="space-y-2 mb-6">
                 {item.warnings.map(w => (
                   <div key={w.id} className={cn(
-                    "flex items-start gap-3 p-3 rounded-xl border",
-                    w.severity === 'danger' ? "bg-red-950/40 border-red-900/50 text-red-200" :
-                    w.severity === 'warning' ? "bg-amber-950/40 border-amber-900/50 text-amber-200" :
-                    "bg-yellow-950/30 border-yellow-900/40 text-yellow-200"
+                    "flex items-start gap-2.5 py-2",
+                    w.severity === 'danger' ? "text-red-300" :
+                    w.severity === 'warning' ? "text-amber-300" : "text-yellow-300"
                   )}>
-                    <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0" />
+                    <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
                     <span className="text-sm leading-relaxed">{w.text}</span>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Vehicle tags */}
-            {item.vehicle_tags?.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mb-4">
-                {item.vehicle_tags.map(tag => (
-                  <Badge key={tag} variant="outline" className="text-xs border-gray-600 text-gray-300 gap-1">
-                    <Tag className="w-3 h-3" /> {tag}
-                  </Badge>
-                ))}
-              </div>
-            )}
-
-            {/* Procedure-level parts — quick reference */}
+            {/* Required parts — compact strip */}
             {procedureParts.length > 0 && (
-              <div className="rounded-xl bg-gray-800/50 border border-gray-700/40 p-4 mb-4">
-                <h4 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-2 flex items-center gap-1.5">
-                  <Package className="w-3.5 h-3.5" /> Required Parts ({procedureParts.length})
-                </h4>
-                <div className="flex flex-wrap gap-2">
+              <div className="mb-6 pb-4 border-b border-gray-800/40">
+                <p className="text-[10px] uppercase tracking-widest text-gray-600 font-semibold mb-2">Required Parts</p>
+                <div className="flex flex-wrap gap-1.5">
                   {procedureParts.map(part => (
-                    <span key={part.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-700/60 text-sm text-gray-200">
-                      <Package className="w-3 h-3 text-gray-400" /> {part.part_name || part.name}
+                    <span key={part.id} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-gray-300 bg-gray-800/40 rounded">
+                      <Package className="w-3 h-3 text-gray-500" /> {part.part_name || part.name}
                     </span>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Entries — step flow */}
+            {/* Steps — clean flow, no card containers */}
             {isLoading ? (
-              <div className="text-center py-12 text-gray-500 text-sm">Loading procedure...</div>
+              <div className="text-center py-16 text-gray-600 text-sm">Loading...</div>
             ) : visible.length === 0 ? (
-              <div className="text-center py-16 text-gray-500">
-                <ListOrdered className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                <p className="text-base">No entries in this procedure</p>
+              <div className="text-center py-16 text-gray-600">
+                <p className="text-sm">No steps in this procedure yet</p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-6">
                 {(() => {
                   let lastGroup = null;
-                  return visible.map((entry, i) => {
+                  return visible.map((entry) => {
                     const isStep = (entry.entry_type || 'step') === 'step';
                     if (isStep) stepCount++;
                     const groupLabel = entry.group_label || null;
@@ -297,21 +285,31 @@ export default function ExecutionModeView({ item, onClose }) {
                     return (
                       <React.Fragment key={entry.id}>
                         {showGroupHeader && (
-                          <div className="flex items-center gap-3 pt-4 pb-1">
-                            <div className="h-px flex-1 bg-gray-700/50" />
-                            <span className="text-xs font-bold uppercase tracking-widest text-gray-400 shrink-0 px-2">
+                          <div className="pt-6 pb-2" id={`exec-step-${entry.id}`}>
+                            <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-gray-500">
                               {groupLabel}
-                            </span>
-                            <div className="h-px flex-1 bg-gray-700/50" />
+                            </h2>
+                            <div className="h-px bg-gray-800/60 mt-2" />
                           </div>
                         )}
-                        <ExecutionStepCard
-                          entry={entry}
-                          stepNumber={isStep ? stepCount : 0}
-                          parts={parts}
-                          onImageClick={(images, idx) => setLightboxState({ images, index: idx })}
-                          isActive={i === activeIndex}
-                        />
+                        {!showGroupHeader && (
+                          <ExecutionStepCard
+                            entry={entry}
+                            stepNumber={isStep ? stepCount : 0}
+                            parts={parts}
+                            onImageClick={(images, idx) => setLightboxState({ images, index: idx })}
+                            isActive={false}
+                          />
+                        )}
+                        {showGroupHeader && (
+                          <ExecutionStepCard
+                            entry={entry}
+                            stepNumber={isStep ? stepCount : 0}
+                            parts={parts}
+                            onImageClick={(images, idx) => setLightboxState({ images, index: idx })}
+                            isActive={false}
+                          />
+                        )}
                       </React.Fragment>
                     );
                   });
@@ -319,28 +317,28 @@ export default function ExecutionModeView({ item, onClose }) {
               </div>
             )}
 
-            {/* Legacy HTML content fallback */}
+            {/* Legacy fallback */}
             {visible.length === 0 && item.content_html && item.content_html !== '<p><br></p>' && (
-              <div className="rounded-xl bg-gray-800/50 border border-gray-700/40 p-4">
+              <div className="mt-4">
                 <div
-                  className="prose prose-sm prose-invert max-w-none text-gray-200 text-base leading-relaxed
+                  className="prose prose-sm prose-invert max-w-none text-gray-300 text-[15px] leading-relaxed
                     [&_a]:text-blue-400 [&_a]:underline [&_img]:rounded-lg [&_img]:my-3 [&_img]:max-w-full"
                   dangerouslySetInnerHTML={{ __html: item.content_html }}
                 />
               </div>
             )}
 
-            {/* Reference URL */}
+            {/* Reference */}
             {item.reference_url && (
-              <a href={item.reference_url} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-2 p-3 rounded-xl bg-gray-800/50 hover:bg-gray-800/70 border border-gray-700/40 transition-colors">
-                <ExternalLink className="w-4 h-4 text-blue-400 shrink-0" />
-                <span className="text-blue-400 text-sm truncate">{item.reference_url}</span>
-              </a>
+              <div className="mt-6 pt-4 border-t border-gray-800/40">
+                <a href={item.reference_url} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300">
+                  <ExternalLink className="w-3.5 h-3.5" /> Reference
+                </a>
+              </div>
             )}
 
-            {/* Bottom padding for safe area */}
-            <div className="h-16" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }} />
+            <div className="h-20" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }} />
           </div>
         </div>
       </div>
