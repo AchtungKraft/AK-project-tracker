@@ -7,7 +7,7 @@ import {
   ArrowLeft, AlertTriangle, Package, ExternalLink,
   ChevronUp, ChevronDown, Crown, Plus, ListOrdered,
   StickyNote, Camera, Settings2, Pencil, Play, FileText,
-  ListChecks, Link2, AlertOctagon
+  ListChecks, Link2, AlertOctagon, Printer
 } from "lucide-react";
 import { format } from "date-fns";
 import ImageLightbox from "@/components/knowledge/ImageLightbox";
@@ -17,6 +17,7 @@ import KnowledgePartLinks from "@/components/knowledge/KnowledgePartLinks";
 import KnowledgeProjectNotes from "@/components/knowledge/KnowledgeProjectNotes";
 import KnowledgeLegacyContent from "@/components/knowledge/KnowledgeLegacyContent";
 import ProcedureExecutionFlow from "@/components/knowledge/ProcedureExecutionFlow";
+import ProcedurePrintView from "@/components/knowledge/ProcedurePrintView";
 
 const QUICK_ADD = [
   { type: "step", label: "Step", icon: ListOrdered },
@@ -34,6 +35,7 @@ export default function ProcedurePage() {
   const [editingEntry, setEditingEntry] = useState(null);
   const [editMode, setEditMode] = useState(false);
   const [executionMode, setExecutionMode] = useState(false);
+  const [printMode, setPrintMode] = useState(false);
   const [coverLightbox, setCoverLightbox] = useState(false);
 
   const { data: item, isLoading: itemLoading } = useQuery({
@@ -55,6 +57,18 @@ export default function ProcedurePage() {
     queryKey: ['partCategories'],
     queryFn: () => base44.entities.PartCategory.list(),
     staleTime: 60000,
+  });
+
+  const { data: partLinks = [] } = useQuery({
+    queryKey: ['knowledgePartLinks_detail', procedureId],
+    queryFn: () => base44.entities.BuildKnowledgePartLink.filter({ knowledge_item_id: procedureId }),
+    enabled: !!procedureId,
+  });
+
+  const { data: allParts = [] } = useQuery({
+    queryKey: ['parts_for_knowledge'],
+    queryFn: () => base44.entities.Part.list(),
+    staleTime: 120000,
   });
 
   const { data: taskLinks = [] } = useQuery({
@@ -156,6 +170,13 @@ export default function ProcedurePage() {
                 <button onClick={() => setExecutionMode(true)}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-blue-600 text-white text-sm font-medium active:bg-blue-700 transition-colors">
                   <Play className="w-3.5 h-3.5" /> Execute
+                </button>
+              )}
+              {hasEntries && (
+                <button onClick={() => setPrintMode(true)}
+                  className="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-gray-800 transition-colors"
+                  title="Print procedure">
+                  <Printer className="w-4 h-4" />
                 </button>
               )}
               {hasEntries && (
@@ -330,6 +351,18 @@ export default function ProcedurePage() {
       {/* Cover lightbox */}
       {coverLightbox && coverImg && (
         <ImageLightbox images={[coverImg]} initialIndex={0} onClose={() => setCoverLightbox(false)} />
+      )}
+
+      {/* Print view */}
+      {printMode && (
+        <ProcedurePrintView
+          item={item}
+          entries={entries}
+          categories={categories}
+          parts={allParts}
+          partLinks={partLinks}
+          onClose={() => setPrintMode(false)}
+        />
       )}
 
       {/* Entry editor sheet */}
