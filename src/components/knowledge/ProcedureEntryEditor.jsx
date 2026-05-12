@@ -4,8 +4,6 @@ import { base44 } from "@/api/base44Client";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, X, Package, Camera, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
@@ -13,15 +11,9 @@ import ReactQuill from "react-quill";
 import { ENTRY_TYPE_CONFIG } from "./ProcedureEntryTimeline";
 
 const QUILL_MODULES = {
-  toolbar: [
-    ['bold', 'italic'],
-    [{ list: 'ordered' }, { list: 'bullet' }],
-    ['link'],
-    ['clean'],
-  ],
+  toolbar: [['bold', 'italic'], [{ list: 'ordered' }, { list: 'bullet' }], ['link'], ['clean']],
 };
 
-// Simplified to 4 types — reduces cognitive load during work
 const ENTRY_TYPES = [
   { value: "step", label: "Step" },
   { value: "note", label: "Note" },
@@ -29,35 +21,49 @@ const ENTRY_TYPES = [
   { value: "media", label: "Photos" },
 ];
 
-export default function ProcedureEntryEditor({ procedureId, procedureTitle, existingEntryCount, isOpen, onClose, initialEntryType = "step" }) {
+const mapEntryType = (type) => {
+  if (type === 'tip' || type === 'reference') return 'note';
+  return type;
+};
+
+/**
+ * Unified Add / Edit entry sheet.
+ * Pass `existingEntry` to enter edit mode.
+ */
+export default function ProcedureEntryEditor({ procedureId, procedureTitle, existingEntryCount, isOpen, onClose, initialEntryType = "step", existingEntry = null }) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const isEdit = !!existingEntry;
 
-  // Map legacy types to simplified set
-  const mapEntryType = (type) => {
-    if (type === 'tip' || type === 'reference') return 'note';
-    return type;
+  const blankForm = {
+    headline: "", entry_type: mapEntryType(initialEntryType), content_html: "",
+    image_urls: [], reference_url: "", lifecycle_state: "active", part_ids: [], group_label: "",
   };
 
-  const [form, setForm] = useState({
-    headline: "",
-    entry_type: mapEntryType(initialEntryType),
-    content_html: "",
-    image_urls: [],
-    reference_url: "",
-    lifecycle_state: "active",
-    part_ids: [],
-    group_label: "",
-  });
+  const [form, setForm] = useState(blankForm);
   const [uploading, setUploading] = useState(false);
 
+  // Initialize form from existingEntry or reset
   useEffect(() => {
-    if (isOpen) {
-      setForm(f => ({ ...f, entry_type: mapEntryType(initialEntryType) }));
+    if (!isOpen) return;
+    if (existingEntry) {
+      setForm({
+        headline: existingEntry.headline || "",
+        entry_type: mapEntryType(existingEntry.entry_type || "step"),
+        content_html: existingEntry.content_html || "",
+        image_urls: existingEntry.image_urls || [],
+        reference_url: existingEntry.reference_url || "",
+        lifecycle_state: existingEntry.lifecycle_state || "active",
+        part_ids: existingEntry.part_ids || [],
+        group_label: existingEntry.group_label || "",
+      });
+      setShowAdvanced(!!(existingEntry.reference_url || existingEntry.group_label || existingEntry.part_ids?.length));
+    } else {
+      setForm({ ...blankForm, entry_type: mapEntryType(initialEntryType) });
       setShowAdvanced(false);
     }
-  }, [initialEntryType, isOpen]);
+  }, [isOpen, existingEntry, initialEntryType]);
 
   const { data: allParts = [] } = useQuery({
     queryKey: ['parts_for_entry_editor'],
@@ -68,17 +74,21 @@ export default function ProcedureEntryEditor({ procedureId, procedureTitle, exis
   const [partSearch, setPartSearch] = useState("");
 
   const saveMutation = useMutation({
-    mutationFn: (data) => base44.entities.ProcedureEntry.create({
-      ...data,
-      procedure_id: procedureId,
-      order_index: existingEntryCount || 0,
-    }),
+    mutationFn: (data) => {
+      if (isEdit) {
+        return base44.entities.ProcedureEntry.update(existingEntry.id, data);
+      }
+      return base44.entities.ProcedureEntry.create({
+        ...data,
+        procedure_id: procedureId,
+        order_index: existingEntryCount || 0,
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['procedureEntries', procedureId] });
-      toast.success('Entry added');
-      setForm({ headline: "", entry_type: "step", content_html: "", image_urls: [], reference_url: "", lifecycle_state: "active", part_ids: [], group_label: "" });
+      queryClient.invalidateQueries({ queryKey: ['allProcedureEntries'] });
+      toast.success(isEdit ? 'Entry updated' : 'Entry added');
       setPartSearch("");
-      setShowAdvanced(false);
       onClose();
     },
   });
@@ -102,8 +112,15 @@ export default function ProcedureEntryEditor({ procedureId, procedureTitle, exis
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const removeImage = (index) => {
-    setForm(f => ({ ...f, image_urls: f.image_urls.filter((_, i) => i !== index) }));
+  const removeImage = (index) => setForm(f => ({ ...f, image_urls: f.image_urls.filter((_, i) => i !== index) }));
+
+  const moveImage = (from, to) => {
+    setForm(f => {
+      const imgs = [...f.image_urls];
+      const [moved] = imgs.splice(from, 1);
+      imgs.splice(to, 0, moved);
+      return { ...f, image_urls: imgs };
+    });
   };
 
   const togglePart = (partId) => {
@@ -113,7 +130,6 @@ export default function ProcedureEntryEditor({ procedureId, procedureTitle, exis
     }));
   };
 
-  const entryConfig = ENTRY_TYPE_CONFIG[form.entry_type] || ENTRY_TYPE_CONFIG.step;
   const filteredParts = partSearch
     ? allParts.filter(p => (p.part_name || p.name || '').toLowerCase().includes(partSearch.toLowerCase())).slice(0, 6)
     : [];
@@ -122,13 +138,13 @@ export default function ProcedureEntryEditor({ procedureId, procedureTitle, exis
     <Sheet open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent className="bg-gray-950 text-white w-full sm:max-w-lg overflow-y-auto flex flex-col p-0">
         <SheetHeader className="sr-only">
-          <SheetTitle>Add Entry</SheetTitle>
-          <SheetDescription>Add entry to procedure</SheetDescription>
+          <SheetTitle>{isEdit ? 'Edit Entry' : 'Add Entry'}</SheetTitle>
+          <SheetDescription>{isEdit ? 'Edit entry' : 'Add entry to procedure'}</SheetDescription>
         </SheetHeader>
 
-        {/* Tight header */}
+        {/* Header with type selector */}
         <div className="px-4 pt-4 pb-2">
-          <p className="text-xs text-gray-500 truncate mb-1">→ {procedureTitle}</p>
+          <p className="text-xs text-gray-500 truncate mb-1">{isEdit ? 'Editing' : '→'} {procedureTitle}</p>
           <div className="flex gap-1.5">
             {ENTRY_TYPES.map(t => {
               const tc = ENTRY_TYPE_CONFIG[t.value] || ENTRY_TYPE_CONFIG.step;
@@ -143,24 +159,35 @@ export default function ProcedureEntryEditor({ procedureId, procedureTitle, exis
           </div>
         </div>
 
-        {/* Core fields — minimal */}
+        {/* Core fields */}
         <div className="flex-1 overflow-y-auto px-4 space-y-3 pb-4">
-          {/* Headline */}
           <Input value={form.headline} onChange={e => setForm(f => ({ ...f, headline: e.target.value }))}
-            placeholder={form.entry_type === 'step' ? 'What\'s this step?' : form.entry_type === 'issue' ? 'What\'s the warning?' : 'Quick description...'}
+            placeholder={form.entry_type === 'step' ? "What's this step?" : form.entry_type === 'issue' ? "What's the warning?" : 'Quick description...'}
             className="bg-gray-900 border-gray-800 text-white text-base h-12" autoFocus />
 
-          {/* Photos — always visible, camera-first */}
+          {/* Photos with reorder */}
           <div>
             {form.image_urls.length > 0 && (
               <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
                 {form.image_urls.map((url, i) => (
-                  <div key={i} className="relative shrink-0">
+                  <div key={`${url}-${i}`} className="relative shrink-0 group">
                     <img src={url} alt="" className="rounded-lg h-20 w-24 object-cover bg-gray-800" />
                     <button onClick={() => removeImage(i)}
                       className="absolute -top-1.5 -right-1.5 bg-gray-900 rounded-full p-0.5 border border-gray-700">
                       <X className="w-3 h-3 text-gray-400" />
                     </button>
+                    {/* Reorder arrows */}
+                    {form.image_urls.length > 1 && (
+                      <div className="absolute bottom-0.5 left-0.5 right-0.5 flex justify-between opacity-0 group-hover:opacity-100 transition-opacity">
+                        {i > 0 && (
+                          <button onClick={() => moveImage(i, i - 1)} className="bg-black/70 rounded px-1 py-0.5 text-[10px] text-white">←</button>
+                        )}
+                        <span />
+                        {i < form.image_urls.length - 1 && (
+                          <button onClick={() => moveImage(i, i + 1)} className="bg-black/70 rounded px-1 py-0.5 text-[10px] text-white">→</button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -173,7 +200,7 @@ export default function ProcedureEntryEditor({ procedureId, procedureTitle, exis
             </button>
           </div>
 
-          {/* Notes — optional for photos type, compact */}
+          {/* Notes */}
           {form.entry_type !== 'media' && (
             <div className="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden [&_.ql-toolbar]:bg-gray-900 [&_.ql-toolbar]:border-gray-800 [&_.ql-toolbar]:py-1 [&_.ql-container]:border-gray-800 [&_.ql-editor]:text-gray-200 [&_.ql-editor]:min-h-[60px] [&_.ql-editor]:text-sm [&_.ql-snow_.ql-stroke]:stroke-gray-500 [&_.ql-snow_.ql-fill]:fill-gray-500 [&_.ql-snow_.ql-picker-label]:text-gray-500 [&_.ql-snow_.ql-picker-options]:bg-gray-900 [&_.ql-snow_.ql-picker-options]:border-gray-800 [&_.ql-snow_.ql-picker-item]:text-gray-400 [&_.ql-editor.ql-blank::before]:text-gray-600">
               <ReactQuill theme="snow" value={form.content_html}
@@ -182,7 +209,7 @@ export default function ProcedureEntryEditor({ procedureId, procedureTitle, exis
             </div>
           )}
 
-          {/* Advanced options — collapsed by default */}
+          {/* Advanced options */}
           <button onClick={() => setShowAdvanced(!showAdvanced)}
             className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors py-1">
             {showAdvanced ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
@@ -191,7 +218,6 @@ export default function ProcedureEntryEditor({ procedureId, procedureTitle, exis
 
           {showAdvanced && (
             <div className="space-y-3 pl-2 border-l border-gray-800/60">
-              {/* Phase group */}
               {form.entry_type === 'step' && (
                 <div>
                   <label className="text-[11px] text-gray-500 mb-1 block">Phase</label>
@@ -200,8 +226,6 @@ export default function ProcedureEntryEditor({ procedureId, procedureTitle, exis
                     className="bg-gray-900 border-gray-800 text-white text-sm h-9" />
                 </div>
               )}
-
-              {/* Parts */}
               <div>
                 <label className="text-[11px] text-gray-500 mb-1 block">Related Parts</label>
                 {form.part_ids.length > 0 && (
@@ -230,23 +254,17 @@ export default function ProcedureEntryEditor({ procedureId, procedureTitle, exis
                   </div>
                 )}
               </div>
-
-              {/* Reference URL */}
               <div>
                 <label className="text-[11px] text-gray-500 mb-1 block">Reference URL</label>
                 <Input value={form.reference_url} onChange={e => setForm(f => ({ ...f, reference_url: e.target.value }))}
                   placeholder="https://..." className="bg-gray-900 border-gray-800 text-white text-sm h-8" />
               </div>
-
-              {/* Lifecycle */}
               <div>
                 <label className="text-[11px] text-gray-500 mb-1 block">Priority</label>
                 <div className="flex gap-1.5">
                   {[
-                    { value: "active", label: "Normal" },
-                    { value: "pinned", label: "Pinned" },
-                    { value: "critical", label: "Critical" },
-                    { value: "archived", label: "Archived" },
+                    { value: "active", label: "Normal" }, { value: "pinned", label: "Pinned" },
+                    { value: "critical", label: "Critical" }, { value: "archived", label: "Archived" },
                   ].map(o => (
                     <button key={o.value} onClick={() => setForm(f => ({ ...f, lifecycle_state: o.value }))}
                       className={`px-2.5 py-1 rounded text-xs transition-colors ${form.lifecycle_state === o.value ? 'bg-gray-700 text-white' : 'bg-gray-900 text-gray-500 hover:text-gray-300'}`}>
@@ -259,12 +277,12 @@ export default function ProcedureEntryEditor({ procedureId, procedureTitle, exis
           )}
         </div>
 
-        {/* Minimal footer */}
+        {/* Footer */}
         <div className="shrink-0 bg-gray-950 border-t border-gray-800/60 px-4 py-3 flex gap-2"
           style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
           <Button variant="ghost" onClick={onClose} className="text-gray-500 h-11 px-3">Cancel</Button>
           <Button onClick={handleSave} disabled={saveMutation.isPending} className="flex-1 bg-red-600 hover:bg-red-700 h-11 text-sm font-medium">
-            {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add'}
+            {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : (isEdit ? 'Save' : 'Add')}
           </Button>
         </div>
       </SheetContent>

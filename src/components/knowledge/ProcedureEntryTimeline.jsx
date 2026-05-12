@@ -1,11 +1,12 @@
-import React, { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import React, { useState, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Clock, ExternalLink, AlertTriangle, Lightbulb, ListOrdered, FileText, StickyNote, Camera, Pin, AlertOctagon, Package } from "lucide-react";
+import { ExternalLink, AlertTriangle, Lightbulb, ListOrdered, FileText, StickyNote, Camera, Package, GripVertical } from "lucide-react";
 import { format } from "date-fns";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import ImageLightbox from "./ImageLightbox";
+import EntryActionMenu from "./EntryActionMenu";
 
 export const ENTRY_TYPE_CONFIG = {
   step:      { label: "Step",    icon: ListOrdered,   rail: "bg-blue-600",    accent: "text-blue-400",    bg: "bg-blue-950/10" },
@@ -16,13 +17,7 @@ export const ENTRY_TYPE_CONFIG = {
   media:     { label: "Photos",  icon: Camera,        rail: "bg-gray-600",    accent: "text-gray-400",    bg: "bg-gray-950/10" },
 };
 
-const LIFECYCLE_BADGE = {
-  pinned:   { label: "Pinned",   icon: Pin,          cls: "bg-amber-900/40 text-amber-300" },
-  critical: { label: "Critical", icon: AlertOctagon, cls: "bg-red-900/40 text-red-300" },
-  archived: { label: "Archived", icon: AlertOctagon,  cls: "bg-gray-700/40 text-gray-400" },
-};
-
-function EntryCard({ entry, stepNumber, parts, onImageClick, compact }) {
+function EntryCard({ entry, stepNumber, parts, onImageClick, compact, editMode, sortedEntries, procedureId, onEdit, dragHandleProps }) {
   const entryType = entry.entry_type || 'step';
   const config = ENTRY_TYPE_CONFIG[entryType] || ENTRY_TYPE_CONFIG.step;
   const Icon = config.icon;
@@ -36,8 +31,15 @@ function EntryCard({ entry, stepNumber, parts, onImageClick, compact }) {
   const entryParts = (entry.part_ids || []).map(id => parts.find(p => p.id === id)).filter(Boolean);
 
   return (
-    <div className={cn("relative flex gap-0", isArchived && "opacity-35")}>
-      {/* Left rail — step number or icon */}
+    <div className={cn("relative flex gap-0 group/entry", isArchived && "opacity-35")}>
+      {/* Drag handle — only in edit mode */}
+      {editMode && (
+        <div {...dragHandleProps} className="flex items-start pt-1 pr-0.5 shrink-0 cursor-grab active:cursor-grabbing touch-manipulation">
+          <GripVertical className="w-4 h-4 text-gray-700 group-hover/entry:text-gray-500 transition-colors" />
+        </div>
+      )}
+
+      {/* Left rail */}
       <div className="flex flex-col items-center shrink-0 w-9 md:w-11">
         {isStep ? (
           <span className={cn("w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0", config.rail)}>
@@ -53,26 +55,37 @@ function EntryCard({ entry, stepNumber, parts, onImageClick, compact }) {
         <div className="flex-1 w-px bg-gray-800/30 min-h-[4px]" />
       </div>
 
-      {/* Content — flat, no containers */}
+      {/* Content */}
       <div className={cn("flex-1 min-w-0", compact ? "pb-1.5" : "pb-4")}>
-        {/* Headline */}
-        <h4 className={cn(
-          "leading-snug",
-          isStep ? "text-[15px] font-medium text-white" :
-          isWarning ? "text-sm font-medium text-amber-200" :
-          "text-sm text-gray-300"
-        )}>
-          {entry.headline}
-        </h4>
-
-        {/* Subtle meta */}
-        {(!isStep || isCritical) && (
-          <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-gray-600">
-            {!isStep && <span className={cn("font-medium uppercase tracking-wide", config.accent)}>{config.label}</span>}
-            {isCritical && <span className="text-red-400 font-semibold">CRITICAL</span>}
-            {entry.created_date && <span>{format(new Date(entry.created_date), 'MMM d')}</span>}
+        {/* Headline row with action menu */}
+        <div className="flex items-start gap-1">
+          <div className="flex-1 min-w-0">
+            <h4 className={cn(
+              "leading-snug",
+              isStep ? "text-[15px] font-medium text-white" :
+              isWarning ? "text-sm font-medium text-amber-200" :
+              "text-sm text-gray-300"
+            )}>
+              {entry.headline}
+            </h4>
+            {(!isStep || isCritical) && (
+              <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-gray-600">
+                {!isStep && <span className={cn("font-medium uppercase tracking-wide", config.accent)}>{config.label}</span>}
+                {isCritical && <span className="text-red-400 font-semibold">CRITICAL</span>}
+                {entry.created_date && <span>{format(new Date(entry.created_date), 'MMM d')}</span>}
+              </div>
+            )}
           </div>
-        )}
+          {/* Action menu — visible on hover desktop, always on edit mode */}
+          {editMode && (
+            <EntryActionMenu entry={entry} procedureId={procedureId} sortedEntries={sortedEntries} onEdit={onEdit} />
+          )}
+          {!editMode && (
+            <div className="opacity-0 group-hover/entry:opacity-100 transition-opacity">
+              <EntryActionMenu entry={entry} procedureId={procedureId} sortedEntries={sortedEntries} onEdit={onEdit} />
+            </div>
+          )}
+        </div>
 
         {/* Content */}
         {hasContent && (
@@ -86,7 +99,7 @@ function EntryCard({ entry, stepNumber, parts, onImageClick, compact }) {
           </div>
         )}
 
-        {/* Images — full-width, prominent */}
+        {/* Images */}
         {images.length > 0 && (
           <div className="mt-2">
             <div className={cn("grid gap-1", images.length === 1 ? "" : "grid-cols-2")}>
@@ -123,7 +136,8 @@ function EntryCard({ entry, stepNumber, parts, onImageClick, compact }) {
   );
 }
 
-export default function ProcedureEntryTimeline({ procedureId, compact = false, executionMode = false }) {
+export default function ProcedureEntryTimeline({ procedureId, compact = false, executionMode = false, editMode = false, onEditEntry }) {
+  const queryClient = useQueryClient();
   const [lightboxState, setLightboxState] = useState(null);
 
   const { data: entries = [], isLoading } = useQuery({
@@ -132,7 +146,6 @@ export default function ProcedureEntryTimeline({ procedureId, compact = false, e
     enabled: !!procedureId,
   });
 
-  // Collect all part IDs from entries for batch fetch
   const allPartIds = [...new Set(entries.flatMap(e => e.part_ids || []))];
   const { data: parts = [] } = useQuery({
     queryKey: ['entryParts', allPartIds.join(',')],
@@ -145,8 +158,43 @@ export default function ProcedureEntryTimeline({ procedureId, compact = false, e
     staleTime: 120000,
   });
 
+  // Sort entries
+  const sorted = [...entries].sort((a, b) => {
+    const orderDiff = (a.order_index || 0) - (b.order_index || 0);
+    if (orderDiff !== 0) return orderDiff;
+    return new Date(a.created_date || 0) - new Date(b.created_date || 0);
+  });
+
+  const visible = executionMode
+    ? sorted.filter(e => (e.lifecycle_state || 'active') !== 'archived')
+        .sort((a, b) => {
+          const priority = { critical: 0, pinned: 1, active: 2 };
+          return (priority[a.lifecycle_state || 'active'] ?? 2) - (priority[b.lifecycle_state || 'active'] ?? 2);
+        })
+    : sorted;
+
+  // Drag reorder
+  const reorderMutation = useMutation({
+    mutationFn: async (updates) => {
+      await Promise.all(updates.map(u => base44.entities.ProcedureEntry.update(u.id, { order_index: u.order_index })));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['procedureEntries', procedureId] });
+    },
+  });
+
+  const handleDragEnd = useCallback((result) => {
+    if (!result.destination || result.destination.index === result.source.index) return;
+    const reordered = [...visible];
+    const [moved] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, moved);
+    // Batch update order_index
+    const updates = reordered.map((entry, idx) => ({ id: entry.id, order_index: idx }));
+    reorderMutation.mutate(updates);
+  }, [visible, reorderMutation]);
+
   if (isLoading) {
-    return <div className="text-xs text-gray-500 py-4 text-center">Loading entries...</div>;
+    return <div className="text-xs text-gray-500 py-4 text-center">Loading...</div>;
   }
 
   if (entries.length === 0) {
@@ -159,82 +207,84 @@ export default function ProcedureEntryTimeline({ procedureId, compact = false, e
     );
   }
 
-  // Sort and filter
-  const sorted = [...entries].sort((a, b) => {
-    const orderDiff = (a.order_index || 0) - (b.order_index || 0);
-    if (orderDiff !== 0) return orderDiff;
-    return new Date(a.created_date || 0) - new Date(b.created_date || 0);
-  });
-
-  // In execution mode, show critical/pinned first, hide archived
-  const visible = executionMode
-    ? sorted.filter(e => (e.lifecycle_state || 'active') !== 'archived')
-        .sort((a, b) => {
-          const priority = { critical: 0, pinned: 1, active: 2 };
-          const pa = priority[a.lifecycle_state || 'active'] ?? 2;
-          const pb = priority[b.lifecycle_state || 'active'] ?? 2;
-          if (pa !== pb) return pa - pb;
-          return 0; // preserve original sort within same priority
-        })
-    : sorted;
-
-  // Step counter
   let stepCount = 0;
-
-  const handleImageClick = (images, index) => {
-    setLightboxState({ images, index });
-  };
-
-  // Track group labels
   let lastGroupLabel = null;
+
+  const renderEntries = (provided) => (
+    <div ref={provided?.innerRef} {...(provided?.droppableProps || {})} className="relative">
+      {visible.map((entry, index) => {
+        const isStep = (entry.entry_type || 'step') === 'step';
+        if (isStep) stepCount++;
+        const groupLabel = entry.group_label || null;
+        let showGroupHeader = false;
+        if (groupLabel && groupLabel !== lastGroupLabel) showGroupHeader = true;
+        if (groupLabel) lastGroupLabel = groupLabel;
+
+        const cardContent = (dragProvided) => (
+          <div ref={dragProvided?.innerRef} {...(dragProvided?.draggableProps || {})}
+            style={dragProvided?.draggableProps?.style}>
+            {showGroupHeader && (
+              <div className="pt-4 pb-1 ml-9 md:ml-11">
+                <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] text-gray-500">{groupLabel}</h3>
+                <div className="h-px bg-gray-800/40 mt-1" />
+              </div>
+            )}
+            <EntryCard
+              entry={entry}
+              stepNumber={isStep ? stepCount : 0}
+              parts={parts}
+              onImageClick={(imgs, idx) => setLightboxState({ images: imgs, index: idx })}
+              compact={compact}
+              editMode={editMode}
+              sortedEntries={visible}
+              procedureId={procedureId}
+              onEdit={onEditEntry || (() => {})}
+              dragHandleProps={dragProvided?.dragHandleProps}
+            />
+          </div>
+        );
+
+        if (editMode) {
+          return (
+            <Draggable key={entry.id} draggableId={entry.id} index={index}>
+              {(dragProvided) => cardContent(dragProvided)}
+            </Draggable>
+          );
+        }
+        return <React.Fragment key={entry.id}>{cardContent({})}</React.Fragment>;
+      })}
+      {provided?.placeholder}
+      <div className="flex items-center w-9 md:w-11 justify-center">
+        <div className="w-1.5 h-1.5 rounded-full bg-gray-700" />
+      </div>
+    </div>
+  );
+
+  // Reset step counter before render
+  stepCount = 0;
+  lastGroupLabel = null;
 
   return (
     <>
-      <div className="relative">
-        {visible.map((entry) => {
-          const isStep = (entry.entry_type || 'step') === 'step';
-          if (isStep) stepCount++;
-          
-          // Group label separator
-          const groupLabel = entry.group_label || null;
-          let showGroupHeader = false;
-          if (groupLabel && groupLabel !== lastGroupLabel) {
-            showGroupHeader = true;
-          }
-          if (groupLabel) lastGroupLabel = groupLabel;
-
-          return (
-            <React.Fragment key={entry.id}>
-              {showGroupHeader && (
-                <div className="pt-4 pb-1 ml-9 md:ml-11">
-                  <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] text-gray-500">
-                    {groupLabel}
-                  </h3>
-                  <div className="h-px bg-gray-800/40 mt-1" />
-                </div>
-              )}
-              <EntryCard
-                entry={entry}
-                stepNumber={isStep ? stepCount : 0}
-                parts={parts}
-                onImageClick={handleImageClick}
-                compact={compact}
-              />
-            </React.Fragment>
-          );
-        })}
-        {/* Terminal dot */}
-        <div className="flex items-center w-9 md:w-11 justify-center">
-          <div className="w-1.5 h-1.5 rounded-full bg-gray-700" />
-        </div>
-      </div>
-
+      {editMode ? (
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <Droppable droppableId={`procedure-${procedureId}`}>
+            {(provided) => {
+              stepCount = 0;
+              lastGroupLabel = null;
+              return renderEntries(provided);
+            }}
+          </Droppable>
+        </DragDropContext>
+      ) : (
+        (() => {
+          stepCount = 0;
+          lastGroupLabel = null;
+          return renderEntries(null);
+        })()
+      )}
       {lightboxState && (
-        <ImageLightbox
-          images={lightboxState.images}
-          initialIndex={lightboxState.index}
-          onClose={() => setLightboxState(null)}
-        />
+        <ImageLightbox images={lightboxState.images} initialIndex={lightboxState.index} onClose={() => setLightboxState(null)} />
       )}
     </>
   );

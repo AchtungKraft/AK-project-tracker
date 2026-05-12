@@ -3,8 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Pencil, Clock, Tag, ExternalLink, Package, ListChecks, FileText, Image, Pin, Crown, Link2, AlertOctagon, ArrowRight, Plus, ListOrdered, StickyNote, AlertTriangle, Lightbulb, Camera, Play } from "lucide-react";
+import { Pencil, ExternalLink, Package, ListChecks, FileText, Image, AlertOctagon, Plus, ListOrdered, StickyNote, AlertTriangle, Camera, Play, Link2, Settings2 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { POST_TYPE_CONFIG } from "./KnowledgeFeedCard";
@@ -33,8 +32,10 @@ const QUICK_ADD = [
 export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdit }) {
   const [entryEditorOpen, setEntryEditorOpen] = useState(false);
   const [entryEditorType, setEntryEditorType] = useState("step");
+  const [editingEntry, setEditingEntry] = useState(null);
   const [coverLightbox, setCoverLightbox] = useState(false);
   const [executionMode, setExecutionMode] = useState(false);
+  const [editMode, setEditMode] = useState(false);
 
   const { data: taskLinks = [] } = useQuery({
     queryKey: ['knowledgeTaskLinks_detail', item?.id],
@@ -59,22 +60,26 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
 
   if (!item) return null;
 
-  const postType = item.post_type || item.type || 'procedure';
-  const config = POST_TYPE_CONFIG[postType] || POST_TYPE_CONFIG.procedure;
   const cat = categories.find(c => c.id === item.category_id);
   const subcat = categories.find(c => c.id === item.subcategory_id);
   const linkedTasks = tasks.filter(t => taskLinks.some(l => l.task_id === t.id));
   const hasHtmlContent = item.content_html && item.content_html !== '<p><br></p>';
   const hasLegacyContent = item.content_blocks?.length > 0;
   const coverImg = getCoverImage(item);
-
   const supersededBy = item.superseded_by_id ? allItems.find(i => i.id === item.superseded_by_id) : null;
   const parentProcedure = item.parent_procedure_id ? allItems.find(i => i.id === item.parent_procedure_id) : null;
   const hasEntries = entries.length > 0;
   const showLegacyContent = !hasEntries && (hasHtmlContent || hasLegacyContent);
 
   const openEntryEditor = (type) => {
+    setEditingEntry(null);
     setEntryEditorType(type);
+    setEntryEditorOpen(true);
+  };
+
+  const handleEditEntry = (entry) => {
+    setEditingEntry(entry);
+    setEntryEditorType(entry.entry_type || 'step');
     setEntryEditorOpen(true);
   };
 
@@ -89,7 +94,6 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
 
           {/* ===== CONDENSED HEADER ===== */}
           <div className="shrink-0">
-            {/* Cover image — tap to zoom */}
             {coverImg && (
               <button onClick={() => setCoverLightbox(true)} className="w-full h-36 md:h-44 overflow-hidden bg-gray-900 block">
                 <img src={coverImg} alt="" className="w-full h-full object-cover" />
@@ -97,7 +101,6 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
             )}
 
             <div className="px-4 pt-3 pb-2">
-              {/* Obsolete banner */}
               {item.is_obsolete && (
                 <div className="flex items-center gap-1.5 text-xs text-amber-400 mb-1.5">
                   <AlertOctagon className="w-3 h-3 shrink-0" /> Obsolete
@@ -105,7 +108,6 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
                 </div>
               )}
 
-              {/* Category line */}
               <div className="flex items-center gap-2 text-[11px] text-gray-500 mb-0.5">
                 {cat && (
                   <span className="flex items-center gap-1">
@@ -117,11 +119,9 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
                 {item.status === 'draft' && <span className="text-yellow-500 text-[10px]">Draft</span>}
               </div>
 
-              {/* Title */}
               <h2 className="text-lg font-bold text-white leading-tight">{item.title}</h2>
               {item.summary && <p className="text-gray-400 text-sm mt-0.5 leading-snug">{item.summary}</p>}
 
-              {/* Compact tags + meta */}
               <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-gray-600 flex-wrap">
                 {item.vehicle_tags?.map(tag => (
                   <span key={tag} className="px-1.5 py-0.5 rounded bg-gray-800/60 text-gray-400">{tag}</span>
@@ -137,12 +137,22 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
               )}
             </div>
 
-            {/* Action strip — Execute prominent, quick-add secondary */}
+            {/* Action strip */}
             <div className="px-4 pb-3 flex gap-2 overflow-x-auto scrollbar-hide">
               {hasEntries && (
                 <button onClick={() => setExecutionMode(true)}
                   className="shrink-0 flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-blue-600 text-white text-sm font-medium active:bg-blue-700 transition-colors">
                   <Play className="w-4 h-4" /> Execute
+                </button>
+              )}
+              {/* Edit mode toggle */}
+              {hasEntries && (
+                <button onClick={() => setEditMode(!editMode)}
+                  className={cn(
+                    "shrink-0 flex items-center gap-1.5 px-3.5 py-2.5 rounded-full text-sm transition-colors",
+                    editMode ? "bg-amber-600 text-white" : "bg-gray-800/60 text-gray-400 active:bg-gray-700"
+                  )}>
+                  <Settings2 className="w-3.5 h-3.5" /> {editMode ? 'Done' : 'Reorder'}
                 </button>
               )}
               {QUICK_ADD.map(qa => {
@@ -161,13 +171,14 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
 
           {/* ===== PRIMARY CONTENT ===== */}
           <div className="flex-1 overflow-y-auto px-4 pt-3 pb-4">
-
-            {/* Entry Timeline */}
             {(hasEntries || item.is_master_procedure) && (
-              <ProcedureEntryTimeline procedureId={item.id} />
+              <ProcedureEntryTimeline
+                procedureId={item.id}
+                editMode={editMode}
+                onEditEntry={handleEditEntry}
+              />
             )}
 
-            {/* Legacy content fallback */}
             {showLegacyContent && (
               <div className="mb-4">
                 {hasHtmlContent ? (
@@ -191,14 +202,11 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
               </div>
             )}
 
-            {/* ===== SECONDARY: Context sections ===== */}
+            {/* Context sections */}
             <div className="mt-4 space-y-4">
-              {/* Container-level gallery */}
               {(item.image_urls?.length > 0 || item.media_urls?.length > 0) && (
                 <ContainerImages images={[...(item.image_urls || []), ...(item.media_urls || [])]} />
               )}
-
-              {/* Reference URL */}
               {item.reference_url && (
                 <a href={item.reference_url} target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-2 p-2.5 rounded-lg bg-gray-800/30 hover:bg-gray-800/50 transition-colors text-xs">
@@ -206,8 +214,6 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
                   <span className="text-blue-400 truncate">{item.reference_url}</span>
                 </a>
               )}
-
-              {/* Attachments */}
               {item.attachments?.length > 0 && (
                 <div className="space-y-1">
                   {item.attachments.map(att => (
@@ -219,9 +225,7 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
                   ))}
                 </div>
               )}
-
               <KnowledgePartLinks knowledgeItemId={item.id} />
-
               {linkedTasks.length > 0 && (
                 <div>
                   <h4 className="text-[10px] font-bold uppercase tracking-widest text-gray-600 mb-1.5 flex items-center gap-1">
@@ -237,12 +241,11 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
                   </div>
                 </div>
               )}
-
               <KnowledgeProjectNotes knowledgeItemId={item.id} />
             </div>
           </div>
 
-          {/* ===== FOOTER — simplified: add dominant, edit subtle ===== */}
+          {/* Footer */}
           <div className="shrink-0 bg-gray-950 border-t border-gray-800/40 px-3 py-2.5 flex items-center gap-2"
             style={{ paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom))' }}>
             <Button variant="ghost" onClick={onClose} className="text-gray-500 h-11 px-3 text-sm">Close</Button>
@@ -256,22 +259,20 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
         </SheetContent>
       </Sheet>
 
-      {/* Cover lightbox */}
       {coverLightbox && coverImg && (
         <ImageLightbox images={[coverImg]} initialIndex={0} onClose={() => setCoverLightbox(false)} />
       )}
 
-      {/* Entry Editor */}
       <ProcedureEntryEditor
         procedureId={item.id}
         procedureTitle={item.title}
         existingEntryCount={entries.length}
         isOpen={entryEditorOpen}
-        onClose={() => setEntryEditorOpen(false)}
+        onClose={() => { setEntryEditorOpen(false); setEditingEntry(null); }}
         initialEntryType={entryEditorType}
+        existingEntry={editingEntry}
       />
 
-      {/* Execution Mode */}
       {executionMode && (
         <ExecutionModeView item={item} onClose={() => setExecutionMode(false)} />
       )}
@@ -279,7 +280,6 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
   );
 }
 
-// Lightweight container images section
 function ContainerImages({ images }) {
   const [lightbox, setLightbox] = useState(null);
   if (!images.length) return null;
