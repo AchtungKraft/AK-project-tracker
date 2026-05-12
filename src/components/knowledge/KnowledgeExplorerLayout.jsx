@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,6 @@ import { cn } from "@/lib/utils";
 import KnowledgeCategoryTree from "./KnowledgeCategoryTree";
 import KnowledgeBreadcrumb from "./KnowledgeBreadcrumb";
 import KnowledgeListView from "./KnowledgeListView";
-import KnowledgeDetailDrawer from "./KnowledgeDetailDrawer";
 import SubsystemContextPanel from "./SubsystemContextPanel";
 
 const STORAGE_KEY = 'achtung_knowledge_explorer_state';
@@ -23,11 +23,11 @@ const POST_TYPE_FILTERS = [
 ];
 
 export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItemCreate }) {
+  const navigate = useNavigate();
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
   const [expandedCategories, setExpandedCategories] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
   const [postTypeFilter, setPostTypeFilter] = useState('all');
-  const [selectedItem, setSelectedItem] = useState(null);
 
   // Persist state
   useEffect(() => {
@@ -275,22 +275,13 @@ export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItem
                 categories={categories}
                 selectedCategoryId={selectedCategoryId}
                 showGrouping={false}
-                onItemClick={setSelectedItem}
+                onItemClick={(item) => navigate(`/buildknowledge/procedure?id=${item.id}`)}
               />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Detail Drawer */}
-      {selectedItem && (
-        <KnowledgeDetailDrawer
-          item={selectedItem}
-          categories={categories}
-          onClose={() => setSelectedItem(null)}
-          onEdit={onItemEdit}
-        />
-      )}
     </>
   );
 }

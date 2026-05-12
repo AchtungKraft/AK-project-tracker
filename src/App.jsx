@@ -13,6 +13,7 @@ import PurchaseOrders from './pages/PurchaseOrders';
 import ProjectPrintView from './pages/ProjectPrintView';
 import PersonPrintView from './pages/PersonPrintView';
 import BuildKnowledge from './pages/BuildKnowledge';
+import ProcedurePage from './pages/ProcedurePage';
 import ClientPage from './pages/ClientPage';
 // VendorPOBuilder page removed — vendor PO creation is now inline in GlobalNeedToOrder
 
@@ -73,6 +74,11 @@ const AuthenticatedApp = () => {
       <Route path="/buildknowledge" element={
         <LayoutWrapper currentPageName="BuildKnowledge">
           <BuildKnowledge />
+        </LayoutWrapper>
+      } />
+      <Route path="/buildknowledge/procedure" element={
+        <LayoutWrapper currentPageName="BuildKnowledge">
+          <ProcedurePage />
         </LayoutWrapper>
       } />
       <Route path="/purchaseorders" element={

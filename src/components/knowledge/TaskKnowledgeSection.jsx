@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +10,6 @@ import { cn } from "@/lib/utils";
 import { TYPE_CONFIG } from "./KnowledgeListView";
 import { getCoverImage, getExcerpt } from "./KnowledgeFeedCard";
 import ExecutionTimeline from "./ExecutionTimeline";
-import ExecutionModeView from "./ExecutionModeView";
 import { toast } from "sonner";
 
 const TASK_ICON_MAP = {
@@ -43,8 +43,8 @@ function InlineWarnings({ warnings }) {
 }
 
 function KnowledgeItemCard({ item, link, onRemove, partLinks, parts, autoExpand = false }) {
+  const navigate = useNavigate();
   const [expanded, setExpanded] = useState(autoExpand || item.is_master_procedure);
-  const [execMode, setExecMode] = useState(false);
   const postType = item.post_type || item.type || 'procedure';
   const config = TYPE_CONFIG[postType] || TYPE_CONFIG.procedure;
   const iconMap = TASK_ICON_MAP[postType] || TASK_ICON_MAP.document;
@@ -104,7 +104,7 @@ function KnowledgeItemCard({ item, link, onRemove, partLinks, parts, autoExpand 
           )}
           <InlineWarnings warnings={item.warnings} />
         </div>
-        <button onClick={() => setExecMode(true)} title="Execute procedure"
+        <button onClick={() => navigate(`/buildknowledge/procedure?id=${item.id}`)} title="Open procedure"
           className="h-7 w-7 flex items-center justify-center rounded-md text-blue-400 hover:bg-blue-900/30 shrink-0 transition-colors">
           <Play className="w-3.5 h-3.5" />
         </button>
@@ -147,8 +147,6 @@ function KnowledgeItemCard({ item, link, onRemove, partLinks, parts, autoExpand 
           )}
         </div>
       )}
-      {/* Execution Mode overlay */}
-      {execMode && <ExecutionModeView item={item} onClose={() => setExecMode(false)} />}
     </div>
   );
 }
