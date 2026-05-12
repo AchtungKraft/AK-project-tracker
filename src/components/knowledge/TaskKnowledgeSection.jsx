@@ -62,9 +62,9 @@ function KnowledgeItemCard({ item, link, onRemove, partLinks, parts, autoExpand 
   return (
     <div className={cn(
       "rounded-lg border mb-1.5 overflow-hidden",
-      item.is_obsolete ? "bg-gray-800/20 border-gray-700/30 opacity-60" :
-      item.is_master_procedure ? "bg-gray-800/40 border-red-900/40" :
-      "bg-gray-800/40 border-gray-700/50"
+      item.is_obsolete ? "bg-gray-900/20 border-gray-800/30 opacity-50" :
+      item.is_master_procedure ? "bg-gray-900/40 border-red-900/30" :
+      "bg-gray-900/30 border-gray-800/40"
     )}>
       {/* Hero image for procedures */}
       {coverImg && expanded && (
@@ -89,7 +89,7 @@ function KnowledgeItemCard({ item, link, onRemove, partLinks, parts, autoExpand 
           <div className="flex items-center gap-1.5 flex-wrap">
             {item.is_master_procedure && <Crown className="w-3 h-3 text-red-400 shrink-0" />}
             <span className={cn("text-sm font-medium text-white truncate", item.is_obsolete && "line-through")}>{item.title}</span>
-            <Badge className="text-[10px] px-1 py-0 h-4 bg-gray-700/50 text-gray-300">{config?.label || postType}</Badge>
+            {postType !== 'procedure' && <span className="text-[9px] text-gray-500 uppercase">{config?.label || postType}</span>}
             {item.is_obsolete && <Badge className="text-[9px] bg-gray-700/50 text-gray-500 border-0 gap-0.5"><AlertOctagon className="w-2 h-2" />obsolete</Badge>}
           </div>
           {/* Part chips + warnings always visible */}
@@ -116,7 +116,7 @@ function KnowledgeItemCard({ item, link, onRemove, partLinks, parts, autoExpand 
 
       {/* Expanded: procedure entries + legacy content */}
       {expanded && (
-        <div className="px-3 pb-3 border-t border-gray-700/30 pt-2 ml-6 space-y-2">
+        <div className="px-3 pb-3 border-t border-gray-800/30 pt-2 ml-6 space-y-2">
           {excerpt && <p className="text-xs text-gray-400">{excerpt}</p>}
           {/* Procedure entries — execution mode */}
           <ExecutionTimeline procedureId={item.id} />
@@ -195,7 +195,7 @@ export default function TaskKnowledgeSection({ taskId }) {
       queryClient.invalidateQueries({ queryKey: ['taskKnowledgeLinks', taskId] });
       setShowAdd(false);
       setSelectedItemId("");
-      toast.success("Knowledge linked");
+      toast.success("Procedure linked");
     },
   });
 
@@ -233,8 +233,8 @@ export default function TaskKnowledgeSection({ taskId }) {
       {showAdd && (
         <div className="flex gap-2 mb-3">
           <Select value={selectedItemId} onValueChange={setSelectedItemId}>
-            <SelectTrigger className="bg-gray-800 border-gray-700 text-white h-9 text-sm flex-1">
-              <SelectValue placeholder="Select knowledge post..." />
+            <SelectTrigger className="bg-gray-900 border-gray-800 text-white h-9 text-sm flex-1">
+              <SelectValue placeholder="Select procedure..." />
             </SelectTrigger>
             <SelectContent>
               {availableItems.map(item => {
@@ -258,7 +258,7 @@ export default function TaskKnowledgeSection({ taskId }) {
       )}
 
       {sortedLinked.length === 0 && !showAdd && (
-        <p className="text-xs text-gray-500 mb-2">No knowledge items linked</p>
+        <p className="text-xs text-gray-600 mb-2">No procedures linked</p>
       )}
 
       {sortedLinked.map(item => {

@@ -40,7 +40,7 @@ export default function RelatedPostSuggestions({ title, categoryId, vehicleTags,
   return (
     <div className="rounded-lg border border-amber-900/30 bg-amber-950/20 p-3">
       <p className="text-[10px] uppercase tracking-widest text-amber-400 font-semibold mb-2 flex items-center gap-1.5">
-        <AlertTriangle className="w-3 h-3" /> Possibly Related Posts
+        <AlertTriangle className="w-3 h-3" /> Similar Procedures
       </p>
       <div className="space-y-1.5">
         {suggestions.map(({ item }) => (
@@ -51,7 +51,7 @@ export default function RelatedPostSuggestions({ title, categoryId, vehicleTags,
           </div>
         ))}
       </div>
-      <p className="text-[10px] text-gray-600 mt-2">Consider linking to or updating an existing post instead.</p>
+      <p className="text-[10px] text-gray-600 mt-2">Consider updating an existing procedure instead.</p>
     </div>
   );
 }

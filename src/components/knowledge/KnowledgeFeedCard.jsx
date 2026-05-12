@@ -5,11 +5,11 @@ import { Crown, Clock } from "lucide-react";
 import { format } from "date-fns";
 
 const POST_TYPE_CONFIG = {
-  procedure:   { label: "Procedure",   dot: "bg-blue-500" },
-  observation: { label: "Observation", dot: "bg-emerald-500" },
-  known_issue: { label: "Known Issue", dot: "bg-amber-500" },
-  reference:   { label: "Reference",   dot: "bg-purple-500" },
-  tip:         { label: "Tip",         dot: "bg-yellow-500" },
+  procedure:   { label: "Procedure", dot: "bg-blue-500" },
+  observation: { label: "Note",      dot: "bg-emerald-500" },
+  known_issue: { label: "Warning",   dot: "bg-amber-500" },
+  reference:   { label: "Reference", dot: "bg-gray-500" },
+  tip:         { label: "Note",      dot: "bg-emerald-500" },
 };
 
 export { POST_TYPE_CONFIG };

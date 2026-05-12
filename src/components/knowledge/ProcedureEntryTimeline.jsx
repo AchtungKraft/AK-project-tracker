@@ -8,12 +8,12 @@ import { format } from "date-fns";
 import ImageLightbox from "./ImageLightbox";
 
 export const ENTRY_TYPE_CONFIG = {
-  step:      { label: "Step",      icon: ListOrdered,   rail: "bg-blue-500",    accent: "text-blue-400",  bg: "bg-blue-950/15" },
-  note:      { label: "Note",      icon: StickyNote,    rail: "bg-emerald-500", accent: "text-emerald-400", bg: "bg-emerald-950/15" },
-  issue:     { label: "Issue",     icon: AlertTriangle, rail: "bg-amber-500",   accent: "text-amber-400", bg: "bg-amber-950/15" },
-  reference: { label: "Reference", icon: FileText,      rail: "bg-purple-500",  accent: "text-purple-400", bg: "bg-purple-950/15" },
-  tip:       { label: "Tip",       icon: Lightbulb,     rail: "bg-yellow-500",  accent: "text-yellow-400", bg: "bg-yellow-950/15" },
-  media:     { label: "Media",     icon: Camera,        rail: "bg-pink-500",    accent: "text-pink-400",  bg: "bg-pink-950/15" },
+  step:      { label: "Step",    icon: ListOrdered,   rail: "bg-blue-600",    accent: "text-blue-400",    bg: "bg-blue-950/10" },
+  note:      { label: "Note",    icon: StickyNote,    rail: "bg-emerald-600", accent: "text-emerald-400", bg: "bg-emerald-950/10" },
+  issue:     { label: "Warning", icon: AlertTriangle, rail: "bg-amber-600",   accent: "text-amber-400",   bg: "bg-amber-950/10" },
+  reference: { label: "Ref",     icon: FileText,      rail: "bg-gray-600",    accent: "text-gray-400",    bg: "bg-gray-950/10" },
+  tip:       { label: "Note",    icon: Lightbulb,     rail: "bg-emerald-600", accent: "text-emerald-400", bg: "bg-emerald-950/10" },
+  media:     { label: "Photos",  icon: Camera,        rail: "bg-gray-600",    accent: "text-gray-400",    bg: "bg-gray-950/10" },
 };
 
 const LIFECYCLE_BADGE = {
@@ -36,88 +36,88 @@ function EntryCard({ entry, stepNumber, parts, onImageClick, compact }) {
   const entryParts = (entry.part_ids || []).map(id => parts.find(p => p.id === id)).filter(Boolean);
 
   return (
-    <div className={cn("relative flex gap-0", isArchived && "opacity-40")}>
-      {/* Left rail */}
-      <div className="flex flex-col items-center shrink-0 w-10 md:w-12">
+    <div className={cn("relative flex gap-0", isArchived && "opacity-35")}>
+      {/* Left rail — step number or icon */}
+      <div className="flex flex-col items-center shrink-0 w-9 md:w-11">
         {isStep ? (
-          <div className={cn("w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0", config.rail)}>
+          <span className={cn("w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0", config.rail)}>
             {stepNumber}
-          </div>
+          </span>
+        ) : isWarning ? (
+          <span className="w-6 h-6 rounded-full bg-amber-600 flex items-center justify-center shrink-0 mt-0.5">
+            <Icon className="w-3 h-3 text-white" />
+          </span>
         ) : (
-          <div className={cn("w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-1", config.rail)}>
-            <Icon className="w-2.5 h-2.5 text-white" />
-          </div>
+          <span className="w-1.5 h-1.5 rounded-full bg-gray-600 shrink-0 mt-2.5 mx-auto" />
         )}
-        <div className="flex-1 w-px bg-gray-800/50 min-h-[6px]" />
+        <div className="flex-1 w-px bg-gray-800/30 min-h-[4px]" />
       </div>
 
-      {/* Content — lighter, no card bg for normal entries */}
-      <div className={cn("flex-1 min-w-0", compact ? "pb-2" : "pb-3")}>
-        <div className={cn(
-          "rounded-lg",
-          isWarning ? "bg-amber-950/10 px-2.5 py-2" :
-          isCritical ? "bg-red-950/10 px-2.5 py-2" :
-          "py-1"
+      {/* Content — flat, no containers */}
+      <div className={cn("flex-1 min-w-0", compact ? "pb-1.5" : "pb-4")}>
+        {/* Headline */}
+        <h4 className={cn(
+          "leading-snug",
+          isStep ? "text-[15px] font-medium text-white" :
+          isWarning ? "text-sm font-medium text-amber-200" :
+          "text-sm text-gray-300"
         )}>
-          {/* Header */}
-          <div className="flex items-start gap-1.5">
-            <div className="flex-1 min-w-0">
-              <h4 className={cn("font-medium text-white leading-snug", isStep ? "text-[15px]" : "text-sm")}>
-                {entry.headline}
-              </h4>
-              <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-gray-600">
-                {!isStep && <span className={cn("font-medium uppercase tracking-wide", config.accent)}>{config.label}</span>}
-                {isCritical && <span className="text-red-400 font-semibold">CRITICAL</span>}
-                {entry.created_date && <span>{format(new Date(entry.created_date), 'MMM d')}</span>}
-              </div>
-            </div>
+          {entry.headline}
+        </h4>
+
+        {/* Subtle meta */}
+        {(!isStep || isCritical) && (
+          <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-gray-600">
+            {!isStep && <span className={cn("font-medium uppercase tracking-wide", config.accent)}>{config.label}</span>}
+            {isCritical && <span className="text-red-400 font-semibold">CRITICAL</span>}
+            {entry.created_date && <span>{format(new Date(entry.created_date), 'MMM d')}</span>}
           </div>
+        )}
 
-          {/* Rich content */}
-          {hasContent && (
-            <div className="mt-1.5">
-              <div className="prose prose-sm prose-invert max-w-none text-gray-300 text-sm leading-relaxed
-                  [&_a]:text-blue-400 [&_a]:underline [&_img]:rounded-lg [&_img]:my-2 [&_img]:max-w-full
-                  [&_ul]:ml-4 [&_ol]:ml-4 [&_li]:text-gray-300
-                  [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
-                dangerouslySetInnerHTML={{ __html: entry.content_html }}
-              />
-            </div>
-          )}
+        {/* Content */}
+        {hasContent && (
+          <div className="mt-1">
+            <div className="text-gray-400 text-sm leading-relaxed
+                [&_a]:text-blue-400 [&_a]:underline [&_img]:rounded-lg [&_img]:my-2 [&_img]:max-w-full
+                [&_ul]:ml-4 [&_ol]:ml-4 [&_li]:text-gray-400
+                [&_p]:my-0.5 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+              dangerouslySetInnerHTML={{ __html: entry.content_html }}
+            />
+          </div>
+        )}
 
-          {/* Images */}
-          {images.length > 0 && (
-            <div className="mt-2">
-              <div className={cn("grid gap-1.5", images.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
-                {images.map((url, i) => (
-                  <button key={i} onClick={() => onImageClick(images, i)} className="block rounded-lg overflow-hidden bg-gray-900 active:opacity-90 transition-opacity">
-                    <img src={url} alt="" loading="lazy"
-                      className={cn("w-full object-cover", images.length === 1 ? "h-44 md:h-56" : "h-28 md:h-36")} />
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Parts */}
-          {entryParts.length > 0 && (
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {entryParts.map(part => (
-                <span key={part.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-gray-400 bg-gray-800/40 rounded">
-                  <Package className="w-2.5 h-2.5" /> {part.part_name || part.name}
-                </span>
+        {/* Images — full-width, prominent */}
+        {images.length > 0 && (
+          <div className="mt-2">
+            <div className={cn("grid gap-1", images.length === 1 ? "" : "grid-cols-2")}>
+              {images.map((url, i) => (
+                <button key={i} onClick={() => onImageClick(images, i)} className="block rounded-lg overflow-hidden bg-gray-900 active:opacity-90 transition-opacity">
+                  <img src={url} alt="" loading="lazy"
+                    className={cn("w-full object-cover", images.length === 1 ? "max-h-[45vh]" : "h-28 md:h-36")} />
+                </button>
               ))}
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Reference */}
-          {entry.reference_url && (
-            <a href={entry.reference_url} target="_blank" rel="noopener noreferrer"
-              className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-blue-400 hover:text-blue-300">
-              <ExternalLink className="w-3 h-3" /> Reference
-            </a>
-          )}
-        </div>
+        {/* Parts */}
+        {entryParts.length > 0 && (
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {entryParts.map(part => (
+              <span key={part.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-gray-500 rounded">
+                <Package className="w-2.5 h-2.5" /> {part.part_name || part.name}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Reference */}
+        {entry.reference_url && (
+          <a href={entry.reference_url} target="_blank" rel="noopener noreferrer"
+            className="mt-1 inline-flex items-center gap-1 text-[11px] text-blue-400 hover:text-blue-300">
+            <ExternalLink className="w-3 h-3" /> Reference
+          </a>
+        )}
       </div>
     </div>
   );
@@ -151,10 +151,10 @@ export default function ProcedureEntryTimeline({ procedureId, compact = false, e
 
   if (entries.length === 0) {
     return (
-      <div className="text-center py-6 text-gray-500">
-        <ListOrdered className="w-6 h-6 mx-auto mb-1.5 opacity-30" />
-        <p className="text-sm">No entries yet</p>
-        <p className="text-xs text-gray-600 mt-0.5">Add your first step, observation, or reference</p>
+      <div className="text-center py-6 text-gray-600">
+        <ListOrdered className="w-5 h-5 mx-auto mb-1 opacity-25" />
+        <p className="text-sm">No steps yet</p>
+        <p className="text-xs text-gray-700 mt-0.5">Add your first step or note</p>
       </div>
     );
   }
@@ -206,12 +206,11 @@ export default function ProcedureEntryTimeline({ procedureId, compact = false, e
           return (
             <React.Fragment key={entry.id}>
               {showGroupHeader && (
-                <div className="flex items-center gap-2 pt-3 pb-2 ml-10 md:ml-12">
-                  <div className="h-px flex-1 bg-gray-700/50" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500 shrink-0 px-2">
+                <div className="pt-4 pb-1 ml-9 md:ml-11">
+                  <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] text-gray-500">
                     {groupLabel}
-                  </span>
-                  <div className="h-px flex-1 bg-gray-700/50" />
+                  </h3>
+                  <div className="h-px bg-gray-800/40 mt-1" />
                 </div>
               )}
               <EntryCard
@@ -225,8 +224,8 @@ export default function ProcedureEntryTimeline({ procedureId, compact = false, e
           );
         })}
         {/* Terminal dot */}
-        <div className="flex items-center w-10 md:w-12 justify-center">
-          <div className="w-2 h-2 rounded-full bg-gray-600" />
+        <div className="flex items-center w-9 md:w-11 justify-center">
+          <div className="w-1.5 h-1.5 rounded-full bg-gray-700" />
         </div>
       </div>
 

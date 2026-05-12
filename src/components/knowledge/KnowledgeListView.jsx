@@ -95,10 +95,10 @@ export default function KnowledgeListView({ items, categories, selectedCategoryI
 
   if (items.length === 0) {
     return (
-      <div className="text-center py-16 text-gray-500">
-        <FileText className="w-10 h-10 mx-auto mb-3 opacity-40" />
-        <p className="text-sm font-medium">No posts in this feed yet</p>
-        <p className="text-xs mt-1 text-gray-600">Add a field note or procedure to get started</p>
+      <div className="text-center py-16 text-gray-600">
+        <FileText className="w-8 h-8 mx-auto mb-2 opacity-30" />
+        <p className="text-sm">No procedures yet</p>
+        <p className="text-xs text-gray-700 mt-0.5">Create your first procedure to get started</p>
       </div>
     );
   }
@@ -121,21 +121,20 @@ export default function KnowledgeListView({ items, categories, selectedCategoryI
       {/* MASTER PROCEDURES SECTION */}
       {masterGroups.length > 0 && (
         <section>
-          <div className="flex items-center gap-2 mb-4 pb-2 border-b-2 border-red-800/50">
-            <Crown className="w-4 h-4 text-red-400" />
-            <h3 className="text-sm font-bold uppercase tracking-widest text-red-400">Master Procedures</h3>
-            <span className="text-xs text-gray-600 ml-auto">{masterGroups.length}</span>
+          <div className="flex items-center gap-2 mb-3 pb-2 border-b border-red-900/30">
+            <Crown className="w-3.5 h-3.5 text-red-400" />
+            <h3 className="text-xs font-bold uppercase tracking-widest text-red-400">Procedures</h3>
+            <span className="text-[10px] text-gray-600 ml-auto">{masterGroups.length}</span>
           </div>
           <div className="space-y-5">
             {masterGroups.map(group => (
               <div key={group.master.id}>
                 {renderCard(group.master)}
                 {group.children.length > 0 && (
-                  <div className="ml-3 md:ml-5 mt-3 border-l-2 border-gray-700/50 pl-3 space-y-2">
-                    <p className="text-[10px] uppercase tracking-widest text-gray-500 font-semibold flex items-center gap-1.5">
-                      <span className="w-1 h-1 rounded-full bg-gray-600" />
-                      Field Intelligence ({group.children.length})
-                    </p>
+                  <div className="ml-3 md:ml-5 mt-2 border-l border-gray-800/40 pl-3 space-y-2">
+                   <p className="text-[10px] uppercase tracking-widest text-gray-600 font-semibold">
+                     Related Notes ({group.children.length})
+                   </p>
                     {group.children.map(child => renderCard(child, true))}
                   </div>
                 )}
@@ -148,9 +147,9 @@ export default function KnowledgeListView({ items, categories, selectedCategoryI
       {/* PINNED SECTION */}
       {pinnedItems.length > 0 && (
         <section>
-          <div className="flex items-center gap-2 mb-3 pb-2 border-b border-amber-900/30">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-amber-400">Pinned References</h3>
-            <span className="text-xs text-gray-600 ml-auto">{pinnedItems.length}</span>
+          <div className="flex items-center gap-2 mb-3 pb-1.5 border-b border-gray-800/40">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500">Pinned</h3>
+            <span className="text-[10px] text-gray-600 ml-auto">{pinnedItems.length}</span>
           </div>
           <div className="space-y-3">
             {pinnedItems.map(item => renderCard(item))}
@@ -162,9 +161,9 @@ export default function KnowledgeListView({ items, categories, selectedCategoryI
       {recentItems.length > 0 && (
         <section>
           {(masterGroups.length > 0 || pinnedItems.length > 0) && (
-            <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-800/60">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500">Field Intelligence</h3>
-              <span className="text-xs text-gray-600 ml-auto">{recentItems.length}</span>
+            <div className="flex items-center gap-2 mb-3 pb-1.5 border-b border-gray-800/40">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-gray-600">Notes & References</h3>
+              <span className="text-[10px] text-gray-700 ml-auto">{recentItems.length}</span>
             </div>
           )}
           <div className="space-y-3">

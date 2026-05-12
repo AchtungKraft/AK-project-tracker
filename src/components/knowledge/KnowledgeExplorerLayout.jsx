@@ -15,12 +15,11 @@ import SubsystemContextPanel from "./SubsystemContextPanel";
 const STORAGE_KEY = 'achtung_knowledge_explorer_state';
 
 const POST_TYPE_FILTERS = [
-  { value: "all", label: "All Posts" },
+  { value: "all", label: "All" },
   { value: "procedure", label: "Procedures" },
-  { value: "observation", label: "Observations" },
-  { value: "known_issue", label: "Known Issues" },
+  { value: "observation", label: "Notes" },
+  { value: "known_issue", label: "Warnings" },
   { value: "reference", label: "References" },
-  { value: "tip", label: "Tips" },
 ];
 
 export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItemCreate }) {
@@ -192,25 +191,24 @@ export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItem
 
   return (
     <>
-      <div className="flex flex-col bg-black/20 rounded-xl border border-red-900/30 md:h-[calc(100vh-8rem)] md:overflow-hidden">
+      <div className="flex flex-col bg-gray-950/50 rounded-xl border border-gray-800/40 md:h-[calc(100vh-8rem)] md:overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between gap-3 p-3 md:p-4 bg-black/40 backdrop-blur-xl border-b border-red-900/30">
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-800/40">
           <div className="flex-1 min-w-0">
-            <h2 className="text-lg font-bold text-white truncate">Execution Intelligence</h2>
-            <p className="text-[11px] text-gray-400">
-              {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''} {selectedCategoryId ? 'in subsystem' : 'total'}
-              {searchTerm && ` · searching "${searchTerm}"`}
+            <h2 className="text-base font-semibold text-white">Procedures</h2>
+            <p className="text-[10px] text-gray-600">
+              {filteredItems.length} {selectedCategoryId ? 'in subsystem' : 'total'}
+              {searchTerm && ` · "${searchTerm}"`}
             </p>
           </div>
-          <Button onClick={onItemCreate} size="sm" className="bg-red-600 hover:bg-red-700 gap-2 h-11 px-4 text-sm shrink-0">
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">New Procedure</span>
+          <Button onClick={onItemCreate} size="sm" className="bg-red-600 hover:bg-red-700 gap-1.5 h-10 px-3 text-sm shrink-0">
+            <Plus className="w-4 h-4" /> New
           </Button>
         </div>
 
         {/* Breadcrumb */}
         {categoryPath.length > 0 && (
-          <div className="px-3 py-2 bg-gray-900/50 border-b border-red-900/20">
+          <div className="px-3 py-2 bg-gray-900/30 border-b border-gray-800/30">
             <KnowledgeBreadcrumb
               path={categoryPath}
               onNavigate={handleCategorySelect}
@@ -222,7 +220,7 @@ export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItem
         {/* Split Pane */}
         <div className="flex-1 flex flex-col md:flex-row md:overflow-hidden">
           {/* Left — Category Tree */}
-          <div className="flex w-full md:w-[28%] lg:w-[22%] flex-col border-b md:border-b-0 md:border-r border-red-900/30 bg-black/20 max-h-[35vh] md:max-h-none">
+          <div className="flex w-full md:w-[28%] lg:w-[22%] flex-col border-b md:border-b-0 md:border-r border-gray-800/30 bg-gray-950/30 max-h-[35vh] md:max-h-none">
             <KnowledgeCategoryTree
               categories={categories}
               items={items}
@@ -238,19 +236,19 @@ export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItem
           {/* Right — Feed */}
           <div className="flex flex-1 flex-col overflow-hidden">
             {/* Toolbar */}
-            <div className="p-3 border-b border-red-900/20 bg-gray-900/30 flex items-center gap-2 flex-wrap">
+            <div className="p-3 border-b border-gray-800/30 flex items-center gap-2 flex-wrap">
               <div className="relative flex-1 min-w-[180px]">
                 <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
                 <Input
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  placeholder="Search procedures, parts, steps..."
-                  className="pl-8 bg-gray-900/50 border-gray-700 text-white h-9 text-sm"
+                  placeholder="Search procedures, parts..."
+                  className="pl-8 bg-gray-900/60 border-gray-800 text-white h-9 text-sm"
                 />
               </div>
               <Select value={postTypeFilter} onValueChange={setPostTypeFilter}>
-                <SelectTrigger className="bg-gray-900/50 border-gray-700 text-white h-9 text-xs w-32">
-                  <Filter className="w-3 h-3 mr-1 text-gray-500" />
+                <SelectTrigger className="bg-gray-900/60 border-gray-800 text-white h-9 text-xs w-28">
+                  <Filter className="w-3 h-3 mr-1 text-gray-600" />
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

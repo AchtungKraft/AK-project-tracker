@@ -126,7 +126,7 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
                 {item.vehicle_tags?.map(tag => (
                   <span key={tag} className="px-1.5 py-0.5 rounded bg-gray-800/60 text-gray-400">{tag}</span>
                 ))}
-                {hasEntries && <span>{entries.length} entries</span>}
+                {hasEntries && <span>{entries.length} steps</span>}
                 <span className="ml-auto">{item.updated_date ? format(new Date(item.updated_date), 'MMM d') : ''}</span>
               </div>
 
@@ -185,9 +185,9 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
 
             {!hasEntries && !showLegacyContent && !item.is_master_procedure && (
               <div className="text-center py-8">
-                <ListOrdered className="w-6 h-6 mx-auto mb-1.5 text-gray-600" />
-                <p className="text-sm text-gray-500">No entries yet</p>
-                <p className="text-xs text-gray-600">Tap a button above to add your first step</p>
+                <ListOrdered className="w-5 h-5 mx-auto mb-1 text-gray-700" />
+                <p className="text-sm text-gray-500">No steps yet</p>
+                <p className="text-xs text-gray-600">Add your first step above</p>
               </div>
             )}
 
@@ -287,7 +287,7 @@ function ContainerImages({ images }) {
     <>
       <div>
         <h4 className="text-[10px] font-bold uppercase tracking-widest text-gray-600 mb-1.5 flex items-center gap-1">
-          <Image className="w-3 h-3" /> Container Photos ({images.length})
+          <Image className="w-3 h-3" /> Photos ({images.length})
         </h4>
         <div className="flex gap-1.5 overflow-x-auto scrollbar-hide pb-1">
           {images.map((url, i) => (
