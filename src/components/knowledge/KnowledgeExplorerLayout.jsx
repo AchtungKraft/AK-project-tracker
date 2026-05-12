@@ -9,7 +9,7 @@ import { Plus, Search, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
 import KnowledgeCategoryTree from "./KnowledgeCategoryTree";
 import KnowledgeBreadcrumb from "./KnowledgeBreadcrumb";
-import KnowledgeListView from "./KnowledgeListView";
+import KnowledgeGroupedList from "./KnowledgeGroupedList";
 import SubsystemContextPanel from "./SubsystemContextPanel";
 
 const STORAGE_KEY = 'achtung_knowledge_explorer_state';
@@ -260,21 +260,10 @@ export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItem
               <span className="text-xs text-gray-500">{filteredItems.length}</span>
             </div>
 
-            <div className="flex-1 p-3 md:p-4 md:overflow-y-auto space-y-4">
-              {/* Subsystem workspace context — shows related parts, tasks, photos */}
-              {selectedCategoryId && !searchTerm && (
-                <SubsystemContextPanel
-                  categoryId={selectedCategoryId}
-                  categories={categories}
-                  items={items}
-                />
-              )}
-
-              <KnowledgeListView
+            <div className="flex-1 md:overflow-y-auto">
+              <KnowledgeGroupedList
                 items={filteredItems}
                 categories={categories}
-                selectedCategoryId={selectedCategoryId}
-                showGrouping={false}
                 onItemClick={(item) => navigate(`/buildknowledge/procedure?id=${item.id}`)}
               />
             </div>
