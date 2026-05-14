@@ -184,6 +184,7 @@ Deno.serve(async (req) => {
           commitment_id: li.commitment_id || null,
           project_id: commitment?.project_id || null,
           project_name: project?.name || 'AK Stock',
+          demand_source: commitment?.demand_source || 'PROJECT',
           status: li.status || 'Ordered',
           is_line_fully_received: qty_remaining === 0 && qty_ordered > 0,
           is_line_cancelled: li.status === 'Cancelled',

@@ -155,6 +155,16 @@ function AggregatedPartRow({
                 {partAgg.commitments.length} projects
               </Badge>
             )}
+            {partAgg.commitments.some(c => c.demand_source === 'STOCK_REPLENISHMENT') && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-blue-900/30 text-blue-400 border-blue-600/50 whitespace-nowrap">
+                AUTO STOCK
+              </Badge>
+            )}
+            {partAgg.commitments.some(c => c.demand_source === 'STOCK_MANUAL') && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-cyan-900/30 text-cyan-400 border-cyan-600/50 whitespace-nowrap">
+                MANUAL STOCK
+              </Badge>
+            )}
           </div>
           <div className="flex items-center gap-1.5 text-[10px] text-gray-500 truncate">
             {partAgg.vendor_part_number && <span className="font-mono">{partAgg.vendor_part_number}</span>}

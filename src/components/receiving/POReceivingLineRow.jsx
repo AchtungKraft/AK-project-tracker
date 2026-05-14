@@ -2,6 +2,7 @@ import React from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { TableCell, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { Package, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import LocationSelect from "@/components/common/LocationSelect";
@@ -86,6 +87,12 @@ const POReceivingLineRow = React.memo(function POReceivingLineRow({
       <TableCell>
         <div className="flex flex-col gap-1">
           <span className="text-sm text-gray-400">{line.project_name}</span>
+          {line.demand_source === 'STOCK_REPLENISHMENT' && (
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-blue-900/30 text-blue-400 border-blue-600/50 w-fit">AUTO STOCK</Badge>
+          )}
+          {line.demand_source === 'STOCK_MANUAL' && (
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-cyan-900/30 text-cyan-400 border-cyan-600/50 w-fit">MANUAL STOCK</Badge>
+          )}
           {(line.unit_cost ?? 0) <= 0 && (
             <span className="inline-flex items-center gap-1 text-[9px] font-mono text-red-400">
               <AlertTriangle className="w-3 h-3" /> NO COST

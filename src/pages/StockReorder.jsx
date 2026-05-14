@@ -140,13 +140,15 @@ export default function StockReorder() {
   const autoReplenishments = openReplenishments.filter(c => c.demand_source === 'STOCK_REPLENISHMENT');
   const manualOrders = openReplenishments.filter(c => c.demand_source === 'STOCK_MANUAL');
 
+  const [rebuilding, setRebuilding] = useState(false);
+
   // Run sync
   const handleSync = async () => {
     setSyncing(true);
     try {
       const res = await base44.functions.invoke('syncStockReplenishment', { dry_run: false });
       if (res.data?.success) {
-        toast.success(`Sync complete: ${res.data.upserted} updated, ${res.data.closed} closed`);
+        toast.success(`Sync complete: ${res.data.upserted} updated, ${res.data.closed} closed${res.data.deduped > 0 ? `, ${res.data.deduped} duplicates cleaned` : ''}`);
         queryClient.invalidateQueries({ queryKey: ['stockCommitments'] });
         queryClient.invalidateQueries({ queryKey: ['partsInventoryView'] });
       } else {
@@ -156,6 +158,26 @@ export default function StockReorder() {
       toast.error('Sync failed: ' + err.message);
     } finally {
       setSyncing(false);
+    }
+  };
+
+  // Run rebuild audit
+  const handleRebuild = async () => {
+    setRebuilding(true);
+    try {
+      const res = await base44.functions.invoke('rebuildStockReplenishment', { fix: true });
+      if (res.data?.success) {
+        const fixes = res.data.fixes?.length || 0;
+        const issues = res.data.issues?.length || 0;
+        toast.success(`Rebuild complete: ${issues} issues found, ${fixes} fixed`);
+        queryClient.invalidateQueries({ queryKey: ['stockCommitments'] });
+      } else {
+        toast.error('Rebuild failed: ' + (res.data?.error || 'Unknown'));
+      }
+    } catch (err) {
+      toast.error('Rebuild failed: ' + err.message);
+    } finally {
+      setRebuilding(false);
     }
   };
 
@@ -193,6 +215,16 @@ export default function StockReorder() {
               >
                 {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
                 Sync Replenishment
+              </Button>
+              <Button
+                onClick={handleRebuild}
+                disabled={rebuilding}
+                variant="outline"
+                size="sm"
+                className="border-amber-700 text-amber-300 gap-2"
+              >
+                {rebuilding ? <Loader2 className="w-4 h-4 animate-spin" /> : <AlertTriangle className="w-4 h-4" />}
+                Rebuild & Fix
               </Button>
               <Link to={createPageUrl('GlobalNeedToOrder')}>
                 <Button size="sm" className="bg-red-600 hover:bg-red-700 gap-2">
@@ -315,40 +347,71 @@ function ReorderRiskTable({ parts }) {
                 <TableHead className="text-gray-400 text-center">Reorder Pt</TableHead>
                 <TableHead className="text-gray-400 text-center">Gap</TableHead>
                 <TableHead className="text-gray-400">Vendor</TableHead>
-                <TableHead className="text-gray-400 text-center">Replenishment</TableHead>
+                <TableHead className="text-gray-400 text-center">Coverage</TableHead>
+                <TableHead className="text-gray-400 text-center">Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {parts.map(part => (
-                <TableRow key={part.id} className="border-gray-800/50">
-                  <TableCell>
-                    <p className="text-white font-medium text-sm">{part.part_name}</p>
-                    {part.vendor_part_number && <p className="text-xs text-gray-500 font-mono">{part.vendor_part_number}</p>}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <span className={cn("font-semibold", part.physical_stock <= 0 ? "text-red-400" : "text-white")}>
-                      {part.physical_stock}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-center text-gray-400">{part.reorder_point}</TableCell>
-                  <TableCell className="text-center">
-                    <Badge className="bg-red-600/80 text-white text-xs">-{part.shortage}</Badge>
-                  </TableCell>
-                  <TableCell className="text-gray-300 text-sm">{part.vendor_name}</TableCell>
-                  <TableCell className="text-center">
-                    {part.has_replenishment ? (
-                      <Badge className={cn(
-                        "text-xs",
-                        part.covered_from_po > 0 ? "bg-blue-600/30 text-blue-300" : "bg-green-600/30 text-green-300"
-                      )}>
-                        {part.covered_from_po > 0 ? `On Order (${part.covered_from_po})` : `Planned (${part.replenishment_qty})`}
-                      </Badge>
-                    ) : (
-                      <Badge className="bg-gray-700/50 text-gray-500 text-xs">None</Badge>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {parts.map(part => {
+                // Derive lifecycle status
+                let lifecycleStatus = 'NEEDED';
+                let lifecycleColor = 'bg-red-600/80 text-white';
+                if (part.has_replenishment) {
+                  if (part.covered_from_po > 0 && part.covered_from_po >= part.replenishment_qty) {
+                    lifecycleStatus = 'ORDERED';
+                    lifecycleColor = 'bg-blue-600/30 text-blue-300';
+                  } else if (part.covered_from_po > 0) {
+                    lifecycleStatus = 'PARTIAL';
+                    lifecycleColor = 'bg-purple-600/30 text-purple-300';
+                  } else {
+                    lifecycleStatus = 'PLANNED';
+                    lifecycleColor = 'bg-yellow-600/30 text-yellow-300';
+                  }
+                }
+                
+                return (
+                  <TableRow key={part.id} className="border-gray-800/50">
+                    <TableCell>
+                      <p className="text-white font-medium text-sm">{part.part_name}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        {part.vendor_part_number && <span className="text-xs text-gray-500 font-mono">{part.vendor_part_number}</span>}
+                        {part.demand_source === 'STOCK_REPLENISHMENT' && (
+                          <Badge variant="outline" className="text-[8px] px-1 py-0 bg-blue-900/30 text-blue-400 border-blue-600/50">AUTO</Badge>
+                        )}
+                        {part.demand_source === 'STOCK_MANUAL' && (
+                          <Badge variant="outline" className="text-[8px] px-1 py-0 bg-cyan-900/30 text-cyan-400 border-cyan-600/50">MANUAL</Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className={cn("font-semibold", part.physical_stock <= 0 ? "text-red-400" : "text-white")}>
+                        {part.physical_stock}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-center text-gray-400">{part.reorder_point}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge className="bg-red-600/80 text-white text-xs">-{part.shortage}</Badge>
+                    </TableCell>
+                    <TableCell className="text-gray-300 text-sm">{part.vendor_name}</TableCell>
+                    <TableCell className="text-center">
+                      {part.has_replenishment ? (
+                        <span className="text-xs font-mono text-gray-300">
+                          {part.covered_from_po > 0 && <span className="text-blue-400">{part.covered_from_po} on PO</span>}
+                          {part.covered_from_po > 0 && part.replenishment_qty > part.covered_from_po && ' / '}
+                          {part.replenishment_qty > (part.covered_from_po || 0) && (
+                            <span className="text-yellow-400">{part.replenishment_qty - (part.covered_from_po || 0)} planned</span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-600">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge className={cn("text-xs", lifecycleColor)}>{lifecycleStatus}</Badge>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
@@ -375,30 +438,40 @@ function ReplenishmentTable({ commitments }) {
             <TableHeader>
               <TableRow className="border-gray-800">
                 <TableHead className="text-gray-400">Part</TableHead>
-                <TableHead className="text-gray-400 text-center">Qty</TableHead>
+                <TableHead className="text-gray-400 text-center">Required</TableHead>
+                <TableHead className="text-gray-400 text-center">On PO</TableHead>
                 <TableHead className="text-gray-400 text-center">Stock</TableHead>
+                <TableHead className="text-gray-400 text-center">Reorder Pt</TableHead>
                 <TableHead className="text-gray-400 text-center">Status</TableHead>
                 <TableHead className="text-gray-400">Vendor</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {commitments.map(c => (
-                <TableRow key={c.id} className="border-gray-800/50">
-                  <TableCell className="text-white text-sm font-medium">{c.part_name}</TableCell>
-                  <TableCell className="text-center text-white">{c.required_total}</TableCell>
-                  <TableCell className="text-center text-gray-400">{c.physical_stock}</TableCell>
-                  <TableCell className="text-center">
-                    <Badge className={cn("text-xs",
-                      c.commitment_status === 'ordered' ? 'bg-blue-600/30 text-blue-300' :
-                      c.commitment_status === 'planned' ? 'bg-yellow-600/30 text-yellow-300' :
-                      'bg-gray-700/50 text-gray-400'
-                    )}>
-                      {c.commitment_status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-gray-300 text-sm">{c.vendor_name}</TableCell>
-                </TableRow>
-              ))}
+              {commitments.map(c => {
+                const coveredPO = c.covered_from_po || 0;
+                const required = c.required_total || 0;
+                let lifecycle = c.commitment_status;
+                let lifecycleColor = 'bg-gray-700/50 text-gray-400';
+                if (coveredPO >= required && required > 0) { lifecycle = 'FULLY ORDERED'; lifecycleColor = 'bg-blue-600/30 text-blue-300'; }
+                else if (coveredPO > 0) { lifecycle = 'PARTIAL ORDER'; lifecycleColor = 'bg-purple-600/30 text-purple-300'; }
+                else if (c.commitment_status === 'planned') { lifecycle = 'PLANNED'; lifecycleColor = 'bg-yellow-600/30 text-yellow-300'; }
+                
+                return (
+                  <TableRow key={c.id} className="border-gray-800/50">
+                    <TableCell className="text-white text-sm font-medium">{c.part_name}</TableCell>
+                    <TableCell className="text-center text-white font-mono">{required}</TableCell>
+                    <TableCell className="text-center">
+                      <span className={cn("font-mono", coveredPO > 0 ? "text-blue-400" : "text-gray-600")}>{coveredPO}</span>
+                    </TableCell>
+                    <TableCell className="text-center text-gray-400 font-mono">{c.physical_stock}</TableCell>
+                    <TableCell className="text-center text-gray-500 font-mono">{c.reorder_point}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge className={cn("text-xs", lifecycleColor)}>{lifecycle}</Badge>
+                    </TableCell>
+                    <TableCell className="text-gray-300 text-sm">{c.vendor_name}</TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
@@ -427,28 +500,40 @@ function ManualOrdersTable({ commitments }) {
               <TableRow className="border-gray-800">
                 <TableHead className="text-gray-400">Part</TableHead>
                 <TableHead className="text-gray-400 text-center">Qty</TableHead>
+                <TableHead className="text-gray-400 text-center">On PO</TableHead>
                 <TableHead className="text-gray-400 text-center">Status</TableHead>
                 <TableHead className="text-gray-400">Reason</TableHead>
                 <TableHead className="text-gray-400">Notes</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {commitments.map(c => (
-                <TableRow key={c.id} className="border-gray-800/50">
-                  <TableCell className="text-white text-sm font-medium">{c.part_name}</TableCell>
-                  <TableCell className="text-center text-white">{c.required_total}</TableCell>
-                  <TableCell className="text-center">
-                    <Badge className={cn("text-xs",
-                      c.commitment_status === 'ordered' ? 'bg-blue-600/30 text-blue-300' :
-                      'bg-yellow-600/30 text-yellow-300'
-                    )}>
-                      {c.commitment_status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-gray-400 text-sm capitalize">{(c.stock_reason || 'manual').replace(/_/g, ' ')}</TableCell>
-                  <TableCell className="text-gray-500 text-xs truncate max-w-[200px]">{c.notes || '—'}</TableCell>
-                </TableRow>
-              ))}
+              {commitments.map(c => {
+                const coveredPO = c.covered_from_po || 0;
+                const required = c.required_total || 0;
+                let lifecycle = 'REQUESTED';
+                let lifecycleColor = 'bg-yellow-600/30 text-yellow-300';
+                if (coveredPO >= required && required > 0) { lifecycle = 'FULFILLED'; lifecycleColor = 'bg-emerald-600/30 text-emerald-300'; }
+                else if (coveredPO > 0) { lifecycle = 'PARTIAL'; lifecycleColor = 'bg-purple-600/30 text-purple-300'; }
+                else if (c.commitment_status === 'ordered') { lifecycle = 'ORDERED'; lifecycleColor = 'bg-blue-600/30 text-blue-300'; }
+                
+                return (
+                  <TableRow key={c.id} className="border-gray-800/50">
+                    <TableCell>
+                      <span className="text-white text-sm font-medium">{c.part_name}</span>
+                      <Badge variant="outline" className="ml-2 text-[8px] px-1 py-0 bg-cyan-900/30 text-cyan-400 border-cyan-600/50">MANUAL</Badge>
+                    </TableCell>
+                    <TableCell className="text-center text-white font-mono">{required}</TableCell>
+                    <TableCell className="text-center">
+                      <span className={cn("font-mono", coveredPO > 0 ? "text-blue-400" : "text-gray-600")}>{coveredPO}</span>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge className={cn("text-xs", lifecycleColor)}>{lifecycle}</Badge>
+                    </TableCell>
+                    <TableCell className="text-gray-400 text-sm capitalize">{(c.stock_reason || 'manual').replace(/_/g, ' ')}</TableCell>
+                    <TableCell className="text-gray-500 text-xs truncate max-w-[200px]">{c.notes || '—'}</TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
