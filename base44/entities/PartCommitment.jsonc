@@ -55,6 +55,28 @@
       "default": "VENDOR",
       "description": "CANONICAL: How this commitment will be fulfilled"
     },
+    "demand_source": {
+      "type": "string",
+      "enum": [
+        "PROJECT",
+        "STOCK_REPLENISHMENT",
+        "STOCK_MANUAL"
+      ],
+      "default": "PROJECT",
+      "description": "CANONICAL: Origin of demand. PROJECT = project need, STOCK_REPLENISHMENT = system-generated reorder, STOCK_MANUAL = buyer-created stock order"
+    },
+    "stock_reason": {
+      "type": "string",
+      "enum": [
+        "reorder_gap",
+        "buyer_override",
+        "seasonal",
+        "safety_stock",
+        "bulk_vendor_order",
+        "forecasted_usage"
+      ],
+      "description": "Optional reason for stock demand commitments (STOCK_REPLENISHMENT or STOCK_MANUAL)"
+    },
     "qty_committed": {
       "type": "number",
       "default": 0,
@@ -143,10 +165,11 @@
       "enum": [
         "unbilled",
         "invoiced",
-        "paid"
+        "paid",
+        "not_billable"
       ],
       "default": "unbilled",
-      "description": "CANONICAL: Billing lifecycle status. Only invoice workflows may modify."
+      "description": "CANONICAL: Billing lifecycle status. Only invoice workflows may modify. not_billable for stock replenishment."
     },
     "order_line_item_ids": {
       "type": "array",

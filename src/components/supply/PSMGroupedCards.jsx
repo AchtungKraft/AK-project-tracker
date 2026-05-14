@@ -434,6 +434,17 @@ export function PSMItemRow({
         >
           <div className="flex items-center gap-2">
             <p className="text-white text-sm font-medium truncate">{part?.part_name || 'Unknown Part'}</p>
+            {/* Demand source badge */}
+            {commitment.demand_source === 'STOCK_REPLENISHMENT' && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-blue-900/30 text-blue-400 border-blue-600/50 whitespace-nowrap">
+                AUTO STOCK
+              </Badge>
+            )}
+            {commitment.demand_source === 'STOCK_MANUAL' && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-cyan-900/30 text-cyan-400 border-cyan-600/50 whitespace-nowrap">
+                MANUAL STOCK
+              </Badge>
+            )}
             {/* PHASE 4: SCOPE ADD Badge for Delta Commitment Model */}
             {commitment.source_type === 'scope_addition' && (
               <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-purple-900/30 text-purple-400 border-purple-600/50 whitespace-nowrap">

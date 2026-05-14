@@ -578,6 +578,9 @@ Deno.serve(async (req) => {
           canCancel: c.commitment_status !== 'cancelled',
           canCreateInvoice: false,
         },
+        demand_source: c.demand_source || 'PROJECT',
+        stock_reason: c.stock_reason || null,
+        is_system_project: project?.is_system_project || false,
         billing_state: c.billing_status === 'invoiced' ? 'INVOICED' : c.billing_status === 'paid' ? 'PAID' : 'NOT_INVOICED',
 
         _raw: {

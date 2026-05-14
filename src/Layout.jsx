@@ -183,7 +183,7 @@ const getNavigationSections = () => {
       colorKey: "inventory",
       items: [
         { title: "Parts Tracker", url: createPageUrl("PartsTracker"), icon: Package },
-        { title: "Stock Reorder", url: createPageUrl("StockReorder"), icon: Package },
+        { title: "Inventory Planning", url: createPageUrl("StockReorder"), icon: Package },
       ],
     },
     {

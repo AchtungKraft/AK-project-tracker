@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/select";
 import {
   ShoppingCart, Search, Building2, FolderKanban, AlertTriangle,
-  DollarSign, CheckCircle2, RefreshCw, Truck, Package, List, LayoutGrid
+  DollarSign, CheckCircle2, RefreshCw, Truck, Package, List, LayoutGrid,
+  Warehouse
 } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
@@ -32,6 +33,7 @@ import VendorQueueView from "@/components/supply/VendorQueueView";
 import AggregatedProcurementView, { resolveActiveVendorSource } from "@/components/supply/AggregatedProcurementView";
 import resolveDefaultVendor from "@/components/supply/resolveDefaultVendor";
 // VendorPOBuilder removed — all PO creation unified through CreateBatchOrderModal
+import AddStockOrderModal from "@/components/supply/AddStockOrderModal";
 import { cn } from "@/lib/utils";
 
 
@@ -72,6 +74,7 @@ export default function GlobalNeedToOrder() {
   const [viewMode, setViewMode] = useState('procurement'); // 'procurement' | 'parts' | 'vendors'
   const [selectedVendorContext, setSelectedVendorContext] = useState(null); // { vendor_id, vendor_name }
   const [vendorSourcesByPart, setVendorSourcesByPart] = useState({}); // part_id -> PartVendorSource[]
+  const [showStockOrderModal, setShowStockOrderModal] = useState(false);
 
   // Use canonical ops supply view
   // CRITICAL: vendor filter is NEVER set by vendor view selection — only by explicit dropdown
@@ -287,6 +290,14 @@ export default function GlobalNeedToOrder() {
               >
                 <RefreshCw className="w-4 h-4" />
                 Refresh
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowStockOrderModal(true)}
+                className="border-gray-700 text-white gap-2"
+              >
+                <Warehouse className="w-4 h-4" />
+                Add Stock Order
               </Button>
               <Button
                 variant="outline"
@@ -619,6 +630,14 @@ export default function GlobalNeedToOrder() {
         <PartModal
           partId={editingPartId}
           onClose={() => setEditingPartId(null)}
+        />
+      )}
+
+      {showStockOrderModal && (
+        <AddStockOrderModal
+          open={showStockOrderModal}
+          onClose={() => setShowStockOrderModal(false)}
+          onSuccess={() => refetch()}
         />
       )}
     </MobileSafeAreaContainer>
