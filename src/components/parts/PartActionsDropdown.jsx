@@ -7,11 +7,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreVertical, Package, ShoppingCart, Eye, ExternalLink, Wrench, ListPlus } from "lucide-react";
+import { MoreVertical, ArrowUpDown, ShoppingCart, Eye, ExternalLink, Wrench, ListPlus } from "lucide-react";
 
 /**
  * PartActionsDropdown - Quick actions for a part
- * - Add Inventory
+ * - Adjust Inventory (add/remove)
  * - Order Part
  * - Add to Build
  * - View Details
@@ -59,8 +59,8 @@ export default function PartActionsDropdown({
           }}
           className="cursor-pointer text-green-400 focus:text-green-400"
         >
-          <Package className="w-4 h-4 mr-2" />
-          Add Inventory
+          <ArrowUpDown className="w-4 h-4 mr-2" />
+          Adjust Inventory
         </DropdownMenuItem>
         
         <DropdownMenuItem 

@@ -30,7 +30,7 @@ import PartJournalSection from "./PartJournalSection";
 import PartProjectUsageSection from "./PartProjectUsageSection";
 import PartVendorSourcesSection from "./PartVendorSourcesSection";
 import LocationSelect from "@/components/common/LocationSelect";
-import AddInventoryModal from "../inventory/AddInventoryModal";
+import AdjustInventoryModal from "../inventory/AdjustInventoryModal";
 import AddToBuildModal from "./AddToBuildModal";
 import { forceAppRefresh, extractRefreshContext } from "@/components/supply/forceAppRefresh";
 
@@ -1502,9 +1502,9 @@ export default function PartModal({ part, partId, onClose }) {
           />
         )}
         
-        {/* Add Inventory Modal (Mobile) */}
+        {/* Adjust Inventory Modal (Mobile) */}
         {showAddInventoryModal && activePart && (
-          <AddInventoryModal
+          <AdjustInventoryModal
             preselectedPartId={activePart.id}
             onClose={async () => {
               setShowAddInventoryModal(false);
@@ -1588,9 +1588,9 @@ export default function PartModal({ part, partId, onClose }) {
         />
       )}
       
-      {/* Add Inventory Modal */}
+      {/* Adjust Inventory Modal */}
       {showAddInventoryModal && activePart && (
-        <AddInventoryModal
+        <AdjustInventoryModal
           preselectedPartId={activePart.id}
           onClose={async () => {
             setShowAddInventoryModal(false);
