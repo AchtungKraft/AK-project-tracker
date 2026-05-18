@@ -1,11 +1,12 @@
 import React from "react";
-import { AlertTriangle, CheckCircle2, Clock, ShoppingCart, TrendingDown } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, ShoppingCart, TrendingDown, Receipt } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 
 /**
  * Single health banner that replaces multiple risk/warning sections.
  * Shows ONE status with a concise explanation.
+ * Now includes billing ledger health for overdue/outstanding invoice awareness.
  */
 const HEALTH_STATES = {
   negative_margin: {
@@ -13,6 +14,18 @@ const HEALTH_STATES = {
     bg: "bg-red-900/30 border-red-700/50",
     iconColor: "text-red-400",
     label: "Negative Margin",
+  },
+  overdue_invoices: {
+    icon: AlertTriangle,
+    bg: "bg-red-900/30 border-red-700/50",
+    iconColor: "text-red-400",
+    label: "Overdue Invoices",
+  },
+  outstanding_balance: {
+    icon: Receipt,
+    bg: "bg-amber-900/30 border-amber-700/50",
+    iconColor: "text-amber-400",
+    label: "Outstanding Balance",
   },
   needs_billing: {
     icon: Clock,
@@ -40,13 +53,19 @@ const HEALTH_STATES = {
   },
 };
 
-export default function FinancialHealthBanner({ fin, sourceStats }) {
+export default function FinancialHealthBanner({ fin, sourceStats, billingLedger }) {
   // Determine primary health state (priority order)
   let state, description;
 
   if (fin.totals.projectedMargin < -0.01) {
     state = HEALTH_STATES.negative_margin;
     description = `Project is ${formatCurrencyUSD(Math.abs(fin.totals.projectedMargin))} over budget — costs exceed planned revenue.`;
+  } else if (billingLedger?.overdueCount > 0) {
+    state = HEALTH_STATES.overdue_invoices;
+    description = `${billingLedger.overdueCount} invoice(s) past due — ${formatCurrencyUSD(billingLedger.outstandingRevenue)} outstanding.`;
+  } else if (billingLedger?.outstandingRevenue > 0.01) {
+    state = HEALTH_STATES.outstanding_balance;
+    description = `${formatCurrencyUSD(billingLedger.outstandingRevenue)} invoiced but not yet paid.`;
   } else if (fin.risk.accounting.total > 0 && fin.totals.actualSpend > 0) {
     state = HEALTH_STATES.needs_billing;
     description = `${formatCurrencyUSD(fin.risk.accounting.total)} spent but not yet billed to client.`;

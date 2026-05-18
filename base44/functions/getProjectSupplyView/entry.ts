@@ -100,6 +100,16 @@ Deno.serve(async (req) => {
 
     // ── EARLY EXIT: No commitments = minimal response ──
     if (commitments.length === 0) {
+      // Include invoice records even for empty projects (billing can exist without parts)
+      const emptyInvoiceRecords = projectInvoices.map(inv => ({
+        id: inv.id, status: inv.status, invoice_type: inv.invoice_type,
+        qb_invoice_number: inv.qb_invoice_number, issue_date: inv.issue_date,
+        due_date: inv.due_date, payment_date: inv.payment_date,
+        subtotal: inv.subtotal ?? 0, total: inv.total ?? 0,
+        balance_due: inv.balance_due ?? 0, paid_amount: inv.paid_amount ?? 0,
+        credit_applied: inv.credit_applied ?? 0,
+        created_date: inv.created_date, updated_date: inv.updated_date,
+      }));
       const emptyResponse = {
         success: true,
         timestamp: new Date().toISOString(),
@@ -114,6 +124,7 @@ Deno.serve(async (req) => {
         },
         categories: [],
         integrity_warnings: null,
+        invoices: emptyInvoiceRecords,
       };
       setCache(cacheKey, emptyResponse);
       return Response.json(emptyResponse);
@@ -709,6 +720,27 @@ Deno.serve(async (req) => {
       }
     });
     
+    // ═══════════════════════════════════════════════════════════════
+    // CANONICAL: Include raw invoice records for client-side billing ledger
+    // The billing ledger derives ALL billing metrics from these records ONLY.
+    // ═══════════════════════════════════════════════════════════════
+    const invoiceRecords = projectInvoices.map(inv => ({
+      id: inv.id,
+      status: inv.status,
+      invoice_type: inv.invoice_type,
+      qb_invoice_number: inv.qb_invoice_number,
+      issue_date: inv.issue_date,
+      due_date: inv.due_date,
+      payment_date: inv.payment_date,
+      subtotal: inv.subtotal ?? 0,
+      total: inv.total ?? 0,
+      balance_due: inv.balance_due ?? 0,
+      paid_amount: inv.paid_amount ?? 0,
+      credit_applied: inv.credit_applied ?? 0,
+      created_date: inv.created_date,
+      updated_date: inv.updated_date,
+    }));
+
     const responsePayload = {
       success: true,
       timestamp: new Date().toISOString(),
@@ -723,6 +755,7 @@ Deno.serve(async (req) => {
       summary,
       categories: categories.filter(c => c.active !== false).map(c => ({ id: c.id, name: c.name, color: c.color })),
       integrity_warnings: integrityWarnings.length > 0 ? integrityWarnings : null,
+      invoices: invoiceRecords,
     };
 
     setCache(cacheKey, responsePayload);

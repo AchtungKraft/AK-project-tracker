@@ -11,8 +11,10 @@ import { cn } from "@/lib/utils";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { deriveProjectFinancials, validateProjectFinancials } from "@/components/supply/deriveProjectFinancials";
 import { normalizePartCommitments } from "@/components/supply/resolveFinancialSource";
+import { deriveBillingLedger } from "@/components/financial/deriveBillingLedger";
 import FinancialHealthBanner from "@/components/financial/FinancialHealthBanner";
 import FinancialDetailDrawer from "@/components/financial/FinancialDetailDrawer";
+import BillingLedgerSection from "@/components/financial/BillingLedgerSection";
 
 function Tip({ text, children }) {
   return (
@@ -51,7 +53,7 @@ function SmallMetric({ label, value, color = "text-gray-400", tip }) {
  * Health banner replaces multiple warnings.
  * All advanced details behind progressive disclosure.
  */
-export default function PSMFinancialSummary({ enrichedCommitments, metrics, servicesSummary }) {
+export default function PSMFinancialSummary({ enrichedCommitments, metrics, servicesSummary, projectInvoices = [] }) {
   const { items: normalizedCommitments, stats: sourceStats } = useMemo(
     () => normalizePartCommitments(enrichedCommitments),
     [enrichedCommitments]
@@ -63,7 +65,19 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
   );
   const warnings = useMemo(() => validateProjectFinancials(fin), [fin]);
 
-  const noScope = enrichedCommitments.length === 0 && fin.revenue.invoiced > 0;
+  // ═══════════════════════════════════════════════════════════════
+  // CANONICAL BILLING LEDGER — derived ONLY from invoice records
+  // This replaces all operational-state-derived billing metrics.
+  // ═══════════════════════════════════════════════════════════════
+  const billingLedger = useMemo(
+    () => deriveBillingLedger({
+      projectedRevenue: fin.revenue.planned,
+      invoices: projectInvoices,
+    }),
+    [fin.revenue.planned, projectInvoices]
+  );
+
+  const noScope = enrichedCommitments.length === 0 && billingLedger.invoicedRevenue > 0;
   const projColor = fin.totals.projectedMargin >= 0 ? "text-emerald-400" : "text-red-400";
   const marginPct = fin.revenue.planned > 0
     ? ((fin.totals.projectedMargin / fin.revenue.planned) * 100).toFixed(0)
@@ -78,12 +92,12 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
         </div>
       )}
 
-      {/* Health Banner — single status */}
-      <FinancialHealthBanner fin={fin} sourceStats={sourceStats} />
+      {/* Health Banner — single status, now with billing ledger awareness */}
+      <FinancialHealthBanner fin={fin} sourceStats={sourceStats} billingLedger={billingLedger} />
 
       {/* Executive Cards — 4 core sections */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* REVENUE */}
+        {/* REVENUE — ledger-derived billing metrics */}
         <Card className="bg-black/40 border-gray-800">
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center gap-1.5">
@@ -92,12 +106,23 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
             </div>
             <BigMetric label="Planned" value={fin.revenue.planned} tip="Total expected revenue from parts + services" />
             <div className="space-y-1 border-t border-gray-800 pt-2">
-              <SmallMetric label="Invoiced" value={fin.revenue.invoiced} color="text-blue-400" tip="Amount billed to client" />
+              <SmallMetric
+                label="Invoiced"
+                value={billingLedger.invoicedRevenue}
+                color="text-blue-400"
+                tip="Sum of actual invoice totals (not operational state)"
+              />
               <SmallMetric
                 label="Outstanding"
-                value={fin.revenue.outstanding}
-                color={fin.revenue.outstanding > 0 ? "text-amber-400" : "text-gray-500"}
-                tip="Invoiced but not yet paid"
+                value={billingLedger.outstandingRevenue}
+                color={billingLedger.outstandingRevenue > 0.01 ? "text-amber-400" : "text-gray-500"}
+                tip="Invoiced minus paid (from invoice records)"
+              />
+              <SmallMetric
+                label="Remaining"
+                value={billingLedger.remainingToBill}
+                color={billingLedger.remainingToBill > 0.01 ? "text-yellow-400" : "text-gray-500"}
+                tip="Projected revenue minus invoiced"
               />
             </div>
           </CardContent>
@@ -135,11 +160,16 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
             <div className="space-y-1 border-t border-gray-800 pt-2">
               <SmallMetric
                 label="Realized"
-                value={fin.totals.realizedMargin}
-                color={fin.totals.realizedMargin >= 0 ? "text-emerald-400" : "text-red-400"}
-                tip="Invoiced − Actual Spend (current truth)"
+                value={billingLedger.invoicedRevenue - fin.totals.actualSpend}
+                color={(billingLedger.invoicedRevenue - fin.totals.actualSpend) >= 0 ? "text-emerald-400" : "text-red-400"}
+                tip="Ledger invoiced − actual spend (accounting truth)"
               />
-              <SmallMetric label="Remaining" value={fin.totals.unrealizedMarginRemaining} tip="Projected margin not yet realized" />
+              <SmallMetric
+                label="Collected"
+                value={billingLedger.paidRevenue}
+                color={billingLedger.paidRevenue > 0 ? "text-emerald-400" : "text-gray-500"}
+                tip="Cash collected from invoices"
+              />
             </div>
           </CardContent>
         </Card>
@@ -182,6 +212,11 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
           </CardContent>
         </Card>
       </div>
+
+      {/* Billing Ledger — canonical invoice-record-derived billing truth */}
+      {projectInvoices.length > 0 && (
+        <BillingLedgerSection ledger={billingLedger} />
+      )}
 
       {/* Progressive Disclosure — Financial Details + Diagnostics */}
       <FinancialDetailDrawer fin={fin} warnings={warnings} />

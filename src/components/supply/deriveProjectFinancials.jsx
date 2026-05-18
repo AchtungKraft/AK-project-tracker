@@ -90,18 +90,21 @@ export function deriveProjectFinancials({ enrichedCommitments = [], metrics = {}
   const servicesCommitted = svcCostOrdered + servicesActualCost;
 
   // ═══════════════════════════════════════════════════════════════
-  // REVENUE (ACCRUAL)
+  // REVENUE — PROJECTED (operational estimation layer)
   // ═══════════════════════════════════════════════════════════════
-  // CRITICAL FIX: metrics.totalPlannedRetail from the backend resolver
-  // ALREADY includes services (parts_planned_retail + services_planned_retail).
-  // Adding servicesBillable again would DOUBLE-COUNT service revenue.
-  // Use parts-only retail from local derivation + services from servicesSummary.
+  // NOTE: This is the PROJECTED revenue layer for cost/margin analysis.
+  // Actual billing metrics (invoiced, paid, outstanding, remaining)
+  // are now derived ONLY from invoice records via deriveBillingLedger().
+  // The values below are kept for backward compatibility but should
+  // NOT be used for billing dashboards — use the billing ledger instead.
   const plannedRevenue = partsPlannedRetail + servicesBillable;
   const invoicedRevenue = metrics.totalInvoiced ?? 0;
   const paidRevenue = metrics.totalPaid ?? 0;
 
   const revenue = {
     planned: plannedRevenue,
+    // DEPRECATED for billing: Use deriveBillingLedger() for canonical billing metrics.
+    // These are kept as operational estimates for backward compatibility.
     invoiced: invoicedRevenue,
     paid: paidRevenue,
     outstanding: metrics.invoiceOutstanding ?? 0,

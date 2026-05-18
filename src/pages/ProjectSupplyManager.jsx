@@ -58,6 +58,7 @@ import PSMGroupedView, { PSMSummaryStrip } from "@/components/supply/PSMGroupedC
 import ProjectSupplySummaryBar, { filterByActionCategory } from "@/components/supply/ProjectSupplySummaryBar";
 import PSMFloatingActionBar from "@/components/supply/PSMFloatingActionBar";
 import PSMFinancialSummary from "@/components/supply/PSMFinancialSummary";
+import ReportTab from "@/components/supply/ReportTab";
 import CommitmentPricingEditor from "@/components/supply/CommitmentPricingEditor";
 import CommitmentBillingDiagnostics from "@/components/financial/CommitmentBillingDiagnostics";
 import BackfillPOCostsModal from "@/components/supply/BackfillPOCostsModal";
@@ -101,6 +102,7 @@ export default function ProjectSupplyManager() {
     summary: supplySummary, 
     categories,
     project,
+    invoices: projectInvoices,
     isLoading: supplyLoading, 
     isFetching: supplyFetching,
     refetch: refetchSupply,
@@ -1007,7 +1009,12 @@ export default function ProjectSupplyManager() {
           )}
 
           {/* Financial Summary - Revenue + Cost Exposure + Capital Breakdown + Cashflow Risk */}
-          <PSMFinancialSummary enrichedCommitments={enrichedCommitments} metrics={metrics} servicesSummary={servicesSummary} />
+          <PSMFinancialSummary
+            enrichedCommitments={enrichedCommitments}
+            metrics={metrics}
+            servicesSummary={servicesSummary}
+            projectInvoices={projectInvoices}
+          />
 
           {/* Financial overview consolidated into PSMFinancialSummary above */}
 
@@ -1281,105 +1288,7 @@ export default function ProjectSupplyManager() {
             </TabsContent>
 
             <TabsContent value="report" className="mt-4 space-y-4">
-              {/* Lifecycle Progress Bar - Report Tab Only */}
-              <Card className="bg-black/40 border-gray-800">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-gray-400">Lifecycle Progress</span>
-                    <span className="text-sm text-gray-500">{metrics.byStatus.installed} / {metrics.totalCommitments} installed</span>
-                  </div>
-                  <div className="flex h-3 rounded-full overflow-hidden bg-gray-800">
-                    <div className="bg-gray-600" style={{ width: `${(metrics.byStatus.planned / metrics.totalCommitments) * 100}%` }} title="Planned" />
-                    <div className="bg-purple-600" style={{ width: `${((metrics.byStatus.ordered + metrics.byStatus.partiallyReceived) / metrics.totalCommitments) * 100}%` }} title="Ordered" />
-                    <div className="bg-blue-600" style={{ width: `${(metrics.byStatus.received / metrics.totalCommitments) * 100}%` }} title="Received" />
-                    <div className="bg-cyan-600" style={{ width: `${(metrics.byStatus.allocated / metrics.totalCommitments) * 100}%` }} title="Allocated" />
-                    <div className="bg-green-600" style={{ width: `${(metrics.byStatus.installed / metrics.totalCommitments) * 100}%` }} title="Installed" />
-                  </div>
-                  <div className="flex justify-between text-xs text-gray-500 mt-1">
-                    <span>Plan: {metrics.byStatus.planned}</span>
-                    <span>Order: {metrics.byStatus.ordered}</span>
-                    <span>Recv: {metrics.byStatus.received}</span>
-                    <span>Alloc: {metrics.byStatus.allocated}</span>
-                    <span>Inst: {metrics.byStatus.installed}</span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Report Summary - FORWARD MODEL */}
-              <Card className="bg-black/40 border-gray-800">
-                <CardHeader className="p-4 pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-white">Supply Chain Report</CardTitle>
-                    <Button variant="outline" className="border-gray-700 text-white gap-2">
-                      <Download className="w-4 h-4" />
-                      Export CSV
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-4 space-y-4">
-                  {/* Requirements Summary */}
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-400 mb-2">Requirements Summary</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      <div className="bg-gray-800/50 p-3 rounded">
-                        <p className="text-xs text-gray-500">Total Commitments</p>
-                        <p className="text-xl font-bold text-white">{metrics.totalCommitments}</p>
-                      </div>
-                      <div className="bg-gray-800/50 p-3 rounded">
-                       <p className="text-xs text-gray-500">Planned Revenue</p>
-                       <p className="text-xl font-bold text-white font-mono">{formatCurrencyUSD(metrics.totalPlannedRetail)}</p>
-                      </div>
-                      <div className="bg-gray-800/50 p-3 rounded">
-                        <p className="text-xs text-gray-500">Invoiced</p>
-                        <p className="text-xl font-bold text-blue-400 font-mono">{formatCurrencyUSD(metrics.totalInvoiced)}</p>
-                      </div>
-                      <div className="bg-gray-800/50 p-3 rounded">
-                        <p className="text-xs text-gray-500">Unbilled</p>
-                        <p className={`text-xl font-bold font-mono ${metrics.unbilledRetail > 0 ? 'text-amber-500' : 'text-gray-400'}`}>
-                          {formatCurrencyUSD(metrics.unbilledRetail)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Invoice Summary */}
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-400 mb-2">Invoice Summary</h4>
-                    <div className="bg-gray-800/50 p-3 rounded">
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                        <div>
-                          <p className="text-xs text-gray-500">Total Invoiced</p>
-                          <p className="text-lg font-bold text-white font-mono">{formatCurrencyUSD(metrics.totalInvoiced)}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Total Paid</p>
-                          <p className="text-lg font-bold text-gray-300 font-mono">{formatCurrencyUSD(metrics.totalPaid)}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Outstanding</p>
-                          <p className={`text-lg font-bold font-mono ${metrics.invoiceOutstanding > 0 ? 'text-amber-500' : 'text-gray-400'}`}>
-                            {formatCurrencyUSD(metrics.invoiceOutstanding)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Install Progress */}
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-400 mb-2">Installation Progress</h4>
-                    <div className="bg-gray-800/50 p-3 rounded">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-gray-400">
-                          {metrics.byStatus.installed} of {metrics.totalCommitments} items installed
-                        </span>
-                        <span className="text-sm text-white font-bold">{metrics.installPct}%</span>
-                      </div>
-                      <Progress value={metrics.installPct} className="h-2" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <ReportTab metrics={metrics} projectInvoices={projectInvoices} />
             </TabsContent>
           </Tabs>
         </div>

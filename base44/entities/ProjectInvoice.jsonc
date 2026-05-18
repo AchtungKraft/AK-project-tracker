@@ -20,11 +20,14 @@
       "enum": [
         "draft",
         "sent",
+        "partial",
         "paid",
+        "overdue",
+        "void",
         "cancelled"
       ],
       "default": "draft",
-      "description": "Invoice status"
+      "description": "Invoice status \u2014 canonical billing lifecycle"
     },
     "qb_invoice_number": {
       "type": "string",
