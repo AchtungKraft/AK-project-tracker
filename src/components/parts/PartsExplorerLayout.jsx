@@ -11,7 +11,7 @@ import PartsViewToolbar from "./PartsViewToolbar";
 import PartsBreadcrumb from "./PartsBreadcrumb";
 import UnifiedAddPartModal from "./UnifiedAddPartModal";
 import PartModal from "./PartModal";
-import AddInventoryModal from "../inventory/AddInventoryModal";
+import AdjustInventoryModal from "../inventory/AdjustInventoryModal";
 import OrderPartModal from "./OrderPartModal";
 import AddToBuildModal from "./AddToBuildModal";
 import AddToNeedToBuyModal from "./AddToNeedToBuyModal";
@@ -405,7 +405,7 @@ export default function PartsExplorerLayout({ onPartClick }) {
       )}
 
       {inventoryModalPart && (
-        <AddInventoryModal 
+        <AdjustInventoryModal 
           onClose={() => setInventoryModalPart(null)} 
           preselectedPartId={inventoryModalPart.id}
         />
