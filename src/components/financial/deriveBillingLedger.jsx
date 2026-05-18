@@ -49,7 +49,8 @@ function resolveEffectiveStatus(invoice) {
 
   const total = invoice.total ?? invoice.subtotal ?? 0;
   const paid = invoice.paid_amount ?? 0;
-  const balanceDue = invoice.balance_due ?? Math.max(0, total - paid);
+  // CANONICAL: Always compute balance from total - paid. Entity balance_due may be stale.
+  const balanceDue = Math.max(0, total - paid);
 
   if (total > 0 && paid >= total - 0.01) return 'paid';
   if (paid > 0 && balanceDue > 0.01) return 'partial';
@@ -82,7 +83,8 @@ export function deriveBillingLedger({ projectedRevenue = 0, invoices = [] }) {
     agingBucket: getAgingBucket(inv),
     invoiceTotal: inv.total ?? inv.subtotal ?? 0,
     invoicePaid: inv.paid_amount ?? 0,
-    invoiceBalance: inv.balance_due ?? Math.max(0, (inv.total ?? inv.subtotal ?? 0) - (inv.paid_amount ?? 0)),
+    // CANONICAL: Always compute balance from total - paid. Entity balance_due may be stale.
+    invoiceBalance: Math.max(0, (inv.total ?? inv.subtotal ?? 0) - (inv.paid_amount ?? 0)),
   }));
 
   const activeInvoices = enrichedInvoices.filter(

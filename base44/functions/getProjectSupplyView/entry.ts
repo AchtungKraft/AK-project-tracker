@@ -101,15 +101,19 @@ Deno.serve(async (req) => {
     // ── EARLY EXIT: No commitments = minimal response ──
     if (commitments.length === 0) {
       // Include invoice records even for empty projects (billing can exist without parts)
-      const emptyInvoiceRecords = projectInvoices.map(inv => ({
-        id: inv.id, status: inv.status, invoice_type: inv.invoice_type,
-        qb_invoice_number: inv.qb_invoice_number, issue_date: inv.issue_date,
-        due_date: inv.due_date, payment_date: inv.payment_date,
-        subtotal: inv.subtotal ?? 0, total: inv.total ?? 0,
-        balance_due: inv.balance_due ?? 0, paid_amount: inv.paid_amount ?? 0,
-        credit_applied: inv.credit_applied ?? 0,
-        created_date: inv.created_date, updated_date: inv.updated_date,
-      }));
+      const emptyInvoiceRecords = projectInvoices.map(inv => {
+        const invTotal = inv.total ?? inv.subtotal ?? 0;
+        const invPaid = inv.paid_amount ?? 0;
+        return {
+          id: inv.id, status: inv.status, invoice_type: inv.invoice_type,
+          qb_invoice_number: inv.qb_invoice_number, issue_date: inv.issue_date,
+          due_date: inv.due_date, payment_date: inv.payment_date,
+          subtotal: inv.subtotal ?? 0, total: invTotal,
+          balance_due: Math.max(0, invTotal - invPaid), paid_amount: invPaid,
+          credit_applied: inv.credit_applied ?? 0,
+          created_date: inv.created_date, updated_date: inv.updated_date,
+        };
+      });
       const emptyResponse = {
         success: true,
         timestamp: new Date().toISOString(),
@@ -727,22 +731,27 @@ Deno.serve(async (req) => {
     // CANONICAL: Include raw invoice records for client-side billing ledger
     // The billing ledger derives ALL billing metrics from these records ONLY.
     // ═══════════════════════════════════════════════════════════════
-    const invoiceRecords = projectInvoices.map(inv => ({
-      id: inv.id,
-      status: inv.status,
-      invoice_type: inv.invoice_type,
-      qb_invoice_number: inv.qb_invoice_number,
-      issue_date: inv.issue_date,
-      due_date: inv.due_date,
-      payment_date: inv.payment_date,
-      subtotal: inv.subtotal ?? 0,
-      total: inv.total ?? 0,
-      balance_due: inv.balance_due ?? 0,
-      paid_amount: inv.paid_amount ?? 0,
-      credit_applied: inv.credit_applied ?? 0,
-      created_date: inv.created_date,
-      updated_date: inv.updated_date,
-    }));
+    const invoiceRecords = projectInvoices.map(inv => {
+      const invTotal = inv.total ?? inv.subtotal ?? 0;
+      const invPaid = inv.paid_amount ?? 0;
+      return {
+        id: inv.id,
+        status: inv.status,
+        invoice_type: inv.invoice_type,
+        qb_invoice_number: inv.qb_invoice_number,
+        issue_date: inv.issue_date,
+        due_date: inv.due_date,
+        payment_date: inv.payment_date,
+        subtotal: inv.subtotal ?? 0,
+        total: invTotal,
+        // CANONICAL: Always compute balance from total - paid. Entity balance_due may be stale.
+        balance_due: Math.max(0, invTotal - invPaid),
+        paid_amount: invPaid,
+        credit_applied: inv.credit_applied ?? 0,
+        created_date: inv.created_date,
+        updated_date: inv.updated_date,
+      };
+    });
 
     const responsePayload = {
       success: true,
@@ -850,9 +859,12 @@ async function resolveCanonicalFinancials(base44, project_id, commitments, proje
   const activeInvoices = projectInvoices.filter(inv => inv.status !== 'cancelled' && inv.status !== 'void');
   let invoice_entity_total = 0, invoice_entity_paid = 0, invoice_entity_balance_due = 0;
   for (const inv of activeInvoices) {
-    invoice_entity_total += inv.total ?? inv.subtotal ?? 0;
-    invoice_entity_paid += inv.paid_amount ?? 0;
-    invoice_entity_balance_due += inv.balance_due ?? 0;
+    const invTotal = inv.total ?? inv.subtotal ?? 0;
+    const invPaid = inv.paid_amount ?? 0;
+    invoice_entity_total += invTotal;
+    invoice_entity_paid += invPaid;
+    // CANONICAL: Always compute balance from total - paid. Entity balance_due may be stale.
+    invoice_entity_balance_due += Math.max(0, invTotal - invPaid);
   }
 
   let invoice_lines_total = 0;

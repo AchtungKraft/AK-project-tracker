@@ -74,7 +74,7 @@ export default function FinancialHealthBanner({ fin, sourceStats, billingLedger,
     description = `${formatCurrencyUSD(billingLedger.outstandingRevenue)} invoiced but not yet paid.`;
   } else if (unbilledOpCost > 0.01 && opCost > 0) {
     state = HEALTH_STATES.needs_billing;
-    description = `You've spent ${formatCurrencyUSD(opCost)} — need to bill ${formatCurrencyUSD(unbilledOpCost)}.`;
+    description = `${formatCurrencyUSD(unbilledOpCost)} in operational costs not yet covered by invoices.`;
   } else if (uncommitted > 0) {
     state = HEALTH_STATES.awaiting_orders;
     description = `${formatCurrencyUSD(uncommitted)} still needs to be ordered.`;

@@ -152,6 +152,8 @@ export function deriveCostLedger({ enrichedCommitments = [], servicesSummary = {
   const accountingCost = partsAccountingCost + servicesAccountingCost;
 
   // Derived metrics
+  // NOTE: This compares operational vs accounting cost layers (internal cost tracking).
+  // NOT related to client billing. For client-facing "unbilled" see billingLedger.
   const uninvoicedOperationalCost = Math.max(0, operationalCost - accountingCost);
   const uncommittedCost = partsCostUnordered + (svcOperationalBreakdown.planned ?? 0);
   const committedNotOperational = partsCostOnPO + (svcOperationalBreakdown.ordered ?? 0);
