@@ -61,6 +61,7 @@ import PSMFinancialSummary from "@/components/supply/PSMFinancialSummary";
 import ReportTab from "@/components/supply/ReportTab";
 import CommitmentPricingEditor from "@/components/supply/CommitmentPricingEditor";
 import CommitmentBillingDiagnostics from "@/components/financial/CommitmentBillingDiagnostics";
+import ResolveNeedModal from "@/components/supply/ResolveNeedModal";
 import BackfillPOCostsModal from "@/components/supply/BackfillPOCostsModal";
 import ProjectPurchaseOrders from "@/components/project/ProjectPurchaseOrders";
 import ProjectServicesSection from "@/components/supply/ProjectServicesSection";
@@ -180,6 +181,8 @@ export default function ProjectSupplyManager() {
   // Bulk sync result modal
   const [syncResultData, setSyncResultData] = useState(null);
   
+  // Resolve Need modal
+  const [resolveNeedTarget, setResolveNeedTarget] = useState(null);
   // Diagnostics overlay toggle (dev/admin)
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   // Phase 4: Action filter for summary bar
@@ -508,6 +511,7 @@ export default function ProjectSupplyManager() {
   const guardedSetCancelModal = useCallback((incoming) => openModal('Cancel', setCancelModal, incoming), [openModal]);
   const guardedSetRemoveCreditModal = useCallback((incoming) => openModal('Remove Credit', setRemoveCreditModal, incoming), [openModal]);
   const guardedSetPricingEditor = useCallback((incoming) => openModal('Pricing Editor', setPricingEditorCommitment, incoming), [openModal]);
+  const guardedSetResolveNeedTarget = useCallback((incoming) => openModal('Resolve Need', setResolveNeedTarget, incoming), [openModal]);
 
   // Filter commitments for each tab - using CANONICAL fields from read model
   const getFilteredCommitments = (tabFilter) => {
@@ -581,7 +585,7 @@ export default function ProjectSupplyManager() {
     orderModalPart || deltaOrderCommitment || installModal || reverseInstallModal ||
     receiveModal || cancelModal || removeCreditModal || qtyManagerDrawer ||
     pricingEditorCommitment || showBulkPOPreview || vendorPickerCommitment ||
-    blockedItems || selectedPartId || showBackfillModal
+    blockedItems || selectedPartId || showBackfillModal || resolveNeedTarget
   );
   const prevModalOpen = useRef(anyModalOpen);
   useEffect(() => {
@@ -1109,6 +1113,7 @@ export default function ProjectSupplyManager() {
                 onRemoveCredit={guardedSetRemoveCreditModal}
                 onEditPricing={handleEditPricing}
                 onSyncCost={handleSyncCost}
+                onResolveNeed={guardedSetResolveNeedTarget}
                 onBatchPO={handleBulkPOPreview}
                 actionsEnabled={actionsEnabled}
                 categoriesMap={categoriesMap}
@@ -1175,6 +1180,7 @@ export default function ProjectSupplyManager() {
                 onRemoveCredit={guardedSetRemoveCreditModal}
                 onEditPricing={handleEditPricing}
                 onSyncCost={handleSyncCost}
+                onResolveNeed={guardedSetResolveNeedTarget}
                 onBatchPO={handleBulkPOPreview}
                 actionsEnabled={actionsEnabled}
                 categoriesMap={categoriesMap}
@@ -1227,6 +1233,7 @@ export default function ProjectSupplyManager() {
                 onRemoveCredit={guardedSetRemoveCreditModal}
                 onEditPricing={handleEditPricing}
                 onSyncCost={handleSyncCost}
+                onResolveNeed={guardedSetResolveNeedTarget}
                 onBatchPO={handleBulkPOPreview}
                 actionsEnabled={actionsEnabled}
                 categoriesMap={categoriesMap}
@@ -1279,6 +1286,7 @@ export default function ProjectSupplyManager() {
                 onRemoveCredit={guardedSetRemoveCreditModal}
                 onEditPricing={handleEditPricing}
                 onSyncCost={handleSyncCost}
+                onResolveNeed={guardedSetResolveNeedTarget}
                 onBatchPO={handleBulkPOPreview}
                 actionsEnabled={actionsEnabled}
                 categoriesMap={categoriesMap}
@@ -1467,6 +1475,19 @@ export default function ProjectSupplyManager() {
         />
       )}
       
+      {/* Resolve Need Modal */}
+      {resolveNeedTarget && (
+        <ResolveNeedModal
+          open={true}
+          onClose={() => setResolveNeedTarget(null)}
+          item={resolveNeedTarget}
+          onSuccess={() => {
+            setResolveNeedTarget(null);
+            handleModalSuccess();
+          }}
+        />
+      )}
+
       {/* PartModal - Opens when part name clicked */}
       {selectedPartId && (
         <PartModal

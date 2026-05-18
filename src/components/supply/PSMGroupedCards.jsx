@@ -521,6 +521,7 @@ export function PSMGroupCard({
   onDeltaOrder,
   onManageQty,
   onCancel,
+  onResolveNeed,
   onGroupOrder,
   actionsEnabled,
   categoriesMap,
@@ -658,6 +659,7 @@ export function PSMGroupCard({
                 onDeltaOrder={onDeltaOrder}
                 onManageQty={onManageQty}
                 onCancel={onCancel}
+                onResolveNeed={onResolveNeed}
                 actionsEnabled={actionsEnabled}
                 categoriesMap={categoriesMap}
                 vendorsMap={vendorsMap}
@@ -759,6 +761,7 @@ function PSMSubGroupCard({
   onRemoveCredit,
   onEditPricing,
   onSyncCost,
+  onResolveNeed,
   actionsEnabled,
   categoriesMap,
   vendorsMap,
@@ -828,6 +831,7 @@ function PSMSubGroupCard({
               onRemoveCredit={onRemoveCredit}
               onEditPricing={onEditPricing}
               onSyncCost={onSyncCost}
+              onResolveNeed={onResolveNeed}
               actionsEnabled={actionsEnabled}
               categoriesMap={categoriesMap}
               vendorsMap={vendorsMap}
@@ -870,6 +874,7 @@ export default function PSMGroupedView({
   onRemoveCredit,
   onEditPricing,
   onSyncCost,
+  onResolveNeed,
   onBatchPO,
   actionsEnabled = true,
   categoriesMap,
@@ -1238,6 +1243,7 @@ export default function PSMGroupedView({
         onRemoveCredit={onRemoveCredit}
         onEditPricing={onEditPricing}
         onSyncCost={onSyncCost}
+        onResolveNeed={onResolveNeed}
         onGroupOrder={handleGroupOrder}
         actionsEnabled={actionsEnabled}
         categoriesMap={categoriesMap}
@@ -1275,6 +1281,7 @@ function PSMGroupCardWithSubgroups({
   onRemoveCredit,
   onEditPricing,
   onSyncCost,
+  onResolveNeed,
   onGroupOrder,
   actionsEnabled,
   categoriesMap,
@@ -1402,30 +1409,31 @@ function PSMGroupCardWithSubgroups({
             <div className="py-1">
               {group.sortedSubgroups.map(subgroup => (
                 <PSMSubGroupCard
-                  key={subgroup.key}
-                  subgroup={subgroup}
-                  subgroupMode={subgroupMode}
-                  sortMode={sortMode}
-                  isExpanded={isSubgroupExpanded(`${group.key}:${subgroup.key}`)}
-                  onToggle={() => onToggleSubgroup(subgroup.key)}
-                  selectedItems={selectedItems}
-                  onSelectAll={onSelectAll}
-                  onItemSelect={onItemSelect}
-                  onPartClick={onPartClick}
-                  onCreatePO={onCreatePO}
-                  onReceive={onReceive}
-                  onInstall={onInstall}
-                  onReverseInstall={onReverseInstall}
-                  onDeltaOrder={onDeltaOrder}
-                  onManageQty={onManageQty}
-                  onCancel={onCancel}
-                  onRemoveCredit={onRemoveCredit}
-                  onEditPricing={onEditPricing}
-                  onSyncCost={onSyncCost}
-                  actionsEnabled={actionsEnabled}
-                  categoriesMap={categoriesMap}
-                  vendorsMap={vendorsMap}
-                  tab={tab}
+                 key={subgroup.key}
+                 subgroup={subgroup}
+                 subgroupMode={subgroupMode}
+                 sortMode={sortMode}
+                 isExpanded={isSubgroupExpanded(`${group.key}:${subgroup.key}`)}
+                 onToggle={() => onToggleSubgroup(subgroup.key)}
+                 selectedItems={selectedItems}
+                 onSelectAll={onSelectAll}
+                 onItemSelect={onItemSelect}
+                 onPartClick={onPartClick}
+                 onCreatePO={onCreatePO}
+                 onReceive={onReceive}
+                 onInstall={onInstall}
+                 onReverseInstall={onReverseInstall}
+                 onDeltaOrder={onDeltaOrder}
+                 onManageQty={onManageQty}
+                 onCancel={onCancel}
+                 onRemoveCredit={onRemoveCredit}
+                 onEditPricing={onEditPricing}
+                 onSyncCost={onSyncCost}
+                 onResolveNeed={onResolveNeed}
+                 actionsEnabled={actionsEnabled}
+                 categoriesMap={categoriesMap}
+                 vendorsMap={vendorsMap}
+                 tab={tab}
                 />
               ))}
             </div>
@@ -1448,6 +1456,7 @@ function PSMGroupCardWithSubgroups({
                 onRemoveCredit={onRemoveCredit}
                 onEditPricing={onEditPricing}
                 onSyncCost={onSyncCost}
+                onResolveNeed={onResolveNeed}
                 actionsEnabled={actionsEnabled}
                 categoriesMap={categoriesMap}
                 vendorsMap={vendorsMap}
