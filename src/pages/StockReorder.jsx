@@ -201,8 +201,8 @@ export default function StockReorder() {
                 Inventory Planning
               </h1>
               <p className="text-gray-400 mt-1 text-sm">
-                Reorder intelligence · All procurement routes through{' '}
-                <Link to={createPageUrl('GlobalNeedToOrder')} className="text-blue-400 hover:underline">Order Queue</Link>
+                Inventory policy & reorder intelligence · Place orders in{' '}
+                <Link to={createPageUrl('GlobalNeedToOrder')} className="text-blue-400 hover:underline">Procurement Queue</Link>
               </p>
             </div>
             <div className="flex items-center gap-2">

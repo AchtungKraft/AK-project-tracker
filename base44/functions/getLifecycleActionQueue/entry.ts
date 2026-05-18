@@ -290,12 +290,16 @@ async function getLifecycleActionQueue(base44, filters = {}) {
     kpis.total_commitments++;
 
     // ── CANONICAL FIELDS ──
+    // ALIGNED WITH getOpsSupplyView: effective_required accounts for qty_removed,
+    // gap subtracts qty_installed to prevent phantom shortages
     const requiredTotal = commitment.required_total || 0;
+    const qtyRemoved = commitment.qty_removed || 0;
+    const effectiveRequired = Math.max(0, requiredTotal - qtyRemoved);
     const reservedFromStock = commitment.reserved_from_stock || 0;
     const coveredFromPo = commitment.covered_from_po || 0;
     const qtyInstalled = commitment.qty_installed || 0;
     const invoicedQty = commitment.invoiced_qty || 0;
-    const gap = Math.max(0, requiredTotal - reservedFromStock - coveredFromPo);
+    const gap = Math.max(0, effectiveRequired - reservedFromStock - coveredFromPo - qtyInstalled);
 
     // ── PROCUREMENT from commitment-scoped line items (with part_id fallback for legacy) ──
     const commitmentLineItems = (lineItemsByCommitment[commitment.id] || []).length > 0
@@ -317,7 +321,7 @@ async function getLifecycleActionQueue(base44, filters = {}) {
     const needsVendor = requiresVendorPurchase(part, effectivePartType);
     let procurementStatus = needsVendor ? 'NEEDS_ORDER' : 'NOT_REQUIRED';
 
-    if (receivedQty >= requiredTotal) {
+    if (receivedQty >= effectiveRequired) {
       procurementStatus = 'RECEIVED';
     } else if (receivedQty > 0) {
       procurementStatus = 'PARTIALLY_RECEIVED';
@@ -344,8 +348,8 @@ async function getLifecycleActionQueue(base44, filters = {}) {
       billingStatus = 'INVOICED';
     }
 
-    // ── INSTALL STATUS ──
-    const installStatus = qtyInstalled >= requiredTotal ? 'INSTALLED' :
+    // ── INSTALL STATUS ── (uses effectiveRequired, not requiredTotal)
+    const installStatus = qtyInstalled >= effectiveRequired && effectiveRequired > 0 ? 'INSTALLED' :
                           qtyInstalled > 0 ? 'PARTIAL' : 'PLANNED';
 
     // ── LIFECYCLE ──
@@ -354,8 +358,8 @@ async function getLifecycleActionQueue(base44, filters = {}) {
     // ── PRICING ──
     const unitCost = commitment.unit_cost_snapshot || part.cost || 0;
     const unitRetail = commitment.unit_retail_snapshot || part.retail_override || part.retail_matrix_price || 0;
-    const lineTotal = requiredTotal * unitRetail;
-    const costTotal = requiredTotal * unitCost;
+    const lineTotal = effectiveRequired * unitRetail;
+    const costTotal = effectiveRequired * unitCost;
 
     // ════════════════════════════════════════════════════
     // ACTION CLASSIFICATION — first match wins
@@ -486,8 +490,10 @@ async function getLifecycleActionQueue(base44, filters = {}) {
       // Install axis
       install_status: installStatus,
 
-      // CANONICAL quantities
+      // CANONICAL quantities (aligned with getOpsSupplyView)
       required_total: requiredTotal,
+      effective_required: effectiveRequired,
+      qty_removed: qtyRemoved,
       reserved_from_stock: reservedFromStock,
       covered_from_po: coveredFromPo,
       qty_installed: qtyInstalled,

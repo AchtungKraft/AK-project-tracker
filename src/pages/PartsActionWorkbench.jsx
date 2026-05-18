@@ -793,8 +793,8 @@ export default function PartsActionWorkbench() {
       return;
     }
     if (actionType === ACTION_TYPES.CREATE_ORDER) {
-      // Navigate to project supply manager for PO creation
-      window.location.href = `${createPageUrl('ProjectDetail')}?id=${item.project_id}&tab=supply`;
+      // CANONICAL: Route ALL procurement to GlobalNeedToOrder with project context
+      window.location.href = `${createPageUrl('GlobalNeedToOrder')}?project_id=${item.project_id}`;
       return;
     }
     if (actionType === ACTION_TYPES.FIX_DATA) {
@@ -842,7 +842,8 @@ export default function PartsActionWorkbench() {
                 Parts Action Workbench
               </h1>
               <p className="text-gray-400 text-sm mt-1">
-                Operational command center — create invoices via modal or Project Invoices
+                Execution operations — billing, installs, delivery tracking · Order via{' '}
+                <Link to={createPageUrl('GlobalNeedToOrder')} className="text-blue-400 hover:underline">Procurement Queue</Link>
               </p>
             </div>
             

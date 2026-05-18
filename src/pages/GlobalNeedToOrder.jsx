@@ -60,12 +60,15 @@ export default function GlobalNeedToOrder() {
   const filterProjectId = urlParams.get('project_id');
   const filterVendorId = urlParams.get('vendor_id');
 
+  const filterDemandSource = urlParams.get('demand_source');
+
   const [searchTerm, setSearchTerm] = useState('');
   const [groupMode, setGroupMode] = useState('vendor');
   const [selectedProjectFilter, setSelectedProjectFilter] = useState(filterProjectId || 'all');
   const [selectedVendorFilter, setSelectedVendorFilter] = useState(filterVendorId || 'all');
   const [coverageFilter, setCoverageFilter] = useState('all');
   const [prepayFilter, setPrepayFilter] = useState('all');
+  const [demandSourceFilter, setDemandSourceFilter] = useState(filterDemandSource || 'all');
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [orderModalPart, setOrderModalPart] = useState(null);
   const [showBatchOrderModal, setShowBatchOrderModal] = useState(false);
@@ -109,9 +112,17 @@ export default function GlobalNeedToOrder() {
       if (prepayFilter === 'required' && !item.requires_prepay) return false;
       if (prepayFilter === 'not_required' && item.requires_prepay) return false;
 
+      // Demand source filter
+      if (demandSourceFilter !== 'all') {
+        const ds = item.demand_source || 'PROJECT';
+        if (demandSourceFilter === 'project' && ds !== 'PROJECT') return false;
+        if (demandSourceFilter === 'stock' && ds !== 'STOCK_REPLENISHMENT' && ds !== 'STOCK_MANUAL') return false;
+        if (demandSourceFilter === 'manual' && ds !== 'STOCK_MANUAL') return false;
+      }
+
       return true;
     });
-  }, [needToOrderItems, coverageFilter, prepayFilter]);
+  }, [needToOrderItems, coverageFilter, prepayFilter, demandSourceFilter]);
 
   // Stats from canonical resolved fields (PartVendorSource-first)
   const totalQty = filteredItems.reduce((sum, i) => sum + (i.to_order ?? 0), 0);
@@ -119,6 +130,8 @@ export default function GlobalNeedToOrder() {
   const totalCost = filteredItems.reduce((sum, i) => sum + (i.resolved_cost_total ?? i.estimated_cost ?? 0), 0);
   const canOrderCount = filteredItems.filter(i => i.is_orderable).length;
   const blockedCount = filteredItems.filter(i => !i.is_orderable).length;
+  const projectDemandCount = filteredItems.filter(i => (i.demand_source || 'PROJECT') === 'PROJECT').length;
+  const stockDemandCount = filteredItems.filter(i => i.demand_source === 'STOCK_REPLENISHMENT' || i.demand_source === 'STOCK_MANUAL').length;
 
   // DEV DRIFT GUARD
   useEffect(() => {
@@ -316,7 +329,12 @@ export default function GlobalNeedToOrder() {
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">Items to Order</p>
                 <p className="text-2xl font-bold text-white">{filteredItems.length}</p>
-                <p className="text-xs text-gray-400">{totalQty} qty total</p>
+                <p className="text-xs text-gray-400">
+                  {projectDemandCount > 0 && <span className="text-blue-400">{projectDemandCount} project</span>}
+                  {projectDemandCount > 0 && stockDemandCount > 0 && ' · '}
+                  {stockDemandCount > 0 && <span className="text-orange-400">{stockDemandCount} stock</span>}
+                  {projectDemandCount === 0 && stockDemandCount === 0 && `${totalQty} qty`}
+                </p>
               </CardContent>
             </Card>
             <Card className="bg-black/40 border-gray-800">
@@ -396,6 +414,19 @@ export default function GlobalNeedToOrder() {
                     <SelectItem value="covered">✓ Covered</SelectItem>
                     <SelectItem value="partial">◐ Partial</SelectItem>
                     <SelectItem value="uncovered">○ Uncovered</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={demandSourceFilter} onValueChange={setDemandSourceFilter}>
+                  <SelectTrigger className="w-36 bg-gray-900/50 border-gray-700 text-white">
+                    <Package className="w-4 h-4 mr-2" />
+                    <SelectValue placeholder="Demand" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Demand</SelectItem>
+                    <SelectItem value="project">🏗️ Projects</SelectItem>
+                    <SelectItem value="stock">📦 Stock</SelectItem>
+                    <SelectItem value="manual">✋ Manual</SelectItem>
                   </SelectContent>
                 </Select>
 
