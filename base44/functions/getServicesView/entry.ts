@@ -197,7 +197,7 @@ Deno.serve(async (req) => {
       return result;
     });
 
-    // Summary
+    // Summary — includes per-status cost totals for canonical cost derivation
     const summary = {
       total: enriched.length,
       by_status: { planned: 0, ordered: 0, completed: 0, billed: 0 },
@@ -209,9 +209,13 @@ Deno.serve(async (req) => {
       planned_billable: 0,
       margin_pct: 0,
       margin_warning_count: 0,
+      // CANONICAL: Per-status cost totals (actual $ in each bucket, not pro-rated)
+      cost_by_status: { planned: 0, ordered: 0, completed: 0, billed: 0 },
+      billable_by_status: { planned: 0, ordered: 0, completed: 0, billed: 0 },
     };
     for (const e of enriched) {
-      summary.by_status[e.status] = (summary.by_status[e.status] || 0) + 1;
+      const st = e.status || 'planned';
+      summary.by_status[st] = (summary.by_status[st] || 0) + 1;
       summary.total_cost += e.total_cost;
       summary.total_billable += e.total_billable;
       summary.external_cost += e.external_cost;
@@ -219,6 +223,9 @@ Deno.serve(async (req) => {
       summary.planned_cost += e.planned_cost;
       summary.planned_billable += e.planned_billable;
       if (e.margin_warning) summary.margin_warning_count++;
+      // CANONICAL: Accumulate real cost per status bucket
+      summary.cost_by_status[st] = (summary.cost_by_status[st] || 0) + e.total_cost;
+      summary.billable_by_status[st] = (summary.billable_by_status[st] || 0) + e.total_billable;
     }
     summary.total_cost = r2(summary.total_cost);
     summary.total_billable = r2(summary.total_billable);
@@ -226,6 +233,14 @@ Deno.serve(async (req) => {
     summary.internal_cost = r2(summary.internal_cost);
     summary.planned_cost = r2(summary.planned_cost);
     summary.planned_billable = r2(summary.planned_billable);
+    summary.cost_by_status.planned = r2(summary.cost_by_status.planned);
+    summary.cost_by_status.ordered = r2(summary.cost_by_status.ordered);
+    summary.cost_by_status.completed = r2(summary.cost_by_status.completed);
+    summary.cost_by_status.billed = r2(summary.cost_by_status.billed);
+    summary.billable_by_status.planned = r2(summary.billable_by_status.planned);
+    summary.billable_by_status.ordered = r2(summary.billable_by_status.ordered);
+    summary.billable_by_status.completed = r2(summary.billable_by_status.completed);
+    summary.billable_by_status.billed = r2(summary.billable_by_status.billed);
     summary.margin_pct = summary.total_billable > 0
       ? Math.round(((summary.total_billable - summary.total_cost) / summary.total_billable) * 1000) / 10
       : 0;

@@ -44,7 +44,7 @@ export function useServicesView(params = {}) {
 
   return {
     commitments: data?.commitments ?? [],
-    summary: data?.summary ?? { total: 0, by_status: { planned: 0, ordered: 0, completed: 0, billed: 0 }, total_cost: 0, total_billable: 0, margin_pct: 0 },
+    summary: data?.summary ?? { total: 0, by_status: { planned: 0, ordered: 0, completed: 0, billed: 0 }, total_cost: 0, total_billable: 0, margin_pct: 0, cost_by_status: { planned: 0, ordered: 0, completed: 0, billed: 0 }, billable_by_status: { planned: 0, ordered: 0, completed: 0, billed: 0 } },
     isLoading,
     refetch,
     error,

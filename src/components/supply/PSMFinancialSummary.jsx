@@ -12,6 +12,7 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { deriveProjectFinancials, validateProjectFinancials } from "@/components/supply/deriveProjectFinancials";
 import { normalizePartCommitments } from "@/components/supply/resolveFinancialSource";
 import { deriveBillingLedger } from "@/components/financial/deriveBillingLedger";
+import { deriveCostLedger } from "@/components/financial/deriveCostLedger";
 import FinancialHealthBanner from "@/components/financial/FinancialHealthBanner";
 import FinancialDetailDrawer from "@/components/financial/FinancialDetailDrawer";
 import BillingLedgerSection from "@/components/financial/BillingLedgerSection";
@@ -66,6 +67,15 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
   const warnings = useMemo(() => validateProjectFinancials(fin), [fin]);
 
   // ═══════════════════════════════════════════════════════════════
+  // CANONICAL COST LEDGER — 3 distinct cost layers
+  // Planned / Operational / Accounting — NEVER blended
+  // ═══════════════════════════════════════════════════════════════
+  const costLedger = useMemo(
+    () => deriveCostLedger({ enrichedCommitments: normalizedCommitments, servicesSummary }),
+    [normalizedCommitments, servicesSummary]
+  );
+
+  // ═══════════════════════════════════════════════════════════════
   // CANONICAL BILLING LEDGER — derived ONLY from invoice records
   // This replaces all operational-state-derived billing metrics.
   // ═══════════════════════════════════════════════════════════════
@@ -92,8 +102,8 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
         </div>
       )}
 
-      {/* Health Banner — single status, now with billing ledger awareness */}
-      <FinancialHealthBanner fin={fin} sourceStats={sourceStats} billingLedger={billingLedger} />
+      {/* Health Banner — single status, now with cost ledger + billing ledger awareness */}
+      <FinancialHealthBanner fin={fin} sourceStats={sourceStats} billingLedger={billingLedger} costLedger={costLedger} />
 
       {/* Executive Cards — 4 core sections */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -128,20 +138,33 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
           </CardContent>
         </Card>
 
-        {/* COSTS */}
+        {/* COSTS — 3 canonical layers */}
         <Card className="bg-black/40 border-gray-800">
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center gap-1.5">
               <DollarSign className="w-3.5 h-3.5 text-gray-400" />
               <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Costs</p>
             </div>
-            <BigMetric label="Total Cost" value={fin.totals.plannedCost} color="text-gray-200" tip="Parts + services planned cost" />
+            <BigMetric label="Planned" value={costLedger.plannedCost} color="text-gray-200" tip="Total expected project cost (parts + services)" />
             <div className="space-y-1 border-t border-gray-800 pt-2">
-              <SmallMetric label="Parts" value={fin.parts.plannedCost} />
-              {fin.services.plannedCost > 0 && (
-                <SmallMetric label="Services" value={fin.services.plannedCost} />
-              )}
-              <SmallMetric label="Spent" value={fin.totals.actualSpend} color="text-white" tip="Cost already realized" />
+              <SmallMetric
+                label="Operational"
+                value={costLedger.operationalCost}
+                color="text-white"
+                tip="Cost incurred: parts received + services completed/billed"
+              />
+              <SmallMetric
+                label="On Order"
+                value={costLedger.exposure.committed}
+                color={costLedger.exposure.committed > 0 ? "text-yellow-400" : "text-gray-500"}
+                tip="PO/vendor committed, awaiting delivery/completion"
+              />
+              <SmallMetric
+                label="Unordered"
+                value={costLedger.exposure.uncommitted}
+                color={costLedger.exposure.uncommitted > 0 ? "text-amber-400" : "text-gray-500"}
+                tip="Planned but no vendor engagement yet"
+              />
             </div>
           </CardContent>
         </Card>
@@ -156,13 +179,13 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
                 {marginPct}%
               </Badge>
             </div>
-            <BigMetric label="Projected" value={fin.totals.projectedMargin} color={projColor} tip="Revenue − Cost (if everything completes as planned)" />
+            <BigMetric label="Projected" value={fin.totals.projectedMargin} color={projColor} tip="Planned revenue − planned cost" />
             <div className="space-y-1 border-t border-gray-800 pt-2">
               <SmallMetric
                 label="Realized"
-                value={billingLedger.invoicedRevenue - fin.totals.actualSpend}
-                color={(billingLedger.invoicedRevenue - fin.totals.actualSpend) >= 0 ? "text-emerald-400" : "text-red-400"}
-                tip="Ledger invoiced − actual spend (accounting truth)"
+                value={billingLedger.invoicedRevenue - costLedger.operationalCost}
+                color={(billingLedger.invoicedRevenue - costLedger.operationalCost) >= 0 ? "text-emerald-400" : "text-red-400"}
+                tip="Invoiced revenue − operational cost incurred"
               />
               <SmallMetric
                 label="Collected"
@@ -174,38 +197,38 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
           </CardContent>
         </Card>
 
-        {/* RISK */}
+        {/* RISK — operational exposure */}
         <Card className={cn("bg-black/40",
-          (fin.risk.accounting.total > 0 || fin.risk.operational.total > 0)
+          (costLedger.operationalCost > 0 || costLedger.exposure.uncommitted > 0)
             ? "border-amber-900/30"
             : "border-gray-800"
         )}>
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center gap-1.5">
               <ShieldAlert className={cn("w-3.5 h-3.5",
-                fin.risk.accounting.total > 0 ? "text-amber-400" : "text-gray-500"
+                costLedger.operationalCost > billingLedger.invoicedRevenue ? "text-amber-400" : "text-gray-500"
               )} />
               <p className={cn("text-[10px] uppercase tracking-widest font-semibold",
-                fin.risk.accounting.total > 0 ? "text-amber-400" : "text-gray-500"
-              )}>Risk</p>
+                costLedger.operationalCost > billingLedger.invoicedRevenue ? "text-amber-400" : "text-gray-500"
+              )}>Exposure</p>
             </div>
             <BigMetric
-              label="Unbilled Cost"
-              value={fin.risk.accounting.total}
-              color={fin.risk.accounting.total > 0 ? "text-amber-400" : "text-gray-500"}
-              tip="Actual cost not yet billed to client"
+              label="Op. Cost Not Billed"
+              value={Math.max(0, costLedger.operationalCost - billingLedger.invoicedRevenue)}
+              color={costLedger.operationalCost > billingLedger.invoicedRevenue ? "text-amber-400" : "text-gray-500"}
+              tip="Operational cost incurred minus invoiced revenue"
             />
             <div className="space-y-1 border-t border-gray-800 pt-2">
               <SmallMetric
                 label="Unordered"
-                value={fin.risk.operational.total}
-                color={fin.risk.operational.total > 0 ? "text-yellow-400" : "text-gray-500"}
+                value={costLedger.exposure.uncommitted}
+                color={costLedger.exposure.uncommitted > 0 ? "text-yellow-400" : "text-gray-500"}
                 tip="Cost not yet committed to vendor"
               />
               <SmallMetric
                 label="Pending Orders"
-                value={fin.exposure.ordered}
-                color={fin.exposure.ordered > 0 ? "text-blue-400" : "text-gray-500"}
+                value={costLedger.exposure.committed}
+                color={costLedger.exposure.committed > 0 ? "text-blue-400" : "text-gray-500"}
                 tip="Committed to vendor, awaiting delivery"
               />
             </div>
@@ -219,7 +242,7 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
       )}
 
       {/* Progressive Disclosure — Financial Details + Diagnostics */}
-      <FinancialDetailDrawer fin={fin} warnings={warnings} />
+      <FinancialDetailDrawer fin={fin} warnings={warnings} costLedger={costLedger} />
     </div>
   );
 }

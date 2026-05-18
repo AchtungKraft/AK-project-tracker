@@ -158,7 +158,7 @@ export default function ServicesDashboardSummary({ commitments }) {
               <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Cost</p>
             </div>
             <BigMetric label="Planned" value={fin.costs.plannedCost} color="text-gray-200" />
-            <SmallMetric label="Spent" value={fin.costs.actualCost} color="text-white" tip="Completed + billed cost" />
+            <SmallMetric label="Operational" value={fin.costs.actualCost} color="text-white" tip="Completed + billed cost (work performed)" />
             {fin.counts.ordered > 0 && (
               <SmallMetric label="Pending" value={fin.exposure.ordered} color="text-yellow-400" tip="Ordered, awaiting completion" />
             )}
@@ -247,7 +247,7 @@ export default function ServicesDashboardSummary({ commitments }) {
             <div>
               <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-2">Reconciliation</p>
               <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs font-mono">
-                <span className="text-gray-500">Actual Spend</span>
+                <span className="text-gray-500">Operational Cost</span>
                 <span className="text-gray-300 text-right">{formatCurrencyUSD(fin.costs.actualCost)}</span>
                 <span className="text-gray-500">+ Pending Orders</span>
                 <span className="text-yellow-400 text-right">{formatCurrencyUSD(fin.exposure.ordered)}</span>

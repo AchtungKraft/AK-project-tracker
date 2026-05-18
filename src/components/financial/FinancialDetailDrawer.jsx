@@ -52,7 +52,7 @@ function ReconRow({ label, value, color = "text-gray-300", bold = false, border 
   );
 }
 
-export default function FinancialDetailDrawer({ fin, warnings }) {
+export default function FinancialDetailDrawer({ fin, warnings, costLedger }) {
   const [showDetails, setShowDetails] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const hasServices = fin.services.plannedCost > 0;
@@ -92,57 +92,60 @@ export default function FinancialDetailDrawer({ fin, warnings }) {
                 <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-2">Services Cost Breakdown</p>
                 <WaterfallBar
                   segments={[
-                    { label: "Billed", value: fin.services.costBilled, color: "bg-emerald-600" },
-                    { label: "Completed", value: fin.services.costCompleted, color: "bg-blue-600" },
-                    { label: "Ordered", value: fin.services.costOrdered, color: "bg-yellow-600" },
-                    { label: "Planned", value: fin.services.costPlannedOnly, color: "bg-gray-600" },
+                    { label: "Billed", value: costLedger?.services?.breakdown?.billed ?? fin.services.costBilled, color: "bg-emerald-600" },
+                    { label: "Completed", value: costLedger?.services?.breakdown?.completed ?? fin.services.costCompleted, color: "bg-blue-600" },
+                    { label: "Ordered", value: costLedger?.services?.breakdown?.ordered ?? fin.services.costOrdered, color: "bg-yellow-600" },
+                    { label: "Planned", value: costLedger?.services?.breakdown?.planned ?? fin.services.costPlannedOnly, color: "bg-gray-600" },
                   ]}
-                  total={fin.services.plannedCost}
+                  total={costLedger?.services?.plannedCost ?? fin.services.plannedCost}
                 />
               </div>
             )}
 
-            {/* Cost Truth Table */}
+            {/* Cost Truth Table — 3-layer model */}
             <div>
-              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-2">Cost Summary</p>
+              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-2">Cost Summary (3-Layer)</p>
               <div className="overflow-x-auto">
                 <table className="w-full text-[10px] font-mono">
                   <thead>
                     <tr className="text-gray-500 border-b border-gray-800">
                       <th className="text-left py-1 pr-4">Category</th>
                       <th className="text-right py-1 px-2">Planned</th>
+                      <th className="text-right py-1 px-2">Operational</th>
                       <th className="text-right py-1 px-2">On Order</th>
-                      <th className="text-right py-1 px-2">Spent</th>
                       <th className="text-right py-1 pl-2">Unordered</th>
                     </tr>
                   </thead>
                   <tbody className="text-gray-400">
                     <tr className="border-b border-gray-800/50">
                       <td className="py-1 pr-4">Parts</td>
-                      <td className="text-right py-1 px-2">{formatCurrencyUSD(fin.parts.plannedCost)}</td>
-                      <td className="text-right py-1 px-2 text-yellow-400">{formatCurrencyUSD(fin.parts.costOnPO)}</td>
-                      <td className="text-right py-1 px-2">{formatCurrencyUSD(fin.parts.actualSpend)}</td>
-                      <td className="text-right py-1 pl-2 text-amber-400">{formatCurrencyUSD(fin.parts.costUnordered)}</td>
+                      <td className="text-right py-1 px-2">{formatCurrencyUSD(costLedger?.parts?.plannedCost ?? fin.parts.plannedCost)}</td>
+                      <td className="text-right py-1 px-2 text-white">{formatCurrencyUSD(costLedger?.parts?.operationalCost ?? fin.parts.actualSpend)}</td>
+                      <td className="text-right py-1 px-2 text-yellow-400">{formatCurrencyUSD(costLedger?.parts?.costOnPO ?? fin.parts.costOnPO)}</td>
+                      <td className="text-right py-1 pl-2 text-amber-400">{formatCurrencyUSD(costLedger?.parts?.costUnordered ?? fin.parts.costUnordered)}</td>
                     </tr>
                     {hasServices && (
                       <tr className="border-b border-gray-800/50">
                         <td className="py-1 pr-4">Services</td>
-                        <td className="text-right py-1 px-2">{formatCurrencyUSD(fin.services.plannedCost)}</td>
-                        <td className="text-right py-1 px-2 text-yellow-400">{formatCurrencyUSD(fin.services.costOrdered)}</td>
-                        <td className="text-right py-1 px-2">{formatCurrencyUSD(fin.services.actualCost)}</td>
-                        <td className="text-right py-1 pl-2 text-amber-400">{formatCurrencyUSD(fin.services.costPlannedOnly)}</td>
+                        <td className="text-right py-1 px-2">{formatCurrencyUSD(costLedger?.services?.plannedCost ?? fin.services.plannedCost)}</td>
+                        <td className="text-right py-1 px-2 text-white">{formatCurrencyUSD(costLedger?.services?.operationalCost ?? fin.services.actualCost)}</td>
+                        <td className="text-right py-1 px-2 text-yellow-400">{formatCurrencyUSD(costLedger?.services?.breakdown?.ordered ?? fin.services.costOrdered)}</td>
+                        <td className="text-right py-1 pl-2 text-amber-400">{formatCurrencyUSD(costLedger?.services?.breakdown?.planned ?? fin.services.costPlannedOnly)}</td>
                       </tr>
                     )}
                     <tr className="font-semibold text-white">
                       <td className="py-1 pr-4 border-t border-gray-700">Total</td>
-                      <td className="text-right py-1 px-2 border-t border-gray-700">{formatCurrencyUSD(fin.totals.plannedCost)}</td>
-                      <td className="text-right py-1 px-2 border-t border-gray-700 text-yellow-400">{formatCurrencyUSD(fin.exposure.ordered)}</td>
-                      <td className="text-right py-1 px-2 border-t border-gray-700">{formatCurrencyUSD(fin.totals.actualSpend)}</td>
-                      <td className="text-right py-1 pl-2 border-t border-gray-700 text-amber-400">{formatCurrencyUSD(fin.exposure.planned)}</td>
+                      <td className="text-right py-1 px-2 border-t border-gray-700">{formatCurrencyUSD(costLedger?.plannedCost ?? fin.totals.plannedCost)}</td>
+                      <td className="text-right py-1 px-2 border-t border-gray-700">{formatCurrencyUSD(costLedger?.operationalCost ?? fin.totals.actualSpend)}</td>
+                      <td className="text-right py-1 px-2 border-t border-gray-700 text-yellow-400">{formatCurrencyUSD(costLedger?.exposure?.committed ?? fin.exposure.ordered)}</td>
+                      <td className="text-right py-1 pl-2 border-t border-gray-700 text-amber-400">{formatCurrencyUSD(costLedger?.exposure?.uncommitted ?? fin.exposure.planned)}</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
+              {costLedger?._reconciliation?.svcSource === 'count_pro_rated_LEGACY' && (
+                <p className="text-[9px] text-yellow-500/60 mt-1">⚠ Services cost split is pro-rated (legacy) — refresh to get per-status totals.</p>
+              )}
             </div>
 
             {/* Diagnostics Toggle */}
@@ -158,16 +161,18 @@ export default function FinancialDetailDrawer({ fin, warnings }) {
 
             {showDiagnostics && (
               <div className="space-y-4 border-t border-gray-800 pt-3">
-                {/* Cost Reconciliation */}
+                {/* Cost Reconciliation — 3-Layer */}
                 <div>
                   <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-2">Cost Reconciliation</p>
                   <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs font-mono">
-                    <ReconRow label="Actual Spend" value={fin.totals.actualSpend} />
-                    <ReconRow label="+ Pending Orders" value={fin.exposure.ordered} color="text-yellow-400" indent />
-                    <ReconRow label="+ Unordered" value={fin.exposure.planned} color="text-amber-400" indent />
-                    <ReconRow label="= Total Planned Cost" value={fin.totals.plannedCost} color="text-white" bold border />
-                    {fin._reconciliation.totalBucketCheck > 0.01 && (
-                      <ReconRow label="⚠ Drift" value={fin._reconciliation.totalBucketCheck} color="text-red-400" />
+                    <ReconRow label="Operational Cost" value={costLedger?.operationalCost ?? fin.totals.actualSpend} />
+                    <ReconRow label="  Parts (received + installed)" value={costLedger?.parts?.operationalCost ?? fin.parts.actualSpend} color="text-gray-500" indent />
+                    <ReconRow label="  Services (completed + billed)" value={costLedger?.services?.operationalCost ?? fin.services.actualCost} color="text-gray-500" indent />
+                    <ReconRow label="+ On Order" value={costLedger?.exposure?.committed ?? fin.exposure.ordered} color="text-yellow-400" indent />
+                    <ReconRow label="+ Unordered" value={costLedger?.exposure?.uncommitted ?? fin.exposure.planned} color="text-amber-400" indent />
+                    <ReconRow label="= Total Planned Cost" value={costLedger?.plannedCost ?? fin.totals.plannedCost} color="text-white" bold border />
+                    {(costLedger?._reconciliation?.totalBucketDrift ?? fin._reconciliation.totalBucketCheck) > 0.01 && (
+                      <ReconRow label="⚠ Drift" value={costLedger?._reconciliation?.totalBucketDrift ?? fin._reconciliation.totalBucketCheck} color="text-red-400" />
                     )}
                   </div>
                 </div>

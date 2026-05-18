@@ -53,9 +53,15 @@ const HEALTH_STATES = {
   },
 };
 
-export default function FinancialHealthBanner({ fin, sourceStats, billingLedger }) {
+export default function FinancialHealthBanner({ fin, sourceStats, billingLedger, costLedger }) {
   // Determine primary health state (priority order)
   let state, description;
+
+  // Use costLedger for accurate operational cost, fallback to fin.totals for backward compat
+  const opCost = costLedger?.operationalCost ?? fin.totals.actualSpend ?? 0;
+  const invoiced = billingLedger?.invoicedRevenue ?? 0;
+  const unbilledOpCost = Math.max(0, opCost - invoiced);
+  const uncommitted = costLedger?.exposure?.uncommitted ?? fin.risk?.operational?.total ?? 0;
 
   if (fin.totals.projectedMargin < -0.01) {
     state = HEALTH_STATES.negative_margin;
@@ -66,12 +72,12 @@ export default function FinancialHealthBanner({ fin, sourceStats, billingLedger 
   } else if (billingLedger?.outstandingRevenue > 0.01) {
     state = HEALTH_STATES.outstanding_balance;
     description = `${formatCurrencyUSD(billingLedger.outstandingRevenue)} invoiced but not yet paid.`;
-  } else if (fin.risk.accounting.total > 0 && fin.totals.actualSpend > 0) {
+  } else if (unbilledOpCost > 0.01 && opCost > 0) {
     state = HEALTH_STATES.needs_billing;
-    description = `${formatCurrencyUSD(fin.risk.accounting.total)} spent but not yet billed to client.`;
-  } else if (fin.risk.operational.total > 0) {
+    description = `${formatCurrencyUSD(opCost)} operational cost incurred — ${formatCurrencyUSD(unbilledOpCost)} not yet billed.`;
+  } else if (uncommitted > 0) {
     state = HEALTH_STATES.awaiting_orders;
-    description = `${formatCurrencyUSD(fin.risk.operational.total)} in parts and services not yet ordered.`;
+    description = `${formatCurrencyUSD(uncommitted)} in parts and services not yet ordered.`;
   } else if (fin.risk.negativeMarginItems > 0) {
     state = HEALTH_STATES.at_risk;
     description = `${fin.risk.negativeMarginItems} item(s) with negative margin — review pricing.`;
