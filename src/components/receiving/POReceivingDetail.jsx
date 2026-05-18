@@ -659,6 +659,10 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
             invoice_number: effectivePO.invoice_number,
             invoice_date: effectivePO.invoice_date,
             invoice_notes: effectivePO.invoice_notes,
+            freight_cost: effectivePO.freight_cost,
+            tariff_cost: effectivePO.tariff_cost,
+            tax: effectivePO.tax,
+            misc_cost: effectivePO.misc_cost,
           }}
           onClose={() => {
             setShowEditModal(false);

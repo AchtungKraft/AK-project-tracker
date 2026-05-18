@@ -1103,27 +1103,33 @@ async function markOrdered(ctx, payload) {
 }
 
 async function updatePOCosts(ctx, payload) {
-  const { order_id, freight_cost, tariff_cost } = payload;
+  const { order_id, freight_cost, tariff_cost, tax, misc_cost } = payload;
   if (!order_id) throw new Error('order_id required');
   const [order] = await ctx.base44.entities.Order.filter({ id: order_id });
   if (!order) throw new Error('Order not found');
   const updates = {};
-  if (freight_cost !== undefined) {
-    const v = Number(freight_cost);
-    if (!Number.isFinite(v) || v < 0) throw new Error('freight_cost must be >= 0');
-    updates.freight_cost = v;
-  }
-  if (tariff_cost !== undefined) {
-    const v = Number(tariff_cost);
-    if (!Number.isFinite(v) || v < 0) throw new Error('tariff_cost must be >= 0');
-    updates.tariff_cost = v;
+  const costFields = { freight_cost, tariff_cost, tax, misc_cost };
+  for (const [field, val] of Object.entries(costFields)) {
+    if (val !== undefined) {
+      const v = Number(val);
+      if (!Number.isFinite(v) || v < 0) throw new Error(`${field} must be >= 0`);
+      updates[field] = v;
+    }
   }
   if (Object.keys(updates).length === 0) return { success: true, message: 'No changes' };
   if (ctx.dry_run) return { preview: { order_id, updates } };
   await ctx.base44.asServiceRole.entities.Order.update(order_id, updates);
   ctx.mutations.push({ entity: 'Order', id: order_id, action: 'UPDATE_PO_COSTS' });
+  // Auto-allocate: distribute updated extras proportionally to line items, then sync to commitments
+  try {
+    await ctx.base44.asServiceRole.functions.invoke('allocatePOCosts', { order_id });
+    console.log(`[UPDATE_PO_COSTS] Allocation triggered for PO=${order.po_number}`);
+  } catch (allocErr) {
+    console.warn(`[UPDATE_PO_COSTS] Allocation failed for PO=${order.po_number}: ${allocErr.message}`);
+    ctx.warnings.push({ type: 'ALLOCATION_FAILED', id: order_id, msg: allocErr.message });
+  }
   console.log(`[UPDATE_PO_COSTS] PO=${order.po_number} order_id=${order_id}`, updates);
-  return { success: true, order_id, po_number: order.po_number, updates };
+  return { success: true, order_id, po_number: order.po_number, updates, allocation_triggered: true };
 }
 
 async function addStock(ctx,payload) {

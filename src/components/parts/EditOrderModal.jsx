@@ -363,27 +363,25 @@ export default function EditOrderModal({ order, onClose }) {
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={onClose} className="border-gray-700">
-              {isFullyReceived ? 'Close' : 'Cancel'}
+              Cancel
             </Button>
-            {!isFullyReceived && (
-              <Button
-                type="submit"
-                className="bg-yellow-600 hover:bg-yellow-700"
-                disabled={updateMutation.isPending}
-              >
-                {updateMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Changes
-                  </>
-                )}
-              </Button>
-            )}
+            <Button
+              type="submit"
+              className="bg-yellow-600 hover:bg-yellow-700"
+              disabled={updateMutation.isPending}
+            >
+              {updateMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Save Changes
+                </>
+              )}
+            </Button>
           </div>
         </form>
       </DialogContent>

@@ -411,10 +411,12 @@ Deno.serve(async (req) => {
         let cost_source = 'planned'; // default: planning estimate
         if (hasPOLines) {
           // Weighted average from PO lines = actual cost
+          // LANDED COST: Use effective_unit_cost (includes allocated freight/tax/tariff/misc) when available
           let poTotalCost = 0, poTotalQty = 0;
           for (const li of commitmentLineItems) {
             if (li.status !== 'Cancelled') {
-              poTotalCost += (li.qty_ordered || 0) * (li.unit_cost || 0);
+              const lineCost = li.effective_unit_cost ?? li.unit_cost ?? 0;
+              poTotalCost += (li.qty_ordered || 0) * lineCost;
               poTotalQty += (li.qty_ordered || 0);
             }
           }
