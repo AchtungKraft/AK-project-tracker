@@ -210,7 +210,7 @@ export const InlineQtyStepper = ({ commitment, onMutationSuccess, disabled = fal
       return response.data;
     },
     onSuccess: async (data) => {
-      toast.success(`Requirement updated to ${data.required_total}`);
+      toast.success(`Quantity updated to ${data.required_total}`);
       
       // PHASE 17: Deterministic refresh
       await forceAppRefresh(queryClient, {
@@ -302,61 +302,43 @@ const ConfirmMutationModal = ({ open, onClose, onConfirm, action, commitment, is
   const [reason, setReason] = useState('');
 
   const actionLabels = {
-    [ACTION_TYPES.INCREASE_QTY]: 'Increase Quantity',
-    [ACTION_TYPES.DECREASE_QTY]: 'Decrease Quantity',
+    [ACTION_TYPES.INCREASE_QTY]: 'Add More',
+    [ACTION_TYPES.DECREASE_QTY]: 'Reduce Quantity',
     [ACTION_TYPES.REALLOCATE_TO_PROJECT]: 'Move to Project',
     [ACTION_TYPES.CANCEL_UNORDERED_QTY]: 'Cancel Unordered',
-    [ACTION_TYPES.SPLIT_COMMITMENT]: 'Split Commitment'
+    [ACTION_TYPES.SPLIT_COMMITMENT]: 'Split'
   };
 
   if (!action) return null;
 
-  const unitRetail = commitment?.unit_retail_snapshot || 0;
-  const retailImpact = action.qty_delta * unitRetail * (action.action_type === ACTION_TYPES.INCREASE_QTY ? 1 : -1);
+  const currentQty = commitment?.required_total ?? commitment?.qty_committed ?? 0;
+  const newQty = currentQty + (action.action_type === ACTION_TYPES.INCREASE_QTY ? action.qty_delta : -action.qty_delta);
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="bg-gray-900 border-gray-700 max-w-md">
+      <DialogContent className="bg-gray-900 border-gray-700 max-w-sm">
         <DialogHeader>
           <DialogTitle className="text-white">
             {actionLabels[action.action_type]}
           </DialogTitle>
           <DialogDescription>
-            Confirm this change to commitment quantity
+            {action.action_type === ACTION_TYPES.INCREASE_QTY
+              ? `Add ${action.qty_delta} to the project requirement.`
+              : `Reduce the project requirement by ${action.qty_delta}.`
+            }
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
-          <div className="bg-gray-800/50 rounded-lg p-3 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-400">Current Qty</span>
-              <span className="text-white">{commitment?.required_total ?? commitment?.qty_committed ?? 0}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-400">Change</span>
-              <span className={action.action_type === ACTION_TYPES.INCREASE_QTY ? 'text-green-400' : 'text-red-400'}>
-                {action.action_type === ACTION_TYPES.INCREASE_QTY ? '+' : '-'}{action.qty_delta}
-              </span>
-            </div>
-            <div className="flex justify-between text-sm border-t border-gray-700 pt-2">
-              <span className="text-gray-400">New Qty</span>
-              <span className="text-white font-bold">
-                {(commitment?.required_total ?? commitment?.qty_committed ?? 0) + (action.action_type === ACTION_TYPES.INCREASE_QTY ? action.qty_delta : -action.qty_delta)}
-              </span>
-            </div>
-          </div>
-
-          {/* Financial impact */}
-          <div className="flex items-center gap-2 text-sm">
-            <DollarSign className="w-4 h-4 text-gray-500" />
-            <span className="text-gray-400">Retail Impact:</span>
-            <span className={retailImpact >= 0 ? 'text-green-400' : 'text-red-400'}>
-              {retailImpact >= 0 ? '+' : ''}${retailImpact.toFixed(2)}
+        <div className="space-y-3 py-2">
+          <div className="bg-gray-800/50 rounded-lg p-3 flex items-center justify-between">
+            <span className="text-sm text-gray-400">Quantity</span>
+            <span className="text-sm text-white">
+              {currentQty} → <span className="font-bold">{newQty}</span>
             </span>
           </div>
 
           <div className="space-y-2">
-            <Label className="text-gray-400">Reason (optional)</Label>
+            <Label className="text-gray-400 text-xs">Reason (optional)</Label>
             <Textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
@@ -368,7 +350,7 @@ const ConfirmMutationModal = ({ open, onClose, onConfirm, action, commitment, is
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isLoading}>
+          <Button variant="outline" onClick={onClose} disabled={isLoading} className="border-gray-700">
             Cancel
           </Button>
           <Button 
@@ -466,7 +448,7 @@ export default function CommitmentQuantityManager({
     },
     onSuccess: async (data) => {
       if (data.success) {
-        toast.success(`Requirement updated to ${data.required_total}`);
+        toast.success(`Quantity updated to ${data.required_total}`);
         // PHASE 17: Deterministic refresh
         await forceAppRefresh(queryClient, {
           partIds: safeCommitment?.part_id ? [safeCommitment.part_id] : [],
@@ -534,14 +516,14 @@ export default function CommitmentQuantityManager({
       label: 'Add More',
       icon: Plus,
       color: 'text-green-400',
-      description: 'Increase committed quantity'
+      description: 'Need more for this project'
     },
     {
       type: ACTION_TYPES.DECREASE_QTY,
       label: 'Reduce',
       icon: Minus,
       color: 'text-yellow-400',
-      description: 'Decrease committed quantity',
+      description: 'Need fewer than planned',
       disabled: constraints.maxDecrease <= 0,
       disabledReason: 'All qty ordered or installed'
     },
@@ -550,9 +532,9 @@ export default function CommitmentQuantityManager({
       label: 'Cancel Unordered',
       icon: X,
       color: 'text-red-400',
-      description: 'Cancel qty not yet on order',
+      description: 'Remove qty not yet on order',
       disabled: constraints.maxCancelUnordered <= 0,
-      disabledReason: 'No unordered qty'
+      disabledReason: 'Nothing unordered'
     },
     {
       type: ACTION_TYPES.REALLOCATE_TO_PROJECT,
@@ -568,7 +550,7 @@ export default function CommitmentQuantityManager({
       label: 'Split',
       icon: Scissors,
       color: 'text-purple-400',
-      description: 'Create separate commitment',
+      description: 'Create a separate line item',
       disabled: constraints.maxSplit <= 0,
       disabledReason: 'Need at least 2 qty to split'
     }
@@ -717,46 +699,41 @@ export default function CommitmentQuantityManager({
               className="w-full border-gray-700"
             >
               {previewMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Preview Impact
+              Preview Changes
             </Button>
 
-            {/* Impact Preview */}
+            {/* Impact Preview — simplified */}
             {impactPreview && (
-              <div className="space-y-3 p-3 bg-gray-900/50 rounded-lg border border-gray-700">
-                <h4 className="text-sm font-medium text-gray-400">Impact Preview</h4>
-                
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <p className="text-gray-500">Current Qty</p>
-                    <p className="text-white">{impactPreview.current.qty}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">New Qty</p>
-                    <p className="text-white font-bold">{impactPreview.proposed.qty}</p>
-                  </div>
+              <div className="p-3 bg-gray-900/50 rounded-lg border border-gray-700 space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-400">Quantity</span>
+                  <span className="text-white">
+                    {impactPreview.current.qty} → <span className="font-bold">{impactPreview.proposed.qty}</span>
+                  </span>
                 </div>
 
                 {impactPreview.delta.cost_total !== 0 && (
-                  <div className="grid grid-cols-2 gap-2 text-sm border-t border-gray-800 pt-2">
-                    <div>
-                      <p className="text-gray-500">Cost Delta</p>
-                      <p className={impactPreview.delta.cost_total >= 0 ? 'text-red-400' : 'text-green-400'}>
-                        {impactPreview.delta.cost_total >= 0 ? '+' : ''}${impactPreview.delta.cost_total.toFixed(2)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-gray-500">Retail Delta</p>
-                      <p className={impactPreview.delta.retail_total >= 0 ? 'text-green-400' : 'text-red-400'}>
-                        {impactPreview.delta.retail_total >= 0 ? '+' : ''}${impactPreview.delta.retail_total.toFixed(2)}
-                      </p>
-                    </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-400">Project cost change</span>
+                    <span className={impactPreview.delta.cost_total >= 0 ? 'text-red-400 font-mono' : 'text-green-400 font-mono'}>
+                      {impactPreview.delta.cost_total >= 0 ? '+' : ''}${impactPreview.delta.cost_total.toFixed(2)}
+                    </span>
+                  </div>
+                )}
+
+                {impactPreview.delta.retail_total !== 0 && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-400">Client total change</span>
+                    <span className={impactPreview.delta.retail_total >= 0 ? 'text-green-400 font-mono' : 'text-red-400 font-mono'}>
+                      {impactPreview.delta.retail_total >= 0 ? '+' : ''}${impactPreview.delta.retail_total.toFixed(2)}
+                    </span>
                   </div>
                 )}
 
                 {impactPreview.meta.warnings.length > 0 && (
-                  <div className="flex items-start gap-2 text-yellow-400 text-sm">
-                    <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                    <div>{impactPreview.meta.warnings.join(', ')}</div>
+                  <div className="flex items-start gap-2 text-yellow-400 text-xs mt-1">
+                    <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                    <span>{impactPreview.meta.warnings.join(', ')}</span>
                   </div>
                 )}
               </div>
@@ -773,7 +750,7 @@ export default function CommitmentQuantityManager({
               className="w-full bg-red-600 hover:bg-red-700"
             >
               {executeMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
-              Confirm Change
+              Confirm
             </Button>
           </CardContent>
         </Card>

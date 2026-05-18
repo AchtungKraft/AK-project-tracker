@@ -11,8 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
-  AlertTriangle, Package, DollarSign, Trash2, RotateCcw, Loader2,
-  CheckCircle2, Wrench, ArrowDown, ArrowRight,
+  AlertTriangle, Package, Trash2, RotateCcw, Loader2,
+  Wrench, Minus, Plus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
@@ -134,7 +134,7 @@ export default function RemovePartCreditModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-white">
             <Trash2 className="w-5 h-5 text-red-400" />
-            {isInvoiced ? "Remove / Credit Part" : "Remove Part"}
+            Remove Part
           </DialogTitle>
         </DialogHeader>
 
@@ -152,34 +152,19 @@ export default function RemovePartCreditModal({
             </div>
           </div>
 
-          {/* Current State Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center">
-            <div className="bg-gray-800/50 rounded p-2">
-              <p className="text-[10px] text-gray-400">Required</p>
-              <p className="text-lg font-bold text-white">{requiredTotal}</p>
-            </div>
-            <div className="bg-gray-800/50 rounded p-2">
-              <p className="text-[10px] text-gray-400">Installed</p>
-              <p className={cn("text-lg font-bold", installedQty > 0 ? "text-emerald-400" : "text-gray-500")}>
-                {installedQty}
-              </p>
-            </div>
-            <div className="bg-gray-800/50 rounded p-2">
-              <p className="text-[10px] text-gray-400">Already Removed</p>
-              <p className={cn("text-lg font-bold", existingRemoved > 0 ? "text-red-400" : "text-gray-500")}>
-                {existingRemoved}
-              </p>
-            </div>
-            <div className="bg-gray-800/50 rounded p-2">
-              <p className="text-[10px] text-gray-400">Removable</p>
-              <p className="text-lg font-bold text-amber-400">{maxRemovable}</p>
-            </div>
-          </div>
-
-          {/* Quantity Selector */}
+          {/* Quantity Selector — clean stepper */}
           <div className="space-y-2">
-            <Label className="text-gray-300">Quantity to Remove</Label>
-            <div className="flex items-center gap-2">
+            <Label className="text-gray-300 text-sm">Quantity to Remove</Label>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 border-gray-600"
+                onClick={() => setQtyToRemove(Math.max(1, qtyToRemove - 1))}
+                disabled={qtyToRemove <= 1}
+              >
+                <Minus className="w-4 h-4" />
+              </Button>
               <Input
                 type="number"
                 min={1}
@@ -189,31 +174,30 @@ export default function RemovePartCreditModal({
                   const v = parseInt(e.target.value) || 0;
                   setQtyToRemove(Math.max(0, Math.min(v, maxRemovable)));
                 }}
-                className="bg-gray-800 border-gray-600 text-white w-24 font-mono text-center"
+                className="bg-gray-800 border-gray-600 text-white w-20 font-mono text-center text-lg"
               />
-              <span className="text-sm text-gray-400">of {maxRemovable} removable</span>
-              {isFullRemoval && (
-                <Badge variant="outline" className="border-red-600 text-red-400 text-[10px]">
-                  Full Removal
-                </Badge>
-              )}
-              {!isFullRemoval && qtyToRemove > 0 && (
-                <Badge variant="outline" className="border-purple-600 text-purple-400 text-[10px]">
-                  Partial
-                </Badge>
-              )}
               <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setQtyToRemove(maxRemovable)}
-                className="text-xs text-gray-400 hover:text-white h-7"
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 border-gray-600"
+                onClick={() => setQtyToRemove(Math.min(maxRemovable, qtyToRemove + 1))}
+                disabled={qtyToRemove >= maxRemovable}
               >
-                All
+                <Plus className="w-4 h-4" />
               </Button>
+              <button
+                onClick={() => setQtyToRemove(maxRemovable)}
+                className="text-xs text-gray-500 hover:text-gray-300 transition-colors underline"
+              >
+                Remove all ({maxRemovable})
+              </button>
             </div>
             {!isValidQty && qtyToRemove !== 0 && (
-              <p className="text-xs text-red-400">Quantity must be between 1 and {maxRemovable}</p>
+              <p className="text-xs text-red-400">Must be between 1 and {maxRemovable}</p>
             )}
+            <p className="text-xs text-gray-500">
+              {requiredTotal} total · {installedQty} installed · {existingRemoved} previously removed · {maxRemovable} removable
+            </p>
           </div>
 
           {/* PHASE 7: Financial Impact Preview */}
@@ -228,54 +212,37 @@ export default function RemovePartCreditModal({
             isFullRemoval={isFullRemoval}
           />
 
-          {/* Install Warning */}
+          {/* Install Warning — compact */}
           {hasInstallWarning && (
-            <div className="p-3 bg-red-900/30 border border-red-700/50 rounded-lg">
-              <div className="flex items-start gap-2">
-                <Wrench className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-                <div className="text-sm">
-                  <p className="text-red-400 font-medium">
-                    {installedQty} unit{installedQty > 1 ? 's' : ''} already installed
-                  </p>
-                  <p className="text-gray-400">
-                    Installed items will NOT be returned to inventory automatically.
-                    {disposition === 'return_to_inventory' && safeReturnQty < qtyToRemove && (
-                      <span className="text-amber-400 block mt-1">
-                        Only {safeReturnQty} of {qtyToRemove} can be safely returned (excludes installed).
-                      </span>
-                    )}
-                  </p>
-                </div>
-              </div>
+            <div className="p-2.5 bg-amber-900/20 border border-amber-700/40 rounded-lg flex items-start gap-2">
+              <Wrench className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <p className="text-xs text-gray-300">
+                {installedQty} unit{installedQty > 1 ? 's' : ''} already installed — won't be returned to stock automatically.
+                {disposition === 'return_to_inventory' && safeReturnQty < qtyToRemove && (
+                  <span className="text-amber-400"> Only {safeReturnQty} can be returned.</span>
+                )}
+              </p>
             </div>
           )}
 
-          {/* Disposition Selection */}
+          {/* Inventory Handling — simple radios */}
           <div className="space-y-2">
-            <Label className="text-gray-300">Inventory Disposition</Label>
-            <RadioGroup value={disposition} onValueChange={setDisposition} className="space-y-2">
-              <label className="flex items-center gap-3 p-2 rounded-lg border border-gray-700 hover:bg-gray-800/50 cursor-pointer">
+            <Label className="text-gray-300 text-sm">Inventory Handling</Label>
+            <RadioGroup value={disposition} onValueChange={setDisposition} className="space-y-1.5">
+              <label className="flex items-center gap-2.5 p-2 rounded-md hover:bg-gray-800/40 cursor-pointer transition-colors">
                 <RadioGroupItem value="return_to_inventory" id="return" />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <RotateCcw className="w-4 h-4 text-blue-400" />
-                    <span className="text-sm text-white font-medium">Return to Inventory</span>
-                  </div>
-                  <p className="text-xs text-gray-500 ml-6">
-                    {safeReturnQty > 0
-                      ? `Will return ${safeReturnQty} unit${safeReturnQty > 1 ? 's' : ''} to physical stock`
-                      : "No units available to return (all installed or none reserved)"}
+                <div>
+                  <span className="text-sm text-white">Return to inventory</span>
+                  <p className="text-[11px] text-gray-500">
+                    {safeReturnQty > 0 ? `${safeReturnQty} unit${safeReturnQty > 1 ? 's' : ''} back to stock` : "No units available to return"}
                   </p>
                 </div>
               </label>
-              <label className="flex items-center gap-3 p-2 rounded-lg border border-gray-700 hover:bg-gray-800/50 cursor-pointer">
+              <label className="flex items-center gap-2.5 p-2 rounded-md hover:bg-gray-800/40 cursor-pointer transition-colors">
                 <RadioGroupItem value="no_inventory" id="no_inv" />
                 <div>
-                  <div className="flex items-center gap-2">
-                    <Trash2 className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm text-white font-medium">No Inventory Change</span>
-                  </div>
-                  <p className="text-xs text-gray-500 ml-6">Do not modify stock levels</p>
+                  <span className="text-sm text-white">No inventory change</span>
+                  <p className="text-[11px] text-gray-500">Stock levels stay the same</p>
                 </div>
               </label>
             </RadioGroup>
@@ -293,36 +260,18 @@ export default function RemovePartCreditModal({
             />
           </div>
 
-          {/* Status Transition Preview */}
-          <div className="flex items-center gap-2 text-sm flex-wrap">
-            <span className="text-gray-400">Status:</span>
-            <Badge variant="outline" className="border-purple-600 text-purple-400">
-              {commitment.commitment_status || "active"}
-            </Badge>
-            <ArrowRight className="w-3 h-3 text-gray-500" />
-            {isFullRemoval ? (
-              <Badge variant="outline" className="border-red-600 text-red-400">cancelled</Badge>
-            ) : (
-              <Badge variant="outline" className="border-purple-600 text-purple-400">
-                removed: {existingRemoved} → {existingRemoved + qtyToRemove}
-              </Badge>
-            )}
-            {creditPreview > 0 && (
-              <>
-                <span className="text-gray-500">+</span>
-                <Badge variant="outline" className="border-amber-600 text-amber-400">
-                  credit ~{formatCurrencyUSD(creditPreview)}
-                </Badge>
-              </>
-            )}
-          </div>
-
-          {/* Approximate credit note */}
-          {isInvoiced && (
-            <p className="text-[10px] text-gray-500 italic">
-              Credit preview is approximate. Final amount calculated from actual invoice line items.
+          {/* Outcome summary — human readable */}
+          <div className="p-2.5 bg-gray-800/40 rounded-lg">
+            <p className="text-sm text-gray-300">
+              {isFullRemoval
+                ? "This item will be fully removed from the project."
+                : `Project quantity will be reduced by ${qtyToRemove}.`
+              }
+              {creditPreview > 0 && (
+                <span className="text-amber-400"> A credit of ~{formatCurrencyUSD(creditPreview)} will be applied.</span>
+              )}
             </p>
-          )}
+          </div>
         </div>
 
         <DialogFooter className="gap-2">
@@ -337,10 +286,8 @@ export default function RemovePartCreditModal({
             {removeMutation.isPending ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Processing...
+                Removing...
               </>
-            ) : isInvoiced ? (
-              `Remove ${qtyToRemove} & Credit ~${formatCurrencyUSD(creditPreview)}`
             ) : (
               `Remove ${qtyToRemove} Unit${qtyToRemove > 1 ? 's' : ''}`
             )}

@@ -26,9 +26,9 @@ export default function CommitmentQuantityDrawer({
     <Sheet open={open} onOpenChange={(o) => !o && onClose?.()}>
       <SheetContent className="bg-gray-900 border-gray-700 w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader className="pb-4">
-          <SheetTitle className="text-white">Manage Commitment Quantity</SheetTitle>
+          <SheetTitle className="text-white">Manage Quantity</SheetTitle>
           <SheetDescription>
-            Adjust quantities, move between projects, or split commitments
+            Adjust, move, or split this project requirement
           </SheetDescription>
         </SheetHeader>
 

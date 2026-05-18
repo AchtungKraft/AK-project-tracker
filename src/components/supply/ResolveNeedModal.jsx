@@ -27,19 +27,19 @@ import { cn } from "@/lib/utils";
  */
 
 const RESOLUTION_MODES = [
-  { value: 'resolve', label: 'Resolve Need', description: 'Part is available — satisfy shortage without a PO', icon: CheckCircle2, color: 'text-emerald-400' },
-  { value: 'external_order', label: 'Already Ordered', description: 'Ordered outside the system — mark as on its way', icon: Truck, color: 'text-blue-400' },
-  { value: 'receive', label: 'Receive Without PO', description: 'Physically receive into inventory without a PO', icon: Package, color: 'text-yellow-400' },
+  { value: 'resolve', label: 'Already Have It', description: 'Part is on hand — no purchase needed', icon: CheckCircle2, color: 'text-emerald-400' },
+  { value: 'external_order', label: 'Ordered Elsewhere', description: 'Ordered outside this system — mark as on its way', icon: Truck, color: 'text-blue-400' },
+  { value: 'receive', label: 'Receive Now', description: 'Receive into inventory without a PO', icon: Package, color: 'text-yellow-400' },
 ];
 
 const RESOLUTION_TYPES = [
   { value: 'client_supplied', label: 'Client Supplied', description: 'Client provided this part' },
-  { value: 'already_in_stock', label: 'Already In Stock', description: 'Found on shelf / already in inventory' },
+  { value: 'already_in_stock', label: 'Already In Stock', description: 'Found on shelf' },
   { value: 'shop_supplied', label: 'Shop Supplied', description: 'Using existing shop stock' },
-  { value: 'local_purchase', label: 'Local Purchase', description: 'Bought locally / cash / credit card' },
+  { value: 'local_purchase', label: 'Local Purchase', description: 'Bought locally (cash/card)' },
   { value: 'externally_purchased', label: 'Externally Purchased', description: 'Ordered outside this system' },
-  { value: 'vendor_warranty', label: 'Vendor Warranty', description: 'Warranty replacement from vendor' },
-  { value: 'inventory_correction', label: 'Inventory Correction', description: 'Count correction / reconciliation' },
+  { value: 'vendor_warranty', label: 'Vendor Warranty', description: 'Warranty replacement' },
+  { value: 'inventory_correction', label: 'Inventory Correction', description: 'Count correction' },
 ];
 
 const RECEIVE_SOURCE_TYPES = [
@@ -99,7 +99,7 @@ export default function ResolveNeedModal({ open, onClose, item, onSuccess }) {
 
       const response = await base44.functions.invoke('executeSupplyAction', payload);
       if (response.data?.success || response.data?.results) {
-        toast.success(response.data?.message || 'Need resolved successfully');
+        toast.success(response.data?.message || 'Done — need resolved.');
         onSuccess?.();
         onClose();
       } else {
@@ -118,7 +118,7 @@ export default function ResolveNeedModal({ open, onClose, item, onSuccess }) {
         <DialogHeader>
           <DialogTitle className="text-white flex items-center gap-2">
             <Wrench className="w-5 h-5 text-yellow-400" />
-            Resolve Procurement Need
+            Resolve Need
           </DialogTitle>
           <DialogDescription className="text-gray-400">
             <span className="text-white font-medium">{partName}</span> · {projectName}
@@ -239,7 +239,7 @@ export default function ResolveNeedModal({ open, onClose, item, onSuccess }) {
           <Button onClick={handleSubmit} disabled={isSubmitting}
             className="bg-emerald-600 hover:bg-emerald-700 text-white">
             {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-            {mode === 'resolve' ? 'Resolve Need' : mode === 'external_order' ? 'Mark Ordered' : 'Receive'}
+            {mode === 'resolve' ? 'Confirm' : mode === 'external_order' ? 'Mark Ordered' : 'Receive'}
           </Button>
         </DialogFooter>
       </DialogContent>
