@@ -61,6 +61,7 @@ import PSMFinancialSummary from "@/components/supply/PSMFinancialSummary";
 import ReportTab from "@/components/supply/ReportTab";
 import CommitmentPricingEditor from "@/components/supply/CommitmentPricingEditor";
 import CommitmentBillingDiagnostics from "@/components/financial/CommitmentBillingDiagnostics";
+import InvoiceReconciliationDiagnostics from "@/components/financial/InvoiceReconciliationDiagnostics";
 import ResolveNeedModal from "@/components/supply/ResolveNeedModal";
 import BackfillPOCostsModal from "@/components/supply/BackfillPOCostsModal";
 import ProjectPurchaseOrders from "@/components/project/ProjectPurchaseOrders";
@@ -943,6 +944,13 @@ export default function ProjectSupplyManager() {
           {/* Phase 7: Billing Drift Diagnostics Panel + Admin Actions */}
           {showDiagnostics && (
             <div className="space-y-3">
+              <InvoiceReconciliationDiagnostics
+                projectInvoices={projectInvoices}
+                projectedRevenue={metrics.totalPlannedRetail}
+                operationalCost={0}
+                backendSummary={supplySummary}
+                enrichedCommitments={enrichedCommitments}
+              />
               <CommitmentBillingDiagnostics projectId={projectId} />
               <ReceivingGapDiagnosticsPanel
                 projectId={projectId}

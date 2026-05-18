@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 /**
  * PHASE 1 — Canonical Financial Read Model
@@ -96,18 +96,11 @@ Deno.serve(async (req) => {
 
       // ── PARTS exposure (SEPARATE from services) ──
       let totalPartsExposure = 0;
-      let totalInvoicedFromCommitments = 0;
-      let hasUnpaidParts = false;
 
       for (const c of projectCommitments) {
         const retailTotal = c.planned_retail_total || 
           ((c.unit_retail_snapshot || 0) * (c.required_total || 0));
         totalPartsExposure += retailTotal;
-        const invoicedAmount = c.invoiced_amount || 0;
-        totalInvoicedFromCommitments += invoicedAmount;
-        if (c.billing_status !== 'paid' && retailTotal > invoicedAmount) {
-          hasUnpaidParts = true;
-        }
       }
 
       // ── SERVICES exposure (SEPARATE from parts) ──
@@ -130,13 +123,26 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Calculate total paid from invoices
+      // ═══════════════════════════════════════════════════════════════
+      // CANONICAL: Invoice totals from actual ProjectInvoice entities
+      // NOT from commitment.invoiced_amount snapshots (deprecated)
+      // ═══════════════════════════════════════════════════════════════
+      let totalInvoicedFromEntities = 0;
       let totalPaid = 0;
+      let totalOutstanding = 0;
+      let hasUnpaidParts = false;
+      const VOID_STATUSES = new Set(['void', 'cancelled']);
+      const DRAFT_STATUSES = new Set(['draft']);
+      
       for (const inv of projectInvoices) {
-        if (inv.status === 'paid') {
-          totalPaid += inv.paid_amount || 0;
-        }
+        if (VOID_STATUSES.has(inv.status) || DRAFT_STATUSES.has(inv.status)) continue;
+        const invTotal = inv.total ?? inv.subtotal ?? 0;
+        const invPaid = inv.paid_amount ?? 0;
+        totalInvoicedFromEntities += invTotal;
+        totalPaid += invPaid;
+        totalOutstanding += Math.max(0, invTotal - invPaid);
       }
+      if (totalOutstanding > 0.01) hasUnpaidParts = true;
 
       // Calculate available credit
       let availableCredit = 0;
@@ -144,10 +150,9 @@ Deno.serve(async (req) => {
         availableCredit += credit.remaining_amount || 0;
       }
 
-      // Combined remaining to bill (parts + services, kept separable)
-      const partsRemainingToBill = Math.max(0, totalPartsExposure - totalInvoicedFromCommitments);
-      const servicesRemainingToBill = Math.max(0, totalServicesBillable - totalServicesBilled);
-      const remainingToBill = partsRemainingToBill + servicesRemainingToBill;
+      // CANONICAL: Remaining to bill from invoice entities, NOT commitment snapshots
+      const totalProjectedRevenue = totalPartsExposure + totalServicesBillable;
+      const remainingToBill = Math.max(0, totalProjectedRevenue - totalInvoicedFromEntities);
 
       const projectType = project.project_type_id ? projectTypeMap[project.project_type_id] : null;
 
@@ -159,7 +164,8 @@ Deno.serve(async (req) => {
         project_type_color: projectType?.color || '#6B7280',
         // PARTS totals (isolated — no service contamination)
         total_parts_exposure: totalPartsExposure,
-        total_invoiced: totalInvoicedFromCommitments,
+        // CANONICAL: From actual ProjectInvoice entities, NOT commitment snapshots
+        total_invoiced: totalInvoicedFromEntities,
         // SERVICES totals (isolated — no parts contamination)
         total_services_billable: totalServicesBillable,
         total_services_cost: totalServicesCost,
