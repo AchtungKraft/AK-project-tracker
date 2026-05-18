@@ -179,6 +179,43 @@ export default function InvoiceReconciliationDiagnostics({
               )}
             </div>
 
+            {/* Invoice Record Trace */}
+            <div>
+              <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-1">
+                Invoice Records Loaded ({projectInvoices.length})
+              </p>
+              {projectInvoices.length === 0 ? (
+                <p className="text-[10px] text-yellow-500">No invoice records loaded into PSM for this project.</p>
+              ) : (
+                <div className="space-y-1">
+                  {projectInvoices.map(inv => {
+                    const invTotal = inv.total ?? inv.subtotal ?? 0;
+                    const invPaid = inv.paid_amount ?? 0;
+                    const computedBalance = Math.max(0, invTotal - invPaid);
+                    const entityBalance = inv.balance_due ?? 0;
+                    const balanceStale = Math.abs(computedBalance - entityBalance) > 0.01;
+                    return (
+                      <div key={inv.id} className="flex items-center gap-2 text-[10px] font-mono">
+                        <span className={cn(
+                          "px-1.5 py-0.5 rounded",
+                          inv.status === 'paid' ? "bg-emerald-900/30 text-emerald-400" :
+                          inv.status === 'sent' ? "bg-blue-900/30 text-blue-400" :
+                          "bg-gray-800 text-gray-400"
+                        )}>{inv.status}</span>
+                        <span className="text-gray-500">{inv.qb_invoice_number || inv.id?.slice(-8)}</span>
+                        <span className="text-gray-300">{formatCurrencyUSD(invTotal)}</span>
+                        <span className="text-emerald-400">paid: {formatCurrencyUSD(invPaid)}</span>
+                        <span className={balanceStale ? "text-red-400" : "text-gray-500"}>
+                          bal: {formatCurrencyUSD(computedBalance)}
+                          {balanceStale && ` (entity: ${formatCurrencyUSD(entityBalance)} STALE)`}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             {/* QB Sync State */}
             <div>
               <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-1">QB Sync</p>

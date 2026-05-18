@@ -58,7 +58,8 @@ export function deriveCanonicalInvoiceState({
     const effectiveStatus = resolveEffectiveStatus(inv);
     const invoiceTotal = inv.total ?? inv.subtotal ?? 0;
     const invoicePaid = inv.paid_amount ?? 0;
-    const invoiceBalance = inv.balance_due ?? Math.max(0, invoiceTotal - invoicePaid);
+    // CANONICAL: Always compute balance from total - paid. Entity balance_due may be stale.
+    const invoiceBalance = Math.max(0, invoiceTotal - invoicePaid);
     return { ...inv, effectiveStatus, invoiceTotal, invoicePaid, invoiceBalance };
   });
 

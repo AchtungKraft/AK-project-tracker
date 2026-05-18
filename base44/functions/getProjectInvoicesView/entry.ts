@@ -209,9 +209,10 @@ Deno.serve(async (req) => {
       sent_count: invoices.filter(i => i.status === 'sent').length,
       paid_count: invoices.filter(i => i.status === 'paid').length,
       overdue_count: invoicesWithFlags.filter(i => i.flags.overdue).length,
+      // CANONICAL: Compute balance from total - paid. Entity balance_due may be stale.
       total_balance_due: invoices
         .filter(i => i.status === 'sent')
-        .reduce((sum, i) => sum + (i.balance_due ?? 0), 0),
+        .reduce((sum, i) => sum + Math.max(0, (i.total ?? i.subtotal ?? 0) - (i.paid_amount ?? 0)), 0),
     };
 
     // PERF: Timing log (dev only)
