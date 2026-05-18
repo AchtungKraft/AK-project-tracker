@@ -8,7 +8,7 @@ import {
 import {
   AlertTriangle, ChevronDown, ChevronUp, Truck,
   TrendingUp, Info, ShieldAlert, Package, CheckCircle2,
-  Receipt, Clock
+  Receipt, Clock, Target
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
@@ -17,13 +17,17 @@ import { deriveServiceFinancials } from "@/components/supply/deriveServiceFinanc
 const DEFS = {
   projected: "Planned Billable − Planned Cost (best case if all services complete as estimated)",
   realized: "Realized Billable − Actual Cost (current financial truth from completed/billed work)",
-  actualCost: "Cost of completed + billed services ONLY — not planned estimates or ordered commitments",
-  committed: "Ordered services only — vendor engaged but work not yet done",
-  exposure: "Planned-only services — no vendor engagement yet (uncommitted risk)",
+  actualCost: "Cost of completed + billed services ONLY — not estimates or ordered commitments",
+  committed: "Ordered services — vendor engaged but work not yet done (ordered exposure)",
+  plannedExp: "Planned-only services — no vendor engagement yet (uncommitted risk)",
+  orderedExp: "Vendor committed, awaiting completion (future liability)",
+  uninvoicedActuals: "Completed services not yet billed to client (accounting risk)",
   pendingVendor: "Ordered vendor services awaiting completion",
-  unbilledCompleted: "Completed services not yet billed to client",
-  unbilledSpend: "Actual cost incurred but not yet covered by client billing",
-  unrealized: "Projected margin not yet realized — NOT a loss, project is incomplete",
+  unbilledSpend: "Actual cost not yet covered by client billing (accounting risk)",
+  unrealized: "Projected margin not yet realized — project is incomplete, NOT a loss",
+  futureLiability: "Money likely owed to vendors (ordered services)",
+  opRisk: "Services not yet ordered — unresolved procurement gap",
+  acctRisk: "Actual cost not yet covered by client billing",
 };
 
 function Tip({ id, children }) {
@@ -36,7 +40,7 @@ function Tip({ id, children }) {
             <Info className="w-2.5 h-2.5 text-gray-600 flex-shrink-0" />
           </span>
         </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-[240px] text-xs">{DEFS[id] || id}</TooltipContent>
+        <TooltipContent side="top" className="max-w-[260px] text-xs">{DEFS[id] || id}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );
@@ -100,7 +104,6 @@ export default function ServicesDashboardSummary({ commitments }) {
 
       {/* ROW 2 — Financials */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {/* Revenue */}
         <Card className="bg-black/40 border-blue-900/30">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-3">
@@ -117,7 +120,6 @@ export default function ServicesDashboardSummary({ commitments }) {
           </CardContent>
         </Card>
 
-        {/* Costs — mutually exclusive buckets */}
         <Card className="bg-black/40 border-gray-800">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-3">
@@ -126,18 +128,17 @@ export default function ServicesDashboardSummary({ commitments }) {
             </div>
             <div className="space-y-1.5">
               <Line label="Planned Cost" value={fin.costs.plannedCost} color="text-gray-300" />
-              <Line label="Committed (Ordered)" value={fin.costs.committedNotActual} color="text-purple-400" tipId="committed" />
+              <Line label="Ordered (Committed)" value={fin.exposure.ordered} color="text-purple-400" tipId="committed" />
               <div className="border-t border-gray-800 pt-1">
                 <Line label="Actual Spend" value={fin.costs.actualCost} color="text-white" bold tipId="actualCost" />
               </div>
-              {fin.costs.exposure > 0 && (
-                <Line label="Uncommitted (Exposure)" value={fin.costs.exposure} color="text-amber-400" tipId="exposure" />
+              {fin.exposure.planned > 0 && (
+                <Line label="Uncommitted (Planned)" value={fin.exposure.planned} color="text-amber-400" tipId="plannedExp" />
               )}
             </div>
           </CardContent>
         </Card>
 
-        {/* Margin — two independent views */}
         <Card className={cn("bg-black/40", fin.margin.projectedMargin >= 0 ? "border-emerald-900/40" : "border-red-900/40")}>
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-3">
@@ -173,29 +174,68 @@ export default function ServicesDashboardSummary({ commitments }) {
         </Card>
       </div>
 
-      {/* ROW 3 — Cost Split + Operational Exposure */}
+      {/* ROW 3 — Exposure & Liability */}
+      {(fin.exposure.planned > 0 || fin.exposure.ordered > 0 || fin.exposure.uninvoicedActuals > 0) && (
+        <Card className="bg-black/40 border-amber-900/30">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Target className="w-4 h-4 text-amber-400" />
+              <p className="text-[10px] text-amber-400 uppercase tracking-widest font-semibold">Exposure & Liability</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1">
+              <div className="space-y-1.5">
+                <p className="text-[9px] text-gray-600 uppercase tracking-wider">Exposure Buckets</p>
+                {fin.exposure.planned > 0 && (
+                  <Line label="Planned (Uncommitted)" value={fin.exposure.planned} color="text-gray-400" tipId="plannedExp" />
+                )}
+                {fin.exposure.ordered > 0 && (
+                  <Line label="Ordered (Committed)" value={fin.exposure.ordered} color="text-purple-400" tipId="orderedExp" />
+                )}
+                {fin.exposure.uninvoicedActuals > 0 && (
+                  <Line label="Uninvoiced Actuals" value={fin.exposure.uninvoicedActuals} color="text-red-400" tipId="uninvoicedActuals" />
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[9px] text-gray-600 uppercase tracking-wider">Risk Classification</p>
+                {fin.risk.operational.total > 0 && (
+                  <Line label="Operational Risk" value={fin.risk.operational.total} color="text-amber-400" tipId="opRisk" />
+                )}
+                {fin.risk.accounting.total > 0 && (
+                  <Line label="Accounting Risk" value={fin.risk.accounting.total} color="text-red-400" tipId="acctRisk" />
+                )}
+                {fin.liability.futureLiability > 0 && (
+                  <Line label="Future Liability" value={fin.liability.futureLiability} color="text-orange-400" tipId="futureLiability" />
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ROW 4 — Cost Split */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         <MiniCard label="Vendor Cost" value={fin.costs.vendorCostAll} color="text-purple-400" />
         <MiniCard label="Internal Cost" value={fin.costs.internalCostAll} color="text-amber-400" />
-        {fin.costs.pendingVendorExposure > 0 && (
-          <MiniCard label="Pending Vendor" value={fin.costs.pendingVendorExposure} color="text-orange-400" tipId="pendingVendor" />
+        {fin.exposure.ordered > 0 && (
+          <MiniCard label="Pending Vendor" value={fin.exposure.ordered} color="text-orange-400" tipId="pendingVendor" />
         )}
-        {fin.costs.unbilledCompleted > 0 && (
-          <MiniCard label="Unbilled Completed" value={fin.costs.unbilledCompleted} color="text-red-400" tipId="unbilledCompleted" />
+        {fin.risk.accounting.unbilledCompleted > 0 && (
+          <MiniCard label="Unbilled Completed" value={fin.risk.accounting.unbilledCompleted} color="text-red-400" tipId="uninvoicedActuals" />
         )}
       </div>
 
-      {/* RISK BANNER */}
-      {fin.costs.unbilledActualSpend > 0 && fin.costs.actualCost > 0 && (
+      {/* ACCOUNTING RISK BANNER */}
+      {fin.risk.accounting.total > 0 && fin.costs.actualCost > 0 && (
         <div className="flex items-center gap-3 p-3 bg-amber-900/30 border border-amber-700/50 rounded-lg">
           <ShieldAlert className="w-5 h-5 text-amber-400 flex-shrink-0" />
           <div className="flex-1">
-            <Tip id="unbilledSpend">
-              <p className="text-sm font-semibold text-amber-300">Unbilled Actual Spend</p>
-            </Tip>
+            <Tip id="acctRisk"><p className="text-sm font-semibold text-amber-300">Accounting Risk</p></Tip>
             <p className="text-xs text-amber-400/80">
               Spent {formatCurrencyUSD(fin.costs.actualCost)} on completed work but billable covers only {formatCurrencyUSD(fin.revenue.realizedBillable)} →{' '}
-              <span className="font-bold text-amber-300">{formatCurrencyUSD(fin.costs.unbilledActualSpend)} not yet covered</span>
+              <span className="font-bold text-amber-300">{formatCurrencyUSD(fin.risk.accounting.total)} unbilled</span>
+              {fin.risk.operational.total > 0 && (
+                <span className="text-gray-500"> + {formatCurrencyUSD(fin.risk.operational.total)} uncommitted</span>
+              )}
             </p>
           </div>
         </div>
@@ -231,27 +271,85 @@ export default function ServicesDashboardSummary({ commitments }) {
               />
             </div>
 
+            {/* Financial Truth Table */}
             <div>
-              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-2">Reconciliation</p>
+              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-2">Financial Truth Table</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[10px] font-mono">
+                  <thead>
+                    <tr className="text-gray-500 border-b border-gray-800">
+                      <th className="text-left py-1 pr-4">State</th>
+                      <th className="text-right py-1 px-2">Cost</th>
+                      <th className="text-right py-1 px-2">Billable</th>
+                      <th className="text-right py-1 px-2">Fin. Status</th>
+                      <th className="text-right py-1 pl-2">Exposure Type</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-gray-400">
+                    <tr className="border-b border-gray-800/50">
+                      <td className="py-1 pr-4 text-gray-300">Planned</td>
+                      <td className="text-right py-1 px-2">{formatCurrencyUSD(fin.costs.costPlanned)}</td>
+                      <td className="text-right py-1 px-2">{formatCurrencyUSD(fin.lifecycle.plannedValue > 0 ? (fin.revenue.plannedBillable * fin.costs.costPlanned / fin.costs.plannedCost) : 0)}</td>
+                      <td className="text-right py-1 px-2 text-gray-500">Estimate</td>
+                      <td className="text-right py-1 pl-2 text-amber-400">Planned</td>
+                    </tr>
+                    <tr className="border-b border-gray-800/50">
+                      <td className="py-1 pr-4 text-purple-300">Ordered</td>
+                      <td className="text-right py-1 px-2">{formatCurrencyUSD(fin.costs.costOrdered)}</td>
+                      <td className="text-right py-1 px-2">—</td>
+                      <td className="text-right py-1 px-2 text-purple-400">Committed</td>
+                      <td className="text-right py-1 pl-2 text-orange-400">Ordered</td>
+                    </tr>
+                    <tr className="border-b border-gray-800/50">
+                      <td className="py-1 pr-4 text-blue-300">Completed</td>
+                      <td className="text-right py-1 px-2">{formatCurrencyUSD(fin.costs.costCompleted)}</td>
+                      <td className="text-right py-1 px-2">{formatCurrencyUSD(fin.costs.costCompleted > 0 ? (fin.revenue.realizedBillable * fin.costs.costCompleted / (fin.costs.costCompleted + fin.costs.costBilled || 1)) : 0)}</td>
+                      <td className="text-right py-1 px-2 text-cyan-400">Actualized</td>
+                      <td className="text-right py-1 pl-2 text-red-400">Uninvoiced</td>
+                    </tr>
+                    <tr className="border-b border-gray-800/50">
+                      <td className="py-1 pr-4 text-green-300">Billed</td>
+                      <td className="text-right py-1 px-2">{formatCurrencyUSD(fin.costs.costBilled)}</td>
+                      <td className="text-right py-1 px-2">{formatCurrencyUSD(fin.costs.costBilled > 0 ? (fin.revenue.realizedBillable * fin.costs.costBilled / (fin.costs.costCompleted + fin.costs.costBilled || 1)) : 0)}</td>
+                      <td className="text-right py-1 px-2 text-green-400">Closed</td>
+                      <td className="text-right py-1 pl-2 text-gray-600">None</td>
+                    </tr>
+                    <tr className="font-semibold text-white">
+                      <td className="py-1 pr-4 border-t border-gray-700">Total</td>
+                      <td className="text-right py-1 px-2 border-t border-gray-700">{formatCurrencyUSD(fin.costs.plannedCost)}</td>
+                      <td className="text-right py-1 px-2 border-t border-gray-700">{formatCurrencyUSD(fin.revenue.plannedBillable)}</td>
+                      <td className="text-right py-1 px-2 border-t border-gray-700">—</td>
+                      <td className="text-right py-1 pl-2 border-t border-gray-700">—</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Reconciliation */}
+            <div>
+              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-2">Reconciliation (Bucket Exclusivity)</p>
               <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs font-mono">
-                <span className="text-gray-500">Planned (uncommitted)</span>
-                <span className="text-gray-300 text-right">{formatCurrencyUSD(fin.costs.costPlanned)}</span>
-                <span className="text-gray-500">+ Ordered (committed)</span>
-                <span className="text-purple-400 text-right">{formatCurrencyUSD(fin.costs.costOrdered)}</span>
-                <span className="text-gray-500">+ Completed (actual)</span>
-                <span className="text-blue-400 text-right">{formatCurrencyUSD(fin.costs.costCompleted)}</span>
-                <span className="text-gray-500">+ Billed (actual)</span>
-                <span className="text-green-400 text-right">{formatCurrencyUSD(fin.costs.costBilled)}</span>
+                <span className="text-gray-500">Actual Spend</span>
+                <span className="text-gray-300 text-right">{formatCurrencyUSD(fin.costs.actualCost)}</span>
+                <span className="text-gray-500">+ Ordered Exposure</span>
+                <span className="text-purple-400 text-right">{formatCurrencyUSD(fin.exposure.ordered)}</span>
+                <span className="text-gray-500">+ Planned Exposure</span>
+                <span className="text-amber-400 text-right">{formatCurrencyUSD(fin.exposure.planned)}</span>
                 <span className="text-gray-500 font-semibold border-t border-gray-800 pt-1">= Total Planned Cost</span>
                 <span className="text-white text-right font-semibold border-t border-gray-800 pt-1">{formatCurrencyUSD(fin.costs.plannedCost)}</span>
-
+                {fin._reconciliation.totalBucketCheck > 0.01 && (
+                  <>
+                    <span className="text-red-500 mt-1">⚠ Drift</span>
+                    <span className="text-red-400 text-right mt-1">{formatCurrencyUSD(fin._reconciliation.totalBucketCheck)}</span>
+                  </>
+                )}
                 <span className="text-gray-500 mt-2">Vendor Actual</span>
                 <span className="text-purple-400 text-right mt-2">{formatCurrencyUSD(fin.costs.vendorCostActual)}</span>
                 <span className="text-gray-500">+ Internal Actual</span>
                 <span className="text-amber-400 text-right">{formatCurrencyUSD(fin.costs.internalCostActual)}</span>
                 <span className="text-gray-500 font-semibold border-t border-gray-800 pt-1">= Actual Spend</span>
                 <span className="text-white text-right font-semibold border-t border-gray-800 pt-1">{formatCurrencyUSD(fin.costs.actualCost)}</span>
-
                 <span className="text-gray-500 mt-2">Projected Revenue</span>
                 <span className="text-blue-400 text-right mt-2">{formatCurrencyUSD(fin.revenue.plannedBillable)}</span>
                 <span className="text-gray-500">− Planned Cost</span>

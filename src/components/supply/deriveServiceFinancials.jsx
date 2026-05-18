@@ -5,18 +5,19 @@
  *
  * LIFECYCLE (mutually exclusive):
  *   PLANNED   → estimate only, no vendor engagement
- *   ORDERED   → vendor committed, exposure exists (not actual spend)
- *   COMPLETED → work done, cost realized (actual spend)
- *   BILLED    → client invoiced, cost realized (actual spend)
+ *   ORDERED   → vendor committed, awaiting completion
+ *   COMPLETED → work done, cost realized, not yet billed
+ *   BILLED    → client invoiced, revenue recognized
  *
- * ACTUAL SPEND = completed + billed ONLY
- * COMMITTED   = ordered ONLY (not overlapping with actual)
- * EXPOSURE    = planned ONLY (not overlapping with committed or actual)
+ * EXPOSURE SEMANTICS:
+ *   plannedExposure   = planned-only services (uncommitted estimates)
+ *   orderedExposure   = ordered services (vendor committed, awaiting delivery)
+ *   uninvoicedActuals = completed but not yet billed to client
+ *   futureLiability   = orderedExposure (money likely owed to vendors)
  *
- * MARGIN:
- *   Projected = allBillable − allCost (if everything completes as planned)
- *   Realized  = actualizedBillable − actualCost (current financial truth)
- *   These are independent views. Delta is NOT a loss — it's unrealized.
+ * RISK SEMANTICS:
+ *   operationalRisk   = planned services not yet ordered (procurement gap)
+ *   accountingRisk    = actual cost not yet covered by client billing
  */
 
 export function isServiceActualized(service) {
@@ -26,19 +27,17 @@ export function isServiceActualized(service) {
 export function deriveServiceFinancials(services = []) {
   const counts = { total: 0, planned: 0, ordered: 0, completed: 0, billed: 0 };
 
-  // Mutually exclusive lifecycle cost buckets
-  let costPlanned = 0;    // planned only
-  let costOrdered = 0;    // ordered only
-  let costCompleted = 0;  // completed only
-  let costBilled = 0;     // billed only
-
-  // Mutually exclusive lifecycle billable buckets
+  // Mutually exclusive lifecycle cost/billable buckets
+  let costPlanned = 0;
+  let costOrdered = 0;
+  let costCompleted = 0;
+  let costBilled = 0;
   let billablePlanned = 0;
   let billableOrdered = 0;
   let billableCompleted = 0;
   let billableBilled = 0;
 
-  // Vendor/internal split (across all statuses)
+  // Vendor/internal splits
   let vendorCostAll = 0;
   let internalCostAll = 0;
   let vendorCostActual = 0;
@@ -57,7 +56,6 @@ export function deriveServiceFinancials(services = []) {
     counts.total++;
     counts[status] = (counts[status] || 0) + 1;
 
-    // STRICT: each service goes to exactly ONE cost bucket
     switch (status) {
       case 'planned':
         costPlanned += cost;
@@ -77,7 +75,6 @@ export function deriveServiceFinancials(services = []) {
         break;
     }
 
-    // Vendor vs internal (total and actualized)
     if (isVendor) {
       vendorCostAll += cost;
       if (isServiceActualized(svc)) vendorCostActual += cost;
@@ -87,7 +84,6 @@ export function deriveServiceFinancials(services = []) {
       if (isServiceActualized(svc)) internalCostActual += cost;
     }
 
-    // Per-service validation
     if (cost > billable && billable > 0) {
       negativeMarginCount++;
       warnings.push({ id: svc.id, level: 'warn', msg: `${svc.description || svc.service_name}: cost ($${cost.toFixed(0)}) > billable ($${billable.toFixed(0)})` });
@@ -98,19 +94,11 @@ export function deriveServiceFinancials(services = []) {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // AGGREGATES — non-overlapping by construction
+  // AGGREGATES
   // ═══════════════════════════════════════════════════════════════
   const totalPlannedCost = costPlanned + costOrdered + costCompleted + costBilled;
   const totalPlannedBillable = billablePlanned + billableOrdered + billableCompleted + billableBilled;
-
-  // Actual = completed + billed (work is done)
   const actualCost = costCompleted + costBilled;
-  // Committed (not yet actual) = ordered only
-  const committedNotActual = costOrdered;
-  // Exposure (not committed) = planned only
-  const exposure = costPlanned;
-
-  // Realized billable = only from actualized services
   const realizedBillable = billableCompleted + billableBilled;
 
   // ═══════════════════════════════════════════════════════════════
@@ -129,46 +117,77 @@ export function deriveServiceFinancials(services = []) {
   const realizedMargin = realizedBillable - actualCost;
   const projectedMarginPct = totalPlannedBillable > 0 ? (projectedMargin / totalPlannedBillable) * 100 : 0;
   const realizedMarginPct = realizedBillable > 0 ? (realizedMargin / realizedBillable) * 100 : 0;
-
-  // Unrealized = how much projected margin hasn't been realized yet (NOT a loss)
   const unrealizedMarginRemaining = Math.max(0, projectedMargin - realizedMargin);
 
-  // Risk = actual spend not covered by realized billable
-  const unbilledActualSpend = Math.max(0, actualCost - realizedBillable);
-  // Pending vendor = ordered but not completed
-  const pendingVendorExposure = costOrdered;
-  // Unbilled completed = completed but not yet billed to client
-  const unbilledCompleted = costCompleted;
+  // ═══════════════════════════════════════════════════════════════
+  // EXPOSURE SEMANTICS — distinct operational buckets
+  // ═══════════════════════════════════════════════════════════════
+  const exposure = {
+    planned: costPlanned,           // estimates, no vendor commitment
+    ordered: costOrdered,           // vendor committed, awaiting completion
+    uninvoicedActuals: costCompleted, // work done but not billed to client
+    totalUnresolved: costPlanned + costOrdered,
+  };
 
   // ═══════════════════════════════════════════════════════════════
-  // RECONCILIATION ASSERTION
+  // LIABILITY — money likely owed
   // ═══════════════════════════════════════════════════════════════
-  const reconDrift = Math.abs((costPlanned + costOrdered + costCompleted + costBilled) - totalPlannedCost);
+  const liability = {
+    futureLiability: costOrdered,     // vendor obligations
+    realizedLiability: actualCost,    // already spent
+    totalLiability: costOrdered + actualCost,
+  };
+
+  // ═══════════════════════════════════════════════════════════════
+  // RISK — operational vs accounting
+  // ═══════════════════════════════════════════════════════════════
+  const risk = {
+    operational: {
+      uncommittedServices: costPlanned,
+      total: costPlanned,
+    },
+    accounting: {
+      unbilledActualSpend: Math.max(0, actualCost - realizedBillable),
+      unbilledCompleted: costCompleted,
+      total: Math.max(0, actualCost - realizedBillable),
+    },
+  };
+
+  // ═══════════════════════════════════════════════════════════════
+  // RECONCILIATION + EXCLUSIVITY ASSERTION
+  // ═══════════════════════════════════════════════════════════════
+  const bucketSum = costPlanned + costOrdered + costCompleted + costBilled;
+  const reconDrift = Math.abs(bucketSum - totalPlannedCost);
+  const totalBucketCheck = Math.abs((actualCost + exposure.ordered + exposure.planned) - totalPlannedCost);
 
   if (typeof window !== 'undefined' && import.meta.env?.DEV) {
+    console.groupCollapsed('[SERVICE FINANCIALS] Lifecycle Accounting');
     console.table({
       '🔧 Planned': Math.round(costPlanned),
       '🔧 Ordered': Math.round(costOrdered),
       '🔧 Completed': Math.round(costCompleted),
       '🔧 Billed': Math.round(costBilled),
-      '🔧 Total': Math.round(totalPlannedCost),
+      '🔧 Bucket Sum': Math.round(bucketSum),
       '🔧 Drift': reconDrift.toFixed(2),
-      '💰 Billable': Math.round(totalPlannedBillable),
-      '💰 Realized': Math.round(realizedBillable),
-      '📊 Proj Margin': Math.round(projectedMargin),
-      '📊 Real Margin': Math.round(realizedMargin),
-      '📊 Unrealized': Math.round(unrealizedMarginRemaining),
     });
+    console.table({
+      '📊 Actual Cost': Math.round(actualCost),
+      '📊 Planned Exposure': Math.round(exposure.planned),
+      '📊 Ordered Exposure': Math.round(exposure.ordered),
+      '📊 Uninvoiced Actuals': Math.round(exposure.uninvoicedActuals),
+      '📊 Future Liability': Math.round(liability.futureLiability),
+      '📊 Bucket Check': totalBucketCheck.toFixed(2),
+      '💰 Proj Margin': Math.round(projectedMargin),
+      '💰 Real Margin': Math.round(realizedMargin),
+      '⚠️ Op Risk': Math.round(risk.operational.total),
+      '⚠️ Acct Risk': Math.round(risk.accounting.total),
+    });
+    console.groupEnd();
 
-    if (reconDrift > 0.01) {
-      console.error(`[SVC RECONCILIATION] Bucket drift: $${reconDrift.toFixed(2)}`);
-    }
-    if (exposure < -0.01) {
-      console.error(`[SVC ASSERTION] Negative exposure: $${exposure.toFixed(2)}`);
-    }
-    if (actualCost > totalPlannedCost + 0.01) {
-      console.warn(`[SVC ASSERTION] Actual ($${actualCost.toFixed(0)}) > Planned ($${totalPlannedCost.toFixed(0)})`);
-    }
+    if (reconDrift > 0.01) console.error(`[SVC RECON] Bucket drift: $${reconDrift.toFixed(2)}`);
+    if (totalBucketCheck > 1) console.warn(`[SVC RECON] Total bucket exclusivity drift: $${totalBucketCheck.toFixed(2)}`);
+    if (exposure.planned < -0.01) console.error('[SVC ASSERTION] Negative planned exposure');
+    if (exposure.ordered < -0.01) console.error('[SVC ASSERTION] Negative ordered exposure');
   }
 
   return {
@@ -176,24 +195,15 @@ export function deriveServiceFinancials(services = []) {
     revenue,
     costs: {
       plannedCost: totalPlannedCost,
-      // Mutually exclusive
       costPlanned,
       costOrdered,
       costCompleted,
       costBilled,
-      // Aggregates
       actualCost,
-      committedNotActual,
-      exposure,
-      // Vendor/internal
       vendorCostAll,
       internalCostAll,
       vendorCostActual,
       internalCostActual,
-      // Operational
-      pendingVendorExposure,
-      unbilledCompleted,
-      unbilledActualSpend,
     },
     margin: {
       projectedMargin,
@@ -203,6 +213,9 @@ export function deriveServiceFinancials(services = []) {
       unrealizedMarginRemaining,
       negativeMarginCount,
     },
+    exposure,
+    liability,
+    risk,
     lifecycle: {
       plannedValue: costPlanned,
       orderedValue: costOrdered,
@@ -210,18 +223,14 @@ export function deriveServiceFinancials(services = []) {
       billedValue: costBilled,
     },
     warnings,
-    _reconciliation: { drift: reconDrift },
+    _reconciliation: { drift: reconDrift, totalBucketCheck },
   };
 }
 
-/**
- * validateServiceFinancial — per-service integrity check
- */
 export function validateServiceFinancial(svc) {
   const issues = [];
   const cost = svc.total_cost || 0;
   const billable = svc.total_billable || 0;
-  const status = svc.status || 'planned';
 
   if (cost > billable && billable > 0)
     issues.push({ type: 'NEGATIVE_MARGIN', msg: `Cost $${cost.toFixed(0)} exceeds billable $${billable.toFixed(0)}` });
@@ -229,7 +238,7 @@ export function validateServiceFinancial(svc) {
     issues.push({ type: 'ZERO_COST_ACTUALIZED', msg: 'Completed/billed with no cost recorded' });
   if (billable <= 0 && cost > 0)
     issues.push({ type: 'NO_BILLABLE', msg: 'Has cost but no billable revenue' });
-  if (status === 'billed' && svc.vendor_type !== 'internal' && cost <= 0)
+  if (svc.status === 'billed' && svc.vendor_type !== 'internal' && cost <= 0)
     issues.push({ type: 'BILLED_NO_VENDOR_COST', msg: 'Billed vendor service with no vendor cost' });
 
   return issues;

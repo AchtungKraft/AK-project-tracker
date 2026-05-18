@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   AlertTriangle, ChevronDown, ChevronUp, Truck,
-  Package, Receipt, TrendingUp, Info, ShieldAlert
+  Package, Receipt, TrendingUp, Info, ShieldAlert, Target
 } from "lucide-react";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
@@ -20,18 +20,23 @@ const DEFS = {
   outstanding: "Invoiced but not yet paid",
   remainingToBill: "Planned revenue not yet invoiced",
   partsPlanned: "Total planned cost for all part commitments",
-  partsOnPO: "Cost of parts on active purchase orders (committed, not yet received)",
-  partsReceived: "Cost of parts received into inventory (actual spend)",
-  partsInstalled: "Cost of installed parts (no additional spend — already counted at receipt)",
-  partsExposure: "Planned cost with no purchase order yet (unresolved risk)",
+  partsOnPO: "Parts on active POs — committed to vendor, awaiting delivery",
+  partsReceived: "Parts received into inventory — cost realized, not yet installed",
+  partsInstalled: "Installed parts — operational complete, no additional financial impact",
+  partsUnordered: "No PO yet — uncommitted procurement gap (operational risk)",
   servicesPlanned: "Total planned cost of non-inventory services",
-  servicesCommitted: "Ordered services — vendor engaged but work not done",
-  servicesActual: "Completed/billed services — work done, cost realized",
-  servicesExposure: "Planned services with no vendor engagement yet",
-  projectedMargin: "Planned Revenue − Planned Cost (best-case if everything goes to plan)",
+  svcOrdered: "Vendor committed, awaiting completion (ordered exposure)",
+  servicesActual: "Completed/billed — work done, cost realized",
+  svcPlannedOnly: "No vendor engagement yet (planned exposure)",
+  projectedMargin: "Planned Revenue − Planned Cost (if everything completes as planned)",
   realizedMargin: "Invoiced Revenue − Actual Spend (current financial truth)",
-  unrealized: "Projected margin not yet realized — NOT a loss, just incomplete",
-  unbilledSpend: "Actual money spent that has not been billed to the client yet",
+  unrealized: "Projected margin not yet realized — project is incomplete, NOT a loss",
+  plannedExposure: "Estimated cost with no commitment — can still change",
+  orderedExposure: "PO/vendor order exists — committed, awaiting delivery/completion",
+  uninvoicedActuals: "Cost already realized but not yet billed to client",
+  futureLiability: "Money likely owed to vendors (ordered exposure)",
+  opRisk: "Items not yet ordered — unresolved procurement gap",
+  acctRisk: "Actual cost not yet billed to client — accounting exposure",
 };
 
 function DefTip({ id, children }) {
@@ -44,16 +49,16 @@ function DefTip({ id, children }) {
             <Info className="w-2.5 h-2.5 text-gray-600 flex-shrink-0" />
           </span>
         </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-[240px] text-xs">{DEFS[id] || id}</TooltipContent>
+        <TooltipContent side="top" className="max-w-[260px] text-xs">{DEFS[id] || id}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );
 }
 
-function MetricRow({ label, value, color = "text-gray-300", bold = false, defId }) {
+function MetricRow({ label, value, color = "text-gray-300", bold = false, defId, indent = false }) {
   const labelEl = defId
-    ? <DefTip id={defId}><span className="text-[10px] text-gray-500">{label}</span></DefTip>
-    : <span className="text-[10px] text-gray-500">{label}</span>;
+    ? <DefTip id={defId}><span className={cn("text-[10px] text-gray-500", indent && "pl-3")}>{label}</span></DefTip>
+    : <span className={cn("text-[10px] text-gray-500", indent && "pl-3")}>{label}</span>;
   return (
     <div className="flex items-center justify-between">
       {labelEl}
@@ -138,14 +143,14 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
             </div>
             <div className="space-y-1.5">
               <MetricRow label="Planned Cost" value={fin.parts.plannedCost} color="text-gray-300" defId="partsPlanned" />
-              <MetricRow label="On PO (Committed)" value={fin.parts.costOnPO} color="text-purple-400" defId="partsOnPO" />
-              <MetricRow label="Received (Actual)" value={fin.parts.costReceived} color="text-cyan-400" defId="partsReceived" />
+              <MetricRow label="On PO (Ordered)" value={fin.parts.costOnPO} color="text-purple-400" defId="partsOnPO" />
+              <MetricRow label="Received" value={fin.parts.costReceived} color="text-cyan-400" defId="partsReceived" />
               <MetricRow label="Installed" value={fin.parts.costInstalled} color="text-emerald-400" defId="partsInstalled" />
               <div className="border-t border-gray-800 pt-1">
                 <MetricRow label="Actual Spend" value={fin.parts.actualSpend} color="text-white" bold />
               </div>
-              {fin.parts.exposure > 0 && (
-                <MetricRow label="Unordered (Exposure)" value={fin.parts.exposure} color="text-amber-400" defId="partsExposure" />
+              {fin.parts.costUnordered > 0 && (
+                <MetricRow label="Unordered (Exposure)" value={fin.parts.costUnordered} color="text-amber-400" defId="partsUnordered" />
               )}
             </div>
           </CardContent>
@@ -163,13 +168,13 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
               </div>
               <div className="space-y-1.5">
                 <MetricRow label="Planned Cost" value={fin.services.plannedCost} color="text-gray-300" defId="servicesPlanned" />
-                <MetricRow label="Ordered (Committed)" value={fin.services.costOrdered} color="text-purple-400" defId="servicesCommitted" />
+                <MetricRow label="Ordered (Committed)" value={fin.services.costOrdered} color="text-purple-400" defId="svcOrdered" />
                 <MetricRow label="Billable Revenue" value={fin.services.billable} color="text-blue-400" />
                 <div className="border-t border-gray-800 pt-1">
                   <MetricRow label="Actual Spend" value={fin.services.actualCost} color="text-white" bold defId="servicesActual" />
                 </div>
-                {fin.services.exposure > 0 && (
-                  <MetricRow label="Uncommitted (Exposure)" value={fin.services.exposure} color="text-amber-400" defId="servicesExposure" />
+                {fin.services.costPlannedOnly > 0 && (
+                  <MetricRow label="Uncommitted (Exposure)" value={fin.services.costPlannedOnly} color="text-amber-400" defId="svcPlannedOnly" />
                 )}
                 {fin.services.totalCount > 0 && (
                   <div className="flex items-center gap-2 pt-1 text-[9px] text-gray-600">
@@ -185,19 +190,55 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
         )}
       </div>
 
-      {/* UNBILLED SPEND BANNER */}
-      {fin.risk.unbilledActualSpend > 0 && fin.totals.actualSpend > 0 && (
+      {/* ROW 3: EXPOSURE + LIABILITY + RISK */}
+      {(fin.exposure.planned > 0 || fin.exposure.ordered > 0 || fin.exposure.uninvoicedActuals > 0) && (
+        <Card className="bg-black/40 border-amber-900/30">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Target className="w-4 h-4 text-amber-400" />
+              <p className="text-[10px] text-amber-400 uppercase tracking-widest font-semibold">Exposure & Liability</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1">
+              <div className="space-y-1.5">
+                <p className="text-[9px] text-gray-600 uppercase tracking-wider">Exposure Buckets</p>
+                {fin.exposure.planned > 0 && (
+                  <MetricRow label="Planned (Uncommitted)" value={fin.exposure.planned} color="text-gray-400" defId="plannedExposure" />
+                )}
+                {fin.exposure.ordered > 0 && (
+                  <MetricRow label="Ordered (Committed)" value={fin.exposure.ordered} color="text-purple-400" defId="orderedExposure" />
+                )}
+                {fin.exposure.uninvoicedActuals > 0 && (
+                  <MetricRow label="Uninvoiced Actuals" value={fin.exposure.uninvoicedActuals} color="text-red-400" defId="uninvoicedActuals" />
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[9px] text-gray-600 uppercase tracking-wider">Risk Classification</p>
+                {fin.risk.operational.total > 0 && (
+                  <MetricRow label="Operational Risk" value={fin.risk.operational.total} color="text-amber-400" defId="opRisk" />
+                )}
+                {fin.risk.accounting.total > 0 && (
+                  <MetricRow label="Accounting Risk" value={fin.risk.accounting.total} color="text-red-400" defId="acctRisk" />
+                )}
+                {fin.liability.futureLiability > 0 && (
+                  <MetricRow label="Future Liability" value={fin.liability.futureLiability} color="text-orange-400" defId="futureLiability" />
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ACCOUNTING RISK BANNER */}
+      {fin.risk.accounting.total > 0 && fin.totals.actualSpend > 0 && (
         <div className="flex items-center gap-3 p-3 bg-amber-900/30 border border-amber-700/50 rounded-lg">
           <ShieldAlert className="w-5 h-5 text-amber-400 flex-shrink-0" />
           <div className="flex-1">
-            <DefTip id="unbilledSpend">
-              <p className="text-sm font-semibold text-amber-300">Unbilled Actual Spend</p>
-            </DefTip>
+            <DefTip id="acctRisk"><p className="text-sm font-semibold text-amber-300">Accounting Risk</p></DefTip>
             <p className="text-xs text-amber-400/80">
               Spent {formatCurrencyUSD(fin.totals.actualSpend)} but invoiced only {formatCurrencyUSD(fin.revenue.invoiced)} →{' '}
-              <span className="font-bold text-amber-300">{formatCurrencyUSD(fin.risk.unbilledActualSpend)} not yet billed</span>
-              {fin.totals.exposure > 0 && (
-                <span> + {formatCurrencyUSD(fin.totals.exposure)} unordered exposure</span>
+              <span className="font-bold text-amber-300">{formatCurrencyUSD(fin.risk.accounting.total)} unbilled</span>
+              {fin.risk.operational.total > 0 && (
+                <span className="text-gray-500"> + {formatCurrencyUSD(fin.risk.operational.total)} unordered</span>
               )}
             </p>
           </div>
@@ -253,21 +294,69 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
               </div>
             )}
 
+            {/* Financial Truth Table */}
             <div>
-              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-2">Reconciliation</p>
+              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-2">Financial Truth Table</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[10px] font-mono">
+                  <thead>
+                    <tr className="text-gray-500 border-b border-gray-800">
+                      <th className="text-left py-1 pr-4">Category</th>
+                      <th className="text-right py-1 px-2">Planned</th>
+                      <th className="text-right py-1 px-2">Ordered</th>
+                      <th className="text-right py-1 px-2">Actual</th>
+                      <th className="text-right py-1 px-2">Exposure</th>
+                      <th className="text-right py-1 pl-2">Liability</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-gray-400">
+                    <tr className="border-b border-gray-800/50">
+                      <td className="py-1 pr-4 text-purple-400">Parts</td>
+                      <td className="text-right py-1 px-2">{formatCurrencyUSD(fin.parts.plannedCost)}</td>
+                      <td className="text-right py-1 px-2">{formatCurrencyUSD(fin.parts.costOnPO)}</td>
+                      <td className="text-right py-1 px-2">{formatCurrencyUSD(fin.parts.actualSpend)}</td>
+                      <td className="text-right py-1 px-2 text-amber-400">{formatCurrencyUSD(fin.parts.costUnordered)}</td>
+                      <td className="text-right py-1 pl-2 text-orange-400">{formatCurrencyUSD(fin.parts.costOnPO)}</td>
+                    </tr>
+                    <tr className="border-b border-gray-800/50">
+                      <td className="py-1 pr-4 text-amber-400">Services</td>
+                      <td className="text-right py-1 px-2">{formatCurrencyUSD(fin.services.plannedCost)}</td>
+                      <td className="text-right py-1 px-2">{formatCurrencyUSD(fin.services.costOrdered)}</td>
+                      <td className="text-right py-1 px-2">{formatCurrencyUSD(fin.services.actualCost)}</td>
+                      <td className="text-right py-1 px-2 text-amber-400">{formatCurrencyUSD(fin.services.costPlannedOnly)}</td>
+                      <td className="text-right py-1 pl-2 text-orange-400">{formatCurrencyUSD(fin.services.costOrdered)}</td>
+                    </tr>
+                    <tr className="font-semibold text-white">
+                      <td className="py-1 pr-4 border-t border-gray-700">Total</td>
+                      <td className="text-right py-1 px-2 border-t border-gray-700">{formatCurrencyUSD(fin.totals.plannedCost)}</td>
+                      <td className="text-right py-1 px-2 border-t border-gray-700">{formatCurrencyUSD(fin.exposure.ordered)}</td>
+                      <td className="text-right py-1 px-2 border-t border-gray-700">{formatCurrencyUSD(fin.totals.actualSpend)}</td>
+                      <td className="text-right py-1 px-2 border-t border-gray-700 text-amber-400">{formatCurrencyUSD(fin.exposure.planned)}</td>
+                      <td className="text-right py-1 pl-2 border-t border-gray-700 text-orange-400">{formatCurrencyUSD(fin.liability.futureLiability)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Reconciliation */}
+            <div>
+              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-2">Reconciliation (Bucket Exclusivity)</p>
               <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs font-mono">
-                <span className="text-gray-500">Parts Actual Spend</span>
-                <span className="text-gray-300 text-right">{formatCurrencyUSD(fin.parts.actualSpend)}</span>
-                <span className="text-gray-500">+ Parts On PO</span>
-                <span className="text-gray-300 text-right">{formatCurrencyUSD(fin.parts.costOnPO)}</span>
-                <span className="text-gray-500">+ Parts Unordered</span>
-                <span className="text-gray-300 text-right">{formatCurrencyUSD(fin.parts.exposure)}</span>
-                <span className="text-gray-500 font-semibold border-t border-gray-800 pt-1">= Parts Planned</span>
-                <span className="text-white text-right font-semibold border-t border-gray-800 pt-1">{formatCurrencyUSD(fin.parts.plannedCost)}</span>
-                <span className="text-gray-500 mt-2">+ Services Planned</span>
-                <span className="text-gray-300 text-right mt-2">{formatCurrencyUSD(fin.services.plannedCost)}</span>
+                <span className="text-gray-500">Actual Spend</span>
+                <span className="text-gray-300 text-right">{formatCurrencyUSD(fin.totals.actualSpend)}</span>
+                <span className="text-gray-500">+ Ordered Exposure</span>
+                <span className="text-purple-400 text-right">{formatCurrencyUSD(fin.exposure.ordered)}</span>
+                <span className="text-gray-500">+ Planned Exposure</span>
+                <span className="text-amber-400 text-right">{formatCurrencyUSD(fin.exposure.planned)}</span>
                 <span className="text-gray-500 font-semibold border-t border-gray-800 pt-1">= Total Planned Cost</span>
                 <span className="text-white text-right font-semibold border-t border-gray-800 pt-1">{formatCurrencyUSD(fin.totals.plannedCost)}</span>
+                {fin._reconciliation.totalBucketCheck > 0.01 && (
+                  <>
+                    <span className="text-red-500 mt-1">⚠ Drift</span>
+                    <span className="text-red-400 text-right mt-1">{formatCurrencyUSD(fin._reconciliation.totalBucketCheck)}</span>
+                  </>
+                )}
                 <span className="text-gray-500 mt-2">Planned Revenue</span>
                 <span className="text-blue-400 text-right mt-2">{formatCurrencyUSD(fin.revenue.planned)}</span>
                 <span className="text-gray-500">− Planned Cost</span>

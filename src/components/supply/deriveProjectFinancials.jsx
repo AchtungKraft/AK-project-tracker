@@ -5,36 +5,43 @@
  * No overlapping buckets. No double-counting.
  *
  * PARTS LIFECYCLE (mutually exclusive per unit):
- *   UNORDERED  → planned but no PO yet (exposure)
- *   ON_PO      → PO exists, not yet received (committed)
- *   RECEIVED   → in stock, reserved for project (actual spend)
+ *   UNORDERED  → planned but no PO yet (planned exposure)
+ *   ON_PO      → PO exists, not yet received (ordered exposure / committed)
+ *   RECEIVED   → in stock, reserved for project (actual spend, uninvoiced to client)
  *   INSTALLED  → consumed on project (actual spend, operational complete)
  *
  * Installing a received part does NOT add new spend — it was already actual
  * when received. Install is an operational state change, not financial.
  *
+ * EXPOSURE SEMANTICS:
+ *   plannedExposure   = estimated cost, no commitment (can change)
+ *   orderedExposure   = PO exists / vendor order (committed, awaiting delivery)
+ *   uninvoicedActuals = cost realized but not yet billed to client
+ *   futureLiability   = orderedExposure (money likely owed)
+ *
+ * RISK SEMANTICS:
+ *   operationalRisk   = items not ordered / unresolved procurement
+ *   accountingRisk    = actual cost not yet billed to client
+ *
  * REVENUE (accrual basis):
- *   Realized Revenue = Invoiced amount (accrual default)
- *   NOT projected billable value
+ *   Realized Revenue = Invoiced amount
  *
  * MARGIN:
  *   Projected = Planned Revenue − Planned Cost (complete picture)
  *   Realized  = Invoiced Revenue − Actual Spend (current truth)
- *   These are INDEPENDENT views, not comparable. Delta is NOT a loss.
+ *   These are INDEPENDENT views, not comparable.
  */
 
 export function deriveProjectFinancials({ enrichedCommitments = [], metrics = {}, servicesSummary = {} }) {
   // ═══════════════════════════════════════════════════════════════
   // PARTS — mutually exclusive lifecycle buckets per unit
-  // Each unit of qty is in exactly ONE of: unordered, onPO, received, installed
   // ═══════════════════════════════════════════════════════════════
   let partsPlannedCost = 0;
   let partsPlannedRetail = 0;
-  // Mutually exclusive cost buckets
-  let partsCostInstalled = 0;   // qty_installed × uc
-  let partsCostReceived = 0;    // (reserved_from_stock - qty_installed) × uc — received but not yet installed
-  let partsCostOnPO = 0;        // covered_from_po × uc — on PO but not yet received
-  let partsCostUnordered = 0;   // to_order × uc — no PO yet
+  let partsCostInstalled = 0;
+  let partsCostReceived = 0;
+  let partsCostOnPO = 0;
+  let partsCostUnordered = 0;
 
   for (const c of enrichedCommitments) {
     const uc = c.unit_cost ?? 0;
@@ -48,29 +55,19 @@ export function deriveProjectFinancials({ enrichedCommitments = [], metrics = {}
     partsPlannedCost += effReq * uc;
     partsPlannedRetail += effReq * ur;
 
-    // STRICT: each qty unit goes to exactly one bucket
-    // installed: these units are consumed (subset of reserved)
     partsCostInstalled += installed * uc;
-    // received but not installed: reserved minus what's already installed
     const receivedNotInstalled = Math.max(0, reserved - installed);
     partsCostReceived += receivedNotInstalled * uc;
-    // on PO but not yet received/reserved
     partsCostOnPO += coveredPO * uc;
-    // not yet on PO
     partsCostUnordered += toOrder * uc;
   }
 
-  // Actual Spend = money irreversibly committed (received into inventory + installed)
-  // On PO is committed but not yet actual (can still be cancelled)
+  // Aggregates
   const partsActualSpend = partsCostReceived + partsCostInstalled;
-  // Committed = actual + on PO (money we owe or have spent)
   const partsCommitted = partsActualSpend + partsCostOnPO;
-  // Exposure = planned cost not yet secured by any PO
-  const partsExposure = partsCostUnordered;
 
   // ═══════════════════════════════════════════════════════════════
   // SERVICES — mutually exclusive lifecycle buckets
-  // Each service is in exactly ONE of: planned, ordered, completed, billed
   // ═══════════════════════════════════════════════════════════════
   const svcSummary = servicesSummary || {};
   const svcByStatus = svcSummary.by_status || {};
@@ -78,29 +75,22 @@ export function deriveProjectFinancials({ enrichedCommitments = [], metrics = {}
   const servicesPlannedCost = svcSummary.total_cost ?? metrics.servicesCost ?? 0;
   const servicesBillable = svcSummary.total_billable ?? metrics.servicesRetail ?? 0;
 
-  // Approximate lifecycle split from count ratios
   const svcPlannedCount = svcByStatus.planned ?? 0;
   const svcOrderedCount = svcByStatus.ordered ?? 0;
   const svcCompletedCount = svcByStatus.completed ?? 0;
   const svcBilledCount = svcByStatus.billed ?? 0;
 
-  // Proportional cost split (best approximation without per-service data in PSM)
-  const svcRatio = (statCount) => servicesTotalCount > 0 ? statCount / servicesTotalCount : 0;
+  const svcRatio = (n) => servicesTotalCount > 0 ? n / servicesTotalCount : 0;
   const svcCostPlannedOnly = servicesPlannedCost * svcRatio(svcPlannedCount);
   const svcCostOrdered = servicesPlannedCost * svcRatio(svcOrderedCount);
   const svcCostCompleted = servicesPlannedCost * svcRatio(svcCompletedCount);
   const svcCostBilled = servicesPlannedCost * svcRatio(svcBilledCount);
 
-  // Actual = completed + billed (work is done, cost is real)
   const servicesActualCost = svcCostCompleted + svcCostBilled;
-  // Committed = ordered + actual (vendor is engaged)
   const servicesCommitted = svcCostOrdered + servicesActualCost;
-  // Exposure = planned only (no vendor engagement yet)
-  const servicesExposure = svcCostPlannedOnly;
 
   // ═══════════════════════════════════════════════════════════════
-  // REVENUE (ACCRUAL BASIS)
-  // Realized = invoiced (not just projected)
+  // REVENUE (ACCRUAL)
   // ═══════════════════════════════════════════════════════════════
   const plannedRevenue = (metrics.totalPlannedRetail ?? 0) + servicesBillable;
   const invoicedRevenue = metrics.totalInvoiced ?? 0;
@@ -115,71 +105,118 @@ export function deriveProjectFinancials({ enrichedCommitments = [], metrics = {}
   };
 
   // ═══════════════════════════════════════════════════════════════
-  // TOTALS — strict non-overlapping
+  // TOTALS
   // ═══════════════════════════════════════════════════════════════
   const totalPlannedCost = partsPlannedCost + servicesPlannedCost;
   const totalActualSpend = partsActualSpend + servicesActualCost;
   const totalCommitted = partsCommitted + servicesCommitted;
-  const totalExposure = partsExposure + servicesExposure;
 
-  // PROJECTED VIEW: if everything goes to plan
   const projectedMargin = plannedRevenue - totalPlannedCost;
-
-  // REALIZED VIEW: what has actually happened (accrual)
   const realizedMargin = invoicedRevenue - totalActualSpend;
-
-  // NOT a "delta" or "loss" — this is the unrealized portion
   const unrealizedMarginRemaining = Math.max(0, projectedMargin - realizedMargin);
 
   // ═══════════════════════════════════════════════════════════════
-  // RISK — strictly unbilled actual spend
+  // EXPOSURE SEMANTICS — distinct operational buckets
+  // Each $ appears in at most ONE exposure bucket
   // ═══════════════════════════════════════════════════════════════
-  const unbilledActualSpend = Math.max(0, totalActualSpend - invoicedRevenue);
-  const overspendRisk = Math.max(0, totalActualSpend - totalPlannedCost);
+  const exposure = {
+    // Estimated cost, no vendor engagement (can still change)
+    planned: partsCostUnordered + svcCostPlannedOnly,
+    // PO/vendor order exists, awaiting delivery/completion
+    ordered: partsCostOnPO + svcCostOrdered,
+    // Cost realized but not yet billed to client
+    uninvoicedActuals: Math.max(0, totalActualSpend - invoicedRevenue),
+    // Total unresolved = planned + ordered (NOT actuals — those are spent)
+    totalUnresolved: partsCostUnordered + svcCostPlannedOnly + partsCostOnPO + svcCostOrdered,
+  };
 
+  // ═══════════════════════════════════════════════════════════════
+  // LIABILITY — money likely owed (committed, not just estimated)
+  // ═══════════════════════════════════════════════════════════════
+  const liability = {
+    // Vendor obligations: PO + ordered services (money we will likely owe)
+    futureLiability: exposure.ordered,
+    // Already spent: actual spend
+    realizedLiability: totalActualSpend,
+    // Total: future + realized
+    totalLiability: exposure.ordered + totalActualSpend,
+  };
+
+  // ═══════════════════════════════════════════════════════════════
+  // RISK — operational vs accounting
+  // ═══════════════════════════════════════════════════════════════
   let negativeMarginItems = 0;
   for (const c of enrichedCommitments) {
     if ((c.actual_margin ?? c.resolved_margin ?? 0) < -0.01) negativeMarginItems++;
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // RECONCILIATION ASSERTION
-  // Planned = Actual + Committed(pending) + Exposure + rounding
-  // ═══════════════════════════════════════════════════════════════
-  const reconCheck = {
-    partsSum: partsCostInstalled + partsCostReceived + partsCostOnPO + partsCostUnordered,
-    partsPlanned: partsPlannedCost,
-    partsDrift: Math.abs((partsCostInstalled + partsCostReceived + partsCostOnPO + partsCostUnordered) - partsPlannedCost),
-    revenueCheck: invoicedRevenue <= plannedRevenue + 0.01,
-    exposureNonNeg: totalExposure >= -0.01,
+  const risk = {
+    // OPERATIONAL: items not yet ordered, procurement gaps
+    operational: {
+      unorderedParts: partsCostUnordered,
+      uncommittedServices: svcCostPlannedOnly,
+      total: partsCostUnordered + svcCostPlannedOnly,
+    },
+    // ACCOUNTING: actual cost not yet billed to client
+    accounting: {
+      unbilledActualSpend: exposure.uninvoicedActuals,
+      overspend: Math.max(0, totalActualSpend - totalPlannedCost),
+      total: exposure.uninvoicedActuals,
+    },
+    negativeMarginItems,
   };
 
-  // DEV diagnostics
-  if (typeof window !== 'undefined' && import.meta.env?.DEV) {
-    console.table({
-      '📦 Parts Installed': Math.round(partsCostInstalled),
-      '📦 Parts Received': Math.round(partsCostReceived),
-      '📦 Parts On PO': Math.round(partsCostOnPO),
-      '📦 Parts Unordered': Math.round(partsCostUnordered),
-      '📦 Parts Planned': Math.round(partsPlannedCost),
-      '📦 Parts Drift': reconCheck.partsDrift.toFixed(2),
-      '🔧 Svc Actual': Math.round(servicesActualCost),
-      '🔧 Svc Committed': Math.round(servicesCommitted),
-      '🔧 Svc Exposure': Math.round(servicesExposure),
-      '💰 Revenue Invoiced': Math.round(invoicedRevenue),
-      '💰 Revenue Planned': Math.round(plannedRevenue),
-      '📊 Projected Margin': Math.round(projectedMargin),
-      '📊 Realized Margin': Math.round(realizedMargin),
-      '📊 Unrealized Remaining': Math.round(unrealizedMarginRemaining),
-    });
+  // ═══════════════════════════════════════════════════════════════
+  // RECONCILIATION + BUCKET EXCLUSIVITY ASSERTIONS
+  // ═══════════════════════════════════════════════════════════════
+  const partsBucketSum = partsCostInstalled + partsCostReceived + partsCostOnPO + partsCostUnordered;
+  const svcBucketSum = svcCostPlannedOnly + svcCostOrdered + svcCostCompleted + svcCostBilled;
+  const recon = {
+    partsBucketSum,
+    partsPlanned: partsPlannedCost,
+    partsDrift: Math.abs(partsBucketSum - partsPlannedCost),
+    svcBucketSum,
+    svcPlanned: servicesPlannedCost,
+    svcDrift: Math.abs(svcBucketSum - servicesPlannedCost),
+    exposureNonNeg: exposure.planned >= -0.01 && exposure.ordered >= -0.01,
+    liabilityCheck: liability.totalLiability >= -0.01,
+    // Every $ in exactly one state: actual + ordered + planned = totalPlannedCost
+    totalBucketCheck: Math.abs((totalActualSpend + exposure.ordered + exposure.planned) - totalPlannedCost),
+  };
 
-    // Hard assertions
-    if (reconCheck.partsDrift > 1) {
-      console.warn(`[RECONCILIATION] Parts cost buckets drift: $${reconCheck.partsDrift.toFixed(2)}`);
-    }
-    if (totalExposure < -0.01) {
-      console.error(`[ASSERTION] Negative exposure: $${totalExposure.toFixed(2)}`);
-    }
+  if (typeof window !== 'undefined' && import.meta.env?.DEV) {
+    console.groupCollapsed('[PROJECT FINANCIALS] Lifecycle Accounting');
+    console.table({
+      '📦 Installed': Math.round(partsCostInstalled),
+      '📦 Received': Math.round(partsCostReceived),
+      '📦 On PO': Math.round(partsCostOnPO),
+      '📦 Unordered': Math.round(partsCostUnordered),
+      '📦 Planned': Math.round(partsPlannedCost),
+      '📦 Drift': recon.partsDrift.toFixed(2),
+      '🔧 Svc Planned': Math.round(svcCostPlannedOnly),
+      '🔧 Svc Ordered': Math.round(svcCostOrdered),
+      '🔧 Svc Completed': Math.round(svcCostCompleted),
+      '🔧 Svc Billed': Math.round(svcCostBilled),
+      '🔧 Svc Drift': recon.svcDrift.toFixed(2),
+    });
+    console.table({
+      '📊 Actual Spend': Math.round(totalActualSpend),
+      '📊 Ordered Exposure': Math.round(exposure.ordered),
+      '📊 Planned Exposure': Math.round(exposure.planned),
+      '📊 Uninvoiced Actuals': Math.round(exposure.uninvoicedActuals),
+      '📊 Future Liability': Math.round(liability.futureLiability),
+      '📊 Total Bucket Check': recon.totalBucketCheck.toFixed(2),
+      '💰 Projected Margin': Math.round(projectedMargin),
+      '💰 Realized Margin': Math.round(realizedMargin),
+      '⚠️ Op Risk': Math.round(risk.operational.total),
+      '⚠️ Acct Risk': Math.round(risk.accounting.total),
+    });
+    console.groupEnd();
+
+    if (recon.partsDrift > 1) console.warn(`[RECON] Parts bucket drift: $${recon.partsDrift.toFixed(2)}`);
+    if (recon.svcDrift > 1) console.warn(`[RECON] Service bucket drift: $${recon.svcDrift.toFixed(2)}`);
+    if (recon.totalBucketCheck > 1) console.warn(`[RECON] Total bucket drift: $${recon.totalBucketCheck.toFixed(2)}`);
+    if (!recon.exposureNonNeg) console.error('[ASSERTION] Negative exposure bucket');
   }
 
   return {
@@ -188,30 +225,24 @@ export function deriveProjectFinancials({ enrichedCommitments = [], metrics = {}
     parts: {
       plannedCost: partsPlannedCost,
       plannedRetail: partsPlannedRetail,
-      // Mutually exclusive buckets
       costInstalled: partsCostInstalled,
       costReceived: partsCostReceived,
       costOnPO: partsCostOnPO,
       costUnordered: partsCostUnordered,
-      // Aggregates
       actualSpend: partsActualSpend,
       committed: partsCommitted,
-      exposure: partsExposure,
       commitmentCount: enrichedCommitments.length,
     },
 
     services: {
       plannedCost: servicesPlannedCost,
       billable: servicesBillable,
-      // Mutually exclusive buckets
       costPlannedOnly: svcCostPlannedOnly,
       costOrdered: svcCostOrdered,
       costCompleted: svcCostCompleted,
       costBilled: svcCostBilled,
-      // Aggregates
       actualCost: servicesActualCost,
       committed: servicesCommitted,
-      exposure: servicesExposure,
       byStatus: svcByStatus,
       totalCount: servicesTotalCount,
     },
@@ -220,49 +251,40 @@ export function deriveProjectFinancials({ enrichedCommitments = [], metrics = {}
       plannedCost: totalPlannedCost,
       actualSpend: totalActualSpend,
       committed: totalCommitted,
-      exposure: totalExposure,
       projectedMargin,
       realizedMargin,
       unrealizedMarginRemaining,
       revenueRemaining: revenue.remainingToBill,
     },
 
-    risk: {
-      unbilledActualSpend,
-      overspendRisk,
-      negativeMarginItems,
-    },
-
-    _reconciliation: reconCheck,
+    exposure,
+    liability,
+    risk,
+    _reconciliation: recon,
   };
 }
 
-/**
- * validateProjectFinancials — integrity assertions
- */
 export function validateProjectFinancials(fin) {
   const warnings = [];
 
   if (fin.totals.projectedMargin < -0.01)
     warnings.push({ level: 'error', msg: `Negative projected margin: $${Math.round(fin.totals.projectedMargin)}` });
-
   if (fin.totals.actualSpend > fin.totals.plannedCost + 0.01)
     warnings.push({ level: 'warn', msg: `Actual spend ($${Math.round(fin.totals.actualSpend)}) exceeds planned ($${Math.round(fin.totals.plannedCost)})` });
-
   if (fin.revenue.invoiced > fin.revenue.planned + 0.01)
     warnings.push({ level: 'warn', msg: `Invoiced ($${Math.round(fin.revenue.invoiced)}) exceeds planned revenue ($${Math.round(fin.revenue.planned)})` });
-
   if (fin.revenue.planned <= 0 && fin.totals.plannedCost > 0)
     warnings.push({ level: 'warn', msg: 'Cost committed but no planned revenue' });
-
   if (fin.risk.negativeMarginItems > 0)
     warnings.push({ level: 'warn', msg: `${fin.risk.negativeMarginItems} item(s) with negative margin` });
-
   if (fin._reconciliation?.partsDrift > 1)
-    warnings.push({ level: 'warn', msg: `Parts cost reconciliation drift: $${fin._reconciliation.partsDrift.toFixed(0)}` });
-
-  if (fin.totals.exposure < -0.01)
-    warnings.push({ level: 'error', msg: `Negative exposure: $${Math.round(fin.totals.exposure)}` });
+    warnings.push({ level: 'warn', msg: `Parts reconciliation drift: $${fin._reconciliation.partsDrift.toFixed(0)}` });
+  if (fin._reconciliation?.svcDrift > 1)
+    warnings.push({ level: 'warn', msg: `Services reconciliation drift: $${fin._reconciliation.svcDrift.toFixed(0)}` });
+  if (fin._reconciliation?.totalBucketCheck > 1)
+    warnings.push({ level: 'warn', msg: `Total bucket exclusivity drift: $${fin._reconciliation.totalBucketCheck.toFixed(0)}` });
+  if (fin.exposure.planned < -0.01 || fin.exposure.ordered < -0.01)
+    warnings.push({ level: 'error', msg: 'Negative exposure bucket detected' });
 
   return warnings;
 }
