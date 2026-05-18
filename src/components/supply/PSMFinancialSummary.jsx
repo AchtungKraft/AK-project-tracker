@@ -364,9 +364,46 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
               </div>
             </div>
 
-            {/* Reconciliation */}
+            {/* Revenue Reconciliation */}
+            {fin._reconciliation?.revenue && (
+              <div>
+                <p className="text-[10px] text-blue-400 uppercase tracking-widest font-semibold mb-2">Revenue Reconciliation</p>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs font-mono">
+                  <span className="text-gray-500">Parts Revenue (row-level)</span>
+                  <span className="text-gray-300 text-right">{formatCurrencyUSD(fin._reconciliation.revenue.partsRevenueLocal)}</span>
+                  <span className="text-gray-500">+ Services Revenue</span>
+                  <span className="text-amber-400 text-right">{formatCurrencyUSD(fin._reconciliation.revenue.servicesRevenueLocal)}</span>
+                  <span className="text-gray-500 font-semibold border-t border-gray-800 pt-1">= Total Planned Revenue</span>
+                  <span className="text-white text-right font-semibold border-t border-gray-800 pt-1">{formatCurrencyUSD(fin._reconciliation.revenue.totalRevenueLocal)}</span>
+                  <span className="text-gray-600 mt-2">Backend Total (parts+svc)</span>
+                  <span className="text-gray-500 text-right mt-2">{formatCurrencyUSD(fin._reconciliation.revenue.backendTotalPlannedRetail)}</span>
+                  <span className="text-gray-600">Backend Parts Only</span>
+                  <span className="text-gray-500 text-right">{formatCurrencyUSD(fin._reconciliation.revenue.backendPartsRetail)}</span>
+                  <span className="text-gray-600">Backend Services Only</span>
+                  <span className="text-gray-500 text-right">{formatCurrencyUSD(fin._reconciliation.revenue.backendServicesRetail)}</span>
+                  {fin._reconciliation.revenue.totalRevenueDrift > 1 && (
+                    <>
+                      <span className={fin._reconciliation.revenue.doubleCountDetected ? "text-red-500 mt-1" : "text-amber-500 mt-1"}>
+                        {fin._reconciliation.revenue.doubleCountDetected ? '🚨 Double-Count' : '⚠ Revenue Drift'}
+                      </span>
+                      <span className={cn("text-right mt-1", fin._reconciliation.revenue.doubleCountDetected ? "text-red-400" : "text-amber-400")}>
+                        {formatCurrencyUSD(fin._reconciliation.revenue.totalRevenueDrift)}
+                      </span>
+                    </>
+                  )}
+                  {fin._reconciliation.revenue.totalRevenueDrift <= 1 && (
+                    <>
+                      <span className="text-emerald-600 mt-1">✅ No Double-Count</span>
+                      <span className="text-emerald-600 text-right mt-1">Match</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Cost Reconciliation */}
             <div>
-              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-2">Reconciliation (Bucket Exclusivity)</p>
+              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-2">Cost Reconciliation (Bucket Exclusivity)</p>
               <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs font-mono">
                 <span className="text-gray-500">Actual Spend</span>
                 <span className="text-gray-300 text-right">{formatCurrencyUSD(fin.totals.actualSpend)}</span>

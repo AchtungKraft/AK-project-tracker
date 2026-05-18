@@ -244,6 +244,8 @@ export default function ProjectSupplyManager() {
       totalCommitments: supplyItems.length,
       supplyCoverage: s.supply_coverage_summary || { full: 0, partial: 0, none: 0, over: 0 },
       // CANONICAL: Sub-breakdowns from resolver
+      partsPlannedRetail: s.parts_planned_retail || 0,
+      partsPlannedCost: s.parts_planned_cost || 0,
       servicesCost: s.services_planned_cost || 0,
       servicesRetail: s.services_planned_retail || 0,
       creditTotal: s.credit_total || 0,

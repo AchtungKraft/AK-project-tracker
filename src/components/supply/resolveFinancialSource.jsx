@@ -118,6 +118,12 @@ export function resolvePartFinancialSource(item) {
     warnings.push({ type: 'ZERO_UNIT_RETAIL', msg: 'No retail/revenue data for this item', severity: 'info' });
   }
 
+  // ── CANONICAL REVENUE: single source per entity ──
+  // Revenue = retail × qty. This is the ONLY revenue contribution.
+  // NEVER sum unit_retail + planned_retail_total — they are the same thing.
+  const canonicalRevenue = plannedRetail;
+  const canonicalRevenueSource = plannedRetailSource;
+
   return {
     unitCost,
     unitRetail,
@@ -129,6 +135,7 @@ export function resolvePartFinancialSource(item) {
     plannedCost,
     plannedRetail,
     actualCost,
+    canonicalRevenue,
     warnings,
     _provenance: {
       cost: { value: unitCost, source: costSource },
@@ -136,6 +143,7 @@ export function resolvePartFinancialSource(item) {
       plannedCost: { value: plannedCost, source: plannedCostSource },
       plannedRetail: { value: plannedRetail, source: plannedRetailSource },
       actualCost: { value: actualCost, source: actualCostSource },
+      canonicalRevenue: { value: canonicalRevenue, source: canonicalRevenueSource },
     },
   };
 }
@@ -241,6 +249,7 @@ export function normalizePartCommitments(items) {
       planned_cost_total: resolved.plannedCost,
       planned_retail_total: resolved.plannedRetail,
       actual_cost_total: resolved.actualCost,
+      canonical_revenue: resolved.canonicalRevenue,
       _financial_provenance: resolved._provenance,
       _financial_warnings: resolved.warnings,
     };
@@ -255,6 +264,18 @@ export function normalizePartCommitments(items) {
       }
       console.groupEnd();
     }
+
+    // Revenue provenance per-item diagnostic table
+    const revenueTotal = normalized.reduce((s, n) => s + (n.canonical_revenue || 0), 0);
+    console.groupCollapsed(`[REVENUE PROVENANCE] ${items.length} parts → Total Revenue $${Math.round(revenueTotal)}`);
+    console.table(normalized.slice(0, 50).map(n => ({
+      part: (n.part_name || n.id || '').substring(0, 30),
+      unitRetail: n.unit_retail,
+      effectiveQty: n.effective_required,
+      canonicalRevenue: Math.round(n.canonical_revenue || 0),
+      revenueSource: n._financial_provenance?.canonicalRevenue?.source || 'unknown',
+    })));
+    console.groupEnd();
   }
 
   return {
@@ -281,6 +302,7 @@ export function normalizeServiceCommitments(services) {
       ...svc,
       total_cost: resolved.totalCost,
       total_billable: resolved.totalBillable,
+      canonical_revenue: resolved.totalBillable,
       _financial_provenance: resolved._provenance,
       _financial_warnings: resolved.warnings,
     };

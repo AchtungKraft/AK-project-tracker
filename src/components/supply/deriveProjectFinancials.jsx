@@ -92,7 +92,11 @@ export function deriveProjectFinancials({ enrichedCommitments = [], metrics = {}
   // ═══════════════════════════════════════════════════════════════
   // REVENUE (ACCRUAL)
   // ═══════════════════════════════════════════════════════════════
-  const plannedRevenue = (metrics.totalPlannedRetail ?? 0) + servicesBillable;
+  // CRITICAL FIX: metrics.totalPlannedRetail from the backend resolver
+  // ALREADY includes services (parts_planned_retail + services_planned_retail).
+  // Adding servicesBillable again would DOUBLE-COUNT service revenue.
+  // Use parts-only retail from local derivation + services from servicesSummary.
+  const plannedRevenue = partsPlannedRetail + servicesBillable;
   const invoicedRevenue = metrics.totalInvoiced ?? 0;
   const paidRevenue = metrics.totalPaid ?? 0;
 
@@ -171,6 +175,38 @@ export function deriveProjectFinancials({ enrichedCommitments = [], metrics = {}
   // ═══════════════════════════════════════════════════════════════
   const partsBucketSum = partsCostInstalled + partsCostReceived + partsCostOnPO + partsCostUnordered;
   const svcBucketSum = svcCostPlannedOnly + svcCostOrdered + svcCostCompleted + svcCostBilled;
+
+  // ═══════════════════════════════════════════════════════════════
+  // REVENUE RECONCILIATION — detect double-counting
+  // ═══════════════════════════════════════════════════════════════
+  // Row-level parts revenue = sum of each commitment's unit_retail × effective_required
+  const rowLevelPartsRevenue = partsPlannedRetail;
+  // Backend summary revenue (includes parts + services already)
+  const backendTotalPlannedRetail = metrics.totalPlannedRetail ?? 0;
+  // Backend parts-only breakdown
+  const backendPartsRetail = metrics.partsPlannedRetail ?? backendTotalPlannedRetail;
+  // Backend services-only breakdown
+  const backendServicesRetail = metrics.servicesRetail ?? 0;
+
+  const revenueRecon = {
+    // What we computed
+    partsRevenueLocal: rowLevelPartsRevenue,
+    servicesRevenueLocal: servicesBillable,
+    totalRevenueLocal: plannedRevenue,
+    // What backend says
+    backendTotalPlannedRetail,
+    backendPartsRetail,
+    backendServicesRetail,
+    // Drift detection
+    partsRevenueDrift: Math.abs(rowLevelPartsRevenue - backendPartsRetail),
+    servicesRevenueDrift: Math.abs(servicesBillable - backendServicesRetail),
+    totalRevenueDrift: Math.abs(plannedRevenue - backendTotalPlannedRetail),
+    // Double-counting detection: if backend total ≈ local total, no double-count
+    doubleCountDetected: Math.abs(plannedRevenue - backendTotalPlannedRetail) > 1 && plannedRevenue > backendTotalPlannedRetail,
+    // Assertion: summary revenue should equal sum of canonical row-level revenue
+    rowSumMatchesSummary: Math.abs(plannedRevenue - (rowLevelPartsRevenue + servicesBillable)) < 0.01,
+  };
+
   const recon = {
     partsBucketSum,
     partsPlanned: partsPlannedCost,
@@ -182,6 +218,7 @@ export function deriveProjectFinancials({ enrichedCommitments = [], metrics = {}
     liabilityCheck: liability.totalLiability >= -0.01,
     // Every $ in exactly one state: actual + ordered + planned = totalPlannedCost
     totalBucketCheck: Math.abs((totalActualSpend + exposure.ordered + exposure.planned) - totalPlannedCost),
+    revenue: revenueRecon,
   };
 
   if (typeof window !== 'undefined' && import.meta.env?.DEV) {
@@ -217,6 +254,26 @@ export function deriveProjectFinancials({ enrichedCommitments = [], metrics = {}
     if (recon.svcDrift > 1) console.warn(`[RECON] Service bucket drift: $${recon.svcDrift.toFixed(2)}`);
     if (recon.totalBucketCheck > 1) console.warn(`[RECON] Total bucket drift: $${recon.totalBucketCheck.toFixed(2)}`);
     if (!recon.exposureNonNeg) console.error('[ASSERTION] Negative exposure bucket');
+
+    // Revenue reconciliation logging
+    console.groupCollapsed('[REVENUE RECON] Double-Count Detection');
+    console.table({
+      '📊 Parts Revenue (local)': Math.round(revenueRecon.partsRevenueLocal),
+      '📊 Services Revenue (local)': Math.round(revenueRecon.servicesRevenueLocal),
+      '📊 Total Revenue (local)': Math.round(revenueRecon.totalRevenueLocal),
+      '🔗 Backend Total Planned Retail': Math.round(revenueRecon.backendTotalPlannedRetail),
+      '🔗 Backend Parts Retail': Math.round(revenueRecon.backendPartsRetail),
+      '🔗 Backend Services Retail': Math.round(revenueRecon.backendServicesRetail),
+      '⚠️ Parts Drift': revenueRecon.partsRevenueDrift.toFixed(2),
+      '⚠️ Services Drift': revenueRecon.servicesRevenueDrift.toFixed(2),
+      '⚠️ Total Drift': revenueRecon.totalRevenueDrift.toFixed(2),
+      '🚨 Double Count?': revenueRecon.doubleCountDetected ? 'YES' : 'No',
+      '✅ Row Sum = Summary': revenueRecon.rowSumMatchesSummary ? 'YES' : 'NO',
+    });
+    console.groupEnd();
+    if (revenueRecon.doubleCountDetected) {
+      console.error(`[REVENUE RECON] DOUBLE-COUNT DETECTED: Local revenue $${Math.round(revenueRecon.totalRevenueLocal)} > Backend $${Math.round(revenueRecon.backendTotalPlannedRetail)}`);
+    }
   }
 
   return {
@@ -285,6 +342,17 @@ export function validateProjectFinancials(fin) {
     warnings.push({ level: 'warn', msg: `Total bucket exclusivity drift: $${fin._reconciliation.totalBucketCheck.toFixed(0)}` });
   if (fin.exposure.planned < -0.01 || fin.exposure.ordered < -0.01)
     warnings.push({ level: 'error', msg: 'Negative exposure bucket detected' });
+
+  // Revenue reconciliation assertions
+  const revRecon = fin._reconciliation?.revenue;
+  if (revRecon) {
+    if (revRecon.doubleCountDetected)
+      warnings.push({ level: 'error', msg: `Revenue double-count detected: local $${Math.round(revRecon.totalRevenueLocal)} vs backend $${Math.round(revRecon.backendTotalPlannedRetail)}` });
+    if (!revRecon.rowSumMatchesSummary)
+      warnings.push({ level: 'warn', msg: 'Revenue row sum does not match summary total' });
+    if (revRecon.partsRevenueDrift > 10)
+      warnings.push({ level: 'info', msg: `Parts revenue drift: row-level $${Math.round(revRecon.partsRevenueLocal)} vs backend $${Math.round(revRecon.backendPartsRetail)} (Δ$${Math.round(revRecon.partsRevenueDrift)})` });
+  }
 
   return warnings;
 }
