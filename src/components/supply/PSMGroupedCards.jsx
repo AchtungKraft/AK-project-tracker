@@ -27,13 +27,9 @@ import resolveDefaultVendor from "@/components/supply/resolveDefaultVendor";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { cn } from "@/lib/utils";
-import { InventoryStateBadgeSimple, getInventoryStateCounts } from "./InventoryStateBadgeSimple";
-import { NextActionBadgeInline } from "./CommitmentNextAction";
-import PricingIntegrityBadge from "@/components/supply/PricingIntegrityBadge";
+import { getInventoryStateCounts } from "./InventoryStateBadgeSimple";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { resolveVendorDisplay, resolveCategoryDisplay } from "@/components/supply/supplyResolvers";
-import { getDisplayStatus, getDisplayStatusColor } from "@/components/supply/lifecycleDisplay";
-import { resolveLifecycleState, getLifecycleLabel, getLifecycleColor } from "./resolveCommitmentStateLocal";
 import { resolveInstallState } from "./resolveInstallState";
 import ExecutionDataBlock from "./ExecutionDataBlock";
 import CoverageDebugPanel from "./CoverageDebugPanel";
@@ -127,128 +123,131 @@ export function PSMSummaryStrip({ items, tab }) {
     };
   }, [items, tab]);
 
-  // ORDERING CONTEXT: Show procurement-relevant cards instead of inventory cards
-  if (isOrderingContext) {
-    return (
-      <div className="grid grid-cols-3 md:grid-cols-5 gap-2 mb-4">
-        <Card className="bg-black/40 border-gray-800">
-          <CardContent className="p-3 text-center">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Items</p>
-            <p className="text-lg font-bold text-white">{stats.totalItems}</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-black/40 border-red-900/50">
-          <CardContent className="p-3 text-center">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Needs Order</p>
-            <p className={cn(
-              "text-lg font-bold",
-              stats.needsOrder > 0 ? "text-red-400" : "text-gray-500"
-            )}>
-              {stats.needsOrder}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="bg-black/40 border-purple-900/50">
-          <CardContent className="p-3 text-center">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Ordered</p>
-            <p className={cn(
-              "text-lg font-bold",
-              stats.ordered > 0 ? "text-purple-400" : "text-gray-500"
-            )}>
-              {stats.ordered}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="bg-black/40 border-emerald-900/50">
-          <CardContent className="p-3 text-center">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Covered</p>
-            <p className={cn(
-              "text-lg font-bold",
-              stats.inStock > 0 ? "text-emerald-400" : "text-gray-500"
-            )}>
-              {stats.inStock}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="bg-black/40 border-amber-900/50">
-          <CardContent className="p-3 text-center">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Cost at Risk</p>
-            <p className={cn(
-              "text-lg font-bold font-mono",
-              stats.totalExposure > 0 ? "text-amber-400" : "text-gray-500"
-            )}>
-              {formatCurrencyUSD(stats.totalExposure)}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  const pills = isOrderingContext
+    ? [
+        { label: "Items", value: stats.totalItems, color: "text-white" },
+        { label: "Needs Order", value: stats.needsOrder, color: stats.needsOrder > 0 ? "text-yellow-400" : "text-gray-500" },
+        { label: "Ordered", value: stats.ordered, color: stats.ordered > 0 ? "text-blue-400" : "text-gray-500" },
+        { label: "Covered", value: stats.inStock, color: stats.inStock > 0 ? "text-emerald-400" : "text-gray-500" },
+      ]
+    : [
+        { label: "Items", value: stats.totalItems, color: "text-white" },
+        { label: "In Stock", value: stats.inStock, color: stats.inStock > 0 ? "text-emerald-400" : "text-gray-500" },
+        { label: "Ordered", value: stats.ordered, color: stats.ordered > 0 ? "text-blue-400" : "text-gray-500" },
+        { label: "Needs Order", value: stats.needsOrder, color: stats.needsOrder > 0 ? "text-yellow-400" : "text-gray-500" },
+        { label: "Ready", value: stats.installReadyCount, color: stats.installReadyCount > 0 ? "text-emerald-400" : "text-gray-500" },
+      ];
 
   return (
-    <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4">
-      <Card className="bg-black/40 border-gray-800">
-        <CardContent className="p-3 text-center">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Items</p>
-          <p className="text-lg font-bold text-white">{stats.totalItems}</p>
-        </CardContent>
-      </Card>
-      <Card className="bg-black/40 border-emerald-900/50">
-        <CardContent className="p-3 text-center">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wide">In Stock</p>
-          <p className="text-lg font-bold text-emerald-400">{stats.inStock}</p>
-        </CardContent>
-      </Card>
-      <Card className="bg-black/40 border-purple-900/50">
-        <CardContent className="p-3 text-center">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Ordered</p>
-          <p className={cn(
-            "text-lg font-bold",
-            stats.ordered > 0 ? "text-purple-400" : "text-gray-500"
-          )}>
-            {stats.ordered}
-          </p>
-        </CardContent>
-      </Card>
-      <Card className="bg-black/40 border-red-900/50">
-        <CardContent className="p-3 text-center">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Needs Order</p>
-          <p className={cn(
-            "text-lg font-bold",
-            stats.needsOrder > 0 ? "text-red-400" : "text-gray-500"
-          )}>
-            {stats.needsOrder}
-          </p>
-        </CardContent>
-      </Card>
-      <Card className="bg-black/40 border-blue-900/50">
-        <CardContent className="p-3 text-center">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Install Ready</p>
-          <p className={cn(
-            "text-lg font-bold",
-            stats.installReadyCount > 0 ? "text-blue-400" : "text-gray-500"
-          )}>
-            {stats.installReadyCount}
-          </p>
-        </CardContent>
-      </Card>
-      <Card className="bg-black/40 border-amber-900/50">
-        <CardContent className="p-3 text-center">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Cost at Risk</p>
-          <p className={cn(
-            "text-lg font-bold font-mono",
-            stats.totalExposure > 0 ? "text-amber-400" : "text-gray-500"
-          )}>
-            {formatCurrencyUSD(stats.totalExposure)}
-          </p>
-        </CardContent>
-      </Card>
+    <div className="flex flex-wrap gap-4 mb-4 px-1">
+      {pills.map(p => (
+        <div key={p.label} className="flex items-center gap-1.5">
+          <span className={cn("text-lg font-bold", p.color)}>{p.value}</span>
+          <span className="text-[10px] text-gray-500 uppercase">{p.label}</span>
+        </div>
+      ))}
     </div>
   );
 }
 
+// ── STATUS CHIP ─────────────────────────────────────────────────
+// Single primary status derived from canonical backend fields.
+// Green/Yellow/Red/Blue only.
+function StatusChip({ commitment, tab }) {
+  let label, color;
+  const isOrderingCtx = tab === 'buy';
+
+  if (commitment.commitment_fulfilled && (commitment.qty_installed ?? 0) >= (commitment.effective_required ?? 1)) {
+    label = "Installed"; color = "bg-emerald-900/50 text-emerald-400 border-emerald-700/50";
+  } else if (commitment.billing_state === 'PAID') {
+    label = "Paid"; color = "bg-emerald-900/50 text-emerald-400 border-emerald-700/50";
+  } else if (commitment.billing_state === 'INVOICED') {
+    label = "Invoiced"; color = "bg-blue-900/50 text-blue-400 border-blue-700/50";
+  } else if (commitment.block_reason_code) {
+    label = "Blocked"; color = "bg-red-900/50 text-red-400 border-red-700/50";
+  } else if (commitment.needs_order === true) {
+    label = "Needs Order"; color = "bg-yellow-900/50 text-yellow-400 border-yellow-700/50";
+  } else if ((commitment.covered_from_po ?? 0) > 0 && !commitment.commitment_fulfilled) {
+    label = "Ordered"; color = "bg-blue-900/50 text-blue-400 border-blue-700/50";
+  } else if (resolveInstallState(commitment).is_ready_to_install) {
+    label = "Ready"; color = "bg-emerald-900/50 text-emerald-400 border-emerald-700/50";
+  } else if (commitment.commitment_fulfilled) {
+    label = "Fulfilled"; color = "bg-emerald-900/50 text-emerald-400 border-emerald-700/50";
+  } else {
+    label = "Planned"; color = "bg-gray-800/80 text-gray-400 border-gray-700/50";
+  }
+
+  return (
+    <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full border whitespace-nowrap", color)}>
+      {label}
+    </span>
+  );
+}
+
+// ── PRIMARY ACTION BUTTON ───────────────────────────────────────
+// Single most-relevant action per row. All others go in overflow.
+function PrimaryActionButton({ commitment, tab, actionsEnabled, onCreatePO, onReceive, onInstall }) {
+  const allowed = commitment.allowed || {};
+  const canOrder = allowed.canCreatePO && commitment.needs_order === true;
+  const installState = resolveInstallState(commitment);
+  const isOrderingCtx = tab === 'buy';
+
+  if (isOrderingCtx && canOrder) {
+    return (
+      <Button size="sm" onClick={() => onCreatePO?.(commitment)} disabled={!actionsEnabled}
+        className="h-7 px-3 text-xs bg-yellow-600 hover:bg-yellow-700 text-black font-medium">
+        Order
+      </Button>
+    );
+  }
+  if (tab === 'install' && allowed.canInstall && installState.is_ready_to_install) {
+    return (
+      <Button size="sm" onClick={() => onInstall?.(commitment)} disabled={!actionsEnabled}
+        className="h-7 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium">
+        Install
+      </Button>
+    );
+  }
+  if (tab === 'receive' && allowed.canReceive) {
+    return (
+      <Button size="sm" onClick={() => onReceive?.(commitment)} disabled={!actionsEnabled}
+        className="h-7 px-3 text-xs bg-blue-600 hover:bg-blue-700 text-white font-medium">
+        Receive
+      </Button>
+    );
+  }
+  // Plan tab: show most relevant action
+  if (canOrder) {
+    return (
+      <Button size="sm" variant="outline" onClick={() => onCreatePO?.(commitment)} disabled={!actionsEnabled}
+        className="h-7 px-3 text-xs border-yellow-700 text-yellow-400 hover:bg-yellow-900/30 font-medium">
+        Order
+      </Button>
+    );
+  }
+  if (allowed.canInstall && installState.is_ready_to_install) {
+    return (
+      <Button size="sm" variant="outline" onClick={() => onInstall?.(commitment)} disabled={!actionsEnabled}
+        className="h-7 px-3 text-xs border-emerald-700 text-emerald-400 hover:bg-emerald-900/30 font-medium">
+        Install
+      </Button>
+    );
+  }
+  if (allowed.canReceive) {
+    return (
+      <Button size="sm" variant="outline" onClick={() => onReceive?.(commitment)} disabled={!actionsEnabled}
+        className="h-7 px-3 text-xs border-blue-700 text-blue-400 hover:bg-blue-900/30 font-medium">
+        Receive
+      </Button>
+    );
+  }
+  return null;
+}
+
 /**
- * PSMItemRow - PHASE 3: Compact horizontal layout with collapsible details
+ * PSMItemRow — Operational-first design.
+ * DEFAULT: Name | Status | Cost · Revenue · Margin | Primary Action | Overflow
+ * EXPANDED: Full execution data, coverage debug, financial provenance
  */
 export function PSMItemRow({
   commitment,
@@ -271,34 +270,18 @@ export function PSMItemRow({
   tab = 'plan',
 }) {
   const navigate = useNavigate();
-  // PHASE 4: Collapsible execution detail
   const [showDetails, setShowDetails] = useState(false);
-  
-  const { part, vendor, allowed, categoryObj } = commitment;
 
-  // ORDERING CONTEXT: Determines which UI elements are shown
+  const { part, vendor, allowed, categoryObj } = commitment;
   const isOrderingContext = tab === 'buy';
 
-  // RESOLVER-FIRST: Derive display from canonical fields, not stored status
-  const displayStatus = getLifecycleLabel(commitment);
-  const statusColor = getLifecycleColor(commitment);
-
-  // CANONICAL inventory values
-  const inv = commitment.inventory_snapshot || {};
-  const reservedProject = inv.reserved_this_project ?? commitment.reserved_from_stock ?? 0;
+  // Canonical financials
+  const cost = commitment.planned_cost_total ?? 0;
+  const revenue = commitment.planned_retail_total ?? 0;
+  const margin = revenue - cost;
   const toOrder = commitment.to_order_qty ?? 0;
-  const available = inv.available_global_active ?? inv.available ?? 0;
 
-  // Resolve names
-
-  // CANONICAL: cost_at_risk from backend only
-  const costExposure = commitment.cost_at_risk ?? 0;
-  // PLANNED vs ACTUAL
-  const actualMargin = commitment.actual_margin ?? commitment.resolved_margin ?? 0;
-  const plannedMargin = commitment.planned_margin ?? 0;
-  const marginDelta = commitment.margin_delta ?? (actualMargin - plannedMargin);
-
-  // CANONICAL: Resolve vendor display using source-first resolution
+  // Resolve display names
   const canonicalVendor = resolveDefaultVendor(commitment, null, {});
   const resolvedVendor = resolveVendorDisplay(
     canonicalVendor?.vendor_id || commitment.vendor?.id || vendor?.id,
@@ -311,107 +294,17 @@ export function PSMItemRow({
     categoriesMap
   );
 
-  // Dev: detect conflicting UI state and coverage drift
-  if (import.meta.env.DEV) {
-    // PHASE 8: Debug output for every Needs Order row
-    if (commitment.needs_order === true || toOrder > 0) {
-      console.log('[NEEDS_ORDER DEBUG]', {
-        name: part?.part_name,
-        required_total: commitment.required_total,
-        qty_removed: commitment.qty_removed ?? 0,
-        effective_required: commitment.effective_required,
-        reserved_from_stock: commitment.reserved_from_stock,
-        covered_from_po: commitment.covered_from_po,
-        qty_installed: commitment.qty_installed,
-        coverage_qty: commitment.coverage_qty,
-        to_order_qty: commitment.to_order_qty,
-        needs_order: commitment.needs_order,
-        commitment_fulfilled: commitment.commitment_fulfilled,
-        next_action: commitment.next_action,
-      });
-    }
-    // PHASE 8: ASSERTION — if item appears in Needs Order context but needs_order=false, flag it
-    if (isOrderingContext && commitment.needs_order !== true) {
-      console.error('[NEEDS_ORDER VIOLATION] Item in buy tab but needs_order !== true:', {
-        name: part?.part_name,
-        needs_order: commitment.needs_order,
-        commitment_fulfilled: commitment.commitment_fulfilled,
-        to_order: toOrder,
-        coverage_qty: commitment.coverage_qty,
-        effective_required: commitment.effective_required,
-      });
-    }
-    // Coverage drift detection
-    if (commitment._coverage_debug?.drift) {
-      console.error('[COVERAGE DRIFT]', {
-        part: part?.part_name,
-        ...commitment._coverage_debug,
-      });
-    }
-    // Ordering context conflict detection
-    if (isOrderingContext) {
-      const stock = commitment.reserved_from_stock ?? 0;
-      if (stock > 0 && toOrder > 0) {
-        console.error('[UI CONFLICT BLOCKED] stock-driven UI leaking into ordering context', {
-          part: part?.part_name,
-          stock,
-          to_order: toOrder,
-          coverage: commitment.coverage_status,
-        });
-      }
-    }
-  }
-
-  // ORDERING CONTEXT: Suppress install actions when to_order > 0
+  // Suppress install actions in ordering context
   const hideInstallActions = isOrderingContext && toOrder > 0;
-
-  // PHASE 5: canOrder is STRICTLY gated by backend needs_order flag
-  // If needs_order !== true, Create PO is hidden regardless of local state
-  // FIX 5: Use to_order_qty consistently
   const canOrder = allowed?.canCreatePO && commitment.needs_order === true;
-  
-  // CANONICAL: Invoice eligibility - use canCreateInvoice from getAllowedCommitmentActions
-  const canInvoice = allowed?.canCreateInvoice ?? false;
-  const invoiceBlockReason = commitment.invoice_block_reason_text;
-  const billingState = commitment.billing_state || 'NOT_INVOICED';
-
-  // PHASE 2: Install Eligibility Debug Trace (dev only)
-  if (import.meta.env.DEV && part?.part_name?.includes('Air Conditioning')) {
-    console.log("INSTALL DEBUG - A/C Part", {
-      part: part?.part_name,
-      reserved_from_stock: commitment.reserved_from_stock,
-      qty_installed: commitment.qty_installed,
-      available_to_install: commitment.available_to_install,
-      allowedInstall: allowed?.canInstall,
-      allowedCreateInvoice: allowed?.canCreateInvoice,
-      block_reason_code: commitment.block_reason_code,
-      actionsEnabled,
-      inventory_snapshot: commitment.inventory_snapshot,
-    });
-  }
-  
-  // TRACE: Debug specific commitment 699bcdbc64c5d88332d0e0c7 (Heating Pipe)
-  if (commitment.id === '699bcdbc64c5d88332d0e0c7' || commitment.commitment_id === '699bcdbc64c5d88332d0e0c7') {
-    console.log("🔍 ROW DEBUG - Heating Pipe", commitment.id, {
-      required_total: commitment.required_total,
-      invoiced_qty: commitment.invoiced_qty,
-      reserved_from_stock: commitment.reserved_from_stock,
-      qty_installed: commitment.qty_installed,
-      actionsEnabled,
-      allowed,
-      canInvoice,
-      canOrder,
-      billingState,
-    });
-  }
 
   return (
     <div className={cn(
-      "hover:bg-gray-800/30 transition-colors border-b border-gray-800/50 last:border-b-0",
+      "transition-colors border-b border-gray-800/40 last:border-b-0",
       commitment.block_reason_code && "opacity-60"
     )}>
-      {/* Main Row - PHASE 3: Horizontal compact layout */}
-      <div className="flex items-center gap-2 p-2 md:p-3">
+      {/* ── MAIN ROW ── */}
+      <div className="flex items-center gap-3 px-3 py-2.5">
         {/* Checkbox */}
         <Checkbox
           checked={isSelected}
@@ -427,261 +320,115 @@ export function PSMItemRow({
           </div>
         )}
 
-        {/* Part Info */}
+        {/* Part Name + Meta */}
         <button
           onClick={() => onPartClick?.(part, commitment)}
-          className="flex-1 min-w-0 text-left hover:text-gray-300 transition-colors"
+          className="flex-1 min-w-0 text-left hover:text-gray-200 transition-colors"
         >
-          <div className="flex items-center gap-2">
-            <p className="text-white text-sm font-medium truncate">{part?.part_name || 'Unknown Part'}</p>
-            {/* Demand source badge */}
-            {commitment.demand_source === 'STOCK_REPLENISHMENT' && (
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-blue-900/30 text-blue-400 border-blue-600/50 whitespace-nowrap">
-                AUTO STOCK
-              </Badge>
-            )}
-            {commitment.demand_source === 'STOCK_MANUAL' && (
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-cyan-900/30 text-cyan-400 border-cyan-600/50 whitespace-nowrap">
-                MANUAL STOCK
-              </Badge>
-            )}
-            {/* PHASE 4: SCOPE ADD Badge for Delta Commitment Model */}
-            {commitment.source_type === 'scope_addition' && (
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-purple-900/30 text-purple-400 border-purple-600/50 whitespace-nowrap">
-                SCOPE ADD +{commitment.required_total ?? 0}
-              </Badge>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5 text-[10px] text-gray-500 truncate">
-            {part?.vendor_part_number && <span className="font-mono">{part.vendor_part_number}</span>}
-            <span>·</span>
-            <span className="truncate">{resolvedCategory.name}</span>
-            <span>·</span>
-            <span className="truncate">{resolvedVendor.name}</span>
-            {/* PHASE 4: Show parent commitment reference */}
-            {commitment.parent_commitment_id && (
-              <>
-                <span>·</span>
-                <span className="text-purple-400/70 truncate">parent: {commitment.parent_commitment_id.slice(-6)}</span>
-              </>
-            )}
-          </div>
+          <p className="text-white text-sm font-medium truncate">{part?.part_name || 'Unknown Part'}</p>
+          <p className="text-[10px] text-gray-500 truncate">
+            {part?.vendor_part_number && <span className="font-mono">{part.vendor_part_number} · </span>}
+            {resolvedCategory.name}
+            {resolvedVendor.name !== 'No Vendor' && ` · ${resolvedVendor.name}`}
+          </p>
         </button>
 
-        {/* Integrity violation inline badge */}
+        {/* Status Chip */}
+        <StatusChip commitment={commitment} tab={tab} />
+
+        {/* Integrity badge (only when violations exist) */}
         <IntegrityViolationBadge commitment={commitment} />
 
-        {/* PHASE 7: Inline Metrics — context-aware, effective qty display */}
-        <div className="hidden lg:flex items-center gap-3 text-[10px] font-mono flex-shrink-0">
-          <EffectiveQtyBadge commitment={commitment} compact />
-          {isOrderingContext ? (
-            /* ORDERING: Show TO ORDER prominently, stock demoted */
-            <>
-              <div className="text-center">
-                <span className="text-gray-500 block">TO ORDER</span>
-                <span className={toOrder > 0 ? "text-red-400 font-semibold" : "text-gray-500"}>{toOrder}</span>
-              </div>
-              {(commitment.covered_from_po ?? 0) > 0 && (
-                <div className="text-center">
-                  <span className="text-gray-500 block">ORD</span>
-                  <span className="text-purple-400">{commitment.covered_from_po}</span>
-                </div>
-              )}
-              {(reservedProject + available) > 0 && (
-                <div className="text-center">
-                  <span className="text-gray-500 block">STOCK</span>
-                  <span className="text-gray-500">{reservedProject + available}</span>
-                </div>
-              )}
-            </>
-          ) : (
-            /* NON-ORDERING: Show full inventory metrics */
-            <>
-              {(commitment.covered_from_po ?? 0) > 0 && (
-                <div className="text-center">
-                  <span className="text-gray-500 block">ORD</span>
-                  <span className="text-purple-400">{commitment.covered_from_po}</span>
-                </div>
-              )}
-              <div className="text-center">
-                <span className="text-gray-500 block">INST</span>
-                <span className="text-emerald-400">{commitment.qty_installed ?? 0}</span>
-              </div>
-              <div className="text-center">
-                <span className="text-gray-500 block">STOCK</span>
-                <span className="text-cyan-400">{reservedProject + available}</span>
-              </div>
-            </>
-          )}
+        {/* Financial Summary — single line */}
+        <div className="hidden md:flex items-center gap-1 text-xs font-mono text-gray-400 flex-shrink-0">
+          <span className="text-gray-500">Cost</span>
+          <span className="text-gray-300">{formatCurrencyUSD(cost)}</span>
+          <span className="text-gray-600 mx-0.5">·</span>
+          <span className="text-gray-500">Rev</span>
+          <span className="text-white">{formatCurrencyUSD(revenue)}</span>
+          <span className="text-gray-600 mx-0.5">·</span>
+          <span className={margin >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(margin)}</span>
         </div>
 
-        {/* Inline Financial — COST | RETAIL | MARGIN | DELTA */}
-        <div className="hidden xl:flex items-center gap-3 text-[10px] font-mono flex-shrink-0 border-l border-gray-700 pl-3">
-          <div className="text-center">
-            <span className="text-gray-500 block">{commitment.cost_source === 'po' ? 'COST (ACTUAL)' : 'PLANNED COST'}</span>
-            <span className={commitment.invalid_cost ? "text-red-500" : commitment.cost_source === 'po' ? "text-emerald-400" : "text-red-400"}>
-              {commitment.invalid_cost ? '$0 ⚠' : formatCurrencyUSD(commitment.actual_cost_total ?? commitment.resolved_cost_total ?? 0)}
-            </span>
-            {commitment.cost_source === 'po' && (commitment.planned_unit_cost ?? 0) > 0 && Math.abs((commitment.actual_unit_cost ?? 0) - (commitment.planned_unit_cost ?? 0)) > 0.01 && (
-              <span className="text-gray-600 block text-[8px]">
-                Plan: {formatCurrencyUSD((commitment.planned_unit_cost ?? 0) * (commitment.effective_required ?? 0))}
-              </span>
-            )}
-          </div>
-          <div className="text-center">
-            <span className="text-gray-500 block">RETAIL</span>
-            <span className="text-white">{formatCurrencyUSD(commitment.planned_retail_total ?? 0)}</span>
-          </div>
-          <div className="text-center" title="Actual margin = quoted retail − actual purchase cost">
-            <span className="text-gray-500 block">ACTUAL MARGIN</span>
-            <span className={actualMargin >= 0 ? "text-emerald-400" : "text-red-400"}>
-              {formatCurrencyUSD(actualMargin)}
-            </span>
-            {Math.abs(marginDelta) > 0.01 && plannedMargin !== 0 && (
-              <span className={cn("block text-[8px]", marginDelta < 0 ? "text-red-500" : "text-emerald-500")}>
-                {marginDelta < 0 ? '↓' : '↑'} {formatCurrencyUSD(Math.abs(marginDelta))} from plan
-              </span>
-            )}
-          </div>
-          {costExposure > 0 && !commitment.invalid_cost && (
-            <div className="text-center">
-              <span className="text-gray-500 block">EXPOSURE</span>
-              <span className="text-amber-400">{formatCurrencyUSD(costExposure)}</span>
-            </div>
-          )}
-          {commitment.invalid_cost && toOrder > 0 && (
-            <div className="text-center">
-              <span className="text-gray-500 block">EXPOSURE</span>
-              <span className="text-red-500 text-[9px]">NO COST</span>
-            </div>
-          )}
-          <CostSourceBadge commitment={commitment} />
+        {/* Primary Action */}
+        <div className="flex-shrink-0">
+          <PrimaryActionButton
+            commitment={commitment}
+            tab={tab}
+            actionsEnabled={actionsEnabled}
+            onCreatePO={onCreatePO}
+            onReceive={onReceive}
+            onInstall={onInstall}
+          />
         </div>
 
-        {/* PHASE 1: Inventory State Badge — context-aware */}
-        {/* PHASE 5: Hide Needs Order badge when item doesn't actually need order */}
-        {!(isOrderingContext && !commitment.needs_order) && (
-          <div className="flex-shrink-0 hidden md:block">
-            <InventoryStateBadgeSimple commitment={commitment} tab={tab} />
-          </div>
-        )}
-
-        {/* PHASE 4: Next Action Badge — HIDDEN in ordering context (prevents install badge leaking) */}
-        {!isOrderingContext && (
-          <div className="flex-shrink-0 hidden lg:block">
-            <NextActionBadgeInline commitment={commitment} />
-          </div>
-        )}
-
-        {/* Lifecycle Status - HIDDEN in ordering context (prevents stock-derived status labels) */}
-        {!isOrderingContext && displayStatus !== 'Planned' && (
-          <div className="hidden lg:block flex-shrink-0">
-            <span className={cn(
-              "text-[10px] font-mono uppercase px-1.5 py-0.5 border-l-2 bg-gray-900/50 whitespace-nowrap",
-              statusColor
-            )}>
-              {displayStatus}
-            </span>
-          </div>
-        )}
-        
-        {/* CANONICAL: Billing State Badge - Uses derived_balance_due logic for PAID display
-            Paid badge shows when: derived_balance_due === 0 AND invoiced_amount > 0
-            This prevents relying on potentially drifted billing_status */}
-        {billingState !== 'NOT_INVOICED' && (
-          <div className="hidden md:block flex-shrink-0">
-            <span className={cn(
-              "text-[9px] font-mono uppercase px-1.5 py-0.5 rounded whitespace-nowrap",
-              billingState === 'PAID' && "bg-emerald-900/50 text-emerald-400 border border-emerald-700/50",
-              billingState === 'INVOICED' && "bg-amber-900/50 text-amber-400 border border-amber-700/50"
-            )}>
-              {billingState}
-            </span>
-          </div>
-        )}
-
-        {/* PHASE 4: Details Toggle */}
+        {/* Details Toggle */}
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setShowDetails(!showDetails)}
-          className="h-7 px-2 text-[10px] text-gray-400 hover:text-white flex-shrink-0"
+          className="h-7 w-7 px-0 text-gray-500 hover:text-white flex-shrink-0"
         >
-          {showDetails ? 'Hide' : 'Details'}
-          <ChevronDown className={cn("w-3 h-3 ml-1 transition-transform", showDetails && "rotate-180")} />
+          <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", showDetails && "rotate-180")} />
         </Button>
 
-        {/* Actions Dropdown */}
+        {/* Overflow Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" disabled={!actionsEnabled}>
+            <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0 text-gray-500" disabled={!actionsEnabled}>
               <MoreVertical className="w-4 h-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
             {canOrder && (
-              <DropdownMenuItem onClick={() => onCreatePO?.(commitment)} className="text-green-400">
-                <ShoppingCart className="w-4 h-4 mr-2" />
-                Create PO
+              <DropdownMenuItem onClick={() => onCreatePO?.(commitment)}>
+                <ShoppingCart className="w-4 h-4 mr-2" /> Create PO
               </DropdownMenuItem>
             )}
             {allowed?.canCreateDeltaOrder && (
-              <DropdownMenuItem onClick={() => onDeltaOrder?.(commitment)} className="text-purple-400">
-                <Plus className="w-4 h-4 mr-2" />
-                Additional Order
+              <DropdownMenuItem onClick={() => onDeltaOrder?.(commitment)}>
+                <Plus className="w-4 h-4 mr-2" /> Additional Order
               </DropdownMenuItem>
             )}
             {allowed?.canReceive && (
-              <DropdownMenuItem onClick={() => onReceive?.(commitment)} className="text-blue-400">
-                <Package className="w-4 h-4 mr-2" />
-                Receive
+              <DropdownMenuItem onClick={() => onReceive?.(commitment)}>
+                <Package className="w-4 h-4 mr-2" /> Receive
               </DropdownMenuItem>
             )}
             {commitment.order_id && (
-              <DropdownMenuItem 
-                onClick={() => navigate(createPageUrl('POReceiving') + `?order_id=${commitment.order_id}`)}
-                className="text-purple-400"
-              >
-                <ExternalLink className="w-4 h-4 mr-2" />
-                View PO{commitment.order_number ? ` #${commitment.order_number}` : ''}
+              <DropdownMenuItem onClick={() => navigate(createPageUrl('POReceiving') + `?order_id=${commitment.order_id}`)}>
+                <ExternalLink className="w-4 h-4 mr-2" /> View PO{commitment.order_number ? ` #${commitment.order_number}` : ''}
               </DropdownMenuItem>
             )}
-            {/* CANONICAL: Install/Reverse Install — BLOCKED in ordering context when to_order > 0 */}
             {!hideInstallActions && allowed?.canInstall && resolveInstallState(commitment).is_ready_to_install && (
-              <DropdownMenuItem onClick={() => onInstall?.(commitment)} className="text-emerald-400">
-                <Wrench className="w-4 h-4 mr-2" />
-                Install ({resolveInstallState(commitment).available_to_install} available)
+              <DropdownMenuItem onClick={() => onInstall?.(commitment)}>
+                <Wrench className="w-4 h-4 mr-2" /> Install ({resolveInstallState(commitment).available_to_install})
               </DropdownMenuItem>
             )}
             {!hideInstallActions && allowed?.canReverseInstall && (
-              <DropdownMenuItem onClick={() => onReverseInstall?.(commitment)} className="text-orange-400">
-                <X className="w-4 h-4 mr-2" />
-                Reverse Install
+              <DropdownMenuItem onClick={() => onReverseInstall?.(commitment)}>
+                <X className="w-4 h-4 mr-2" /> Reverse Install
               </DropdownMenuItem>
             )}
-            <DropdownMenuItem onClick={() => onManageQty?.(commitment)} className="text-cyan-400">
-              <Edit className="w-4 h-4 mr-2" />
-              Manage Qty / Move
+            <DropdownMenuItem onClick={() => onManageQty?.(commitment)}>
+              <Edit className="w-4 h-4 mr-2" /> Manage Qty
             </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-gray-700" />
             {onEditPricing && (
-              <DropdownMenuItem onClick={() => onEditPricing?.(commitment)} className="text-emerald-400">
-                <DollarSign className="w-4 h-4 mr-2" />
-                Edit Pricing
+              <DropdownMenuItem onClick={() => onEditPricing?.(commitment)}>
+                <DollarSign className="w-4 h-4 mr-2" /> Edit Pricing
               </DropdownMenuItem>
             )}
             {onSyncCost && ((commitment.order_line_item_ids || []).length > 0 || (commitment.qty_ordered ?? 0) > 0) && (
-              <DropdownMenuItem onClick={() => onSyncCost?.(commitment)} className="text-blue-400">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Sync Cost from PO
+              <DropdownMenuItem onClick={() => onSyncCost?.(commitment)}>
+                <RefreshCw className="w-4 h-4 mr-2" /> Sync Cost from PO
               </DropdownMenuItem>
             )}
             {allowed?.canCancel && (
               <>
                 <DropdownMenuSeparator className="bg-gray-700" />
                 <DropdownMenuItem onClick={() => onRemoveCredit?.(commitment)} className="text-red-400">
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Remove / Credit Part
+                  <Trash2 className="w-4 h-4 mr-2" /> Remove / Credit
                 </DropdownMenuItem>
               </>
             )}
@@ -689,25 +436,56 @@ export function PSMItemRow({
         </DropdownMenu>
       </div>
 
-      {/* Debug supply truth strip — always visible */}
-      <div className="px-3 py-0.5 ml-6 flex items-center gap-3 text-[9px] font-mono text-gray-600 flex-wrap">
-        <span>needs_order: <span className={commitment.needs_order ? "text-red-400" : "text-emerald-400"}>{String(!!commitment.needs_order)}</span></span>
-        <span>to_order: <span className={((commitment.to_order_qty ?? 0) > 0) ? "text-red-400" : "text-gray-500"}>{commitment.to_order_qty ?? 0}</span></span>
-        <span>plan_cost: <span className="text-gray-400">${(commitment.planned_unit_cost ?? 0).toFixed(2)}</span></span>
-        <span>actual_cost: <span className={commitment.cost_source === 'po' ? "text-emerald-400" : "text-gray-400"}>${(commitment.actual_unit_cost ?? commitment.unit_cost ?? 0).toFixed(2)} ({commitment.cost_source || '?'})</span></span>
-        <span>Δmargin: <span className={(commitment.margin_delta ?? 0) < -0.01 ? "text-red-400" : (commitment.margin_delta ?? 0) > 0.01 ? "text-emerald-400" : "text-gray-500"}>${(commitment.margin_delta ?? 0).toFixed(2)}</span></span>
-        <span>locked: <span className={commitment.cost_locked ? "text-blue-400" : "text-gray-500"}>{String(!!commitment.cost_locked)}</span></span>
-      </div>
-
-      {/* PHASE 4: Collapsible Execution Detail */}
+      {/* ── EXPANDED DETAILS ── */}
       {showDetails && (
-        <div className="px-3 pb-3 ml-6">
-          <div className="max-w-sm">
+        <div className="px-3 pb-3 ml-10 space-y-3">
+          {/* Quantity Summary */}
+          <div className="flex flex-wrap gap-4 text-xs font-mono text-gray-400">
+            <span>Req: <span className="text-white">{commitment.effective_required ?? commitment.required_total ?? 0}</span></span>
+            <span>Installed: <span className="text-emerald-400">{commitment.qty_installed ?? 0}</span></span>
+            <span>Reserved: <span className="text-blue-400">{commitment.reserved_from_stock ?? 0}</span></span>
+            <span>On PO: <span className="text-yellow-400">{commitment.covered_from_po ?? 0}</span></span>
+            {toOrder > 0 && <span>To Order: <span className="text-red-400">{toOrder}</span></span>}
+          </div>
+
+          {/* Financial Detail */}
+          <div className="flex flex-wrap gap-4 text-xs font-mono text-gray-400">
+            <span>Unit Cost: <span className="text-gray-300">${(commitment.unit_cost ?? 0).toFixed(2)}</span></span>
+            <span>Unit Retail: <span className="text-gray-300">${(commitment.unit_retail ?? 0).toFixed(2)}</span></span>
+            <span>Planned Margin: <span className={margin >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(margin)}</span></span>
+            {(commitment.actual_margin ?? 0) !== 0 && Math.abs((commitment.actual_margin ?? 0) - margin) > 0.01 && (
+              <span>Actual Margin: <span className={(commitment.actual_margin ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(commitment.actual_margin ?? 0)}</span></span>
+            )}
+            {(commitment.cost_at_risk ?? 0) > 0 && (
+              <span>Unbilled: <span className="text-amber-400">{formatCurrencyUSD(commitment.cost_at_risk)}</span></span>
+            )}
+            <CostSourceBadge commitment={commitment} />
+          </div>
+
+          {/* Demand/Source badges */}
+          <div className="flex flex-wrap gap-1.5">
+            {commitment.demand_source === 'STOCK_REPLENISHMENT' && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-blue-900/30 text-blue-400 border-blue-600/50">AUTO STOCK</Badge>
+            )}
+            {commitment.demand_source === 'STOCK_MANUAL' && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-blue-900/30 text-blue-400 border-blue-600/50">MANUAL STOCK</Badge>
+            )}
+            {commitment.source_type === 'scope_addition' && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-yellow-900/30 text-yellow-400 border-yellow-600/50">SCOPE ADD</Badge>
+            )}
+            {commitment.billing_state && commitment.billing_state !== 'NOT_INVOICED' && (
+              <Badge variant="outline" className={cn("text-[9px] px-1.5 py-0",
+                commitment.billing_state === 'PAID' ? "bg-emerald-900/30 text-emerald-400 border-emerald-600/50" : "bg-blue-900/30 text-blue-400 border-blue-600/50"
+              )}>{commitment.billing_state}</Badge>
+            )}
+          </div>
+
+          {/* Execution Data Block + Debug */}
+          <div className="max-w-md">
             <ExecutionDataBlock item={commitment} />
           </div>
-          {/* Coverage Debug Panel — dev mode or localStorage toggle */}
           {(import.meta.env.DEV || localStorage.getItem('ak_debug_coverage') === 'true') && (
-            <div className="max-w-sm mt-2">
+            <div className="max-w-md">
               <CoverageDebugPanel item={commitment} />
             </div>
           )}
@@ -826,38 +604,16 @@ export function PSMGroupCard({
           {sortedItems.length}
         </Badge>
 
-        {/* Inventory State Mini Counts */}
-        <div className="hidden md:flex items-center gap-1">
-          {groupStats.inStock > 0 && (
-            <span className="text-[10px] text-emerald-400 font-mono">{groupStats.inStock}✓</span>
-          )}
-          {groupStats.ordered > 0 && (
-            <span className="text-[10px] text-purple-400 font-mono">{groupStats.ordered}📦</span>
-          )}
-          {groupStats.needsOrder > 0 && (
-            <span className="text-[10px] text-red-400 font-mono">{groupStats.needsOrder}!</span>
-          )}
+        {/* Group Financials — clean: Cost · Revenue · Margin */}
+        <div className="hidden md:flex items-center gap-1 text-[10px] font-mono text-gray-400">
+          <span>{formatCurrencyUSD(groupStats.totalPlannedCost)}</span>
+          <span className="text-gray-600">·</span>
+          <span className="text-white">{formatCurrencyUSD(groupStats.totalRetail)}</span>
+          <span className="text-gray-600">·</span>
+          <span className={groupStats.totalActualMargin >= 0 ? "text-emerald-400" : "text-red-400"}>
+            {formatCurrencyUSD(groupStats.totalActualMargin)}
+          </span>
         </div>
-
-        {/* Group Financial Labels — Actual Margin with delta from plan */}
-        <div className="hidden md:flex items-center gap-2 text-[10px] font-mono">
-          <span className="text-gray-400">Cost <span className="text-red-400">{formatCurrencyUSD(groupStats.totalActualCost)}</span></span>
-          <span className="text-gray-400">Rev <span className="text-white">{formatCurrencyUSD(groupStats.totalRetail)}</span></span>
-          <span className="text-gray-400">Margin <span className={groupStats.totalActualMargin >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(groupStats.totalActualMargin)}</span></span>
-          {Math.abs(groupStats.totalMarginDelta) > 0.01 && (
-            <span className={groupStats.totalMarginDelta < 0 ? "text-red-500" : "text-emerald-500"}>
-              Δ {groupStats.totalMarginDelta < 0 ? '' : '+'}{formatCurrencyUSD(groupStats.totalMarginDelta)}
-            </span>
-          )}
-        </div>
-
-        {/* Cost at Risk Badge */}
-        {groupStats.totalExposure > 0 && (
-          <Badge className="bg-amber-900/50 text-amber-400 border-amber-700 text-[10px]">
-            <AlertTriangle className="w-3 h-3 mr-1" />
-            {formatCurrencyUSD(groupStats.totalExposure)}
-          </Badge>
-        )}
 
         {/* Order All Button */}
         {tab === 'buy' && groupStats.readyCount > 0 && (
@@ -868,7 +624,7 @@ export function PSMGroupCard({
               e.stopPropagation();
               onGroupOrder?.(sortedItems);
             }}
-            className="border-purple-700 text-purple-400 hover:bg-purple-900/30 h-6 text-[10px]"
+            className="border-yellow-700 text-yellow-400 hover:bg-yellow-900/30 h-6 text-[10px]"
           >
             <ShoppingCart className="w-3 h-3 mr-1" />
             Order {groupStats.readyCount}
@@ -878,7 +634,7 @@ export function PSMGroupCard({
 
       {/* Group Items (expanded) */}
       {isExpanded && (
-        <div className="border-t border-gray-800">
+        <div className="border-t border-gray-800/50">
           {sortedItems.length === 0 ? (
             <p className="text-center py-6 text-gray-500">No items in this group</p>
           ) : (
@@ -1602,38 +1358,16 @@ function PSMGroupCardWithSubgroups({
           {items.length}
         </Badge>
 
-        {/* Inventory State Mini Counts */}
-        <div className="hidden md:flex items-center gap-1">
-          {groupStats.inStock > 0 && (
-            <span className="text-[10px] text-emerald-400 font-mono">{groupStats.inStock}✓</span>
-          )}
-          {groupStats.ordered > 0 && (
-            <span className="text-[10px] text-purple-400 font-mono">{groupStats.ordered}📦</span>
-          )}
-          {groupStats.needsOrder > 0 && (
-            <span className="text-[10px] text-red-400 font-mono">{groupStats.needsOrder}!</span>
-          )}
+        {/* Group Financials — clean: Cost · Revenue · Margin */}
+        <div className="hidden md:flex items-center gap-1 text-[10px] font-mono text-gray-400">
+          <span>{formatCurrencyUSD(groupStats.totalPlannedCost)}</span>
+          <span className="text-gray-600">·</span>
+          <span className="text-white">{formatCurrencyUSD(groupStats.totalRetail)}</span>
+          <span className="text-gray-600">·</span>
+          <span className={groupStats.totalActualMargin >= 0 ? "text-emerald-400" : "text-red-400"}>
+            {formatCurrencyUSD(groupStats.totalActualMargin)}
+          </span>
         </div>
-
-        {/* Group Financial Labels — Actual Margin with delta from plan */}
-        <div className="hidden md:flex items-center gap-2 text-[10px] font-mono">
-          <span className="text-gray-400">Cost <span className="text-red-400">{formatCurrencyUSD(groupStats.totalActualCost)}</span></span>
-          <span className="text-gray-400">Rev <span className="text-white">{formatCurrencyUSD(groupStats.totalRetail)}</span></span>
-          <span className="text-gray-400">Margin <span className={groupStats.totalActualMargin >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(groupStats.totalActualMargin)}</span></span>
-          {Math.abs(groupStats.totalMarginDelta) > 0.01 && (
-            <span className={groupStats.totalMarginDelta < 0 ? "text-red-500" : "text-emerald-500"}>
-              Δ {groupStats.totalMarginDelta < 0 ? '' : '+'}{formatCurrencyUSD(groupStats.totalMarginDelta)}
-            </span>
-          )}
-        </div>
-
-        {/* Cost at Risk Badge */}
-        {groupStats.totalExposure > 0 && (
-          <Badge className="bg-amber-900/50 text-amber-400 border-amber-700 text-[10px]">
-            <AlertTriangle className="w-3 h-3 mr-1" />
-            {formatCurrencyUSD(groupStats.totalExposure)}
-          </Badge>
-        )}
 
         {/* Order All Button */}
         {tab === 'buy' && groupStats.readyCount > 0 && (
@@ -1644,7 +1378,7 @@ function PSMGroupCardWithSubgroups({
               e.stopPropagation();
               onGroupOrder?.(items);
             }}
-            className="border-purple-700 text-purple-400 hover:bg-purple-900/30 h-6 text-[10px]"
+            className="border-yellow-700 text-yellow-400 hover:bg-yellow-900/30 h-6 text-[10px]"
           >
             <ShoppingCart className="w-3 h-3 mr-1" />
             Order {groupStats.readyCount}

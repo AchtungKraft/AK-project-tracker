@@ -17,10 +17,10 @@ import ServiceCostBadge from "@/components/supply/ServiceCostBadge";
 import { FolderKanban } from "lucide-react";
 
 const STATUS_CONFIG = {
-  planned: { label: "Planned", color: "bg-gray-600 text-gray-100" },
-  ordered: { label: "Ordered", color: "bg-purple-600 text-purple-100" },
-  completed: { label: "Completed", color: "bg-blue-600 text-blue-100" },
-  billed: { label: "Billed", color: "bg-green-600 text-green-100" },
+  planned: { label: "Planned", color: "bg-gray-800/80 text-gray-400 border border-gray-700/50" },
+  ordered: { label: "Ordered", color: "bg-blue-900/50 text-blue-400 border border-blue-700/50" },
+  completed: { label: "Completed", color: "bg-emerald-900/50 text-emerald-400 border border-emerald-700/50" },
+  billed: { label: "Billed", color: "bg-emerald-900/50 text-emerald-400 border border-emerald-700/50" },
 };
 
 const NEXT_STATUS = {
@@ -97,50 +97,32 @@ export default function ServiceCommitmentCard({
             <span className="text-sm font-medium text-white truncate">
               {commitment.description}
             </span>
-            <Badge className={`text-[10px] px-1.5 py-0 ${cfg.color}`}>
+            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${cfg.color}`}>
               {cfg.label}
-            </Badge>
+            </span>
           </div>
-          <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-400 flex-wrap">
-            {projectName && (
-              <span className="flex items-center gap-1 text-blue-400">
-                <FolderKanban className="w-3 h-3" />
-                {projectName}
-              </span>
-            )}
-            <span>{serviceName}</span>
-            {vendorName && <span>• {vendorName}</span>}
-            {commitment.quantity > 1 && <span>• Qty: {commitment.quantity}</span>}
-            <ServiceCostBadge commitment={commitment} />
-          </div>
+          <p className="text-[10px] text-gray-500 truncate mt-0.5">
+            {serviceName}
+            {vendorName && ` · ${vendorName}`}
+            {projectName && ` · ${projectName}`}
+            {commitment.quantity > 1 && ` · Qty: ${commitment.quantity}`}
+          </p>
         </div>
 
-        {/* Cost & Billable + margin warning */}
-        <div className="text-right shrink-0">
-          <p className="text-sm font-mono font-medium text-white">
-            {formatCurrencyUSD(totalCost)}
-          </p>
-          {totalBillable > 0 && (
-            <div className="flex items-center gap-1.5 justify-end">
-              <span className="text-[10px] font-mono text-green-400">{formatCurrencyUSD(totalBillable)}</span>
-              {margin != null && (
-                <span className={`text-[10px] ${margin >= 0 ? 'text-green-500' : 'text-red-400'}`}>
-                  {typeof margin === 'number' ? margin.toFixed(0) : '0'}%
-                </span>
-              )}
-            </div>
-          )}
-          {/* PHASE 2: Planned vs actual variance */}
-          {(commitment.cost_variance ?? 0) !== 0 && (
-            <div className="text-[9px] font-mono text-right">
-              <span className={(commitment.cost_variance ?? 0) > 0 ? "text-red-400" : "text-emerald-400"}>
-                Δ {(commitment.cost_variance ?? 0) > 0 ? '+' : ''}{formatCurrencyUSD(commitment.cost_variance ?? 0)}
+        {/* Financial summary — single line */}
+        <div className="hidden md:flex items-center gap-1 text-xs font-mono text-gray-400 shrink-0">
+          <span className="text-gray-500">Cost</span>
+          <span className="text-gray-300">{formatCurrencyUSD(totalCost)}</span>
+          <span className="text-gray-600 mx-0.5">·</span>
+          <span className="text-gray-500">Rev</span>
+          <span className="text-white">{formatCurrencyUSD(totalBillable)}</span>
+          {margin != null && (
+            <>
+              <span className="text-gray-600 mx-0.5">·</span>
+              <span className={margin >= 0 ? "text-emerald-400" : "text-red-400"}>
+                {typeof margin === 'number' ? margin.toFixed(0) : '0'}%
               </span>
-            </div>
-          )}
-          {/* PHASE 6: Margin warning */}
-          {marginWarning && (
-            <Badge className="text-[8px] px-1 py-0 bg-red-900/40 text-red-400 border-red-700/50 mt-0.5">⚠ NEG MARGIN</Badge>
+            </>
           )}
         </div>
 
@@ -148,12 +130,11 @@ export default function ServiceCommitmentCard({
         <div className="flex items-center gap-1 shrink-0">
           {nextStatus && (
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
-              className="h-7 text-xs gap-1 text-blue-400 hover:text-blue-300"
+              className="h-7 text-xs gap-1 border-blue-700 text-blue-400 hover:bg-blue-900/30 font-medium"
               onClick={() => onStatusChange(commitment.id, nextStatus)}
             >
-              <ArrowRight className="w-3 h-3" />
               {NEXT_LABEL[status]}
             </Button>
           )}
