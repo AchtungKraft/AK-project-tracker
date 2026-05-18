@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import {
   ShoppingCart, Search, Building2, FolderKanban, AlertTriangle,
-  DollarSign, CheckCircle2, RefreshCw, Truck, Package, List, LayoutGrid,
+  DollarSign, CheckCircle2, RefreshCw, Truck, Package,
   Warehouse
 } from "lucide-react";
 import { toast } from "sonner";
@@ -26,13 +26,12 @@ import { useOpsSupplyView, useSupplyAction, useSupplyActionPreview } from "@/com
 import { useWiringAudit } from "@/components/dev/wiringAudit";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { validateSupplyModelDrift } from "@/components/supply/ExecutionDataBlock";
-import PSMGroupedView, { PSMSummaryStrip } from "@/components/supply/PSMGroupedCards";
+import { PSMSummaryStrip } from "@/components/supply/PSMGroupedCards";
 import PSMFloatingActionBar from "@/components/supply/PSMFloatingActionBar";
 import PartModal from "@/components/parts/PartModal";
 import VendorQueueView from "@/components/supply/VendorQueueView";
-import AggregatedProcurementView, { resolveActiveVendorSource } from "@/components/supply/AggregatedProcurementView";
+import ProcurementGroupedView from "@/components/supply/ProcurementGroupedView";
 import resolveDefaultVendor from "@/components/supply/resolveDefaultVendor";
-// VendorPOBuilder removed — all PO creation unified through CreateBatchOrderModal
 import AddStockOrderModal from "@/components/supply/AddStockOrderModal";
 import { cn } from "@/lib/utils";
 
@@ -63,7 +62,6 @@ export default function GlobalNeedToOrder() {
   const filterDemandSource = urlParams.get('demand_source');
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [groupMode, setGroupMode] = useState('vendor');
   const [selectedProjectFilter, setSelectedProjectFilter] = useState(filterProjectId || 'all');
   const [selectedVendorFilter, setSelectedVendorFilter] = useState(filterVendorId || 'all');
   const [coverageFilter, setCoverageFilter] = useState('all');
@@ -74,10 +72,19 @@ export default function GlobalNeedToOrder() {
   const [showBatchOrderModal, setShowBatchOrderModal] = useState(false);
   const [deltaOrderCommitment, setDeltaOrderCommitment] = useState(null);
   const [editingPartId, setEditingPartId] = useState(null);
-  const [viewMode, setViewMode] = useState('procurement'); // 'procurement' | 'parts' | 'vendors'
-  const [selectedVendorContext, setSelectedVendorContext] = useState(null); // { vendor_id, vendor_name }
-  const [vendorSourcesByPart, setVendorSourcesByPart] = useState({}); // part_id -> PartVendorSource[]
+  // Grouping mode: vendor_project | project_vendor | vendor_only | vendor_sources
+  const [groupingMode, setGroupingMode] = useState(() => {
+    return localStorage.getItem('gno_grouping_mode') || 'vendor_project';
+  });
+  const [selectedVendorContext, setSelectedVendorContext] = useState(null);
+  const [vendorSourcesByPart, setVendorSourcesByPart] = useState({});
   const [showStockOrderModal, setShowStockOrderModal] = useState(false);
+
+  // Persist grouping mode
+  const handleGroupingChange = (mode) => {
+    setGroupingMode(mode);
+    localStorage.setItem('gno_grouping_mode', mode);
+  };
 
   // Use canonical ops supply view
   // CRITICAL: vendor filter is NEVER set by vendor view selection — only by explicit dropdown
@@ -256,43 +263,59 @@ export default function GlobalNeedToOrder() {
               <p className="text-sm text-gray-400">Cross-project ordering with financial visibility</p>
             </div>
             <div className="flex items-center gap-2">
-              {/* View Mode Toggle */}
+              {/* Grouping Mode Selector */}
               <div className="flex items-center bg-gray-800 rounded-lg p-0.5 border border-gray-700">
                 <Button
-                  variant={viewMode === 'procurement' ? 'default' : 'ghost'}
+                  variant={groupingMode === 'vendor_project' ? 'default' : 'ghost'}
                   size="sm"
-                  onClick={() => setViewMode('procurement')}
+                  onClick={() => handleGroupingChange('vendor_project')}
                   className={cn(
                     "gap-1.5 h-7 text-xs",
-                    viewMode === 'procurement' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'
+                    groupingMode === 'vendor_project' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'
                   )}
-                >
-                  <ShoppingCart className="w-3.5 h-3.5" />
-                  Order
-                </Button>
-                <Button
-                  variant={viewMode === 'parts' ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => setViewMode('parts')}
-                  className={cn(
-                    "gap-1.5 h-7 text-xs",
-                    viewMode === 'parts' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'
-                  )}
-                >
-                  <List className="w-3.5 h-3.5" />
-                  Commitments
-                </Button>
-                <Button
-                  variant={viewMode === 'vendors' ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => setViewMode('vendors')}
-                  className={cn(
-                    "gap-1.5 h-7 text-xs",
-                    viewMode === 'vendors' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'
-                  )}
+                  title="Vendor → Project: Group by vendor, then by project underneath"
                 >
                   <Building2 className="w-3.5 h-3.5" />
-                  Vendors
+                  Vendor→Project
+                </Button>
+                <Button
+                  variant={groupingMode === 'project_vendor' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => handleGroupingChange('project_vendor')}
+                  className={cn(
+                    "gap-1.5 h-7 text-xs",
+                    groupingMode === 'project_vendor' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'
+                  )}
+                  title="Project → Vendor: Group by project, then by vendor underneath"
+                >
+                  <FolderKanban className="w-3.5 h-3.5" />
+                  Project→Vendor
+                </Button>
+                <Button
+                  variant={groupingMode === 'vendor_only' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => handleGroupingChange('vendor_only')}
+                  className={cn(
+                    "gap-1.5 h-7 text-xs",
+                    groupingMode === 'vendor_only' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'
+                  )}
+                  title="Vendor Only: Flat vendor groups for rapid PO creation"
+                >
+                  <ShoppingCart className="w-3.5 h-3.5" />
+                  Vendor Only
+                </Button>
+                <Button
+                  variant={groupingMode === 'vendor_sources' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => handleGroupingChange('vendor_sources')}
+                  className={cn(
+                    "gap-1.5 h-7 text-xs",
+                    groupingMode === 'vendor_sources' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'
+                  )}
+                  title="Vendor Intelligence: Multi-source vendor comparison"
+                >
+                  <Package className="w-3.5 h-3.5" />
+                  Sources
                 </Button>
               </div>
               <Button
@@ -448,52 +471,8 @@ export default function GlobalNeedToOrder() {
           {/* PSM Summary Strip */}
           <PSMSummaryStrip items={filteredItems} tab="buy" />
 
-          {/* Main Content — Procurement, Parts, or Vendors view */}
-          {viewMode === 'vendors' ? (
-            isLoading ? (
-              <Card className="bg-black/40 border-gray-800">
-                <CardContent className="p-8 text-center text-gray-500">Loading vendor queue...</CardContent>
-              </Card>
-            ) : (
-              <VendorQueueView
-                items={filteredItems}
-                onSelectVendor={(vendor, itemIds, sourcesByPartId) => {
-                  // Selection ONLY — no filter mutation
-                  setSelectedItems(new Set(itemIds));
-                  setSelectedVendorContext({ vendor_id: vendor.id, vendor_name: vendor.vendor_name });
-                  setVendorSourcesByPart(sourcesByPartId || {});
-                  setViewMode('parts');
-                }}
-              />
-            )
-          ) : viewMode === 'procurement' ? (
-            isLoading ? (
-              <Card className="bg-black/40 border-gray-800">
-                <CardContent className="p-8 text-center text-gray-500">Loading procurement queue...</CardContent>
-              </Card>
-            ) : filteredItems.length === 0 ? (
-              <Card className="bg-black/40 border-gray-800">
-                <CardContent className="p-8 text-center">
-                  <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-green-400" />
-                  <p className="text-gray-400">No items need ordering</p>
-                  <p className="text-xs text-gray-500 mt-1">All commitments are ordered or filters exclude results</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <AggregatedProcurementView
-                items={filteredItems}
-                selectedItems={selectedItems}
-                setSelectedItems={setSelectedItems}
-                onPartClick={handlePartClick}
-                onCreatePO={handleCreatePO}
-                onReceive={handleReceive}
-                onDeltaOrder={handleDeltaOrder}
-                onBatchPO={handleBatchCreatePO}
-                actionsEnabled={true}
-                vendorSourcesByPart={vendorSourcesByPart}
-              />
-            )
-          ) : isLoading ? (
+          {/* Main Content — Grouped procurement view */}
+          {isLoading ? (
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-8 text-center text-gray-500">Loading procurement queue...</CardContent>
             </Card>
@@ -505,11 +484,20 @@ export default function GlobalNeedToOrder() {
                 <p className="text-xs text-gray-500 mt-1">All commitments are ordered or filters exclude results</p>
               </CardContent>
             </Card>
-          ) : (
-            <PSMGroupedView
+          ) : groupingMode === 'vendor_sources' ? (
+            <VendorQueueView
               items={filteredItems}
-              groupMode={groupMode}
-              onGroupModeChange={setGroupMode}
+              onSelectVendor={(vendor, itemIds, sourcesByPartId) => {
+                setSelectedItems(new Set(itemIds));
+                setSelectedVendorContext({ vendor_id: vendor.id, vendor_name: vendor.vendor_name });
+                setVendorSourcesByPart(sourcesByPartId || {});
+                handleGroupingChange('vendor_project');
+              }}
+            />
+          ) : (
+            <ProcurementGroupedView
+              items={filteredItems}
+              groupingMode={groupingMode}
               selectedItems={selectedItems}
               setSelectedItems={setSelectedItems}
               onPartClick={handlePartClick}
@@ -518,7 +506,7 @@ export default function GlobalNeedToOrder() {
               onDeltaOrder={handleDeltaOrder}
               onBatchPO={handleBatchCreatePO}
               actionsEnabled={true}
-              tab="buy"
+              vendorSourcesByPart={vendorSourcesByPart}
             />
           )}
         </div>
