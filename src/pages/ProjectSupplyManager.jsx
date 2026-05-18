@@ -54,8 +54,9 @@ import { filterActiveCommitments } from "@/components/supply/lifecycleDisplay";
 import { validateInventoryConsistency } from "@/components/supply/inventoryResolver";
 import { validateSupplyModelDrift } from "@/components/supply/ExecutionDataBlock";
 // BillingSummaryStrip and ProjectFinancialBar removed — consolidated into PSMFinancialSummary
-import PSMGroupedView, { PSMSummaryStrip } from "@/components/supply/PSMGroupedCards";
-import ProjectSupplySummaryBar, { filterByActionCategory } from "@/components/supply/ProjectSupplySummaryBar";
+import PSMGroupedView from "@/components/supply/PSMGroupedCards";
+import UnifiedSupplySummary, { filterByCanonicalState } from "@/components/supply/UnifiedSupplySummary";
+import SupplyStateDiagnostics from "@/components/supply/SupplyStateDiagnostics";
 import PSMFloatingActionBar from "@/components/supply/PSMFloatingActionBar";
 import PSMFinancialSummary from "@/components/supply/PSMFinancialSummary";
 import ReportTab from "@/components/supply/ReportTab";
@@ -179,8 +180,8 @@ export default function ProjectSupplyManager() {
   const [resolveNeedTarget, setResolveNeedTarget] = useState(null);
   // Diagnostics overlay toggle (dev/admin)
   const [showDiagnostics, setShowDiagnostics] = useState(false);
-  // Phase 4: Action filter for summary bar
-  const [actionFilter, setActionFilter] = useState(null);
+  // Canonical state filter for unified summary bar
+  const [stateFilter, setStateFilter] = useState(null);
 
   // =====================================================================
   // CANONICAL READ MODEL - Already loaded above for tab routing
@@ -542,9 +543,9 @@ export default function ProjectSupplyManager() {
       filtered = filtered.filter(c => c.commitment_status === statusFilter);
     }
 
-    // Phase 4: Apply action category filter from summary bar
-    if (actionFilter) {
-      filtered = filterByActionCategory(filtered, actionFilter);
+    // Canonical state filter from unified summary bar
+    if (stateFilter) {
+      filtered = filterByCanonicalState(filtered, stateFilter);
     }
 
     return filtered;
@@ -957,6 +958,10 @@ export default function ProjectSupplyManager() {
                 onReceive={guardedSetReceiveModal}
                 onManageQty={guardedSetQtyManagerDrawer}
               />
+              {/* Canonical State Diagnostics — per-item state table */}
+              <SupplyStateDiagnostics
+                items={enrichedCommitments.filter(c => c.commitment_status !== 'cancelled' && c.commitment_status !== 'closed')}
+              />
               <div className="flex gap-2 flex-wrap">
                 <Button
                   variant="outline"
@@ -1074,15 +1079,12 @@ export default function ProjectSupplyManager() {
                 </div>
               </div>
 
-              {/* Phase 4: Project Supply Summary Bar with action filters */}
-              <ProjectSupplySummaryBar
+              {/* Unified Supply Summary — quantities + item states + filters */}
+              <UnifiedSupplySummary
                 items={enrichedCommitments.filter(c => c.commitment_status !== 'cancelled' && c.commitment_status !== 'closed')}
-                activeFilter={actionFilter}
-                onFilterChange={setActionFilter}
+                activeFilter={stateFilter}
+                onFilterChange={setStateFilter}
               />
-
-              {/* Summary Strip */}
-              <PSMSummaryStrip items={getFilteredCommitments('plan')} tab="plan" />
 
               {/* Grouped Cards - includes built-in grouping/sorting controls */}
               <PSMGroupedView
@@ -1148,8 +1150,8 @@ export default function ProjectSupplyManager() {
                 </div>
               </div>
 
-              {/* Summary Strip */}
-              <PSMSummaryStrip items={getFilteredCommitments('buy')} tab="buy" />
+              {/* Unified Supply Summary */}
+              <UnifiedSupplySummary items={getFilteredCommitments('buy')} />
 
               {/* Grouped Cards - includes built-in grouping/sorting controls */}
               <PSMGroupedView
@@ -1201,8 +1203,8 @@ export default function ProjectSupplyManager() {
                 </div>
               </div>
 
-              {/* Summary Strip */}
-              <PSMSummaryStrip items={getFilteredCommitments('receive')} tab="receive" />
+              {/* Unified Supply Summary */}
+              <UnifiedSupplySummary items={getFilteredCommitments('receive')} />
 
               {/* Grouped Cards - includes built-in grouping/sorting controls */}
               <PSMGroupedView
@@ -1254,8 +1256,8 @@ export default function ProjectSupplyManager() {
                 </div>
               </div>
 
-              {/* Summary Strip */}
-              <PSMSummaryStrip items={getFilteredCommitments('install')} tab="install" />
+              {/* Unified Supply Summary */}
+              <UnifiedSupplySummary items={getFilteredCommitments('install')} />
 
               {/* Grouped Cards - includes built-in grouping/sorting controls */}
               <PSMGroupedView
