@@ -13,6 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { deriveServiceFinancials } from "@/components/supply/deriveServiceFinancials";
+import { normalizeServiceCommitments } from "@/components/supply/resolveFinancialSource";
 
 const DEFS = {
   projected: "Planned Billable − Planned Cost (best case if all services complete as estimated)",
@@ -83,7 +84,13 @@ function StatusPill({ status, count }) {
 
 export default function ServicesDashboardSummary({ commitments }) {
   const [showBreakdown, setShowBreakdown] = useState(false);
-  const fin = useMemo(() => deriveServiceFinancials(commitments), [commitments]);
+
+  // CANONICAL: Normalize source values before derivation (fallback chains, provenance)
+  const { items: normalizedServices, sourceWarnings } = useMemo(
+    () => normalizeServiceCommitments(commitments),
+    [commitments]
+  );
+  const fin = useMemo(() => deriveServiceFinancials(normalizedServices), [normalizedServices]);
 
   const projColor = fin.margin.projectedMargin >= 0 ? "text-emerald-400" : "text-red-400";
   const realColor = fin.margin.realizedMargin >= 0 ? "text-emerald-400" : "text-red-400";
@@ -223,6 +230,16 @@ export default function ServicesDashboardSummary({ commitments }) {
           <MiniCard label="Unbilled Completed" value={fin.risk.accounting.unbilledCompleted} color="text-red-400" tipId="uninvoicedActuals" />
         )}
       </div>
+
+      {/* SOURCE DATA WARNINGS */}
+      {sourceWarnings.filter(w => w.severity === 'warn').length > 0 && (
+        <div className="flex items-start gap-3 p-2 bg-yellow-900/20 border border-yellow-700/30 rounded-lg">
+          <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
+          <div className="space-y-0.5">
+            <p className="text-xs text-yellow-400">{sourceWarnings.filter(w => w.severity === 'warn').length} service(s) have data quality issues</p>
+          </div>
+        </div>
+      )}
 
       {/* ACCOUNTING RISK BANNER */}
       {fin.risk.accounting.total > 0 && fin.costs.actualCost > 0 && (

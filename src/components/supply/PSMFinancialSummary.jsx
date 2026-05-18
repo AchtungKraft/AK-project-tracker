@@ -12,6 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { deriveProjectFinancials, validateProjectFinancials } from "@/components/supply/deriveProjectFinancials";
+import { normalizePartCommitments } from "@/components/supply/resolveFinancialSource";
 
 const DEFS = {
   plannedRevenue: "Total expected revenue from parts retail + services billable",
@@ -72,9 +73,15 @@ function MetricRow({ label, value, color = "text-gray-300", bold = false, defId,
 export default function PSMFinancialSummary({ enrichedCommitments, metrics, servicesSummary }) {
   const [showBreakdown, setShowBreakdown] = useState(false);
 
+  // CANONICAL: Normalize source values before derivation (fallback chains, provenance)
+  const { items: normalizedCommitments, sourceWarnings, stats: sourceStats } = useMemo(
+    () => normalizePartCommitments(enrichedCommitments),
+    [enrichedCommitments]
+  );
+
   const fin = useMemo(
-    () => deriveProjectFinancials({ enrichedCommitments, metrics, servicesSummary }),
-    [enrichedCommitments, metrics, servicesSummary]
+    () => deriveProjectFinancials({ enrichedCommitments: normalizedCommitments, metrics, servicesSummary }),
+    [normalizedCommitments, metrics, servicesSummary]
   );
   const warnings = useMemo(() => validateProjectFinancials(fin), [fin]);
 
@@ -241,6 +248,24 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
                 <span className="text-gray-500"> + {formatCurrencyUSD(fin.risk.operational.total)} unordered</span>
               )}
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* SOURCE DATA WARNINGS */}
+      {(sourceStats.missingCostCount > 0 || sourceStats.fallbackCostCount > 0) && (
+        <div className="flex items-start gap-3 p-3 bg-yellow-900/20 border border-yellow-700/30 rounded-lg">
+          <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
+          <div className="space-y-0.5">
+            {sourceStats.missingCostCount > 0 && (
+              <p className="text-xs text-yellow-400">{sourceStats.missingCostCount} of {sourceStats.total} items have no cost data — showing as $0</p>
+            )}
+            {sourceStats.fallbackCostCount > 0 && (
+              <p className="text-xs text-yellow-400">{sourceStats.fallbackCostCount} item(s) used actual cost as planned cost fallback</p>
+            )}
+            {sourceStats.missingRetailCount > 0 && (
+              <p className="text-xs text-gray-500">{sourceStats.missingRetailCount} item(s) have no retail/revenue data</p>
+            )}
           </div>
         </div>
       )}
