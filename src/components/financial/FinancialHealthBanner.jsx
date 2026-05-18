@@ -74,16 +74,16 @@ export default function FinancialHealthBanner({ fin, sourceStats, billingLedger,
     description = `${formatCurrencyUSD(billingLedger.outstandingRevenue)} invoiced but not yet paid.`;
   } else if (unbilledOpCost > 0.01 && opCost > 0) {
     state = HEALTH_STATES.needs_billing;
-    description = `${formatCurrencyUSD(opCost)} operational cost incurred — ${formatCurrencyUSD(unbilledOpCost)} not yet billed.`;
+    description = `You've spent ${formatCurrencyUSD(opCost)} — need to bill ${formatCurrencyUSD(unbilledOpCost)}.`;
   } else if (uncommitted > 0) {
     state = HEALTH_STATES.awaiting_orders;
-    description = `${formatCurrencyUSD(uncommitted)} in parts and services not yet ordered.`;
+    description = `${formatCurrencyUSD(uncommitted)} still needs to be ordered.`;
   } else if (fin.risk.negativeMarginItems > 0) {
     state = HEALTH_STATES.at_risk;
-    description = `${fin.risk.negativeMarginItems} item(s) with negative margin — review pricing.`;
+    description = `${fin.risk.negativeMarginItems} item(s) losing money — check the pricing.`;
   } else {
     state = HEALTH_STATES.healthy;
-    description = "Revenue, costs, and margins are on track.";
+    description = "Project is on track.";
   }
 
   const Icon = state.icon;

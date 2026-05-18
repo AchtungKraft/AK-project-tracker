@@ -112,27 +112,27 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center gap-1.5">
               <Receipt className="w-3.5 h-3.5 text-blue-400" />
-              <p className="text-[10px] text-blue-400 uppercase tracking-widest font-semibold">Revenue</p>
+              <p className="text-[10px] text-blue-400 uppercase tracking-widest font-semibold">Project Total</p>
             </div>
-            <BigMetric label="Planned" value={fin.revenue.planned} tip="Total expected revenue from parts + services" />
+            <BigMetric label="Project Total" value={fin.revenue.planned} tip="Total project value" />
             <div className="space-y-1 border-t border-gray-800 pt-2">
               <SmallMetric
-                label="Invoiced"
+                label="Billed"
                 value={billingLedger.invoicedRevenue}
                 color="text-blue-400"
-                tip="Sum of actual invoice totals (not operational state)"
+                tip="Total billed to client"
               />
               <SmallMetric
-                label="Outstanding"
+                label="Unpaid"
                 value={billingLedger.outstandingRevenue}
                 color={billingLedger.outstandingRevenue > 0.01 ? "text-amber-400" : "text-gray-500"}
-                tip="Invoiced minus paid (from invoice records)"
+                tip="Billed but not yet paid"
               />
               <SmallMetric
-                label="Remaining"
+                label="Left to Bill"
                 value={billingLedger.remainingToBill}
                 color={billingLedger.remainingToBill > 0.01 ? "text-yellow-400" : "text-gray-500"}
-                tip="Projected revenue minus invoiced"
+                tip="Billable work not yet invoiced"
               />
             </div>
           </CardContent>
@@ -143,27 +143,27 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center gap-1.5">
               <DollarSign className="w-3.5 h-3.5 text-gray-400" />
-              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Costs</p>
+              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Expected Cost</p>
             </div>
-            <BigMetric label="Planned" value={costLedger.plannedCost} color="text-gray-200" tip="Total expected project cost (parts + services)" />
+            <BigMetric label="Expected Cost" value={costLedger.plannedCost} color="text-gray-200" tip="Total estimated project cost" />
             <div className="space-y-1 border-t border-gray-800 pt-2">
               <SmallMetric
-                label="Operational"
+                label="Spent So Far"
                 value={costLedger.operationalCost}
                 color="text-white"
-                tip="Cost incurred: parts received + services completed/billed"
+                tip="What you've spent on this project"
               />
               <SmallMetric
-                label="On Order"
+                label="Ordered"
                 value={costLedger.exposure.committed}
                 color={costLedger.exposure.committed > 0 ? "text-yellow-400" : "text-gray-500"}
-                tip="PO/vendor committed, awaiting delivery/completion"
+                tip="Parts and services on order"
               />
               <SmallMetric
-                label="Unordered"
+                label="Still Needed"
                 value={costLedger.exposure.uncommitted}
                 color={costLedger.exposure.uncommitted > 0 ? "text-amber-400" : "text-gray-500"}
-                tip="Planned but no vendor engagement yet"
+                tip="What still needs to be ordered"
               />
             </div>
           </CardContent>
@@ -174,24 +174,24 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center gap-1.5">
               <TrendingUp className={cn("w-3.5 h-3.5", projColor)} />
-              <p className={cn("text-[10px] uppercase tracking-widest font-semibold", projColor)}>Margin</p>
+              <p className={cn("text-[10px] uppercase tracking-widest font-semibold", projColor)}>Expected Profit</p>
               <Badge variant="outline" className={cn("text-[8px] px-1 py-0 ml-auto border-gray-700", projColor)}>
                 {marginPct}%
               </Badge>
             </div>
-            <BigMetric label="Projected" value={fin.totals.projectedMargin} color={projColor} tip="Planned revenue − planned cost" />
+            <BigMetric label="Expected Profit" value={fin.totals.projectedMargin} color={projColor} tip="What you should make on this project" />
             <div className="space-y-1 border-t border-gray-800 pt-2">
               <SmallMetric
-                label="Realized"
+                label="Current Profit"
                 value={billingLedger.invoicedRevenue - costLedger.operationalCost}
                 color={(billingLedger.invoicedRevenue - costLedger.operationalCost) >= 0 ? "text-emerald-400" : "text-red-400"}
-                tip="Invoiced revenue − operational cost incurred"
+                tip="Billed amount minus what you've spent"
               />
               <SmallMetric
-                label="Collected"
+                label="Cash In"
                 value={billingLedger.paidRevenue}
                 color={billingLedger.paidRevenue > 0 ? "text-emerald-400" : "text-gray-500"}
-                tip="Cash collected from invoices"
+                tip="Actual cash received from invoices"
               />
             </div>
           </CardContent>
@@ -210,26 +210,26 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
               )} />
               <p className={cn("text-[10px] uppercase tracking-widest font-semibold",
                 costLedger.operationalCost > billingLedger.invoicedRevenue ? "text-amber-400" : "text-gray-500"
-              )}>Exposure</p>
+              )}>At Risk</p>
             </div>
             <BigMetric
-              label="Op. Cost Not Billed"
+              label="Unbilled Spend"
               value={Math.max(0, costLedger.operationalCost - billingLedger.invoicedRevenue)}
               color={costLedger.operationalCost > billingLedger.invoicedRevenue ? "text-amber-400" : "text-gray-500"}
-              tip="Operational cost incurred minus invoiced revenue"
+              tip="You've spent this but haven't billed it yet"
             />
             <div className="space-y-1 border-t border-gray-800 pt-2">
               <SmallMetric
-                label="Unordered"
+                label="Still Needed"
                 value={costLedger.exposure.uncommitted}
                 color={costLedger.exposure.uncommitted > 0 ? "text-yellow-400" : "text-gray-500"}
-                tip="Cost not yet committed to vendor"
+                tip="What still needs to be ordered"
               />
               <SmallMetric
-                label="Pending Orders"
+                label="On Order"
                 value={costLedger.exposure.committed}
                 color={costLedger.exposure.committed > 0 ? "text-blue-400" : "text-gray-500"}
-                tip="Committed to vendor, awaiting delivery"
+                tip="Parts and services on order"
               />
             </div>
           </CardContent>

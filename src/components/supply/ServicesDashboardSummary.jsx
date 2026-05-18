@@ -157,8 +157,8 @@ export default function ServicesDashboardSummary({ commitments }) {
               <DollarSign className="w-3.5 h-3.5 text-gray-400" />
               <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Cost</p>
             </div>
-            <BigMetric label="Planned" value={fin.costs.plannedCost} color="text-gray-200" />
-            <SmallMetric label="Operational" value={fin.costs.actualCost} color="text-white" tip="Completed + billed cost (work performed)" />
+            <BigMetric label="Expected Cost" value={fin.costs.plannedCost} color="text-gray-200" />
+            <SmallMetric label="Spent" value={fin.costs.actualCost} color="text-white" tip="What you've spent on these services" />
             {fin.counts.ordered > 0 && (
               <SmallMetric label="Pending" value={fin.exposure.ordered} color="text-yellow-400" tip="Ordered, awaiting completion" />
             )}
@@ -175,9 +175,9 @@ export default function ServicesDashboardSummary({ commitments }) {
                 {marginPct}%
               </Badge>
             </div>
-            <BigMetric label="Projected" value={fin.margin.projectedMargin} color={projColor} />
+            <BigMetric label="Expected Profit" value={fin.margin.projectedMargin} color={projColor} />
             <SmallMetric
-              label="Realized"
+              label="Current Profit"
               value={fin.margin.realizedMargin}
               color={fin.margin.realizedMargin >= 0 ? "text-emerald-400" : "text-red-400"}
             />
@@ -247,13 +247,13 @@ export default function ServicesDashboardSummary({ commitments }) {
             <div>
               <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-2">Reconciliation</p>
               <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs font-mono">
-                <span className="text-gray-500">Operational Cost</span>
+                <span className="text-gray-500">Spent So Far</span>
                 <span className="text-gray-300 text-right">{formatCurrencyUSD(fin.costs.actualCost)}</span>
-                <span className="text-gray-500">+ Pending Orders</span>
+                <span className="text-gray-500">+ On Order</span>
                 <span className="text-yellow-400 text-right">{formatCurrencyUSD(fin.exposure.ordered)}</span>
-                <span className="text-gray-500">+ Unordered</span>
+                <span className="text-gray-500">+ Still Needed</span>
                 <span className="text-amber-400 text-right">{formatCurrencyUSD(fin.exposure.planned)}</span>
-                <span className="text-gray-500 font-semibold border-t border-gray-800 pt-1">= Total Cost</span>
+                <span className="text-gray-500 font-semibold border-t border-gray-800 pt-1">= Expected Cost</span>
                 <span className="text-white text-right font-semibold border-t border-gray-800 pt-1">{formatCurrencyUSD(fin.costs.plannedCost)}</span>
                 {fin._reconciliation.totalBucketCheck > 0.01 && (
                   <>
