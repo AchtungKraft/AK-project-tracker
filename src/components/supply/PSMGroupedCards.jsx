@@ -67,12 +67,12 @@ const GROUP_COLORS = {
 
 // Sort options
 const SORT_OPTIONS = [
-  { value: 'cost_at_risk_desc', label: 'Cost at Risk (High → Low)' },
-  { value: 'margin_desc', label: 'Margin (High → Low)' },
-  { value: 'retail_desc', label: 'Revenue (High → Low)' },
+  { value: 'cost_at_risk_desc', label: 'Unbilled (High → Low)' },
+  { value: 'margin_desc', label: 'Profit (High → Low)' },
+  { value: 'retail_desc', label: 'Client Total (High → Low)' },
   { value: 'required_desc', label: 'Qty Required (High → Low)' },
   { value: 'alphabetical', label: 'Alphabetical' },
-  { value: 'to_order_desc', label: 'To Order (High → Low)' },
+  { value: 'to_order_desc', label: 'Still Needed (High → Low)' },
 ];
 
 // Apply sorting to items — CANONICAL: cost_at_risk is the single exposure definition
@@ -345,7 +345,7 @@ export function PSMItemRow({
           <span className="text-gray-500">Cost</span>
           <span className="text-gray-300">{formatCurrencyUSD(cost)}</span>
           <span className="text-gray-600 mx-0.5">·</span>
-          <span className="text-gray-500">Rev</span>
+          <span className="text-gray-500">Total</span>
           <span className="text-white">{formatCurrencyUSD(revenue)}</span>
           <span className="text-gray-600 mx-0.5">·</span>
           <span className={margin >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(margin)}</span>
@@ -434,7 +434,7 @@ export function PSMItemRow({
               <>
                 <DropdownMenuSeparator className="bg-gray-700" />
                 <DropdownMenuItem onClick={() => onRemoveCredit?.(commitment)} className="text-red-400">
-                  <Trash2 className="w-4 h-4 mr-2" /> Remove / Credit
+                  <Trash2 className="w-4 h-4 mr-2" /> Remove Part
                 </DropdownMenuItem>
               </>
             )}
@@ -458,12 +458,12 @@ export function PSMItemRow({
           <div className="flex flex-wrap gap-4 text-xs font-mono text-gray-400">
             <span>Unit Cost: <span className="text-gray-300">${(commitment.unit_cost ?? 0).toFixed(2)}</span></span>
             <span>Unit Retail: <span className="text-gray-300">${(commitment.unit_retail ?? 0).toFixed(2)}</span></span>
-            <span>Planned Margin: <span className={margin >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(margin)}</span></span>
+            <span>Expected Profit: <span className={margin >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(margin)}</span></span>
             {(commitment.actual_margin ?? 0) !== 0 && Math.abs((commitment.actual_margin ?? 0) - margin) > 0.01 && (
-              <span>Actual Margin: <span className={(commitment.actual_margin ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(commitment.actual_margin ?? 0)}</span></span>
+              <span>Current Profit: <span className={(commitment.actual_margin ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(commitment.actual_margin ?? 0)}</span></span>
             )}
             {(commitment.cost_at_risk ?? 0) > 0 && (
-              <span>Unbilled: <span className="text-amber-400">{formatCurrencyUSD(commitment.cost_at_risk)}</span></span>
+              <span>Not Yet Billed: <span className="text-amber-400">{formatCurrencyUSD(commitment.cost_at_risk)}</span></span>
             )}
             <CostSourceBadge commitment={commitment} />
           </div>
@@ -490,7 +490,7 @@ export function PSMItemRow({
           <div className="max-w-md">
             <ExecutionDataBlock item={commitment} />
           </div>
-          {(import.meta.env.DEV || localStorage.getItem('ak_debug_coverage') === 'true') && (
+          {localStorage.getItem('ak_debug_coverage') === 'true' && (
             <div className="max-w-md">
               <CoverageDebugPanel item={commitment} />
             </div>
@@ -911,22 +911,11 @@ export default function PSMGroupedView({
   const visibleItems = useMemo(() => {
     if (tab === 'buy') {
       const filtered = items.filter(i => i.needs_order === true);
-      // PHASE 3: ASSERTION — log any items that were stripped
-      if (import.meta.env.DEV || localStorage.getItem('ak_debug_coverage') === 'true') {
+      // Gate diagnostics behind debug flag only
+      if (localStorage.getItem('ak_debug_coverage') === 'true') {
         const stripped = items.length - filtered.length;
         if (stripped > 0) {
-          console.error(`[NEEDS_ORDER RENDER GATE] Stripped ${stripped} items from Buy tab that had needs_order !== true`);
-          items.filter(i => i.needs_order !== true).forEach(i => {
-            console.error('[NEEDS_ORDER RENDER GATE] Rejected item:', {
-              id: i.id || i.commitment_id,
-              part: i.part?.part_name,
-              needs_order: i.needs_order,
-              commitment_fulfilled: i.commitment_fulfilled,
-              to_order: i.to_order_qty ?? i.to_order,
-              coverage_qty: i.coverage_qty,
-              effective_required: i.effective_required,
-            });
-          });
+          console.warn(`[RENDER GATE] Stripped ${stripped} non-orderable items from Buy tab`);
         }
       }
       return filtered;

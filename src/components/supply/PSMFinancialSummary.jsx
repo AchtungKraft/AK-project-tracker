@@ -210,7 +210,7 @@ export default function PSMFinancialSummary({ enrichedCommitments, metrics, serv
               )} />
               <p className={cn("text-[10px] uppercase tracking-widest font-semibold",
                 costLedger.operationalCost > billingLedger.invoicedRevenue ? "text-amber-400" : "text-gray-500"
-              )}>At Risk</p>
+              )}>Not Yet Billed</p>
             </div>
             <BigMetric
               label="Unbilled Spend"

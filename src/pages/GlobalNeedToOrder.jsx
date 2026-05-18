@@ -146,9 +146,9 @@ export default function GlobalNeedToOrder() {
   const projectDemandCount = filteredItems.filter(i => (i.demand_source || 'PROJECT') === 'PROJECT').length;
   const stockDemandCount = filteredItems.filter(i => i.demand_source === 'STOCK_REPLENISHMENT' || i.demand_source === 'STOCK_MANUAL').length;
 
-  // DEV DRIFT GUARD
+  // Drift guard — debug only
   useEffect(() => {
-    if (import.meta.env.DEV && filteredItems.length > 0) {
+    if (localStorage.getItem('ak_debug_coverage') === 'true' && filteredItems.length > 0) {
       validateSupplyModelDrift(filteredItems, 'GlobalNeedToOrder');
     }
   }, [filteredItems]);
@@ -278,7 +278,7 @@ export default function GlobalNeedToOrder() {
               <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">
                 GLOBAL PROCUREMENT QUEUE
               </h1>
-              <p className="text-sm text-gray-400">Cross-project ordering with financial visibility</p>
+              <p className="text-sm text-gray-400">Cross-project ordering queue</p>
             </div>
             <div className="flex items-center gap-2">
               {/* Grouping Mode Selector */}
@@ -386,7 +386,7 @@ export default function GlobalNeedToOrder() {
             </Card>
             <Card className="bg-black/40 border-gray-800">
               <CardContent className="p-3 text-center">
-                <p className="text-xs text-gray-500">Total Exposure</p>
+                <p className="text-xs text-gray-500">Not Yet Billed</p>
                 <p className="text-2xl font-bold text-red-400">{formatCurrencyUSD(totalExposure)}</p>
               </CardContent>
             </Card>
@@ -400,7 +400,7 @@ export default function GlobalNeedToOrder() {
               <CardContent className="p-3 text-center">
                 <p className="text-xs text-gray-500">Blocked</p>
                 <p className="text-2xl font-bold text-red-400">{blockedCount}</p>
-                <p className="text-xs text-gray-400">need coverage/prepay</p>
+                <p className="text-xs text-gray-400">need info</p>
               </CardContent>
             </Card>
           </div>
