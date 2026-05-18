@@ -147,7 +147,7 @@ function useSelectionState(items, selectedItems) {
 function SubgroupSection({
   subgroup, isProject, isExpanded, onToggle,
   selectedItems, onSelectAll, onItemSelect,
-  onPartClick, onCreatePO, onReceive, onDeltaOrder, onBatchPO, actionsEnabled,
+  onPartClick, onCreatePO, onReceive, onDeltaOrder, onResolveNeed, onBatchPO, actionsEnabled,
 }) {
   const { orderableIds, allSelected, someSelected } = useSelectionState(subgroup.items, selectedItems);
   const Icon = isProject ? FolderKanban : Building2;
@@ -185,6 +185,7 @@ function SubgroupSection({
               onCreatePO={onCreatePO}
               onReceive={onReceive}
               onDeltaOrder={onDeltaOrder}
+              onResolveNeed={onResolveNeed}
               actionsEnabled={actionsEnabled}
               tab="buy"
             />
@@ -203,7 +204,7 @@ function PrimaryGroupCard({
   group, isProject, hasSubgroups, isExpanded, onToggle,
   expandedSubs, onToggleSub,
   selectedItems, onSelectAll, onItemSelect, onBatchGroup,
-  onPartClick, onCreatePO, onReceive, onDeltaOrder, onBatchPO, actionsEnabled,
+  onPartClick, onCreatePO, onReceive, onDeltaOrder, onResolveNeed, onBatchPO, actionsEnabled,
 }) {
   const { orderableIds, allSelected, someSelected } = useSelectionState(group.items, selectedItems);
   const Icon = isProject ? FolderKanban : Building2;
@@ -267,6 +268,7 @@ function PrimaryGroupCard({
                 onCreatePO={onCreatePO}
                 onReceive={onReceive}
                 onDeltaOrder={onDeltaOrder}
+                onResolveNeed={onResolveNeed}
                 onBatchPO={onBatchPO}
                 actionsEnabled={actionsEnabled}
               />
@@ -282,6 +284,7 @@ function PrimaryGroupCard({
                 onCreatePO={onCreatePO}
                 onReceive={onReceive}
                 onDeltaOrder={onDeltaOrder}
+                onResolveNeed={onResolveNeed}
                 actionsEnabled={actionsEnabled}
                 tab="buy"
               />
@@ -306,6 +309,7 @@ export default function ProcurementGroupedView({
   onCreatePO,
   onReceive,
   onDeltaOrder,
+  onResolveNeed,
   onBatchPO,
   actionsEnabled = true,
   vendorSourcesByPart = {},
@@ -405,6 +409,7 @@ export default function ProcurementGroupedView({
           onCreatePO={onCreatePO}
           onReceive={onReceive}
           onDeltaOrder={onDeltaOrder}
+          onResolveNeed={onResolveNeed}
           onBatchPO={onBatchPO}
           actionsEnabled={actionsEnabled}
         />

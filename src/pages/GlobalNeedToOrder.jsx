@@ -33,6 +33,7 @@ import VendorQueueView from "@/components/supply/VendorQueueView";
 import ProcurementGroupedView from "@/components/supply/ProcurementGroupedView";
 import resolveDefaultVendor from "@/components/supply/resolveDefaultVendor";
 import AddStockOrderModal from "@/components/supply/AddStockOrderModal";
+import ResolveNeedModal from "@/components/supply/ResolveNeedModal";
 import { cn } from "@/lib/utils";
 
 
@@ -79,6 +80,7 @@ export default function GlobalNeedToOrder() {
   const [selectedVendorContext, setSelectedVendorContext] = useState(null);
   const [vendorSourcesByPart, setVendorSourcesByPart] = useState({});
   const [showStockOrderModal, setShowStockOrderModal] = useState(false);
+  const [resolveNeedTarget, setResolveNeedTarget] = useState(null);
 
   // Persist grouping mode
   const handleGroupingChange = (mode) => {
@@ -230,6 +232,10 @@ export default function GlobalNeedToOrder() {
 
   const handleDeltaOrder = (commitment) => {
     setDeltaOrderCommitment(commitment);
+  };
+
+  const handleResolveNeed = (commitment) => {
+    setResolveNeedTarget(commitment);
   };
 
   const handlePartClick = (part, commitment) => {
@@ -504,6 +510,7 @@ export default function GlobalNeedToOrder() {
               onCreatePO={handleCreatePO}
               onReceive={handleReceive}
               onDeltaOrder={handleDeltaOrder}
+              onResolveNeed={handleResolveNeed}
               onBatchPO={handleBatchCreatePO}
               actionsEnabled={true}
               vendorSourcesByPart={vendorSourcesByPart}
@@ -649,6 +656,18 @@ export default function GlobalNeedToOrder() {
         <PartModal
           partId={editingPartId}
           onClose={() => setEditingPartId(null)}
+        />
+      )}
+
+      {resolveNeedTarget && (
+        <ResolveNeedModal
+          open={true}
+          onClose={() => setResolveNeedTarget(null)}
+          item={resolveNeedTarget}
+          onSuccess={() => {
+            setResolveNeedTarget(null);
+            refetch();
+          }}
         />
       )}
 

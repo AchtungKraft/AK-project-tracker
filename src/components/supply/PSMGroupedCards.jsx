@@ -264,6 +264,7 @@ export function PSMItemRow({
   onRemoveCredit,
   onEditPricing,
   onSyncCost,
+  onResolveNeed,
   actionsEnabled = true,
   categoriesMap,
   vendorsMap,
@@ -388,6 +389,11 @@ export function PSMItemRow({
             {allowed?.canCreateDeltaOrder && (
               <DropdownMenuItem onClick={() => onDeltaOrder?.(commitment)}>
                 <Plus className="w-4 h-4 mr-2" /> Additional Order
+              </DropdownMenuItem>
+            )}
+            {onResolveNeed && (commitment.needs_order || (commitment.to_order_qty ?? commitment.to_order ?? 0) > 0) && (
+              <DropdownMenuItem onClick={() => onResolveNeed?.(commitment)}>
+                <CheckCircle2 className="w-4 h-4 mr-2" /> Resolve Without PO
               </DropdownMenuItem>
             )}
             {allowed?.canReceive && (
