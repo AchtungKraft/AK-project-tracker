@@ -34,6 +34,8 @@ import ProcurementGroupedView from "@/components/supply/ProcurementGroupedView";
 import resolveDefaultVendor from "@/components/supply/resolveDefaultVendor";
 import AddStockOrderModal from "@/components/supply/AddStockOrderModal";
 import ResolveNeedModal from "@/components/supply/ResolveNeedModal";
+import CommitmentQuantityDrawer from "@/components/parts/CommitmentQuantityDrawer";
+import RemovePartCreditModal from "@/components/supply/RemovePartCreditModal";
 import { cn } from "@/lib/utils";
 
 
@@ -81,6 +83,8 @@ export default function GlobalNeedToOrder() {
   const [vendorSourcesByPart, setVendorSourcesByPart] = useState({});
   const [showStockOrderModal, setShowStockOrderModal] = useState(false);
   const [resolveNeedTarget, setResolveNeedTarget] = useState(null);
+  const [manageQtyTarget, setManageQtyTarget] = useState(null);
+  const [removeCreditTarget, setRemoveCreditTarget] = useState(null);
 
   // Persist grouping mode
   const handleGroupingChange = (mode) => {
@@ -236,6 +240,14 @@ export default function GlobalNeedToOrder() {
 
   const handleResolveNeed = (commitment) => {
     setResolveNeedTarget(commitment);
+  };
+
+  const handleManageQty = (commitment) => {
+    setManageQtyTarget(commitment);
+  };
+
+  const handleRemoveCredit = (commitment) => {
+    setRemoveCreditTarget(commitment);
   };
 
   const handlePartClick = (part, commitment) => {
@@ -511,6 +523,8 @@ export default function GlobalNeedToOrder() {
               onReceive={handleReceive}
               onDeltaOrder={handleDeltaOrder}
               onResolveNeed={handleResolveNeed}
+              onManageQty={handleManageQty}
+              onRemoveCredit={handleRemoveCredit}
               onBatchPO={handleBatchCreatePO}
               actionsEnabled={true}
               vendorSourcesByPart={vendorSourcesByPart}
@@ -666,6 +680,32 @@ export default function GlobalNeedToOrder() {
           item={resolveNeedTarget}
           onSuccess={() => {
             setResolveNeedTarget(null);
+            refetch();
+          }}
+        />
+      )}
+
+      {manageQtyTarget && (
+        <CommitmentQuantityDrawer
+          open={true}
+          onClose={() => setManageQtyTarget(null)}
+          commitment={manageQtyTarget}
+          part={manageQtyTarget.part || { id: manageQtyTarget.part_id, part_name: manageQtyTarget.part_name }}
+          onSuccess={() => {
+            setManageQtyTarget(null);
+            refetch();
+          }}
+        />
+      )}
+
+      {removeCreditTarget && (
+        <RemovePartCreditModal
+          commitment={removeCreditTarget}
+          part={removeCreditTarget.part || { id: removeCreditTarget.part_id, part_name: removeCreditTarget.part_name }}
+          project={{ id: removeCreditTarget.project_id, name: removeCreditTarget.project_name }}
+          onClose={() => setRemoveCreditTarget(null)}
+          onSuccess={() => {
+            setRemoveCreditTarget(null);
             refetch();
           }}
         />

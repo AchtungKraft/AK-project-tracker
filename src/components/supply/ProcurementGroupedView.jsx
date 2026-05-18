@@ -147,7 +147,7 @@ function useSelectionState(items, selectedItems) {
 function SubgroupSection({
   subgroup, isProject, isExpanded, onToggle,
   selectedItems, onSelectAll, onItemSelect,
-  onPartClick, onCreatePO, onReceive, onDeltaOrder, onResolveNeed, onBatchPO, actionsEnabled,
+  onPartClick, onCreatePO, onReceive, onDeltaOrder, onResolveNeed, onManageQty, onRemoveCredit, onBatchPO, actionsEnabled,
 }) {
   const { orderableIds, allSelected, someSelected } = useSelectionState(subgroup.items, selectedItems);
   const Icon = isProject ? FolderKanban : Building2;
@@ -186,6 +186,8 @@ function SubgroupSection({
               onReceive={onReceive}
               onDeltaOrder={onDeltaOrder}
               onResolveNeed={onResolveNeed}
+              onManageQty={onManageQty}
+              onRemoveCredit={onRemoveCredit}
               actionsEnabled={actionsEnabled}
               tab="buy"
             />
@@ -204,7 +206,7 @@ function PrimaryGroupCard({
   group, isProject, hasSubgroups, isExpanded, onToggle,
   expandedSubs, onToggleSub,
   selectedItems, onSelectAll, onItemSelect, onBatchGroup,
-  onPartClick, onCreatePO, onReceive, onDeltaOrder, onResolveNeed, onBatchPO, actionsEnabled,
+  onPartClick, onCreatePO, onReceive, onDeltaOrder, onResolveNeed, onManageQty, onRemoveCredit, onBatchPO, actionsEnabled,
 }) {
   const { orderableIds, allSelected, someSelected } = useSelectionState(group.items, selectedItems);
   const Icon = isProject ? FolderKanban : Building2;
@@ -269,6 +271,8 @@ function PrimaryGroupCard({
                 onReceive={onReceive}
                 onDeltaOrder={onDeltaOrder}
                 onResolveNeed={onResolveNeed}
+                onManageQty={onManageQty}
+                onRemoveCredit={onRemoveCredit}
                 onBatchPO={onBatchPO}
                 actionsEnabled={actionsEnabled}
               />
@@ -285,6 +289,8 @@ function PrimaryGroupCard({
                 onReceive={onReceive}
                 onDeltaOrder={onDeltaOrder}
                 onResolveNeed={onResolveNeed}
+                onManageQty={onManageQty}
+                onRemoveCredit={onRemoveCredit}
                 actionsEnabled={actionsEnabled}
                 tab="buy"
               />
@@ -310,6 +316,8 @@ export default function ProcurementGroupedView({
   onReceive,
   onDeltaOrder,
   onResolveNeed,
+  onManageQty,
+  onRemoveCredit,
   onBatchPO,
   actionsEnabled = true,
   vendorSourcesByPart = {},
@@ -410,6 +418,8 @@ export default function ProcurementGroupedView({
           onReceive={onReceive}
           onDeltaOrder={onDeltaOrder}
           onResolveNeed={onResolveNeed}
+          onManageQty={onManageQty}
+          onRemoveCredit={onRemoveCredit}
           onBatchPO={onBatchPO}
           actionsEnabled={actionsEnabled}
         />
