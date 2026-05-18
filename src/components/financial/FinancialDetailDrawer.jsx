@@ -1,550 +1,230 @@
-import React from "react";
-import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  DollarSign,
-  Receipt,
-  Truck,
-  FileText,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
-  Building2,
-  ExternalLink,
-  Package,
-  Link2,
-  Calendar,
-  TrendingUp,
-  HelpCircle,
-  ShieldCheck,
-  ShoppingCart,
-} from "lucide-react";
+import React, { useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { PartTypeBadge } from "../parts/PartTypeSelector";
+import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 
-// ============================================
-// STATUS COLOR CONFIGS
-// ============================================
-
-const CLIENT_BILLING_COLORS = {
-  NOT_BILLABLE: { bg: "bg-gray-600", text: "text-gray-100", label: "Not Billable" },
-  NOT_INVOICED: { bg: "bg-yellow-600", text: "text-yellow-100", label: "Not Invoiced" },
-  INVOICED: { bg: "bg-blue-600", text: "text-blue-100", label: "Invoiced" },
-  PARTIALLY_PAID: { bg: "bg-orange-600", text: "text-orange-100", label: "Partially Paid" },
-  PAID: { bg: "bg-green-600", text: "text-green-100", label: "Paid" },
-};
-
-const CLIENT_PAYMENT_COLORS = {
-  NOT_APPLICABLE: { bg: "bg-gray-600", label: "N/A" },
-  PENDING: { bg: "bg-yellow-600", label: "Pending" },
-  PARTIAL: { bg: "bg-orange-600", label: "Partial" },
-  PAID: { bg: "bg-green-600", label: "Paid" },
-};
-
-const VENDOR_INVOICE_COLORS = {
-  NOT_RECEIVED: { bg: "bg-gray-600", label: "Not Received" },
-  RECEIVED: { bg: "bg-yellow-600", label: "Received" },
-  APPROVED: { bg: "bg-blue-600", label: "Approved" },
-  POSTED: { bg: "bg-purple-600", label: "Posted" },
-  PAID: { bg: "bg-green-600", label: "Paid" },
-};
-
-const VENDOR_PAYMENT_COLORS = {
-  NOT_APPLICABLE: { bg: "bg-gray-600", label: "N/A" },
-  UNPAID: { bg: "bg-red-600", label: "Unpaid" },
-  PARTIAL: { bg: "bg-orange-600", label: "Partial" },
-  PAID: { bg: "bg-green-600", label: "Paid" },
-};
-
-const MARGIN_STATE_COLORS = {
-  UNKNOWN: { bg: "bg-gray-600", label: "Unknown", icon: HelpCircle },
-  COST_ONLY: { bg: "bg-orange-600", label: "Cost Only", icon: Receipt },
-  BILLABLE_PENDING: { bg: "bg-yellow-600", label: "Billable Pending", icon: Clock },
-  INVOICED_PENDING_PAYMENT: { bg: "bg-blue-600", label: "Invoiced - Pending Payment", icon: FileText },
-  COMPLETE: { bg: "bg-green-600", label: "Complete", icon: CheckCircle2 },
-};
-
-const FINANCIAL_ROLE_LABELS = {
-  VENDOR_MARGIN: { label: "Vendor Margin", color: "bg-purple-600" },
-  INTERNAL_MANUFACTURING: { label: "Internal Mfg", color: "bg-blue-600" },
-  LABOR_ONLY: { label: "Labor Only", color: "bg-teal-600" },
-  ASSET_RECOVERY: { label: "Asset Recovery", color: "bg-amber-600" },
-  NON_BILLABLE: { label: "Non-Billable", color: "bg-gray-600" },
-};
-
-const BILLING_SOURCE_LABELS = {
-  LINE_OVERRIDE: "Line Item Override",
-  ORDER: "Order",
-  COMMITMENT: "Commitment",
-  NONE: "None",
-};
-
-const ORDERING_SAFETY_CONFIG = {
-  RED: { label: 'Not Billed', color: 'bg-red-600', icon: AlertCircle },
-  YELLOW: { label: 'Awaiting Payment', color: 'bg-yellow-600', icon: Clock },
-  GREEN: { label: 'Paid - Safe to Order', color: 'bg-green-600', icon: ShieldCheck },
-};
-
-const LIFECYCLE_LABELS = {
-  ASSIGNED_NEEDS_BILLING: 'Needs Billing',
-  BILLED_NOT_PAID: 'Awaiting Payment',
-  PAID_READY_TO_ORDER: 'Ready to Order',
-  ORDERED_WAITING_RECEIPT: 'Order in Progress',
-  INSTALLED_READY_TO_BILL: 'Installed - Billing',
-};
-
-// ============================================
-// TIMELINE ITEM COMPONENT
-// ============================================
-
-function TimelineItem({ icon: Icon, label, date, status, isLast }) {
-  const hasDate = !!date;
-  
+/**
+ * Progressive disclosure drawer for advanced financial details.
+ * Level 1: Cost waterfalls
+ * Level 2: Truth tables + reconciliation
+ * Level 3: Revenue reconciliation + diagnostics
+ */
+function WaterfallBar({ segments, total }) {
+  if (total <= 0) return <p className="text-xs text-gray-600 italic">No cost data</p>;
   return (
-    <div className="flex items-start gap-3">
-      <div className="flex flex-col items-center">
-        <div className={cn(
-          "w-8 h-8 rounded-full flex items-center justify-center",
-          hasDate ? "bg-green-600/20" : "bg-gray-700/50"
-        )}>
-          <Icon className={cn("w-4 h-4", hasDate ? "text-green-400" : "text-gray-500")} />
-        </div>
-        {!isLast && <div className="w-0.5 h-8 bg-gray-700 mt-1" />}
+    <div>
+      <div className="flex h-3 rounded-full overflow-hidden bg-gray-800">
+        {segments.filter(s => s.value > 0).map((seg, i) => (
+          <div key={i} className={cn(seg.color, "transition-all")} style={{ width: `${Math.max(1, (seg.value / total) * 100)}%` }} title={`${seg.label}: ${formatCurrencyUSD(seg.value)}`} />
+        ))}
       </div>
-      <div className="flex-1 pt-1">
-        <p className={cn("text-sm", hasDate ? "text-white" : "text-gray-500")}>{label}</p>
-        {hasDate ? (
-          <p className="text-xs text-gray-400">{new Date(date).toLocaleDateString()}</p>
-        ) : (
-          <p className="text-xs text-gray-600">Pending</p>
-        )}
+      <div className="flex flex-wrap gap-3 mt-1.5">
+        {segments.filter(s => s.value > 0).map((seg, i) => (
+          <div key={i} className="flex items-center gap-1.5">
+            <div className={cn("w-2 h-2 rounded-full", seg.color)} />
+            <span className="text-[10px] text-gray-500">{seg.label}</span>
+            <span className="text-[10px] text-gray-400 font-mono">{formatCurrencyUSD(seg.value)}</span>
+          </div>
+        ))}
       </div>
-      {status && (
-        <Badge className={cn("text-xs", status.bg)}>{status.label}</Badge>
-      )}
     </div>
   );
 }
 
-// ============================================
-// MAIN COMPONENT
-// ============================================
+function ReconRow({ label, value, color = "text-gray-300", bold = false, border = false, indent = false }) {
+  return (
+    <>
+      <span className={cn(
+        "text-gray-500",
+        bold && "font-semibold",
+        border && "border-t border-gray-800 pt-1 mt-1",
+        indent && "pl-2"
+      )}>{label}</span>
+      <span className={cn(
+        "text-right font-mono",
+        color,
+        bold && "font-semibold",
+        border && "border-t border-gray-800 pt-1 mt-1"
+      )}>{formatCurrencyUSD(value)}</span>
+    </>
+  );
+}
 
-export default function FinancialDetailDrawer({ 
-  isOpen, 
-  onClose, 
-  partId, 
-  projectId,
-  financialStatus,
-  lifecycleContext, // Optional: { lifecycle_category, ordering_safety, commitment_id, order_reference }
-}) {
-  // Fetch part data
-  const { data: part } = useQuery({
-    queryKey: ['part', partId],
-    queryFn: async () => {
-      const parts = await base44.entities.Part.filter({ id: partId });
-      return parts[0] || null;
-    },
-    enabled: isOpen && !!partId,
-  });
-
-  // Fetch order if we have order reference
-  const { data: order } = useQuery({
-    queryKey: ['order', financialStatus?.order_id],
-    queryFn: async () => {
-      const orders = await base44.entities.Order.filter({ id: financialStatus.order_id });
-      return orders[0] || null;
-    },
-    enabled: isOpen && !!financialStatus?.order_id,
-  });
-
-  // Fetch vendor invoice if we have reference
-  const { data: vendorInvoice } = useQuery({
-    queryKey: ['vendorInvoice', financialStatus?.vendor_invoice_id],
-    queryFn: async () => {
-      const invoices = await base44.entities.VendorInvoice.filter({ id: financialStatus.vendor_invoice_id });
-      return invoices[0] || null;
-    },
-    enabled: isOpen && !!financialStatus?.vendor_invoice_id,
-  });
-
-  // Fetch vendor
-  const { data: vendor } = useQuery({
-    queryKey: ['vendor', vendorInvoice?.vendor_id || part?.default_vendor_id],
-    queryFn: async () => {
-      const vendorId = vendorInvoice?.vendor_id || part?.default_vendor_id;
-      const vendors = await base44.entities.Vendor.filter({ id: vendorId });
-      return vendors[0] || null;
-    },
-    enabled: isOpen && !!(vendorInvoice?.vendor_id || part?.default_vendor_id),
-  });
-
-  // Fetch commitment if we have reference
-  const { data: commitment } = useQuery({
-    queryKey: ['commitment', financialStatus?.commitment_id],
-    queryFn: async () => {
-      const commitments = await base44.entities.PartCommitment.filter({ id: financialStatus.commitment_id });
-      return commitments[0] || null;
-    },
-    enabled: isOpen && !!financialStatus?.commitment_id,
-  });
-
-  const clientBillingConfig = CLIENT_BILLING_COLORS[financialStatus?.client_billing_status] || CLIENT_BILLING_COLORS.NOT_INVOICED;
-  const clientPaymentConfig = CLIENT_PAYMENT_COLORS[financialStatus?.client_payment_status] || CLIENT_PAYMENT_COLORS.PENDING;
-  const vendorInvoiceConfig = VENDOR_INVOICE_COLORS[financialStatus?.vendor_invoice_status] || VENDOR_INVOICE_COLORS.NOT_RECEIVED;
-  const vendorPaymentConfig = VENDOR_PAYMENT_COLORS[financialStatus?.vendor_payment_status] || VENDOR_PAYMENT_COLORS.UNPAID;
-  const marginConfig = MARGIN_STATE_COLORS[financialStatus?.margin_state] || MARGIN_STATE_COLORS.UNKNOWN;
-  const roleConfig = FINANCIAL_ROLE_LABELS[financialStatus?.financial_role] || FINANCIAL_ROLE_LABELS.VENDOR_MARGIN;
-  const MarginIcon = marginConfig.icon;
+export default function FinancialDetailDrawer({ fin, warnings }) {
+  const [showDetails, setShowDetails] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const hasServices = fin.services.plannedCost > 0;
+  const projColor = fin.totals.projectedMargin >= 0 ? "text-emerald-400" : "text-red-400";
 
   return (
-    <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent 
-        side="right" 
-        className="w-full sm:max-w-lg bg-gray-900 border-gray-700 p-0 overflow-hidden"
+    <div className="space-y-2">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setShowDetails(!showDetails)}
+        className="text-gray-500 hover:text-gray-300 text-xs gap-1.5 h-7"
       >
-        <SheetHeader className="p-4 border-b border-gray-700">
-          <SheetTitle className="text-white flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-green-400" />
-            Financial Details
-          </SheetTitle>
-        </SheetHeader>
+        {showDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+        {showDetails ? "Hide" : "Show"} Financial Details
+      </Button>
 
-        <ScrollArea className="h-[calc(100vh-80px)]">
-          <div className="p-4 space-y-4">
-            {/* Part Header */}
-            {part && (
-              <Card className="bg-gray-800/50 border-gray-700">
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    {part.featured_photo ? (
-                      <img 
-                        src={part.featured_photo} 
-                        alt="" 
-                        className="w-12 h-12 rounded object-contain bg-gray-800"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 rounded bg-gray-800 flex items-center justify-center">
-                        <Package className="w-6 h-6 text-gray-600" />
-                      </div>
+      {showDetails && (
+        <Card className="bg-black/30 border-gray-800">
+          <CardContent className="p-4 space-y-4">
+            {/* Cost Waterfalls */}
+            <div>
+              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-2">Parts Cost Breakdown</p>
+              <WaterfallBar
+                segments={[
+                  { label: "Installed", value: fin.parts.costInstalled, color: "bg-emerald-600" },
+                  { label: "Received", value: fin.parts.costReceived, color: "bg-blue-600" },
+                  { label: "On PO", value: fin.parts.costOnPO, color: "bg-yellow-600" },
+                  { label: "Unordered", value: fin.parts.costUnordered, color: "bg-gray-600" },
+                ]}
+                total={fin.parts.plannedCost}
+              />
+            </div>
+
+            {hasServices && (
+              <div>
+                <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-2">Services Cost Breakdown</p>
+                <WaterfallBar
+                  segments={[
+                    { label: "Billed", value: fin.services.costBilled, color: "bg-emerald-600" },
+                    { label: "Completed", value: fin.services.costCompleted, color: "bg-blue-600" },
+                    { label: "Ordered", value: fin.services.costOrdered, color: "bg-yellow-600" },
+                    { label: "Planned", value: fin.services.costPlannedOnly, color: "bg-gray-600" },
+                  ]}
+                  total={fin.services.plannedCost}
+                />
+              </div>
+            )}
+
+            {/* Cost Truth Table */}
+            <div>
+              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-2">Cost Summary</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[10px] font-mono">
+                  <thead>
+                    <tr className="text-gray-500 border-b border-gray-800">
+                      <th className="text-left py-1 pr-4">Category</th>
+                      <th className="text-right py-1 px-2">Planned</th>
+                      <th className="text-right py-1 px-2">On Order</th>
+                      <th className="text-right py-1 px-2">Spent</th>
+                      <th className="text-right py-1 pl-2">Unordered</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-gray-400">
+                    <tr className="border-b border-gray-800/50">
+                      <td className="py-1 pr-4">Parts</td>
+                      <td className="text-right py-1 px-2">{formatCurrencyUSD(fin.parts.plannedCost)}</td>
+                      <td className="text-right py-1 px-2 text-yellow-400">{formatCurrencyUSD(fin.parts.costOnPO)}</td>
+                      <td className="text-right py-1 px-2">{formatCurrencyUSD(fin.parts.actualSpend)}</td>
+                      <td className="text-right py-1 pl-2 text-amber-400">{formatCurrencyUSD(fin.parts.costUnordered)}</td>
+                    </tr>
+                    {hasServices && (
+                      <tr className="border-b border-gray-800/50">
+                        <td className="py-1 pr-4">Services</td>
+                        <td className="text-right py-1 px-2">{formatCurrencyUSD(fin.services.plannedCost)}</td>
+                        <td className="text-right py-1 px-2 text-yellow-400">{formatCurrencyUSD(fin.services.costOrdered)}</td>
+                        <td className="text-right py-1 px-2">{formatCurrencyUSD(fin.services.actualCost)}</td>
+                        <td className="text-right py-1 pl-2 text-amber-400">{formatCurrencyUSD(fin.services.costPlannedOnly)}</td>
+                      </tr>
                     )}
-                    <div className="flex-1">
-                      <h3 className="text-white font-medium">{part.part_name}</h3>
-                      {part.vendor_part_number && (
-                        <p className="text-xs text-gray-500 font-mono">{part.vendor_part_number}</p>
+                    <tr className="font-semibold text-white">
+                      <td className="py-1 pr-4 border-t border-gray-700">Total</td>
+                      <td className="text-right py-1 px-2 border-t border-gray-700">{formatCurrencyUSD(fin.totals.plannedCost)}</td>
+                      <td className="text-right py-1 px-2 border-t border-gray-700 text-yellow-400">{formatCurrencyUSD(fin.exposure.ordered)}</td>
+                      <td className="text-right py-1 px-2 border-t border-gray-700">{formatCurrencyUSD(fin.totals.actualSpend)}</td>
+                      <td className="text-right py-1 pl-2 border-t border-gray-700 text-amber-400">{formatCurrencyUSD(fin.exposure.planned)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Diagnostics Toggle */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowDiagnostics(!showDiagnostics)}
+              className="text-gray-600 hover:text-gray-400 text-[10px] gap-1 h-6"
+            >
+              {showDiagnostics ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              Diagnostics
+            </Button>
+
+            {showDiagnostics && (
+              <div className="space-y-4 border-t border-gray-800 pt-3">
+                {/* Cost Reconciliation */}
+                <div>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-2">Cost Reconciliation</p>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs font-mono">
+                    <ReconRow label="Actual Spend" value={fin.totals.actualSpend} />
+                    <ReconRow label="+ Pending Orders" value={fin.exposure.ordered} color="text-yellow-400" indent />
+                    <ReconRow label="+ Unordered" value={fin.exposure.planned} color="text-amber-400" indent />
+                    <ReconRow label="= Total Planned Cost" value={fin.totals.plannedCost} color="text-white" bold border />
+                    {fin._reconciliation.totalBucketCheck > 0.01 && (
+                      <ReconRow label="⚠ Drift" value={fin._reconciliation.totalBucketCheck} color="text-red-400" />
+                    )}
+                  </div>
+                </div>
+
+                {/* Revenue Reconciliation */}
+                {fin._reconciliation?.revenue && (
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-2">Revenue Reconciliation</p>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs font-mono">
+                      <ReconRow label="Parts Revenue (rows)" value={fin._reconciliation.revenue.partsRevenueLocal} />
+                      <ReconRow label="+ Services Revenue" value={fin._reconciliation.revenue.servicesRevenueLocal} color="text-blue-400" indent />
+                      <ReconRow label="= Total Revenue" value={fin._reconciliation.revenue.totalRevenueLocal} color="text-white" bold border />
+                      <ReconRow label="Backend Total" value={fin._reconciliation.revenue.backendTotalPlannedRetail} color="text-gray-500" />
+                      {fin._reconciliation.revenue.totalRevenueDrift > 1 ? (
+                        <ReconRow
+                          label={fin._reconciliation.revenue.doubleCountDetected ? "🚨 Double-Count" : "⚠ Drift"}
+                          value={fin._reconciliation.revenue.totalRevenueDrift}
+                          color={fin._reconciliation.revenue.doubleCountDetected ? "text-red-400" : "text-amber-400"}
+                        />
+                      ) : (
+                        <>
+                          <span className="text-emerald-600">✓ Reconciled</span>
+                          <span className="text-emerald-600 text-right">Match</span>
+                        </>
                       )}
-                      <div className="flex items-center gap-2 mt-2 flex-wrap">
-                        <PartTypeBadge partType={part.part_type} size="sm" />
-                        <Badge className={cn(roleConfig.color, "text-white text-xs")}>
-                          {roleConfig.label}
-                        </Badge>
-                        <Badge className={cn(marginConfig.bg, "text-white text-xs")}>
-                          <MarginIcon className="w-3 h-3 mr-1" />
-                          {marginConfig.label}
-                        </Badge>
-                      </div>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+                )}
+
+                {/* Margin Reconciliation */}
+                <div>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-2">Margin Reconciliation</p>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs font-mono">
+                    <ReconRow label="Planned Revenue" value={fin.revenue.planned} color="text-blue-400" />
+                    <ReconRow label="− Planned Cost" value={fin.totals.plannedCost} />
+                    <ReconRow label="= Projected Margin" value={fin.totals.projectedMargin} color={projColor} bold border />
+                  </div>
+                </div>
+
+                {/* Validation Warnings */}
+                {warnings.length > 0 && (
+                  <div>
+                    <p className="text-[10px] text-red-400 uppercase tracking-widest font-semibold mb-2">Validation Warnings</p>
+                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                      {warnings.map((w, i) => (
+                        <p key={i} className={cn("text-[10px]",
+                          w.level === "error" ? "text-red-400" : w.level === "warn" ? "text-amber-400" : "text-gray-500"
+                        )}>• {w.msg}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
-
-            {/* Section A: Client Billing Details */}
-            <Card className="bg-gray-800/50 border-gray-700">
-              <CardHeader className="p-3 border-b border-gray-700">
-                <CardTitle className="text-sm text-white flex items-center gap-2">
-                  <DollarSign className="w-4 h-4 text-green-400" />
-                  Client Billing
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-3 space-y-3">
-                {/* Order Reference */}
-                {order && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400">Order Reference</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-white text-sm">{order.po_number || `Order ${order.id?.slice(0, 8)}`}</span>
-                      <ExternalLink className="w-3 h-3 text-blue-400 cursor-pointer" />
-                    </div>
-                  </div>
-                )}
-
-                {/* Line Override Indicator */}
-                {financialStatus?.billing_source === 'LINE_OVERRIDE' && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400">Billing Override</span>
-                    <Badge className="bg-yellow-600/30 text-yellow-400 text-xs">
-                      ⚡ Line Item Override Active
-                    </Badge>
-                  </div>
-                )}
-
-                {/* Commitment Reference */}
-                {commitment && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400">Commitment</span>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-purple-400 border-purple-600 text-xs">
-                        {commitment.commitment_status}
-                      </Badge>
-                      <Link2 className="w-3 h-3 text-purple-400 cursor-pointer" />
-                    </div>
-                  </div>
-                )}
-
-                <Separator className="bg-gray-700" />
-
-                {/* Client Billing Status */}
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-400">Billing Status</span>
-                  <Badge className={cn(clientBillingConfig.bg, "text-white text-xs")}>
-                    {clientBillingConfig.label}
-                  </Badge>
-                </div>
-
-                {/* Client Payment Status */}
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-400">Payment Status</span>
-                  <Badge className={cn(clientPaymentConfig.bg, "text-white text-xs")}>
-                    {clientPaymentConfig.label}
-                  </Badge>
-                </div>
-
-                {/* Invoice Number if exists */}
-                {order?.invoice_number && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400">Invoice #</span>
-                    <span className="text-white text-sm">{order.invoice_number}</span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Section B: Vendor Cost Details */}
-            <Card className="bg-gray-800/50 border-gray-700">
-              <CardHeader className="p-3 border-b border-gray-700">
-                <CardTitle className="text-sm text-white flex items-center gap-2">
-                  <Truck className="w-4 h-4 text-purple-400" />
-                  Vendor Cost
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-3 space-y-3">
-                {/* Vendor Name */}
-                {vendor && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400">Vendor</span>
-                    <div className="flex items-center gap-2">
-                      <Building2 className="w-3 h-3 text-gray-400" />
-                      <span className="text-white text-sm">{vendor.vendor_name}</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Vendor Invoice */}
-                {vendorInvoice && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400">Vendor Invoice</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-white text-sm">{vendorInvoice.invoice_number}</span>
-                      <ExternalLink className="w-3 h-3 text-blue-400 cursor-pointer" />
-                    </div>
-                  </div>
-                )}
-
-                <Separator className="bg-gray-700" />
-
-                {/* Vendor Invoice Status */}
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-400">Invoice Status</span>
-                  <Badge className={cn(vendorInvoiceConfig.bg, "text-white text-xs")}>
-                    {vendorInvoiceConfig.label}
-                  </Badge>
-                </div>
-
-                {/* Vendor Payment Status */}
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-400">Payment Status</span>
-                  <Badge className={cn(vendorPaymentConfig.bg, "text-white text-xs")}>
-                    {vendorPaymentConfig.label}
-                  </Badge>
-                </div>
-
-                {/* No Vendor Cost for some part types */}
-                {(financialStatus?.financial_role === 'LABOR_ONLY' || 
-                  financialStatus?.financial_role === 'NON_BILLABLE') && (
-                  <div className="bg-gray-700/30 rounded p-2 text-center">
-                    <span className="text-xs text-gray-400">No vendor cost tracking for this part type</span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Section C: Billing Timeline */}
-            <Card className="bg-gray-800/50 border-gray-700">
-              <CardHeader className="p-3 border-b border-gray-700">
-                <CardTitle className="text-sm text-white flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-blue-400" />
-                  Billing Timeline
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-3">
-                <div className="space-y-2">
-                  <TimelineItem 
-                    icon={Package}
-                    label="Part added to project"
-                    date={commitment?.created_date || financialStatus?.created_date}
-                  />
-                  <TimelineItem 
-                    icon={Receipt}
-                    label="Vendor invoice received"
-                    date={vendorInvoice?.invoice_date}
-                    status={vendorInvoice ? vendorInvoiceConfig : null}
-                  />
-                  <TimelineItem 
-                    icon={CheckCircle2}
-                    label="Vendor invoice paid"
-                    date={vendorInvoice?.invoice_status === 'paid' ? vendorInvoice?.posted_at : null}
-                  />
-                  <TimelineItem 
-                    icon={FileText}
-                    label="Client invoiced"
-                    date={order?.invoice_date}
-                    status={order?.billing_status === 'Client Invoiced' || order?.billing_status === 'Client Paid' ? clientBillingConfig : null}
-                  />
-                  <TimelineItem 
-                    icon={DollarSign}
-                    label="Client payment received"
-                    date={order?.billing_status === 'Client Paid' ? financialStatus?.last_updated_at : null}
-                    isLast
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Section: Lifecycle Context (Phase 7) */}
-            {lifecycleContext && (
-              <Card className="bg-gray-800/50 border-gray-700">
-                <CardHeader className="p-3 border-b border-gray-700">
-                  <CardTitle className="text-sm text-white flex items-center gap-2">
-                    <ShoppingCart className="w-4 h-4 text-blue-400" />
-                    Lifecycle Status
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-3 space-y-3">
-                  {lifecycleContext.lifecycle_category && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-400">Category</span>
-                      <Badge className="bg-blue-600 text-xs">
-                        {LIFECYCLE_LABELS[lifecycleContext.lifecycle_category] || lifecycleContext.lifecycle_category}
-                      </Badge>
-                    </div>
-                  )}
-
-                  {lifecycleContext.ordering_safety && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-400">Ordering Safety</span>
-                      <Badge className={cn("text-xs", ORDERING_SAFETY_CONFIG[lifecycleContext.ordering_safety]?.color || 'bg-gray-600')}>
-                        {lifecycleContext.ordering_safety} - {ORDERING_SAFETY_CONFIG[lifecycleContext.ordering_safety]?.label}
-                      </Badge>
-                    </div>
-                  )}
-
-                  {lifecycleContext.order_reference && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-400">PO Reference</span>
-                      <span className="text-xs text-white">{lifecycleContext.order_reference}</span>
-                    </div>
-                  )}
-
-                  {lifecycleContext.recommended_action && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-400">Recommended</span>
-                      <span className="text-xs text-green-400">{lifecycleContext.recommended_action}</span>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Section E: Data Traceability */}
-            <Card className="bg-gray-800/50 border-gray-700">
-              <CardHeader className="p-3 border-b border-gray-700">
-                <CardTitle className="text-sm text-white flex items-center gap-2">
-                  <Link2 className="w-4 h-4 text-gray-400" />
-                  Data Traceability
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-3 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-400">Billing Source</span>
-                  <Badge variant="outline" className="text-xs">
-                    {BILLING_SOURCE_LABELS[financialStatus?.billing_source] || 'None'}
-                  </Badge>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-400">Vendor Source</span>
-                  <Badge variant="outline" className="text-xs">
-                    {financialStatus?.vendor_source || 'None'}
-                  </Badge>
-                </div>
-
-                <Separator className="bg-gray-700" />
-
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-400">Last Updated</span>
-                  <span className="text-xs text-gray-300">
-                    {financialStatus?.last_updated_at 
-                      ? new Date(financialStatus.last_updated_at).toLocaleString()
-                      : 'Unknown'}
-                  </span>
-                </div>
-
-                {financialStatus?.commitment_id && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400">Commitment ID</span>
-                    <span className="text-xs text-gray-500 font-mono">
-                      {financialStatus.commitment_id.slice(0, 8)}...
-                    </span>
-                  </div>
-                )}
-
-                {financialStatus?.order_id && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400">Order ID</span>
-                    <span className="text-xs text-gray-500 font-mono">
-                      {financialStatus.order_id.slice(0, 8)}...
-                    </span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* No Financial Data State */}
-            {!financialStatus && (
-              <Card className="bg-gray-800/50 border-gray-700">
-                <CardContent className="p-8 text-center">
-                  <AlertCircle className="w-12 h-12 mx-auto mb-3 text-gray-600" />
-                  <p className="text-gray-400">No financial data available</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Financial status will be calculated when orders or invoices are created.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </ScrollArea>
-      </SheetContent>
-    </Sheet>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }
