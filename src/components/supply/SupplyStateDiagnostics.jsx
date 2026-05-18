@@ -107,7 +107,7 @@ export default function SupplyStateDiagnostics({ items = [] }) {
           <div className="bg-gray-800/50 rounded p-2">
             <div className="text-gray-500">Qty Totals</div>
             <div className="font-mono text-gray-300">
-              Req:{qty.required} Res:{qty.reserved} PO:{qty.onOrder} Inst:{qty.installed}
+              Req:{qty.required} Ready:{qty.readyToInstall} PO:{qty.onOrder} Inst:{qty.installed}
             </div>
           </div>
           <div className="bg-gray-800/50 rounded p-2">
@@ -115,7 +115,7 @@ export default function SupplyStateDiagnostics({ items = [] }) {
             <div className="font-mono">
               <span className="text-red-400">Gap: {qty.gap}</span>
               {' · '}
-              <span className="text-green-400">Ready: {qty.readyToInstall}</span>
+              <span className="text-cyan-400">Res: {qty.reserved}</span>
             </div>
           </div>
         </div>

@@ -5,20 +5,21 @@
  * All UI surfaces (PSM, GNO, StockReorder, dashboards) must use this.
  * 
  * CANONICAL STATES (mutually exclusive):
- *   INSTALLED   — qty_installed >= effective_required
- *   READY       — has units available to install NOW (reserved - installed > 0)
- *   ON_ORDER    — covered by PO, awaiting delivery (covered_from_po > 0, no ready units)
- *   NEEDS_ORDER — gap exists, no PO coverage for remaining need
- *   COMPLETE    — fully installed AND fulfilled
+ *   COMPLETE    — qty_installed >= effective_required (fully done)
+ *   READY       — has units physically available to install NOW
+ *   ON_ORDER    — covered by PO, awaiting delivery (no ready units)
+ *   NEEDS_ORDER — gap exists, needs procurement
  *   PLANNED     — just added, no coverage action taken yet
  * 
  * CANONICAL QUANTITIES (per commitment):
  *   requiredQty       — required_total
  *   effectiveRequired — required_total - qty_removed
- *   reservedQty       — reserved_from_stock
- *   onOrderQty        — covered_from_po
+ *   reservedQty       — reserved_from_stock (physical inventory allocated)
+ *   onOrderQty        — covered_from_po (PO coverage, NOT physically available)
  *   installedQty      — qty_installed
  *   readyToInstallQty — max(0, reserved_from_stock - qty_installed)
+ *                        ONLY physical inventory minus already-installed.
+ *                        Does NOT include on-order / PO-covered / future receipts.
  *   gapQty            — max(0, effectiveRequired - reservedQty - onOrderQty - installedQty)
  *   coveredQty        — reservedQty + onOrderQty + installedQty
  */
@@ -47,10 +48,10 @@ export function resolveCanonicalPartState(commitment) {
   const reservedQty = commitment.reserved_from_stock ?? 0;
   const onOrderQty = commitment.covered_from_po ?? 0;
   const installedQty = commitment.qty_installed ?? 0;
-  // readyToInstallQty: units physically available for install
-  // Uses same formula as resolveInstallState: (reserved + covered) - installed
-  // covered_from_po represents units received to project allocation
-  const readyToInstallQty = Math.max(0, (reservedQty + onOrderQty) - installedQty);
+  // readyToInstallQty: units PHYSICALLY AVAILABLE for install RIGHT NOW
+  // ONLY reserved_from_stock (physical inventory allocated to project) minus installed.
+  // Does NOT include covered_from_po — those are on order, not in hand.
+  const readyToInstallQty = Math.max(0, reservedQty - installedQty);
   const coveredQty = reservedQty + onOrderQty + installedQty;
   const gapQty = Math.max(0, effectiveRequired - reservedQty - onOrderQty - installedQty);
 
