@@ -110,16 +110,9 @@ export default function ProjectSupplyManager() {
     invalidate: invalidateSupply
   } = useProjectSupplyView(projectId);
   
-  // DEV diagnostic logging
-  if (import.meta.env.DEV) {
-    console.log("[ProjectSupplyManager] Query State:", {
-      normalizedProjectId: projectId,
-      queryKey: ['projectSupplyView', projectId],
-      supplyItems: supplyItems?.length ?? 0,
-      isLoading: supplyLoading,
-      isFetching: supplyFetching,
-      project: project?.name ?? "null",
-    });
+  // Diagnostic logging — debug flag only
+  if (localStorage.getItem('ak_debug_coverage') === 'true') {
+    console.log("[PSM] Items:", supplyItems?.length ?? 0, "Loading:", supplyLoading);
   }
 
   // FORWARD MODEL ONLY - No legacy support
@@ -278,21 +271,9 @@ export default function ProjectSupplyManager() {
         console.error(`[CANONICAL VIOLATION] Missing coverage_status for commitment ${item.commitment_id}`);
       }
       
-      // PHASE 2: DEV GUARD - Use shared drift validation
-      if (import.meta.env.DEV) {
+      // Drift validation — debug flag only (per-item, perf-sensitive)
+      if (localStorage.getItem('ak_debug_coverage') === 'true') {
         validateSupplyModelDrift([item], 'ProjectSupplyManager');
-        
-        const displayed = {
-          in_stock: item.inventory_snapshot?.physical ?? 0,
-          reserved: item.inventory_snapshot?.reserved ?? 0,
-          available: item.inventory_snapshot?.available ?? 0,
-        };
-        const canonical = {
-          physical_stock: item.inventory_snapshot?.physical ?? 0,
-          reserved_global: item.inventory_snapshot?.reserved ?? 0,
-          available_global: item.inventory_snapshot?.available ?? 0,
-        };
-        validateInventoryConsistency('ProjectSupplyManager', item.part_id, displayed, canonical);
       }
 
       // Build category object from read model data

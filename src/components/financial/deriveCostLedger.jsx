@@ -168,7 +168,7 @@ export function deriveCostLedger({ enrichedCommitments = [], servicesSummary = {
   const totalBucketSum = operationalCost + committedNotOperational + uncommittedCost;
   const totalBucketDrift = Math.abs(totalBucketSum - plannedCost);
 
-  if (typeof window !== 'undefined' && import.meta.env?.DEV) {
+  if (typeof window !== 'undefined' && localStorage.getItem('ak_debug_coverage') === 'true') {
     console.groupCollapsed('[COST LEDGER] Canonical 3-Layer Costs');
     console.table({
       '📦 Parts Planned': Math.round(partsPlannedCost),

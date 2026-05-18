@@ -118,19 +118,12 @@ export default function ProjectInvoices() {
     staleTime: 0,
   });
 
-  // DEV diagnostic logging
-  if (import.meta.env.DEV) {
+  // Diagnostic logging — debug flag only
+  if (localStorage.getItem('ak_debug_coverage') === 'true') {
     console.log("[ProjectInvoices] Query State:", {
       normalizedProjectId,
-      invoiceQueryKey,
-      billingQueryKey,
       invoicesData: invoicesData ? `${invoicesData.invoices?.length || 0} invoices` : "null",
-      isLoading,
-      isFetching,
-      billingFetching,
-      invoiceDataUpdatedAt: invoiceDataUpdatedAt ? new Date(invoiceDataUpdatedAt).toISOString() : null,
-      billingDataUpdatedAt: billingDataUpdatedAt ? new Date(billingDataUpdatedAt).toISOString() : null,
-      netExposure: billingData?.totals?.net_exposure ?? "N/A",
+      isLoading, isFetching, billingFetching,
     });
   }
 

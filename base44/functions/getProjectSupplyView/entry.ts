@@ -683,10 +683,11 @@ Deno.serve(async (req) => {
       // CANONICAL: Financial totals from resolver (not local reduce)
       total_planned_retail: financialTotals.planned_retail,
       total_planned_cost: financialTotals.planned_cost,
-      total_invoiced: financialTotals.invoiced_total,
+      // CANONICAL: Use invoice entity totals (actual invoice records), NOT commitment snapshots
+      total_invoiced: financialTotals.invoice_entity_total,
       total_paid: financialTotals.invoice_entity_paid,
       invoice_outstanding: financialTotals.invoice_entity_balance_due,
-      unbilled_retail: financialTotals.remaining_total,
+      unbilled_retail: Math.max(0, financialTotals.planned_retail - financialTotals.invoice_entity_total - financialTotals.credit_total),
       // Sub-breakdowns
       parts_planned_retail: financialTotals.parts_planned_retail,
       parts_planned_cost: financialTotals.parts_planned_cost,

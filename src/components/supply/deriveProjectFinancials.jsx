@@ -92,19 +92,15 @@ export function deriveProjectFinancials({ enrichedCommitments = [], metrics = {}
   // ═══════════════════════════════════════════════════════════════
   // REVENUE — PROJECTED (operational estimation layer)
   // ═══════════════════════════════════════════════════════════════
-  // NOTE: This is the PROJECTED revenue layer for cost/margin analysis.
-  // Actual billing metrics (invoiced, paid, outstanding, remaining)
-  // are now derived ONLY from invoice records via deriveBillingLedger().
-  // The values below are kept for backward compatibility but should
-  // NOT be used for billing dashboards — use the billing ledger instead.
+  // NOTE: metrics.totalInvoiced/totalPaid now come from actual ProjectInvoice
+  // entity records (fixed in getProjectSupplyView), NOT from commitment snapshots.
+  // For billing dashboards, deriveBillingLedger() is the canonical source.
   const plannedRevenue = partsPlannedRetail + servicesBillable;
   const invoicedRevenue = metrics.totalInvoiced ?? 0;
   const paidRevenue = metrics.totalPaid ?? 0;
 
   const revenue = {
     planned: plannedRevenue,
-    // DEPRECATED for billing: Use deriveBillingLedger() for canonical billing metrics.
-    // These are kept as operational estimates for backward compatibility.
     invoiced: invoicedRevenue,
     paid: paidRevenue,
     outstanding: metrics.invoiceOutstanding ?? 0,
@@ -224,7 +220,7 @@ export function deriveProjectFinancials({ enrichedCommitments = [], metrics = {}
     revenue: revenueRecon,
   };
 
-  if (typeof window !== 'undefined' && import.meta.env?.DEV) {
+  if (typeof window !== 'undefined' && localStorage.getItem('ak_debug_coverage') === 'true') {
     console.groupCollapsed('[PROJECT FINANCIALS] Lifecycle Accounting');
     console.table({
       '📦 Installed': Math.round(partsCostInstalled),
