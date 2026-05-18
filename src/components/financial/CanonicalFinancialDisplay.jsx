@@ -94,22 +94,22 @@ export function CanonicalFinancialStrip({ projectId, className }) {
       {/* Metrics Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4 p-4 bg-gray-800/50 rounded-lg border border-gray-700">
         <FinancialMetric
-          label="Planned Retail"
+          label="Project Total"
           value={canonical.planned_retail}
           variant="default"
         />
         <FinancialMetric
-          label="Total Invoiced"
+          label="Billed"
           value={canonical.total_invoiced}
           variant="default"
         />
         <FinancialMetric
-          label="Total Paid"
+          label="Cash In"
           value={canonical.total_paid}
           variant="positive"
         />
         <FinancialMetric
-          label="Outstanding"
+          label="Unpaid"
           value={canonical.outstanding_invoice_balance}
           variant={canonical.outstanding_invoice_balance > 0 ? "warning" : "muted"}
         />
@@ -124,12 +124,12 @@ export function CanonicalFinancialStrip({ projectId, className }) {
           variant="positive"
         />
         <FinancialMetric
-          label="Remaining to Bill"
+          label="Left to Bill"
           value={canonical.remaining_to_bill}
           variant={canonical.remaining_to_bill > 0 ? "warning" : "muted"}
         />
         <FinancialMetric
-          label="Net Exposure"
+          label="Unbilled Spend"
           value={canonical.net_exposure}
           variant={canonical.net_exposure > 0 ? "negative" : "positive"}
           size="md"
@@ -179,7 +179,7 @@ export function CreditSummaryCompact({ projectId, className }) {
         </span>
       </div>
       <div>
-        <span className="text-gray-500">Net Exposure: </span>
+        <span className="text-gray-500">Unbilled Spend: </span>
         <span className={cn(
           "font-mono font-semibold",
           canonical.net_exposure > 0 ? "text-amber-400" : "text-green-400"

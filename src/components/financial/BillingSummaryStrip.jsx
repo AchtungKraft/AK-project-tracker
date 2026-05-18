@@ -81,7 +81,7 @@ export default function BillingSummaryStrip({ projectId, commitments = [] }) {
                 <DollarSign className="w-4 h-4 text-amber-400" />
               </div>
               <div>
-                <p className="text-xs text-gray-400">Remaining to Bill</p>
+                <p className="text-xs text-gray-400">Left to Bill</p>
                 <p className="text-lg font-bold text-white font-mono">
                   {formatCurrencyUSD(billingMetrics.remainingToBillAmount)}
                 </p>

@@ -238,31 +238,31 @@ export function deriveInvoiceBalances(invoice) {
 export const BILLING_HEALTH_CONFIG = {
   fully_billed: {
     label: 'Fully Billed',
-    description: 'All projected revenue has been invoiced.',
+    description: 'Everything has been billed.',
     color: 'text-emerald-400',
     bg: 'bg-emerald-900/20 border-emerald-700/30',
   },
   partially_billed: {
     label: 'Partially Billed',
-    description: 'Some revenue invoiced, more remains.',
+    description: 'Some work billed — more left to bill.',
     color: 'text-blue-400',
     bg: 'bg-blue-900/20 border-blue-700/30',
   },
   awaiting_billing: {
-    label: 'Awaiting Billing',
+    label: 'Not Yet Billed',
     description: 'No invoices sent yet.',
     color: 'text-gray-400',
     bg: 'bg-gray-900/30 border-gray-700/30',
   },
   outstanding: {
-    label: 'Outstanding Balance',
+    label: 'Unpaid Invoices',
     description: 'Invoices sent but not fully paid.',
     color: 'text-amber-400',
     bg: 'bg-amber-900/20 border-amber-700/30',
   },
   overdue: {
-    label: 'Overdue Invoices',
-    description: 'Invoices past due date.',
+    label: 'Overdue',
+    description: 'Invoices past due — follow up needed.',
     color: 'text-red-400',
     bg: 'bg-red-900/20 border-red-700/30',
   },

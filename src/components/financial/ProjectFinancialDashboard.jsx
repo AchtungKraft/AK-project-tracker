@@ -496,22 +496,22 @@ export default function ProjectFinancialDashboard({ projectId }) {
           <CardContent className="p-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
               <MetricCard
-                label="Total Billable"
+                label="Project Total"
                 value={forwardRevenueSummary.totalBillable}
                 color="text-blue-400"
               />
               <MetricCard
-                label="Invoiced"
+                label="Billed"
                 value={forwardRevenueSummary.totalInvoiced}
                 color="text-purple-400"
               />
               <MetricCard
-                label="Collected"
+                label="Cash In"
                 value={forwardRevenueSummary.totalCollected}
                 color="text-green-400"
               />
               <MetricCard
-                label="Remaining to Invoice"
+                label="Left to Bill"
                 value={forwardRevenueSummary.remainingToInvoice}
                 color={forwardRevenueSummary.remainingToInvoice > 0 ? "text-yellow-400" : "text-green-400"}
                 icon={forwardRevenueSummary.remainingToInvoice > 0 ? AlertTriangle : CheckCircle2}
@@ -534,7 +534,7 @@ export default function ProjectFinancialDashboard({ projectId }) {
               </div>
               <div className="ml-auto">
                 <span className="text-gray-400 text-sm">
-                  Coverage: {forwardRevenueSummary.invoiceCoveragePct.toFixed(1)}%
+                  {forwardRevenueSummary.invoiceCoveragePct.toFixed(1)}% billed
                 </span>
               </div>
             </div>
@@ -543,7 +543,7 @@ export default function ProjectFinancialDashboard({ projectId }) {
             {forwardRevenueSummary.outstandingReceivable > 0 && (
               <div className="mt-3 p-3 bg-yellow-900/20 border border-yellow-600/30 rounded-lg">
                 <div className="flex items-center justify-between">
-                  <span className="text-yellow-400 text-sm">Outstanding Receivable</span>
+                  <span className="text-yellow-400 text-sm">Unpaid</span>
                   <span className="text-yellow-400 font-medium">
                     ${forwardRevenueSummary.outstandingReceivable.toLocaleString()}
                   </span>
@@ -690,22 +690,22 @@ export default function ProjectFinancialDashboard({ projectId }) {
         <CardContent className="p-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
             <MetricCard
-              label="Planned Retail"
+              label="Project Total"
               value={exposureSummary.totalPlannedRetail}
               color="text-blue-400"
             />
             <MetricCard
-              label="Covered Retail"
+              label="Covered"
               value={exposureSummary.totalCoveredRetail}
               color="text-green-400"
             />
             <MetricCard
-              label="Invoiced Retail"
+              label="Billed"
               value={exposureSummary.totalInvoicedRetail}
               color="text-purple-400"
             />
             <MetricCard
-              label="Exposure Gap"
+              label="Unbilled Spend"
               value={exposureSummary.totalExposureGap}
               color={exposureSummary.totalExposureGap > 0 ? "text-red-400" : "text-green-400"}
               icon={exposureSummary.totalExposureGap > 0 ? AlertTriangle : CheckCircle2}

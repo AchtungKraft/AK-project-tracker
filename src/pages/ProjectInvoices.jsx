@@ -308,7 +308,7 @@ export default function ProjectInvoices() {
             </div>
             <p className="text-2xl font-bold text-purple-300">{summary.sent_count || 0}</p>
             <p className="text-xs text-gray-500">
-              {formatCurrencyUSD(summary.total_balance_due || 0)} outstanding
+              {formatCurrencyUSD(summary.total_balance_due || 0)} unpaid
             </p>
           </CardContent>
         </Card>

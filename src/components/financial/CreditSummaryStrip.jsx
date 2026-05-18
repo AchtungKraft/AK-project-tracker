@@ -76,9 +76,9 @@ export default function CreditSummaryStrip({
       )}
 
       <div className="flex flex-wrap items-center gap-3 p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
-        {/* Planned Retail (was Gross Exposure) */}
+        {/* Project Total (was Gross Exposure) */}
         <div className="flex-1 min-w-[100px]">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Planned Retail</p>
+          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Project Total</p>
           <p className="text-lg font-bold text-white font-mono">
             {formatCurrencyUSD(grossExposure)}
           </p>
@@ -111,9 +111,9 @@ export default function CreditSummaryStrip({
         <ArrowRight className="w-4 h-4 text-gray-500" />
       </div>
 
-      {/* Net Exposure */}
+      {/* Unbilled Spend */}
       <div className="flex-1 min-w-[100px]">
-        <p className="text-[10px] text-gray-500 uppercase tracking-wide">Net Exposure</p>
+        <p className="text-[10px] text-gray-500 uppercase tracking-wide">Unbilled Spend</p>
         <p className={cn(
           "text-lg font-bold font-mono",
           netExposure > 0 ? "text-amber-400" : "text-green-400"

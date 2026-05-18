@@ -146,7 +146,7 @@ export default function ServicesDashboardSummary({ commitments }) {
               <p className="text-[10px] text-blue-400 uppercase tracking-widest font-semibold">Billable</p>
             </div>
             <BigMetric label="Revenue" value={fin.revenue.plannedBillable} tip="Total billable to client" />
-            <SmallMetric label="Realized" value={fin.revenue.realizedBillable} color="text-blue-400" />
+            <SmallMetric label="Billed" value={fin.revenue.realizedBillable} color="text-blue-400" />
           </CardContent>
         </Card>
 

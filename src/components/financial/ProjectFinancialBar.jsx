@@ -53,28 +53,28 @@ export default function ProjectFinancialBar({ projectId, className }) {
 
   const metrics = [
     {
-      label: "Parts Exposure",
+      label: "Project Total",
       value: total_parts_exposure,
       icon: DollarSign,
       color: "text-blue-400",
       bgColor: "bg-blue-900/20",
     },
     {
-      label: "Invoiced",
+      label: "Billed",
       value: total_invoiced,
       icon: FileText,
       color: "text-purple-400",
       bgColor: "bg-purple-900/20",
     },
     {
-      label: "Paid",
+      label: "Cash In",
       value: total_paid,
       icon: CreditCard,
       color: "text-green-400",
       bgColor: "bg-green-900/20",
     },
     {
-      label: "Remaining",
+      label: "Left to Bill",
       value: remaining_to_bill,
       icon: AlertTriangle,
       color: remaining_to_bill > 0 ? "text-amber-400" : "text-gray-400",
@@ -123,7 +123,7 @@ export default function ProjectFinancialBar({ projectId, className }) {
 
       {has_unpaid_parts && remaining_to_bill > 0 && (
         <Badge className="bg-amber-600/20 text-amber-400 ml-auto">
-          Billing Needed
+          Needs Billing
         </Badge>
       )}
     </div>

@@ -84,7 +84,7 @@ export default function ProjectFinancialWarningBanner({
               >
                 <DollarSign className="w-4 h-4 text-yellow-400" />
                 <span className="text-yellow-200 text-sm">
-                  {warnings.unbilled} Part{warnings.unbilled !== 1 ? 's' : ''} Not Yet Billed
+                  {warnings.unbilled} part{warnings.unbilled !== 1 ? 's' : ''} not yet billed
                 </span>
                 <ChevronRight className="w-3 h-3 text-yellow-500 opacity-0 group-hover:opacity-100 transition-opacity" />
               </button>
@@ -97,7 +97,7 @@ export default function ProjectFinancialWarningBanner({
               >
                 <Truck className="w-4 h-4 text-red-400" />
                 <span className="text-red-200 text-sm">
-                  {warnings.vendorUnpaid} Vendor Cost{warnings.vendorUnpaid !== 1 ? 's' : ''} Unpaid
+                  {warnings.vendorUnpaid} vendor cost{warnings.vendorUnpaid !== 1 ? 's' : ''} unpaid
                 </span>
                 <ChevronRight className="w-3 h-3 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" />
               </button>
@@ -110,7 +110,7 @@ export default function ProjectFinancialWarningBanner({
               >
                 <TrendingUp className="w-4 h-4 text-orange-400" />
                 <span className="text-orange-200 text-sm">
-                  {warnings.marginIncomplete} Part{warnings.marginIncomplete !== 1 ? 's' : ''} Margin Incomplete
+                  {warnings.marginIncomplete} part{warnings.marginIncomplete !== 1 ? 's' : ''} with incomplete margin
                 </span>
                 <ChevronRight className="w-3 h-3 text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity" />
               </button>

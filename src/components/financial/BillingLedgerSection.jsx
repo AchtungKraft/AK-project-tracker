@@ -112,16 +112,16 @@ export default function BillingLedgerSection({ ledger }) {
       <Card className="bg-black/30 border-gray-800">
         <CardContent className="p-4 space-y-1">
           <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-2">Billing Ledger</p>
-          <LedgerRow label="Projected Revenue" value={ledger.projectedRevenue} color="text-gray-300" />
-          <LedgerRow label="Invoiced" value={ledger.invoicedRevenue} color="text-blue-400" />
-          <LedgerRow label="Paid" value={ledger.paidRevenue} color="text-emerald-400" />
+          <LedgerRow label="Project Total" value={ledger.projectedRevenue} color="text-gray-300" />
+          <LedgerRow label="Billed" value={ledger.invoicedRevenue} color="text-blue-400" />
+          <LedgerRow label="Cash In" value={ledger.paidRevenue} color="text-emerald-400" />
           <LedgerRow
-            label="Outstanding"
+            label="Unpaid"
             value={ledger.outstandingRevenue}
             color={ledger.outstandingRevenue > 0.01 ? "text-amber-400" : "text-gray-500"}
           />
           <LedgerRow
-            label="Remaining to Bill"
+            label="Left to Bill"
             value={ledger.remainingToBill}
             color={ledger.remainingToBill > 0.01 ? "text-yellow-400" : "text-gray-500"}
             bold
@@ -146,8 +146,8 @@ export default function BillingLedgerSection({ ledger }) {
               {/* Reconciliation */}
               <div className="space-y-1">
                 <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold">Reconciliation</p>
-                <LedgerRow label="Projected Revenue" value={ledger.reconciliation.projectedRevenue} />
-                <LedgerRow label="Invoice Ledger Total" value={ledger.reconciliation.invoicedRevenue} color="text-blue-400" />
+                <LedgerRow label="Project Total" value={ledger.reconciliation.projectedRevenue} />
+                <LedgerRow label="Billed (Invoice Total)" value={ledger.reconciliation.invoicedRevenue} color="text-blue-400" />
                 <LedgerRow
                   label="Difference"
                   value={ledger.reconciliation.difference}
