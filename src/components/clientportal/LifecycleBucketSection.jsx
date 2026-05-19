@@ -65,14 +65,14 @@ export const LIFECYCLE_BUCKETS = {
   },
   approved: {
     key: 'approved',
-    label: 'Approved',
-    sublabel: 'Archive',
+    label: 'Approved Archive',
+    sublabel: 'Historical',
     icon: CheckCircle2,
     color: 'green',
-    borderColor: 'border-green-500/30',
+    borderColor: 'border-green-500/20',
     bgColor: 'bg-green-500/5',
-    textColor: 'text-green-400/70',
-    badgeClass: 'bg-green-500/10 text-green-400/70 border-green-500/30'
+    textColor: 'text-green-400/50',
+    badgeClass: 'bg-green-500/10 text-green-400/50 border-green-500/20'
   }
 };
 
@@ -82,17 +82,20 @@ export const LIFECYCLE_BUCKETS = {
 const RequestCard = ({ request, bucket, getProjectClientSlug, onUpdateDueDate }) => {
   const isDraft = bucket === 'draft';
   const isRecentApproval = bucket === 'recently_approved';
+  const isArchiveApproval = bucket === 'approved';
   const overdue = isRequestOverdue(request, bucket);
   
   return (
     <div className={`relative rounded-lg border transition-all group ${
       isRecentApproval
         ? 'bg-emerald-950/20 border-emerald-500/40 border-l-[3px] border-l-emerald-500'
-        : overdue
-          ? 'bg-red-950/20 border-red-500/40 border-l-[3px] border-l-red-500'
-          : isDraft 
-            ? 'bg-slate-900/30 border-slate-700/50' 
-            : 'bg-gray-900/30 border-gray-700/50'
+        : isArchiveApproval
+          ? 'bg-gray-900/20 border-green-500/15 opacity-70'
+          : overdue
+            ? 'bg-red-950/20 border-red-500/40 border-l-[3px] border-l-red-500'
+            : isDraft 
+              ? 'bg-slate-900/30 border-slate-700/50' 
+              : 'bg-gray-900/30 border-gray-700/50'
     }`}>
       <Link
         to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&bucket=${bucket}`}

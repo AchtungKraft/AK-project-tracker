@@ -256,3 +256,20 @@ button[disabled]:not([data-tooltip]) {
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* ============================================
+   SUBTLE PULSE FOR FRESH APPROVALS
+   ============================================ */
+
+@keyframes pulse-subtle {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(52, 211, 153, 0);
+  }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 3s ease-in-out infinite;
+}

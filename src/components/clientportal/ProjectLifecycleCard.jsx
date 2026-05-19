@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import LifecycleBucketSection, { LifecycleSummaryBadges } from "./LifecycleBucketSection";
+import RecentlyApprovedStrip from "./RecentlyApprovedStrip";
 
 export default function ProjectLifecycleCard({
   project,
@@ -175,12 +176,10 @@ export default function ProjectLifecycleCard({
             onUpdateDueDate={onUpdateDueDate}
           />
           
-          {/* Recently Approved - visible in active workflow */}
-          <LifecycleBucketSection
-            bucket="recently_approved"
+          {/* Recently Approved Strip — dedicated elevated section */}
+          <RecentlyApprovedStrip
             requests={buckets.recently_approved || []}
             getProjectClientSlug={getProjectClientSlug}
-            onUpdateDueDate={onUpdateDueDate}
           />
           
           {/* Approved Archive */}

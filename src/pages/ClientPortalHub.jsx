@@ -42,6 +42,7 @@ import { useFilterState, CLIENT_PORTAL_DEFAULTS } from "@/components/common/useF
 import NeedsAttentionSection from "@/components/clientportal/NeedsAttentionSection";
 import ClientPortalAdminTab from "@/components/clientportal/ClientPortalAdminTab";
 import ProjectLifecycleCard from "@/components/clientportal/ProjectLifecycleCard";
+import RecentlyApprovedStrip from "@/components/clientportal/RecentlyApprovedStrip";
 import ClientPortalCalendarView from "@/components/clientportal/ClientPortalCalendarView";
 import { 
   groupRequestsByProjectAndLifecycle, 
@@ -500,7 +501,7 @@ export default function ClientPortalHub() {
         </div>
 
         {/* Summary KPI Row - Clickable Filters */}
-        <div className="grid grid-cols-5 gap-2 md:gap-3">
+        <div className={`grid gap-2 md:gap-3 ${summaryCounts.recently_approved > 0 ? 'grid-cols-6' : 'grid-cols-5'}`}>
           <Card 
             className={cn(
               "cursor-pointer transition-all hover:scale-[1.02]",
@@ -555,21 +556,42 @@ export default function ClientPortalHub() {
               </div>
             </CardContent>
           </Card>
+          {/* Recently Approved KPI — only visible when > 0 */}
+          {summaryCounts.recently_approved > 0 && (
+            <Card 
+              className={cn(
+                "cursor-pointer transition-all hover:scale-[1.02]",
+                "bg-emerald-900/30 border-emerald-500/40",
+                lifecycleQuickFilter === 'recently_approved' && "ring-2 ring-emerald-400 shadow-lg shadow-emerald-500/20"
+              )}
+              onClick={() => toggleLifecycleFilter('recently_approved')}
+            >
+              <CardContent className="p-2 md:p-4 flex items-center gap-2 md:gap-3">
+                <div className="p-1.5 md:p-2 bg-emerald-500/20 rounded-lg shrink-0">
+                  <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5 text-emerald-400" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-lg md:text-2xl font-bold text-emerald-300">{summaryCounts.recently_approved}</p>
+                  <p className="text-[10px] md:text-xs text-emerald-400 truncate">✓ Recent</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
           <Card 
             className={cn(
               "cursor-pointer transition-all hover:scale-[1.02]",
-              "bg-green-900/30 border-green-700/50",
+              "bg-green-900/20 border-green-700/30",
               lifecycleQuickFilter === 'approved' && "ring-2 ring-green-400 shadow-lg shadow-green-500/20"
             )}
             onClick={() => toggleLifecycleFilter('approved')}
           >
             <CardContent className="p-2 md:p-4 flex items-center gap-2 md:gap-3">
-              <div className="p-1.5 md:p-2 bg-green-500/20 rounded-lg shrink-0">
-                <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5 text-green-400" />
+              <div className="p-1.5 md:p-2 bg-green-500/10 rounded-lg shrink-0">
+                <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5 text-green-400/60" />
               </div>
               <div className="min-w-0">
-                <p className="text-lg md:text-2xl font-bold text-white">{summaryCounts.approved}</p>
-                <p className="text-[10px] md:text-xs text-green-400 truncate">Approved</p>
+                <p className="text-lg md:text-2xl font-bold text-green-400/70">{summaryCounts.approved}</p>
+                <p className="text-[10px] md:text-xs text-green-500/50 truncate">Approved</p>
               </div>
             </CardContent>
           </Card>
@@ -700,6 +722,17 @@ export default function ClientPortalHub() {
             {/* Card View */}
             {boardViewMode === 'card' && (
               <>
+                {/* Global Recently Approved Strip — top of board */}
+                {lifecycleQuickFilter === 'all' && (() => {
+                  const allRecentlyApproved = filteredProjectData.flatMap(g => g.recently_approved || []);
+                  return allRecentlyApproved.length > 0 ? (
+                    <RecentlyApprovedStrip
+                      requests={allRecentlyApproved}
+                      getProjectClientSlug={getProjectClientSlug}
+                    />
+                  ) : null;
+                })()}
+
                 {filteredProjectData.length === 0 ? (
                   <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
                     <CardContent className="p-8 md:p-12 text-center">
