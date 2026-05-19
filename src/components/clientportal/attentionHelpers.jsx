@@ -322,20 +322,16 @@ function classifyRequest(request, project, canonicalState) {
 
   if (type === 'follow_up') {
     const h = hoursSinceLastActivity;
-    let followUpLabel = null;
-    let riskTier = 'low';
-    let actionLabel = 'Monitor';
-    
-    // Simplified label: focus on time since last contact only
     if (h < 1) {
-      followUpLabel = '<1h';
+      followUpLabel = 'Just sent';
     } else if (h < 24) {
-      followUpLabel = `${Math.floor(h)}h`;
+      followUpLabel = `Sent • ${Math.floor(h)}h ago`;
     } else {
-      followUpLabel = `${Math.floor(h / 24)}d`;
+      followUpLabel = `Client silent • ${Math.floor(h / 24)}d`;
     }
 
-    // Risk tiers based on silence duration
+    let riskTier = 'low';
+    let actionLabel = 'Monitor';
     if (h > 120) {
       riskTier = 'high';
       actionLabel = 'Call / escalate';
@@ -399,38 +395,4 @@ export function groupByColumn(attentionItems) {
     follow_up: followUp,
     resolved: attentionItems.filter(i => i.type === 'approved_recent'),
   };
-}
-
-/**
- * Group items within a column by project.
- * Returns sorted array of { projectId, projectName, items }.
- * Projects with overdue items sort first, then most items, then most recent activity.
- */
-export function groupColumnByProject(columnItems) {
-  const map = {};
-  for (const item of columnItems) {
-    const pid = item.project?.id || 'unknown';
-    if (!map[pid]) {
-      map[pid] = {
-        projectId: pid,
-        projectName: item.project?.name || 'Unknown Project',
-        items: [],
-        overdueCount: 0,
-        latestActivityAt: 0,
-      };
-    }
-    map[pid].items.push(item);
-    if (item.isOverdue) map[pid].overdueCount++;
-    const t = getTime(item.lastActivityAt);
-    if (t > map[pid].latestActivityAt) map[pid].latestActivityAt = t;
-  }
-
-  return Object.values(map).sort((a, b) => {
-    // 1. Overdue count DESC
-    if (a.overdueCount !== b.overdueCount) return b.overdueCount - a.overdueCount;
-    // 2. Total items DESC
-    if (a.items.length !== b.items.length) return b.items.length - a.items.length;
-    // 3. Most recent activity DESC
-    return b.latestActivityAt - a.latestActivityAt;
-  });
 }
