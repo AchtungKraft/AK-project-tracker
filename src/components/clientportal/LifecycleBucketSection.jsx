@@ -14,7 +14,7 @@ import {
 import { format, formatDistanceToNow } from "date-fns";
 import { CopyRequestLinkButton } from "./ClientLinksCopyButtons";
 import { getRequestTypeInfo } from "./utils";
-import { isRequestOverdue, sortOverdueFirst, countOverdue } from "./lifecycleHelpers";
+import { isRequestOverdue, sortOverdueFirst, countOverdue, RECENTLY_APPROVED_WINDOW_HOURS } from "./lifecycleHelpers";
 import InlineDueDatePicker, { BulkDueDatePicker } from "./InlineDueDatePicker";
 
 // Lifecycle bucket configurations
@@ -52,16 +52,27 @@ export const LIFECYCLE_BUCKETS = {
     textColor: 'text-blue-400',
     badgeClass: 'bg-blue-500/20 text-blue-400 border-blue-500/50'
   },
+  recently_approved: {
+    key: 'recently_approved',
+    label: 'Recently Approved',
+    sublabel: `Last ${RECENTLY_APPROVED_WINDOW_HOURS}h`,
+    icon: CheckCircle2,
+    color: 'emerald',
+    borderColor: 'border-emerald-500/70',
+    bgColor: 'bg-emerald-500/15',
+    textColor: 'text-emerald-400',
+    badgeClass: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50'
+  },
   approved: {
     key: 'approved',
     label: 'Approved',
-    sublabel: 'Closed',
+    sublabel: 'Archive',
     icon: CheckCircle2,
     color: 'green',
-    borderColor: 'border-green-500/50',
-    bgColor: 'bg-green-500/10',
-    textColor: 'text-green-400',
-    badgeClass: 'bg-green-500/20 text-green-400 border-green-500/50'
+    borderColor: 'border-green-500/30',
+    bgColor: 'bg-green-500/5',
+    textColor: 'text-green-400/70',
+    badgeClass: 'bg-green-500/10 text-green-400/70 border-green-500/30'
   }
 };
 
@@ -70,15 +81,18 @@ export const LIFECYCLE_BUCKETS = {
 // Request card component with overdue visual + inline due date + quick actions
 const RequestCard = ({ request, bucket, getProjectClientSlug, onUpdateDueDate }) => {
   const isDraft = bucket === 'draft';
+  const isRecentApproval = bucket === 'recently_approved';
   const overdue = isRequestOverdue(request, bucket);
   
   return (
     <div className={`relative rounded-lg border transition-all group ${
-      overdue
-        ? 'bg-red-950/20 border-red-500/40 border-l-[3px] border-l-red-500'
-        : isDraft 
-          ? 'bg-slate-900/30 border-slate-700/50' 
-          : 'bg-gray-900/30 border-gray-700/50'
+      isRecentApproval
+        ? 'bg-emerald-950/20 border-emerald-500/40 border-l-[3px] border-l-emerald-500'
+        : overdue
+          ? 'bg-red-950/20 border-red-500/40 border-l-[3px] border-l-red-500'
+          : isDraft 
+            ? 'bg-slate-900/30 border-slate-700/50' 
+            : 'bg-gray-900/30 border-gray-700/50'
     }`}>
       <Link
         to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&bucket=${bucket}`}
@@ -89,7 +103,13 @@ const RequestCard = ({ request, bucket, getProjectClientSlug, onUpdateDueDate })
             <h4 className="text-white font-medium text-sm line-clamp-2 group-hover:text-red-400 transition-colors">
               {request.title}
             </h4>
-            {overdue && (
+            {isRecentApproval && (
+              <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold uppercase tracking-wide">
+                <CheckCircle2 className="w-3 h-3" />
+                Approved
+              </span>
+            )}
+            {overdue && !isRecentApproval && (
               <span className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 text-[10px] font-semibold uppercase tracking-wide">
                 Overdue
               </span>
@@ -121,6 +141,11 @@ const RequestCard = ({ request, bucket, getProjectClientSlug, onUpdateDueDate })
         {/* Context info */}
         <div className="flex items-center justify-between text-xs">
           <div className="flex flex-col gap-0.5 text-gray-400">
+            {isRecentApproval && request.approvedAt && (
+              <span className="text-emerald-400 font-medium">
+                Approved by client • {formatDistanceToNow(new Date(request.approvedAt), { addSuffix: true })}
+              </span>
+            )}
             {bucket === 'awaiting_client' && request.posted_at && (
               <span className="text-amber-400/70">
                 Sent {formatDistanceToNow(new Date(request.posted_at), { addSuffix: true })}
@@ -134,6 +159,11 @@ const RequestCard = ({ request, bucket, getProjectClientSlug, onUpdateDueDate })
             {isDraft && (
               <span className="text-slate-500">
                 Created {formatDistanceToNow(new Date(request.created_date), { addSuffix: true })}
+              </span>
+            )}
+            {bucket === 'approved' && request.approvedAt && (
+              <span className="text-green-400/50">
+                Approved {formatDistanceToNow(new Date(request.approvedAt), { addSuffix: true })}
               </span>
             )}
           </div>
@@ -253,8 +283,14 @@ export function LifecycleSummaryBadges({ counts }) {
           {counts.client_replied}
         </Badge>
       )}
+      {counts.recently_approved > 0 && (
+        <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/50 text-xs">
+          <CheckCircle2 className="w-3 h-3 mr-1" />
+          ✓ {counts.recently_approved}
+        </Badge>
+      )}
       {counts.approved > 0 && (
-        <Badge className="bg-green-500/20 text-green-400 border-green-500/50 text-xs">
+        <Badge className="bg-green-500/20 text-green-400/70 border-green-500/30 text-xs">
           <CheckCircle2 className="w-3 h-3 mr-1" />
           {counts.approved}
         </Badge>

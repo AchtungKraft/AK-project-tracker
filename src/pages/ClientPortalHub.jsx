@@ -326,12 +326,13 @@ export default function ClientPortalHub() {
 
   // Calculate summary counts including overdue
   const summaryCounts = useMemo(() => {
-    const counts = { draft: 0, awaiting_client: 0, client_replied: 0, approved: 0, overdue: 0 };
+    const counts = { draft: 0, awaiting_client: 0, client_replied: 0, recently_approved: 0, approved: 0, overdue: 0 };
     groupedProjectData.forEach(group => {
       counts.draft += group.draft.length;
       counts.awaiting_client += group.awaiting_client.length;
       counts.client_replied += group.client_replied.length;
-      counts.approved += group.approved.length;
+      counts.recently_approved += group.recently_approved.length;
+      counts.approved += group.approved.length + group.recently_approved.length;
       
       // Count overdue (only from awaiting_client and client_replied)
       group.awaiting_client.forEach(r => {
@@ -722,6 +723,7 @@ export default function ClientPortalHub() {
                         draft: projectGroup.draft,
                         awaiting_client: projectGroup.awaiting_client,
                         client_replied: projectGroup.client_replied,
+                        recently_approved: projectGroup.recently_approved,
                         approved: projectGroup.approved
                       }}
                       getProjectClientSlug={getProjectClientSlug}

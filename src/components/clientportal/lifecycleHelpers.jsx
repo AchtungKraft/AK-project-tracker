@@ -21,6 +21,48 @@ export const getRequestState = (request, decisions, attachments) => {
 };
 
 /**
+ * How many hours an approved item stays visible in the "Recently Approved" 
+ * subsection of the active workflow before moving to the archive-only bucket.
+ */
+export const RECENTLY_APPROVED_WINDOW_HOURS = 48;
+
+/**
+ * Test whether a request was approved within the recent visibility window.
+ * Uses the latest approval decision timestamp.
+ */
+export const isRecentlyApproved = (request, decisions) => {
+  if (!request) return false;
+  const requestDecisions = decisions.filter(d => d.request_id === request.id && d.decision === 'approved');
+  if (requestDecisions.length === 0) return false;
+  
+  // Find latest approval timestamp
+  const latestApproval = requestDecisions.reduce((latest, d) => {
+    const ts = getTime(getEventTimestamp(d));
+    return ts > latest ? ts : latest;
+  }, 0);
+  
+  if (!latestApproval) return false;
+  const hoursSince = (Date.now() - latestApproval) / (1000 * 60 * 60);
+  return hoursSince < RECENTLY_APPROVED_WINDOW_HOURS;
+};
+
+/**
+ * Get the approval timestamp for a request (latest approved decision).
+ */
+export const getApprovalTimestamp = (request, decisions) => {
+  const requestDecisions = decisions.filter(d => d.request_id === request.id && d.decision === 'approved');
+  if (requestDecisions.length === 0) return null;
+  
+  const latestApproval = requestDecisions.reduce((latest, d) => {
+    const ts = getEventTimestamp(d);
+    const tMs = getTime(ts);
+    return tMs > getTime(latest || '1970-01-01') ? ts : latest;
+  }, null);
+  
+  return latestApproval;
+};
+
+/**
  * Determine which lifecycle bucket a request belongs to
  */
 export const getLifecycleBucket = (request, decisions, attachments, comments) => {
@@ -30,8 +72,13 @@ export const getLifecycleBucket = (request, decisions, attachments, comments) =>
   if (state === 'draft') return 'draft';
   if (state === 'archived') return null;
   
-  // Approved goes to approved bucket
-  if (state === 'approved') return 'approved';
+  // Approved: split into recently_approved (visible in active workflow) vs approved (archive)
+  if (state === 'approved') {
+    if (isRecentlyApproved(request, decisions)) {
+      return 'recently_approved';
+    }
+    return 'approved';
+  }
   
   // Check if client has replied since last post — use timeline stateEvents (SINGLE SOURCE)
   // Includes both comments AND decisions (approve / request changes) from client
@@ -178,6 +225,9 @@ export const enrichRequest = (request, comments, decisions, attachments) => {
     e => e.kind === 'comment' && e.actor === 'client'
   );
 
+  // Compute approval timestamp for recently-approved display
+  const approvedAt = getApprovalTimestamp(request, requestDecisions);
+
   return {
     ...request,
     decisions: requestDecisions,
@@ -191,7 +241,8 @@ export const enrichRequest = (request, comments, decisions, attachments) => {
     latestCommentContent,
     latestCommentActor,
     isArchivedWithClientResponse,
-    requiresTeamAction
+    requiresTeamAction,
+    approvedAt,
   };
 };
 
@@ -225,6 +276,7 @@ export const groupRequestsByProjectAndLifecycle = (
         draft: [],
         awaiting_client: [],
         client_replied: [],
+        recently_approved: [],
         approved: []
       };
     }
@@ -237,6 +289,12 @@ export const groupRequestsByProjectAndLifecycle = (
     projectGroup.draft.sort(comparator);
     projectGroup.awaiting_client.sort(comparator);
     projectGroup.client_replied.sort(comparator);
+    // Recently approved: newest approval first
+    projectGroup.recently_approved.sort((a, b) => {
+      const aTs = a.approvedAt ? getTime(a.approvedAt) : 0;
+      const bTs = b.approvedAt ? getTime(b.approvedAt) : 0;
+      return bTs - aTs;
+    });
     projectGroup.approved.sort(comparator);
   });
   
@@ -255,8 +313,8 @@ export const groupRequestsByProjectAndLifecycle = (
     if (!aHasOverdue && bHasOverdue) return 1;
     
     // Then by total active items (non-approved)
-    const aActive = a.draft.length + a.awaiting_client.length + a.client_replied.length;
-    const bActive = b.draft.length + b.awaiting_client.length + b.client_replied.length;
+    const aActive = a.draft.length + a.awaiting_client.length + a.client_replied.length + a.recently_approved.length;
+    const bActive = b.draft.length + b.awaiting_client.length + b.client_replied.length + b.recently_approved.length;
     return bActive - aActive;
   });
 };
@@ -298,6 +356,10 @@ export const filterByLifecycleQuickFilter = (groupedProjectData, lifecycleQuickF
         if (lifecycleQuickFilter === 'overdue') {
           return isRequestOverdue(request, bucket);
         }
+        // "approved" filter shows both recently_approved and approved archive
+        if (lifecycleQuickFilter === 'approved') {
+          return bucket === 'approved' || bucket === 'recently_approved';
+        }
         return bucket === lifecycleQuickFilter;
       };
       
@@ -306,6 +368,7 @@ export const filterByLifecycleQuickFilter = (groupedProjectData, lifecycleQuickF
         draft: group.draft.filter(r => filterFn(r, 'draft')),
         awaiting_client: group.awaiting_client.filter(r => filterFn(r, 'awaiting_client')),
         client_replied: group.client_replied.filter(r => filterFn(r, 'client_replied')),
+        recently_approved: group.recently_approved.filter(r => filterFn(r, 'recently_approved')),
         approved: group.approved.filter(r => filterFn(r, 'approved')),
       };
     })
@@ -313,6 +376,7 @@ export const filterByLifecycleQuickFilter = (groupedProjectData, lifecycleQuickF
       group.draft.length ||
       group.awaiting_client.length ||
       group.client_replied.length ||
+      group.recently_approved.length ||
       group.approved.length
     );
 };
@@ -356,6 +420,7 @@ export const flattenGroupedRequests = (groupedProjectData) => {
     group.draft.forEach(r => flattened.push({ ...r, lifecycleBucket: 'draft' }));
     group.awaiting_client.forEach(r => flattened.push({ ...r, lifecycleBucket: 'awaiting_client' }));
     group.client_replied.forEach(r => flattened.push({ ...r, lifecycleBucket: 'client_replied' }));
+    group.recently_approved.forEach(r => flattened.push({ ...r, lifecycleBucket: 'recently_approved' }));
     group.approved.forEach(r => flattened.push({ ...r, lifecycleBucket: 'approved' }));
   });
   

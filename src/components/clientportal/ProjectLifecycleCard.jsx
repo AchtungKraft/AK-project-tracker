@@ -31,6 +31,7 @@ export default function ProjectLifecycleCard({
     draft: buckets.draft?.length || 0,
     awaiting_client: buckets.awaiting_client?.length || 0,
     client_replied: buckets.client_replied?.length || 0,
+    recently_approved: buckets.recently_approved?.length || 0,
     approved: buckets.approved?.length || 0
   };
   
@@ -174,7 +175,15 @@ export default function ProjectLifecycleCard({
             onUpdateDueDate={onUpdateDueDate}
           />
           
-          {/* Approved Section */}
+          {/* Recently Approved - visible in active workflow */}
+          <LifecycleBucketSection
+            bucket="recently_approved"
+            requests={buckets.recently_approved || []}
+            getProjectClientSlug={getProjectClientSlug}
+            onUpdateDueDate={onUpdateDueDate}
+          />
+          
+          {/* Approved Archive */}
           <LifecycleBucketSection
             bucket="approved"
             requests={buckets.approved || []}

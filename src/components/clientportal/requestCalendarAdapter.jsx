@@ -102,6 +102,14 @@ export const LIFECYCLE_BUCKET_CONFIG = {
     borderClass: 'border-blue-600',
     textClass: 'text-blue-400',
   },
+  recently_approved: {
+    key: 'recently_approved',
+    label: 'Recently Approved ✓',
+    color: '#34D399', // emerald
+    bgClass: 'bg-emerald-900/30',
+    borderClass: 'border-emerald-500',
+    textClass: 'text-emerald-400',
+  },
   approved: {
     key: 'approved',
     label: 'Approved',
