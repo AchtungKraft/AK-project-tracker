@@ -51,15 +51,16 @@ export default function CompactRequestRow({
   onUpdateDueDate,
   showProject = false,
 }) {
+  const effectiveBucket = bucket || request._bucket || 'awaiting_client';
   const overdue = request.isOverdue;
-  const isApproved = bucket === 'recently_approved' || bucket === 'approved';
-  const isDraft = bucket === 'draft';
+  const isApproved = effectiveBucket === 'recently_approved' || effectiveBucket === 'approved';
+  const isDraft = effectiveBucket === 'draft';
 
   // Determine primary status
   let statusType = 'waiting';
   if (overdue) statusType = 'overdue';
   else if (isApproved) statusType = 'approved';
-  else if (bucket === 'client_replied') statusType = 'replied';
+  else if (effectiveBucket === 'client_replied') statusType = 'replied';
   else if (isDraft) statusType = 'draft';
 
   // Stalled detection: no activity for 3+ days on non-draft/non-approved
@@ -85,7 +86,7 @@ export default function CompactRequestRow({
 
       {/* Title — primary visual weight */}
       <Link
-        to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&bucket=${bucket}`}
+        to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&bucket=${effectiveBucket}`}
         className="flex-1 min-w-0 flex items-center gap-2"
       >
         {showProject && request._projectName && (
@@ -136,7 +137,7 @@ export default function CompactRequestRow({
       </div>
 
       <Link
-        to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&bucket=${bucket}`}
+        to={createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&bucket=${effectiveBucket}`}
       >
         <ChevronRight className="w-3.5 h-3.5 text-gray-600 group-hover:text-red-400 transition-colors shrink-0" />
       </Link>
