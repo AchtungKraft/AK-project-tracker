@@ -1,46 +1,49 @@
 import React, { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { AlertCircle, ChevronDown, ChevronRight, CheckCircle2 } from "lucide-react";
-import { buildAttentionList, groupByColumn, BOARD_COLUMNS } from "./attentionHelpers";
-import AttentionCard from "./AttentionCard";
+import { buildAttentionList, groupByColumn, groupColumnByProject, BOARD_COLUMNS } from "./attentionHelpers";
 import AttentionColumnHeader from "./AttentionColumnHeader";
-import FollowUpClientGroups from "./FollowUpClientGroups";
-import DraftClientGroups from "./DraftClientGroups";
+import ActionQueueProjectGroup from "./ActionQueueProjectGroup";
+import ActionQueueRequestRow from "./ActionQueueRequestRow";
 
 /**
- * A single scrollable board column.
+ * A single board column — now project-grouped.
+ * Multi-request projects show a collapsible group header.
+ * Single-request projects render directly as a row.
  */
-function BoardColumn({ col, items, onUpdateDueDate, muted = false }) {
-  const isFollowUp = col.key === 'follow_up';
-  const isDrafts = col.key === 'needs_sending';
+function BoardColumn({ col, items, onUpdateDueDate }) {
+  const projectGroups = useMemo(
+    () => groupColumnByProject(items),
+    [items]
+  );
 
   return (
     <div className="space-y-2">
-      <AttentionColumnHeader {...col} count={items.length} />
+      <AttentionColumnHeader
+        label={col.label}
+        subtitle={col.subtitle}
+        count={items.length}
+        headerBg={col.headerBg}
+        headerBorder={col.headerBorder}
+        headerText={col.headerText}
+        countBg={col.countBg}
+        countText={col.countText}
+      />
       <div className="max-h-[70vh] overflow-y-auto pr-1 space-y-2 scrollbar-hide">
-        {items.length === 0 ? (
+        {projectGroups.length === 0 ? (
           <div className="text-center py-4 text-xs text-gray-600 italic">
             {col.emptyText}
           </div>
-        ) : isDrafts ? (
-          <DraftClientGroups
-            items={items}
-            onUpdateDueDate={onUpdateDueDate}
-          />
-        ) : isFollowUp ? (
-          <FollowUpClientGroups
-            items={items}
-            onUpdateDueDate={onUpdateDueDate}
-          />
         ) : (
-          items.map(item => (
-            <AttentionCard
-              key={item.requestId}
-              item={item}
+          projectGroups.map(group => (
+            <ActionQueueProjectGroup
+              key={group.projectId}
+              projectName={group.projectName}
+              projectId={group.projectId}
+              items={group.items}
+              columnKey={col.key}
               onUpdateDueDate={onUpdateDueDate}
-              muted={muted}
             />
           ))
         )}
@@ -51,9 +54,14 @@ function BoardColumn({ col, items, onUpdateDueDate, muted = false }) {
 
 /**
  * Collapsible resolved section below the main board.
+ * Shows recently approved items — project-grouped.
  */
 function ResolvedSection({ items, onUpdateDueDate }) {
   const [expanded, setExpanded] = useState(false);
+  const projectGroups = useMemo(
+    () => groupColumnByProject(items),
+    [items]
+  );
 
   if (items.length === 0) return null;
 
@@ -80,12 +88,14 @@ function ResolvedSection({ items, onUpdateDueDate }) {
 
       {expanded && (
         <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2">
-          {items.map(item => (
-            <AttentionCard
-              key={item.requestId}
-              item={item}
+          {projectGroups.map(group => (
+            <ActionQueueProjectGroup
+              key={group.projectId}
+              projectName={group.projectName}
+              projectId={group.projectId}
+              items={group.items}
+              columnKey="resolved"
               onUpdateDueDate={onUpdateDueDate}
-              muted
             />
           ))}
         </div>
@@ -95,7 +105,10 @@ function ResolvedSection({ items, onUpdateDueDate }) {
 }
 
 /**
- * NeedsAttentionSection — Action Queue with 3 active columns + resolved below.
+ * NeedsAttentionSection — Action Queue with 4 active columns + resolved below.
+ * 
+ * Now project-grouped: multiple requests from the same project are consolidated
+ * under a collapsible project header. Single-request projects render as rows.
  */
 const NeedsAttentionSection = ({ 
   projectGroups,
@@ -134,7 +147,7 @@ const NeedsAttentionSection = ({
         </div>
       </CardHeader>
       <CardContent className="p-2 md:p-4">
-        {/* 3-Column Active Board */}
+        {/* 4-Column Active Board — project-grouped */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 md:gap-4">
           {BOARD_COLUMNS.map(col => (
             <BoardColumn
@@ -142,7 +155,6 @@ const NeedsAttentionSection = ({
               col={col}
               items={columnData[col.key] || []}
               onUpdateDueDate={onUpdateDueDate}
-              muted={col.key === 'follow_up'}
             />
           ))}
         </div>

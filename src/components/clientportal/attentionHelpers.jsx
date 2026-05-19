@@ -396,3 +396,37 @@ export function groupByColumn(attentionItems) {
     resolved: attentionItems.filter(i => i.type === 'approved_recent'),
   };
 }
+
+/**
+ * Group items within a column by project.
+ * Returns sorted array of { projectId, projectName, items }.
+ * Projects with overdue items sort first, then most items, then most recent activity.
+ */
+export function groupColumnByProject(columnItems) {
+  const map = {};
+  for (const item of columnItems) {
+    const pid = item.project?.id || 'unknown';
+    if (!map[pid]) {
+      map[pid] = {
+        projectId: pid,
+        projectName: item.project?.name || 'Unknown Project',
+        items: [],
+        overdueCount: 0,
+        latestActivityAt: 0,
+      };
+    }
+    map[pid].items.push(item);
+    if (item.isOverdue) map[pid].overdueCount++;
+    const t = getTime(item.lastActivityAt);
+    if (t > map[pid].latestActivityAt) map[pid].latestActivityAt = t;
+  }
+
+  return Object.values(map).sort((a, b) => {
+    // 1. Overdue count DESC
+    if (a.overdueCount !== b.overdueCount) return b.overdueCount - a.overdueCount;
+    // 2. Total items DESC
+    if (a.items.length !== b.items.length) return b.items.length - a.items.length;
+    // 3. Most recent activity DESC
+    return b.latestActivityAt - a.latestActivityAt;
+  });
+}
