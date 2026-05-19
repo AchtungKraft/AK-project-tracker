@@ -68,6 +68,7 @@ Deno.serve(async (req) => {
       case 'CREATE_PO': result = await createPO(ctx, commitment_ids, payload); break;
       case 'RECEIVE': result = await receive(ctx, commitment_ids, payload); break;
       case 'ADD_STOCK': case 'RECEIVE_STOCK': result = await addStock(ctx, payload); break;
+      case 'ADJUST_STOCK': result = await adjustStock(ctx, payload); break;
       case 'INSTALL': result = await install(ctx, commitment_ids, payload); break;
       case 'REVERSE_INSTALL': result = await reverseInstall(ctx, commitment_ids, payload); break;
       case 'ALLOCATE_POOL': throw new Error('ALLOCATE_POOL removed. Use InvoiceBatch.');
@@ -1130,6 +1131,92 @@ async function updatePOCosts(ctx, payload) {
   }
   console.log(`[UPDATE_PO_COSTS] PO=${order.po_number} order_id=${order_id}`, updates);
   return { success: true, order_id, po_number: order.po_number, updates, allocation_triggered: true };
+}
+
+async function adjustStock(ctx, payload) {
+  const { part_id, direction, qty, location_id: rawLocId, reason, notes, purchase_cost } = payload;
+  if (!part_id) throw new Error('part_id required');
+  if (!direction || !['add', 'remove'].includes(direction)) throw new Error('direction must be "add" or "remove"');
+  const quantity = Number(qty) || 0;
+  if (quantity <= 0) throw new Error('qty must be positive');
+  if (!reason) throw new Error('reason is required');
+
+  const [part] = await ctx.base44.entities.Part.filter({ id: part_id });
+  if (!part) throw new Error('Part not found');
+  const oldPhys = part.physical_stock ?? 0;
+
+  if (direction === 'remove' && quantity > oldPhys) {
+    throw new Error(`Cannot remove ${quantity} — only ${oldPhys} in stock`);
+  }
+
+  let location_id = rawLocId;
+  if (!location_id) location_id = await getOrCreateDefaultLocation(ctx);
+
+  if (ctx.dry_run) return { preview: { part_id, part_name: part.part_name, direction, qty: quantity, old_physical_stock: oldPhys } };
+
+  if (direction === 'add') {
+    await upsertInventoryItem(ctx, part_id, location_id, quantity);
+  } else {
+    // Remove: decrement inventory items
+    const inv = await ctx.base44.asServiceRole.entities.InventoryItem.filter({ part_id });
+    // Prefer specified location first
+    let rem = quantity;
+    if (rawLocId) {
+      const locItems = inv.filter(i => i.location_id === rawLocId);
+      for (const item of locItems) {
+        if (rem <= 0) break;
+        const avail = item.quantity_on_hand ?? 0;
+        const take = Math.min(avail, rem);
+        if (take > 0) {
+          await ctx.base44.asServiceRole.entities.InventoryItem.update(item.id, { quantity_on_hand: avail - take });
+          rem -= take;
+        }
+      }
+    }
+    // Fall through to any location with stock
+    if (rem > 0) {
+      const sorted = inv.filter(i => (i.quantity_on_hand ?? 0) > 0).sort((a, b) => (b.quantity_on_hand ?? 0) - (a.quantity_on_hand ?? 0));
+      for (const item of sorted) {
+        if (rem <= 0) break;
+        const avail = item.quantity_on_hand ?? 0;
+        const take = Math.min(avail, rem);
+        if (take > 0) {
+          await ctx.base44.asServiceRole.entities.InventoryItem.update(item.id, { quantity_on_hand: avail - take });
+          rem -= take;
+        }
+      }
+    }
+  }
+
+  const rr = await inlineRecompute(ctx, part_id, false);
+  ctx.mutations.push({ entity: 'Part', id: part_id, action: 'PHYSICAL_STOCK_RECOMPUTED' });
+  await inlineRebalance(ctx, part_id, false);
+
+  const actionLabel = direction === 'add' ? 'ADD_STOCK' : 'REMOVE_STOCK';
+  const qtyDelta = direction === 'add' ? quantity : -quantity;
+  await ctx.base44.asServiceRole.entities.InventoryAuditLog.create({
+    part_id,
+    action_type: actionLabel,
+    qty_delta: qtyDelta,
+    old_qty: oldPhys,
+    new_qty: rr.computed_physical_stock,
+    location_id,
+    notes: [reason, notes].filter(Boolean).join(' — '),
+    performed_by: ctx.user.email,
+    performed_at: ctx.timestamp,
+  });
+
+  return {
+    success: true,
+    part_id,
+    part_name: part.part_name,
+    direction,
+    qty_adjusted: quantity,
+    old_physical_stock: oldPhys,
+    new_physical_stock: rr.computed_physical_stock,
+    location_id,
+    invalidation_context: { part_ids: [part_id], invalidateAll: true },
+  };
 }
 
 async function addStock(ctx,payload) {

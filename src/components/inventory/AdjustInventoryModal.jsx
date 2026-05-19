@@ -109,12 +109,14 @@ export default function AdjustInventoryModal({ onClose, preselectedPartId }) {
       return response.data;
     },
     onSuccess: async (result) => {
-      // PHASE 17: Deterministic refresh
-      const context = extractRefreshContext(result, { part_id: result.part_id });
+      // Deterministic refresh
+      const context = extractRefreshContext(result, { part_id: formData.part_id });
       await forceAppRefresh(queryClient, context);
       
       const action = direction === 'add' ? 'Added' : 'Removed';
-      toast.success(`${action} ${result.qty_adjusted} (new total: ${result.new_physical_stock})`);
+      const qtyAdj = result.qty_adjusted ?? Number(formData.quantity);
+      const newStock = result.new_physical_stock;
+      toast.success(`${action} ${qtyAdj} units${newStock != null ? ` (new total: ${newStock})` : ''}`);
       onClose();
     },
     onError: (error) => {
@@ -123,9 +125,18 @@ export default function AdjustInventoryModal({ onClose, preselectedPartId }) {
   });
 
   const handleSubmit = (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (!formData.part_id) {
       toast.error('Please select a part');
+      return;
+    }
+    if (!formData.reason) {
+      toast.error('Please select a reason');
+      return;
+    }
+    const qty = Number(formData.quantity);
+    if (!qty || qty <= 0) {
+      toast.error('Quantity must be greater than 0');
       return;
     }
     adjustMutation.mutate(formData);
