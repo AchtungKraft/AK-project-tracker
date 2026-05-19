@@ -30,17 +30,11 @@ async function runBatched(tasks, batchSize = 3, delay = 150) {
   return results;
 }
 
-// ── Short-term response cache (15s for ops supply) ───────────────
-const cache = new Map();
-function getCached(key, ttl = 15000) {
-  const item = cache.get(key);
-  if (!item) return null;
-  if (Date.now() - item.timestamp > ttl) { cache.delete(key); return null; }
-  return item.data;
-}
-function setCache(key, data) {
-  cache.set(key, { data, timestamp: Date.now() });
-}
+// ── Server-side response cache DISABLED ──────────────────────────
+// Previously cached responses for 15s, but this caused stale data after mutations.
+// Frontend query cache (React Query) handles caching. Backend must always return fresh data.
+function getCached(_key, _ttl) { return null; }
+function setCache(_key, _data) { /* no-op */ }
 
 /**
  * getOpsSupplyView - Canonical read model for operations/global supply state
