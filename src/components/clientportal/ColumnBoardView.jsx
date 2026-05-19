@@ -1,208 +1,107 @@
-import React, { useMemo, useState } from "react";
-import { Badge } from "@/components/ui/badge";
+import React, { useMemo } from "react";
 import { 
-  Wrench, 
-  Clock, 
-  MessageSquareText, 
+  Flame, 
+  Zap, 
+  Archive,
+  Wrench,
+  Clock,
+  MessageSquareText,
   CheckCircle2,
-  AlertCircle,
-  ChevronDown,
-  ChevronRight
+  AlertCircle
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { RequestCard } from "./LifecycleBucketSection";
-import BucketProjectGroup from "./BucketProjectGroup";
-import { isRequestOverdue, sortOverdueFirst, countOverdue, RECENTLY_APPROVED_WINDOW_HOURS } from "./lifecycleHelpers";
-import { LIFECYCLE_BUCKETS } from "./LifecycleBucketSection";
+import MomentumFeed from "./MomentumFeed";
+import PriorityLane from "./PriorityLane";
 import RecentlyApprovedStrip from "./RecentlyApprovedStrip";
 
 /**
- * Aggregate all requests from all project groups into a flat bucket map,
- * enriching each request with its project name.
+ * Aggregate all requests from project groups into a flat enriched list,
+ * then triage into priority lanes.
  */
-function aggregateBuckets(filteredProjectData, projects) {
-  const projectMap = new Map((projects || []).map(p => [p.id, p]));
-  const buckets = {
-    draft: [],
-    awaiting_client: [],
-    client_replied: [],
-    recently_approved: [],
-    approved: [],
-  };
-
+function triageRequests(filteredProjectData) {
+  const all = [];
+  
   for (const group of filteredProjectData) {
     const pName = group.project?.name || 'Unknown Project';
     const pId = group.project?.id || 'unknown';
     
-    for (const [bucketKey, requests] of Object.entries(buckets)) {
-      const groupRequests = group[bucketKey] || [];
-      for (const r of groupRequests) {
-        buckets[bucketKey].push({ ...r, _projectName: pName, _projectId: pId });
+    const bucketKeys = ['draft', 'awaiting_client', 'client_replied', 'recently_approved', 'approved'];
+    for (const bk of bucketKeys) {
+      for (const r of (group[bk] || [])) {
+        all.push({ ...r, _projectName: pName, _projectId: pId, _bucket: bk });
       }
     }
   }
-  return buckets;
-}
 
-/**
- * Group requests by project, preserving sort order.
- */
-function groupByProject(requests) {
-  const map = new Map();
-  for (const r of requests) {
-    const pid = r._projectId || r.project_id || 'unknown';
-    if (!map.has(pid)) {
-      map.set(pid, { 
-        projectId: pid, 
-        projectName: r._projectName || 'Unknown Project', 
-        requests: [] 
-      });
+  // === TRIAGE INTO LANES ===
+  const immediate = [];   // 🔥 overdue, stalled 3d+, client replied (needs action)
+  const active = [];      // ⚡ awaiting client (recent), active drafts
+  const background = [];  // 📦 low priority, approved archive
+  const recentlyApproved = []; // ✓ separate strip
+
+  const STALE_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+
+  for (const r of all) {
+    if (r._bucket === 'recently_approved') {
+      recentlyApproved.push(r);
+      continue;
     }
-    map.get(pid).requests.push(r);
+    if (r._bucket === 'approved') {
+      background.push(r);
+      continue;
+    }
+
+    const isOverdue = r.isOverdue;
+    const isStalled = r.latestActivityAt && 
+      (Date.now() - new Date(r.latestActivityAt).getTime()) > STALE_THRESHOLD_MS;
+    const isClientReplied = r._bucket === 'client_replied';
+
+    if (isOverdue || isClientReplied || (isStalled && r._bucket !== 'draft')) {
+      immediate.push(r);
+    } else if (r._bucket === 'draft') {
+      active.push(r);
+    } else {
+      // awaiting_client, not overdue, not stalled
+      active.push(r);
+    }
   }
-  // Sort groups: most requests first, then alphabetical
-  return Array.from(map.values()).sort((a, b) => {
-    // Groups with overdue requests first
-    const aOverdue = a.requests.some(r => r.isOverdue);
-    const bOverdue = b.requests.some(r => r.isOverdue);
-    if (aOverdue && !bOverdue) return -1;
-    if (!aOverdue && bOverdue) return 1;
-    return b.requests.length - a.requests.length;
+
+  // Sort immediate: overdue first, then stalled, then client replied
+  immediate.sort((a, b) => {
+    const aOd = a.isOverdue ? 1 : 0;
+    const bOd = b.isOverdue ? 1 : 0;
+    if (aOd !== bOd) return bOd - aOd;
+    // Then by staleness
+    const aTs = a.latestActivityAt ? new Date(a.latestActivityAt).getTime() : 0;
+    const bTs = b.latestActivityAt ? new Date(b.latestActivityAt).getTime() : 0;
+    return aTs - bTs; // oldest activity first
   });
+
+  // Sort active: most recent activity first
+  active.sort((a, b) => {
+    const aTs = a.latestActivityAt ? new Date(a.latestActivityAt).getTime() : 0;
+    const bTs = b.latestActivityAt ? new Date(b.latestActivityAt).getTime() : 0;
+    return bTs - aTs;
+  });
+
+  // Sort recently approved: newest first
+  recentlyApproved.sort((a, b) => {
+    const aTs = a.approvedAt ? new Date(a.approvedAt).getTime() : 0;
+    const bTs = b.approvedAt ? new Date(b.approvedAt).getTime() : 0;
+    return bTs - aTs;
+  });
+
+  return { immediate, active, background, recentlyApproved, all };
 }
 
 /**
- * A single workflow column with project grouping.
- * Auto-collapses groups with >1 request; shows "+X more" for >2.
- */
-function WorkflowColumn({ 
-  bucketKey, 
-  requests, 
-  getProjectClientSlug, 
-  onUpdateDueDate 
-}) {
-  const config = LIFECYCLE_BUCKETS[bucketKey];
-  const groups = useMemo(() => groupByProject(requests), [requests]);
-  const overdueCount = useMemo(() => countOverdue(requests, bucketKey), [requests, bucketKey]);
-
-  if (!config || requests.length === 0) return null;
-
-  const Icon = config.icon;
-
-  return (
-    <div className={`rounded-lg border ${config.borderColor} overflow-hidden`}>
-      {/* Column Header */}
-      <div className={`px-3 py-2 ${config.bgColor} border-b ${config.borderColor} flex items-center justify-between`}>
-        <div className="flex items-center gap-2">
-          <Icon className={`w-4 h-4 ${config.textColor}`} />
-          <span className={`font-medium text-sm ${config.textColor}`}>{config.label}</span>
-          <span className={`font-medium text-sm ${config.textColor}`}>
-            {config.sublabel && (
-              <span className="text-xs text-gray-500 font-normal ml-1 hidden lg:inline">{config.sublabel}</span>
-            )}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          {overdueCount > 0 && (
-            <span className="text-[10px] text-red-400 flex items-center gap-0.5">
-              <AlertCircle className="w-3 h-3" />
-              {overdueCount}
-            </span>
-          )}
-          <Badge className={config.badgeClass}>
-            {requests.length}
-          </Badge>
-        </div>
-      </div>
-
-      {/* Project Groups */}
-      <div className="p-2 space-y-2 bg-black/20">
-        {groups.map(group => (
-          <BucketProjectGroup
-            key={group.projectId}
-            projectName={group.projectName}
-            projectId={group.projectId}
-            requests={group.requests}
-            bucket={bucketKey}
-            autoCollapse={group.requests.length > 1}
-            maxVisible={2}
-          >
-            {group.requests.map(request => (
-              <RequestCard
-                key={request.id}
-                request={request}
-                bucket={bucketKey}
-                getProjectClientSlug={getProjectClientSlug}
-                onUpdateDueDate={onUpdateDueDate}
-              />
-            ))}
-          </BucketProjectGroup>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Flat column rendering for outer buckets (draft, approved) — no project grouping needed.
- */
-function FlatColumn({ 
-  bucketKey, 
-  requests, 
-  getProjectClientSlug, 
-  onUpdateDueDate,
-  projects 
-}) {
-  const config = LIFECYCLE_BUCKETS[bucketKey];
-  const [expanded, setExpanded] = useState(bucketKey !== 'approved');
-  const overdueCount = useMemo(() => countOverdue(requests, bucketKey), [requests, bucketKey]);
-  const sorted = useMemo(() => sortOverdueFirst(requests, bucketKey), [requests, bucketKey]);
-
-  if (!config || requests.length === 0) return null;
-
-  const Icon = config.icon;
-  
-  return (
-    <div className={`rounded-lg border ${config.borderColor} overflow-hidden`}>
-      <button
-        type="button"
-        onClick={() => setExpanded(prev => !prev)}
-        className={`w-full px-3 py-2 ${config.bgColor} border-b ${config.borderColor} flex items-center justify-between`}
-      >
-        <div className="flex items-center gap-2">
-          {expanded ? <ChevronDown className="w-3.5 h-3.5 text-gray-500" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-500" />}
-          <Icon className={`w-4 h-4 ${config.textColor}`} />
-          <span className={`font-medium text-sm ${config.textColor}`}>{config.label}</span>
-          <span className="text-xs text-gray-500">
-            {requests.length}{overdueCount > 0 && (
-              <span className="text-red-400 ml-1">· {overdueCount} overdue</span>
-            )}
-          </span>
-        </div>
-        <Badge className={config.badgeClass}>{requests.length}</Badge>
-      </button>
-      
-      {expanded && (
-        <div className="p-2 space-y-2 bg-black/20 max-h-[60vh] overflow-y-auto">
-          {sorted.map(request => (
-            <RequestCard
-              key={request.id}
-              request={request}
-              bucket={bucketKey}
-              getProjectClientSlug={getProjectClientSlug}
-              onUpdateDueDate={onUpdateDueDate}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-
-/**
- * ColumnBoardView — renders workflow columns side-by-side,
- * grouping requests by project within each column.
+ * ColumnBoardView — Priority Lane architecture.
+ * 
+ * Renders:
+ * 1. Momentum Feed (recent activity ticker)
+ * 2. Recently Approved Strip
+ * 3. 🔥 Immediate Attention lane (overdue, stalled, client replied)
+ * 4. ⚡ Active Momentum lane (awaiting client, drafts)
+ * 5. 📦 Background lane (approved archive)
  */
 export default function ColumnBoardView({
   filteredProjectData,
@@ -211,67 +110,86 @@ export default function ColumnBoardView({
   onUpdateDueDate,
   lifecycleQuickFilter,
 }) {
-  const buckets = useMemo(
-    () => aggregateBuckets(filteredProjectData, projects),
-    [filteredProjectData, projects]
+  const lanes = useMemo(
+    () => triageRequests(filteredProjectData),
+    [filteredProjectData]
   );
 
-  const hasAny = Object.values(buckets).some(arr => arr.length > 0);
+  const hasAny = lanes.all.length > 0;
   if (!hasAny) return null;
 
   return (
-    <div className="space-y-4">
-      {/* Global Recently Approved Strip */}
-      {lifecycleQuickFilter === 'all' && buckets.recently_approved.length > 0 && (
+    <div className="space-y-3">
+      {/* Momentum Feed — operational awareness */}
+      <MomentumFeed allRequests={lanes.all} />
+
+      {/* Recently Approved Strip */}
+      {lifecycleQuickFilter === 'all' && lanes.recentlyApproved.length > 0 && (
         <RecentlyApprovedStrip
-          requests={buckets.recently_approved}
+          requests={lanes.recentlyApproved}
           getProjectClientSlug={getProjectClientSlug}
         />
       )}
 
-      {/* Drafts — flat, collapsible */}
-      <FlatColumn
-        bucketKey="draft"
-        requests={buckets.draft}
+      {/* 🔥 IMMEDIATE ATTENTION */}
+      <PriorityLane
+        label="Immediate Attention"
+        sublabel="Overdue · Client Replied · Stalled"
+        icon={Flame}
+        color="red"
+        requests={lanes.immediate}
+        bucket="awaiting_client"
         getProjectClientSlug={getProjectClientSlug}
         onUpdateDueDate={onUpdateDueDate}
-        projects={projects}
+        defaultExpanded={true}
+        showProjectStacks={true}
       />
 
-      {/* Middle workflow columns — project-grouped */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <WorkflowColumn
-          bucketKey="client_replied"
-          requests={buckets.client_replied}
-          getProjectClientSlug={getProjectClientSlug}
-          onUpdateDueDate={onUpdateDueDate}
-        />
-        <WorkflowColumn
-          bucketKey="awaiting_client"
-          requests={buckets.awaiting_client}
-          getProjectClientSlug={getProjectClientSlug}
-          onUpdateDueDate={onUpdateDueDate}
-        />
-      </div>
+      {/* ⚡ ACTIVE MOMENTUM */}
+      <PriorityLane
+        label="Active Momentum"
+        sublabel="Awaiting Response · Drafts in Progress"
+        icon={Zap}
+        color="amber"
+        requests={lanes.active}
+        bucket="awaiting_client"
+        getProjectClientSlug={getProjectClientSlug}
+        onUpdateDueDate={onUpdateDueDate}
+        defaultExpanded={true}
+        showProjectStacks={true}
+      />
 
-      {/* Recently Approved (if not shown in strip above) */}
-      {lifecycleQuickFilter !== 'all' && buckets.recently_approved.length > 0 && (
-        <WorkflowColumn
-          bucketKey="recently_approved"
-          requests={buckets.recently_approved}
+      {/* Recently Approved (when filtered) */}
+      {lifecycleQuickFilter !== 'all' && lanes.recentlyApproved.length > 0 && (
+        <PriorityLane
+          label="Recently Approved"
+          sublabel="Last 48h"
+          icon={CheckCircle2}
+          color="emerald"
+          requests={lanes.recentlyApproved}
+          bucket="recently_approved"
           getProjectClientSlug={getProjectClientSlug}
           onUpdateDueDate={onUpdateDueDate}
+          defaultExpanded={true}
+          showProjectStacks={false}
         />
       )}
 
-      {/* Approved Archive — flat, collapsed by default */}
-      <FlatColumn
-        bucketKey="approved"
-        requests={buckets.approved}
-        getProjectClientSlug={getProjectClientSlug}
-        onUpdateDueDate={onUpdateDueDate}
-        projects={projects}
-      />
+      {/* 📦 BACKGROUND / ARCHIVE */}
+      {lanes.background.length > 0 && (
+        <PriorityLane
+          label="Approved Archive"
+          sublabel="Historical"
+          icon={Archive}
+          color="gray"
+          requests={lanes.background}
+          bucket="approved"
+          getProjectClientSlug={getProjectClientSlug}
+          onUpdateDueDate={onUpdateDueDate}
+          defaultExpanded={false}
+          showProjectStacks={false}
+        />
+      )}
     </div>
   );
 }
