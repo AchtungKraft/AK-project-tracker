@@ -322,16 +322,20 @@ function classifyRequest(request, project, canonicalState) {
 
   if (type === 'follow_up') {
     const h = hoursSinceLastActivity;
-    if (h < 1) {
-      followUpLabel = 'Just sent';
-    } else if (h < 24) {
-      followUpLabel = `Sent • ${Math.floor(h)}h ago`;
-    } else {
-      followUpLabel = `Client silent • ${Math.floor(h / 24)}d`;
-    }
-
+    let followUpLabel = null;
     let riskTier = 'low';
     let actionLabel = 'Monitor';
+    
+    // Simplified label: focus on time since last contact only
+    if (h < 1) {
+      followUpLabel = '<1h';
+    } else if (h < 24) {
+      followUpLabel = `${Math.floor(h)}h`;
+    } else {
+      followUpLabel = `${Math.floor(h / 24)}d`;
+    }
+
+    // Risk tiers based on silence duration
     if (h > 120) {
       riskTier = 'high';
       actionLabel = 'Call / escalate';

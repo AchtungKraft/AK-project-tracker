@@ -19,7 +19,7 @@ function BoardColumn({ col, items, onUpdateDueDate }) {
   );
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <AttentionColumnHeader
         label={col.label}
         subtitle={col.subtitle}
@@ -30,9 +30,9 @@ function BoardColumn({ col, items, onUpdateDueDate }) {
         countBg={col.countBg}
         countText={col.countText}
       />
-      <div className="max-h-[70vh] overflow-y-auto pr-1 space-y-2 scrollbar-hide">
+      <div className="max-h-[70vh] overflow-y-auto pr-1 space-y-2.5 scrollbar-hide">
         {projectGroups.length === 0 ? (
-          <div className="text-center py-4 text-xs text-gray-600 italic">
+          <div className="text-center py-6 text-xs text-gray-600 italic">
             {col.emptyText}
           </div>
         ) : (
@@ -66,28 +66,28 @@ function ResolvedSection({ items, onUpdateDueDate }) {
   if (items.length === 0) return null;
 
   return (
-    <div className="mt-4 pt-4 border-t border-gray-700/30">
+    <div className="mt-6 pt-6 border-t border-gray-700/30">
       <button
         onClick={() => setExpanded(prev => !prev)}
-        className="flex items-center gap-2 w-full text-left px-1 py-1.5 rounded-md hover:bg-green-500/5 transition-colors"
+        className="flex items-center gap-2 w-full text-left px-2 py-2 rounded-md hover:bg-green-950/20 transition-colors group/resolved"
       >
         {expanded ? (
-          <ChevronDown className="w-4 h-4 text-green-400/70" />
+          <ChevronDown className="w-4 h-4 text-green-400" />
         ) : (
-          <ChevronRight className="w-4 h-4 text-green-400/70" />
+          <ChevronRight className="w-4 h-4 text-green-400" />
         )}
-        <CheckCircle2 className="w-4 h-4 text-green-400/70" />
-        <span className="text-sm font-medium text-green-400/80">Resolved</span>
-        <Badge className="bg-green-500/15 text-green-400/70 border-green-500/30 text-xs px-1.5 py-0">
+        <CheckCircle2 className="w-4 h-4 text-green-400" />
+        <span className="text-sm font-semibold text-green-400">Resolved</span>
+        <Badge className="bg-green-500/20 text-green-400 border-green-500/40 text-xs px-2 py-0.5 font-medium">
           {items.length}
         </Badge>
         {!expanded && (
-          <span className="text-xs text-gray-600 ml-auto">Click to expand</span>
+          <span className="text-xs text-gray-500 ml-auto">Click to expand</span>
         )}
       </button>
 
       {expanded && (
-        <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2">
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
           {projectGroups.map(group => (
             <ActionQueueProjectGroup
               key={group.projectId}
@@ -148,7 +148,7 @@ const NeedsAttentionSection = ({
       </CardHeader>
       <CardContent className="p-2 md:p-4">
         {/* 4-Column Active Board — project-grouped */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 md:gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-5">
           {BOARD_COLUMNS.map(col => (
             <BoardColumn
               key={col.key}

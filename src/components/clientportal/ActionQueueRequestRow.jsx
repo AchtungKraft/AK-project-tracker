@@ -4,6 +4,7 @@ import { createPageUrl } from "@/utils";
 import { Badge } from "@/components/ui/badge";
 import { ChevronRight, MessageSquareText } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { cn } from "@/lib/utils";
 import InlineDueDatePicker from "./InlineDueDatePicker";
 import { ATTENTION_BADGE_CONFIG, getWaitingTimeLabel } from "./attentionHelpers";
 
@@ -27,13 +28,14 @@ const RISK_BORDER = {
  * No project name — that's in the parent group header.
  * Shows: title, type badge, status signals, activity time, actions.
  */
-export default function ActionQueueRequestRow({ item, onUpdateDueDate, muted = false }) {
+export default function ActionQueueRequestRow({ item, onUpdateDueDate, muted = false, isSingleInGroup = false }) {
   const { request, type, isOverdue, lastActor, lastActivityAt } = item;
   const config = ATTENTION_BADGE_CONFIG[type];
   const risk = item.followUpMeta?.riskTier;
   const requestUrl = createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=attention`;
 
   const isNewClientActivity = lastActor === 'client' && type !== 'approved_recent';
+  const isApprovedRecent = type === 'approved_recent';
 
   // Waiting time for client-waiting items
   const waitingLabel = type === 'needs_response' && lastActivityAt
@@ -45,19 +47,26 @@ export default function ActionQueueRequestRow({ item, onUpdateDueDate, muted = f
     ? RISK_BORDER[risk]
     : (BORDER_COLORS[type] || 'border-l-gray-500');
 
-  // Background based on state
+  // Background based on state — with better breathing room
   let bgClass;
-  if (isOverdue) {
-    bgClass = 'bg-red-950/25 border-red-500/40';
+  if (isApprovedRecent) {
+    bgClass = 'bg-green-950/15 border-green-500/30 hover:bg-green-950/25';
+  } else if (isOverdue) {
+    bgClass = 'bg-red-950/25 border-red-500/40 hover:bg-red-950/35';
   } else if (muted) {
-    bgClass = 'bg-black/15 border-gray-800 opacity-70';
+    bgClass = 'bg-black/10 border-gray-800 opacity-65 hover:opacity-75';
   } else {
-    bgClass = 'bg-black/30 border-gray-700/60 hover:border-gray-500 hover:bg-gray-900/70';
+    bgClass = 'bg-black/20 border-gray-700/50 hover:border-gray-500 hover:bg-gray-900/60';
   }
 
   return (
-    <div className={`rounded-md border border-l-[3px] ${borderColor} ${bgClass} transition-all group/row`}>
-      <div className="flex items-center gap-2 px-2.5 py-2">
+    <div className={`rounded-md border border-l-[3px] ${borderColor} ${bgClass} transition-all group/row ${
+      isSingleInGroup ? 'rounded-t-none' : ''
+    }`}>
+      <div className={cn(
+        "flex items-center gap-2 text-left transition-colors",
+        isSingleInGroup ? 'px-3 py-2' : 'px-2.5 py-2'
+      )}>
         {/* Left: Title + inline badges */}
         <Link to={requestUrl} className="flex-1 min-w-0 flex items-center gap-2">
           {/* Status signals - compact inline badges */}
@@ -86,14 +95,14 @@ export default function ActionQueueRequestRow({ item, onUpdateDueDate, muted = f
             )}
           </div>
 
-          {/* Title */}
-          <span className="text-sm text-white group-hover/row:text-red-400 transition-colors truncate">
+          {/* Title — improved wrapping for readability */}
+          <span className="text-sm text-white group-hover/row:text-red-400 transition-colors line-clamp-2 flex-1 min-w-0">
             {request.title}
           </span>
         </Link>
 
         {/* Right: metadata + actions */}
-        <div className="flex items-center gap-2 shrink-0 text-[11px]">
+        <div className="flex items-center gap-1.5 shrink-0 text-[11px]">
           {/* Comment count */}
           {request.clientCommentCount > 0 && (
             <span className="flex items-center gap-0.5 text-gray-500">
@@ -105,15 +114,15 @@ export default function ActionQueueRequestRow({ item, onUpdateDueDate, muted = f
           {/* Activity time */}
           <span className={`whitespace-nowrap ${
             waitingLabel ? 'text-red-400 font-medium' :
-            type === 'follow_up' && risk === 'high' ? 'text-orange-400' :
+            type === 'follow_up' && risk === 'high' ? 'text-orange-400 font-medium' :
             type === 'follow_up' && risk === 'medium' ? 'text-amber-400' :
-            type === 'approved_recent' ? 'text-green-400' :
+            isApprovedRecent ? 'text-green-400 font-medium' :
             'text-gray-500'
           }`}>
             {waitingLabel ||
               (item.followUpLabel) ||
-              (type === 'approved_recent' && lastActivityAt
-                ? formatDistanceToNow(new Date(lastActivityAt), { addSuffix: true })
+              (isApprovedRecent && lastActivityAt
+                ? '✓ ' + formatDistanceToNow(new Date(lastActivityAt), { addSuffix: true })
                 : item.lastActivityLabel || '')}
           </span>
 
