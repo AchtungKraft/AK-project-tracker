@@ -87,11 +87,13 @@ export default function AddInventoryModal({ onClose, preselectedPartId }) {
       return response.data;
     },
     onSuccess: async (result) => {
-      // PHASE 17: Deterministic refresh
-      const context = extractRefreshContext(result, { part_id: result.part_id });
+      // Deterministic refresh
+      const context = extractRefreshContext(result, { part_id: formData.part_id });
       await forceAppRefresh(queryClient, context);
       
-      toast.success(`Added ${result.qty_added} to inventory (new total: ${result.new_physical_stock})`);
+      const qtyAdded = result.qty_added ?? Number(formData.quantity_on_hand);
+      const newStock = result.new_physical_stock;
+      toast.success(`Added ${qtyAdded} to inventory${newStock != null ? ` (new total: ${newStock})` : ''}`);
       onClose();
     },
     onError: (error) => {
@@ -100,9 +102,14 @@ export default function AddInventoryModal({ onClose, preselectedPartId }) {
   });
 
   const handleSubmit = (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (!formData.part_id) {
       toast.error('Please select a part');
+      return;
+    }
+    const qty = Number(formData.quantity_on_hand);
+    if (!qty || qty <= 0) {
+      toast.error('Quantity must be greater than 0');
       return;
     }
     createMutation.mutate(formData);
