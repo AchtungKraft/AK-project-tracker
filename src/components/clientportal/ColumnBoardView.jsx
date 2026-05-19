@@ -1,104 +1,89 @@
 import React, { useMemo, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { 
   Flame, 
   Zap, 
   Archive,
   AlertCircle,
+  CheckCircle2,
   ChevronDown,
   ChevronRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import MomentumFeed from "./MomentumFeed";
-import UnifiedProjectContainer from "./UnifiedProjectContainer";
+import ProjectLifecycleCard from "./ProjectLifecycleCard";
+import RecentlyApprovedStrip from "./RecentlyApprovedStrip";
+import { isRequestOverdue } from "./lifecycleHelpers";
 
 const STALE_THRESHOLD_DAYS = 3;
 
 /**
- * Build unified project objects from filteredProjectData.
+ * Compute project-level health from grouped bucket data.
  */
-function buildUnifiedProjects(filteredProjectData) {
-  const projects = [];
-  const allRequests = [];
+function computeProjectHealth(group) {
+  const bucketKeys = ['draft', 'awaiting_client', 'client_replied', 'recently_approved', 'approved'];
+  let overdue = 0, waiting = 0, replied = 0, recentApproval = 0, approvedArchive = 0, drafts = 0;
+  let latestTs = null;
 
-  for (const group of filteredProjectData) {
-    const project = group.project;
-    const pName = project?.name || 'Unknown Project';
-    const pId = project?.id || 'unknown';
-    
-    const bucketKeys = ['draft', 'awaiting_client', 'client_replied', 'recently_approved', 'approved'];
-    const projectRequests = [];
-    
-    for (const bk of bucketKeys) {
-      for (const r of (group[bk] || [])) {
-        const enriched = { ...r, _projectName: pName, _projectId: pId, _bucket: bk };
-        projectRequests.push(enriched);
-        allRequests.push(enriched);
-      }
-    }
-
-    if (projectRequests.length === 0) continue;
-
-    let overdue = 0, waiting = 0, replied = 0, recentApproval = 0, approvedArchive = 0, drafts = 0;
-    let latestTs = null;
-
-    for (const r of projectRequests) {
+  for (const bk of bucketKeys) {
+    for (const r of (group[bk] || [])) {
       const ts = r.latestActivityAt || r.updated_date;
       if (ts && (!latestTs || new Date(ts) > new Date(latestTs))) latestTs = ts;
-      if (r._bucket === 'recently_approved') { recentApproval++; continue; }
-      if (r._bucket === 'approved') { approvedArchive++; continue; }
-      if (r._bucket === 'draft') { drafts++; continue; }
-      if (r.isOverdue) overdue++;
-      if (r._bucket === 'client_replied') replied++;
-      else if (r._bucket === 'awaiting_client' && !r.isOverdue) waiting++;
+
+      if (bk === 'recently_approved') { recentApproval++; continue; }
+      if (bk === 'approved') { approvedArchive++; continue; }
+      if (bk === 'draft') { drafts++; continue; }
+      if (isRequestOverdue(r, bk)) overdue++;
+      if (bk === 'client_replied') replied++;
+      else if (bk === 'awaiting_client' && !isRequestOverdue(r, bk)) waiting++;
     }
-
-    const active = overdue + waiting + replied + drafts;
-    const daysSinceActivity = latestTs 
-      ? (Date.now() - new Date(latestTs).getTime()) / (1000 * 60 * 60 * 24) 
-      : 999;
-    const isStalled = daysSinceActivity >= STALE_THRESHOLD_DAYS && active > 0;
-
-    const accent = { border: 'border-l-amber-500/60', headerBg: 'bg-amber-950/10', text: 'text-amber-400' };
-    if (overdue > 0) Object.assign(accent, { border: 'border-l-red-500', headerBg: 'bg-red-950/15', text: 'text-red-400' });
-    else if (replied > 0) Object.assign(accent, { border: 'border-l-blue-500', headerBg: 'bg-blue-950/10', text: 'text-blue-400' });
-    else if (isStalled) Object.assign(accent, { border: 'border-l-orange-500', headerBg: 'bg-orange-950/10', text: 'text-orange-400' });
-    else if (active === 0 && recentApproval > 0) Object.assign(accent, { border: 'border-l-emerald-500/60', headerBg: 'bg-emerald-950/10', text: 'text-emerald-400' });
-    else if (active === 0 && approvedArchive > 0) Object.assign(accent, { border: 'border-l-gray-600/40', headerBg: 'bg-gray-900/20', text: 'text-gray-500' });
-
-    const health = { overdue, waiting, replied, recentApproval, approvedArchive, drafts, active, latestTs, isStalled, daysSinceActivity, accent };
-    projects.push({ project, health, allRequests: projectRequests });
   }
 
-  return { projects, allRequests };
+  const active = overdue + waiting + replied + drafts;
+  const daysSinceActivity = latestTs 
+    ? (Date.now() - new Date(latestTs).getTime()) / (1000 * 60 * 60 * 24) 
+    : 999;
+  const isStalled = daysSinceActivity >= STALE_THRESHOLD_DAYS && active > 0;
+  const totalRequests = bucketKeys.reduce((s, bk) => s + (group[bk]?.length || 0), 0);
+
+  return { overdue, waiting, replied, recentApproval, approvedArchive, drafts, active, latestTs, isStalled, daysSinceActivity, totalRequests };
 }
 
 /**
- * Triage projects into priority lanes.
+ * Triage project groups into priority lanes based on health.
  */
-function triageProjects(projects) {
+function triageProjectGroups(filteredProjectData) {
   const immediate = [];
   const active = [];
   const background = [];
 
-  for (const p of projects) {
-    const h = p.health;
-    if (h.overdue > 0 || h.replied > 0 || (h.isStalled && h.active > 0)) immediate.push(p);
-    else if (h.active > 0 || h.recentApproval > 0) active.push(p);
-    else background.push(p);
+  for (const group of filteredProjectData) {
+    const h = computeProjectHealth(group);
+    const entry = { group, health: h };
+
+    if (h.overdue > 0 || h.replied > 0 || (h.isStalled && h.active > 0)) {
+      immediate.push(entry);
+    } else if (h.active > 0 || h.recentApproval > 0) {
+      active.push(entry);
+    } else {
+      background.push(entry);
+    }
   }
 
+  // Sort immediate: most overdue first, then most replied, then most stalled
   immediate.sort((a, b) => {
     if (a.health.overdue !== b.health.overdue) return b.health.overdue - a.health.overdue;
     if (a.health.replied !== b.health.replied) return b.health.replied - a.health.replied;
     return a.health.daysSinceActivity - b.health.daysSinceActivity;
   });
 
+  // Sort active: most recently active first
   active.sort((a, b) => {
     const aTs = a.health.latestTs ? new Date(a.health.latestTs).getTime() : 0;
     const bTs = b.health.latestTs ? new Date(b.health.latestTs).getTime() : 0;
     return bTs - aTs;
   });
 
+  // Sort background: most recently approved first
   background.sort((a, b) => {
     const aTs = a.health.latestTs ? new Date(a.health.latestTs).getTime() : 0;
     const bTs = b.health.latestTs ? new Date(b.health.latestTs).getTime() : 0;
@@ -109,55 +94,69 @@ function triageProjects(projects) {
 }
 
 /**
- * Lane — minimal section divider with lean project stream.
- * No wrapping card. Just a label + project list.
+ * Production lane — section header + project cards.
  */
-function ProjectLane({
-  label, icon: Icon, color, projects: laneProjects,
-  getProjectClientSlug, onUpdateDueDate, defaultExpanded = true,
+function ProductionLane({
+  label, icon: Icon, color, entries,
+  getProjectClientSlug, onUpdateDueDate, sendingEmailForProject, onSendBulkEmail,
+  defaultExpanded = true,
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
 
-  if (laneProjects.length === 0) return null;
+  if (entries.length === 0) return null;
 
-  const totalOverdue = laneProjects.reduce((s, p) => s + p.health.overdue, 0);
+  const totalRequests = entries.reduce((s, e) => s + e.health.totalRequests, 0);
+  const totalOverdue = entries.reduce((s, e) => s + e.health.overdue, 0);
+
+  const colorMap = {
+    red: { text: 'text-red-400', border: 'border-red-500/30', headerBg: 'bg-red-950/20', badge: 'bg-red-500/20 text-red-400 border-red-500/40' },
+    amber: { text: 'text-amber-400', border: 'border-amber-500/20', headerBg: 'bg-amber-950/15', badge: 'bg-amber-500/20 text-amber-400 border-amber-500/40' },
+    gray: { text: 'text-gray-400', border: 'border-gray-700/30', headerBg: 'bg-gray-900/30', badge: 'bg-gray-700/50 text-gray-400 border-gray-600/40' },
+  };
+  const c = colorMap[color] || colorMap.gray;
 
   return (
-    <div>
-      {/* Lane header — minimal divider line */}
+    <div className={cn("rounded-lg border overflow-hidden", c.border)}>
+      {/* Lane header */}
       <button
         type="button"
         onClick={() => setExpanded(prev => !prev)}
-        className="w-full flex items-center gap-2 px-2 py-1.5 group"
+        className={cn("w-full flex items-center gap-2.5 px-4 py-2.5 transition-colors", c.headerBg, "border-b", c.border)}
       >
-        <div className="text-gray-600 shrink-0">
-          {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        <div className="text-gray-500 shrink-0">
+          {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </div>
-        <Icon className={cn("w-3.5 h-3.5 shrink-0", color)} />
-        <span className={cn("text-[11px] font-semibold uppercase tracking-widest", color)}>
-          {label}
-        </span>
+        <Icon className={cn("w-4 h-4 shrink-0", c.text)} />
+        <span className={cn("font-semibold text-sm", c.text)}>{label}</span>
         {totalOverdue > 0 && (
           <span className="flex items-center gap-0.5 text-[10px] text-red-400 font-semibold">
-            <AlertCircle className="w-2.5 h-2.5" />{totalOverdue}
+            <AlertCircle className="w-3 h-3" />{totalOverdue} overdue
           </span>
         )}
-        <span className="text-[10px] text-gray-700 tabular-nums">{laneProjects.length}</span>
-        <div className="flex-1 border-t border-gray-800/50 ml-2" />
+        <div className="flex-1" />
+        <span className="text-xs text-gray-500">{entries.length} projects</span>
+        <Badge className={cn("text-xs px-1.5 py-0", c.badge)}>{totalRequests}</Badge>
       </button>
 
-      {/* Project stream */}
+      {/* Project cards */}
       {expanded && (
-        <div className="space-y-0">
-          {laneProjects.map(p => (
-            <UnifiedProjectContainer
-              key={p.project?.id || 'unknown'}
-              project={p.project}
-              health={p.health}
-              allRequests={p.allRequests}
+        <div className="p-3 space-y-3 bg-black/10">
+          {entries.map((entry, idx) => (
+            <ProjectLifecycleCard
+              key={entry.group.project?.id || `unknown-${idx}`}
+              project={entry.group.project}
+              buckets={{
+                draft: entry.group.draft,
+                awaiting_client: entry.group.awaiting_client,
+                client_replied: entry.group.client_replied,
+                recently_approved: entry.group.recently_approved,
+                approved: entry.group.approved,
+              }}
               getProjectClientSlug={getProjectClientSlug}
+              onSendBulkEmail={onSendBulkEmail}
+              sendingEmailForProject={sendingEmailForProject}
               onUpdateDueDate={onUpdateDueDate}
-              defaultExpanded={p.allRequests.length <= 3}
+              initialCollapsed={entry.health.totalRequests > 5}
             />
           ))}
         </div>
@@ -167,10 +166,12 @@ function ProjectLane({
 }
 
 /**
- * ColumnBoardView — editorial operational queue.
+ * ColumnBoardView — Production Board with project cards organized by priority lanes.
  * 
- * No nested cards. No heavy borders.
- * Flat project stream triaged by priority lanes.
+ * Lanes:
+ * 1. 🔥 Immediate Attention — projects with overdue, client replies, or stalled items
+ * 2. ⚡ Active Momentum — projects with active requests in progress
+ * 3. 📦 Resolved — only approved/archived projects
  */
 export default function ColumnBoardView({
   filteredProjectData,
@@ -178,54 +179,67 @@ export default function ColumnBoardView({
   getProjectClientSlug,
   onUpdateDueDate,
   lifecycleQuickFilter,
+  onSendBulkEmail,
+  sendingEmailForProject,
 }) {
-  const { projects: unifiedProjects, allRequests } = useMemo(
-    () => buildUnifiedProjects(filteredProjectData),
+  const lanes = useMemo(
+    () => triageProjectGroups(filteredProjectData),
     [filteredProjectData]
   );
 
-  const lanes = useMemo(
-    () => triageProjects(unifiedProjects),
-    [unifiedProjects]
-  );
+  // Collect all recently approved for strip
+  const allRecentlyApproved = useMemo(() => {
+    return filteredProjectData.flatMap(g => g.recently_approved || []);
+  }, [filteredProjectData]);
 
-  if (allRequests.length === 0) return null;
+  if (filteredProjectData.length === 0) return null;
 
   return (
-    <div className="space-y-1">
-      {/* Momentum ticker */}
-      <MomentumFeed allRequests={allRequests} />
+    <div className="space-y-4">
+      {/* Recently Approved Strip */}
+      {lifecycleQuickFilter === 'all' && allRecentlyApproved.length > 0 && (
+        <RecentlyApprovedStrip
+          requests={allRecentlyApproved}
+          getProjectClientSlug={getProjectClientSlug}
+        />
+      )}
 
-      {/* Immediate Attention */}
-      <ProjectLane
-        label="Immediate"
+      {/* 🔥 IMMEDIATE ATTENTION */}
+      <ProductionLane
+        label="Immediate Attention"
         icon={Flame}
-        color="text-red-400"
-        projects={lanes.immediate}
+        color="red"
+        entries={lanes.immediate}
         getProjectClientSlug={getProjectClientSlug}
         onUpdateDueDate={onUpdateDueDate}
+        onSendBulkEmail={onSendBulkEmail}
+        sendingEmailForProject={sendingEmailForProject}
         defaultExpanded={true}
       />
 
-      {/* Active Momentum */}
-      <ProjectLane
-        label="Active"
+      {/* ⚡ ACTIVE MOMENTUM */}
+      <ProductionLane
+        label="Active Momentum"
         icon={Zap}
-        color="text-amber-400"
-        projects={lanes.active}
+        color="amber"
+        entries={lanes.active}
         getProjectClientSlug={getProjectClientSlug}
         onUpdateDueDate={onUpdateDueDate}
+        onSendBulkEmail={onSendBulkEmail}
+        sendingEmailForProject={sendingEmailForProject}
         defaultExpanded={true}
       />
 
-      {/* Background / Approved */}
-      <ProjectLane
+      {/* 📦 RESOLVED */}
+      <ProductionLane
         label="Resolved"
         icon={Archive}
-        color="text-gray-500"
-        projects={lanes.background}
+        color="gray"
+        entries={lanes.background}
         getProjectClientSlug={getProjectClientSlug}
         onUpdateDueDate={onUpdateDueDate}
+        onSendBulkEmail={onSendBulkEmail}
+        sendingEmailForProject={sendingEmailForProject}
         defaultExpanded={false}
       />
     </div>

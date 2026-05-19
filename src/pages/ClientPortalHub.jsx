@@ -750,6 +750,8 @@ export default function ClientPortalHub() {
                   getProjectClientSlug={getProjectClientSlug}
                   onUpdateDueDate={handleUpdateRequestDueDate}
                   lifecycleQuickFilter={lifecycleQuickFilter}
+                  onSendBulkEmail={handleSendBulkEmail}
+                  sendingEmailForProject={sendingEmailForProject}
                 />
               )
             )}
