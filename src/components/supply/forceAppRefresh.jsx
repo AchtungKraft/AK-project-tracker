@@ -110,6 +110,11 @@ export async function forceAppRefresh(queryClient, options = {}) {
     
     // Coverage/diagnostics
     queryClient.invalidateQueries({ queryKey: ['coverageDiagnostics'] }),
+    
+    // Stock reorder domain
+    queryClient.invalidateQueries({ queryKey: ['stockCommitments'] }),
+    queryClient.invalidateQueries({ queryKey: ['stockReorder'] }),
+    queryClient.invalidateQueries({ queryKey: ['akStockProject'] }),
   ];
   
   // Scoped part invalidations

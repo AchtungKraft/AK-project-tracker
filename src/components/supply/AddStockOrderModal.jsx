@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Warehouse, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
+import { forceAppRefresh, extractRefreshContext } from "@/components/supply/forceAppRefresh";
 
 /**
  * AddStockOrderModal — Creates a STOCK_MANUAL PartCommitment on AK_STOCK project.
@@ -100,20 +101,18 @@ export default function AddStockOrderModal({ open, onClose, onSuccess }) {
         },
       });
 
-      if (response.data?.error) throw new Error(response.data.error);
+      const result = response.data;
+      if (result?.error) throw new Error(result.error);
 
-      const qtyResult = response.data?.required_total ?? qty;
+      const qtyResult = result?.required_total ?? qty;
       toast.success(`Added ${qtyResult} to AK Stock order needs for ${selectedPart?.part_name}`);
       
-      // Invalidate ALL supply-related caches
-      queryClient.invalidateQueries({ queryKey: ['opsSupplyView'] });
-      queryClient.invalidateQueries({ queryKey: ['partsInventoryView'] });
-      queryClient.invalidateQueries({ queryKey: ['globalSupplyQueues'] });
-      queryClient.invalidateQueries({ queryKey: ['parts'] });
-      queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
-      queryClient.invalidateQueries({ queryKey: ['commitments'] });
-      queryClient.invalidateQueries({ queryKey: ['partSupplyUsage'] });
-      queryClient.invalidateQueries({ queryKey: ['stockReorder'] });
+      // Deterministic cache invalidation via canonical refresh path
+      const context = extractRefreshContext(result, { part_id: selectedPartId, project_id: stockProject.id });
+      await forceAppRefresh(queryClient, context);
+      // Also invalidate stock-specific queries not covered by forceAppRefresh
+      queryClient.invalidateQueries({ queryKey: ['stockCommitments'] });
+      queryClient.invalidateQueries({ queryKey: ['akStockProject'] });
       
       onSuccess?.();
       handleClose();

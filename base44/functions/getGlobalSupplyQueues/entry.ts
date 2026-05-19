@@ -63,6 +63,7 @@ Deno.serve(async (req) => {
     };
 
     // Enrich commitment with computed fields
+    // CANONICAL: Uses the same gap formula as getPartsInventoryView
     const enrichCommitment = (c) => {
       const project = projectMap.get(c.project_id);
       const part = partMap.get(c.part_id);
@@ -74,10 +75,18 @@ Deno.serve(async (req) => {
       const coveredRetail = c.covered_retail_total || 0;
       const coveragePercent = plannedRetail > 0 ? Math.round((coveredRetail / plannedRetail) * 100) : 0;
       
-      const qtyCommitted = c.qty_committed || 0;
+      // CANONICAL FIELDS (same as executeSupplyAction readCanonical)
+      const required_total = c.required_total || 0;
+      const qty_removed = c.qty_removed || 0;
+      const effective_required = Math.max(0, required_total - qty_removed);
+      const reserved_from_stock = c.reserved_from_stock || 0;
+      const covered_from_po = c.covered_from_po || 0;
+      const qtyInstalled = c.qty_installed || 0;
       const qtyOrdered = c.qty_ordered || 0;
       const qtyReceived = c.qty_received || 0;
-      const qtyInstalled = c.qty_installed || 0;
+      
+      // CANONICAL GAP: effective_required - reserved - covered - installed
+      const canonical_to_order = Math.max(0, effective_required - reserved_from_stock - covered_from_po - qtyInstalled);
       
       const isFundingBlocked = exposureGap > poolBalance && exposureGap > 0;
 
@@ -91,13 +100,19 @@ Deno.serve(async (req) => {
         vendor_name: vendor?.vendor_name || 'No Vendor',
         commitment_status: c.commitment_status,
         
-        qty_committed: qtyCommitted,
+        qty_committed: required_total,
         qty_ordered: qtyOrdered,
         qty_received: qtyReceived,
         qty_installed: qtyInstalled,
-        qty_to_order: Math.max(0, qtyCommitted - qtyOrdered),
+        qty_to_order: canonical_to_order,
         qty_to_receive: Math.max(0, qtyOrdered - qtyReceived),
         qty_to_install: Math.max(0, qtyReceived - qtyInstalled),
+        
+        // Canonical supply fields for downstream consumers
+        required_total,
+        effective_required,
+        reserved_from_stock,
+        covered_from_po,
         
         exposure_gap: exposureGap,
         planned_retail: plannedRetail,
@@ -105,7 +120,7 @@ Deno.serve(async (req) => {
         pool_balance: poolBalance,
         
         is_funding_blocked: isFundingBlocked,
-        is_orderable: !isFundingBlocked && (qtyCommitted > qtyOrdered),
+        is_orderable: !isFundingBlocked && canonical_to_order > 0,
       };
     };
 
