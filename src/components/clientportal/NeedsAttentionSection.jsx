@@ -8,6 +8,8 @@ import AttentionCard from "./AttentionCard";
 import AttentionColumnHeader from "./AttentionColumnHeader";
 import FollowUpClientGroups from "./FollowUpClientGroups";
 import DraftClientGroups from "./DraftClientGroups";
+import ClientWaitingGroups from "./ClientWaitingGroups";
+import ActiveReviewGroups from "./ActiveReviewGroups";
 
 /**
  * A single scrollable board column.
@@ -15,6 +17,8 @@ import DraftClientGroups from "./DraftClientGroups";
 function BoardColumn({ col, items, onUpdateDueDate, muted = false }) {
   const isFollowUp = col.key === 'follow_up';
   const isDrafts = col.key === 'needs_sending';
+  const isClientWaiting = col.key === 'client_waiting';
+  const isActiveReview = col.key === 'review_active';
 
   return (
     <div className="space-y-2">
@@ -26,6 +30,16 @@ function BoardColumn({ col, items, onUpdateDueDate, muted = false }) {
           </div>
         ) : isDrafts ? (
           <DraftClientGroups
+            items={items}
+            onUpdateDueDate={onUpdateDueDate}
+          />
+        ) : isClientWaiting ? (
+          <ClientWaitingGroups
+            items={items}
+            onUpdateDueDate={onUpdateDueDate}
+          />
+        ) : isActiveReview ? (
+          <ActiveReviewGroups
             items={items}
             onUpdateDueDate={onUpdateDueDate}
           />
