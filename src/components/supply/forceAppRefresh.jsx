@@ -45,6 +45,7 @@ import {
   normalizeProjectId,
   normalizeId,
 } from '@/components/financial/queryKeyFactories';
+import { bumpSupplyStateVersion } from '@/components/supply/useSupplyStateVersion';
 
 // Re-export normalizeId for backwards compatibility
 export { normalizeId };
@@ -322,6 +323,9 @@ export async function forceAppRefresh(queryClient, options = {}) {
   
   // Wait for all refetches to complete
   await Promise.all(refetches);
+  
+  // STEP 4: Bump supply state version to prevent stale cross-view hydration
+  bumpSupplyStateVersion('forceAppRefresh');
   
   // Log in development
   if (import.meta.env.DEV) {

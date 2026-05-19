@@ -218,9 +218,15 @@ async function adjustRequired(ctx, commitment_ids, payload) {
 
   if (!cid) {
     if (!project_id||!part_id) throw new Error('commitment_id OR (project_id+part_id) required');
-    const ex = await ctx.base44.entities.PartCommitment.filter({ project_id, part_id, is_archived:{$ne:true} });
-    const active = ex.find(c=>!['cancelled','closed'].includes(c.commitment_status));
-    const closed = ex.find(c=>['cancelled','closed'].includes(c.commitment_status));
+    // STEP 6: Duplicate commitment guard — find existing active commitment for same part+project+demand_source
+    const dupFilter = { project_id, part_id, is_archived:{$ne:true} };
+    const ex = await ctx.base44.entities.PartCommitment.filter(dupFilter);
+    // Filter by demand_source for stock orders to avoid merging stock demand with project demand
+    const matchesDemand = demand_source
+      ? ex.filter(c => (c.demand_source || 'PROJECT') === demand_source)
+      : ex;
+    const active = matchesDemand.find(c=>!['cancelled','closed'].includes(c.commitment_status));
+    const closed = matchesDemand.find(c=>['cancelled','closed'].includes(c.commitment_status));
     if (active) { commitment=active; cid=commitment.id; }
     else if (reopen_if_closed && closed) { commitment=closed; cid=commitment.id; wasReopened=true; }
     else {

@@ -31,6 +31,10 @@ function readCanonicalQty(c) {
     effective_required - qty_installed
   ));
   const is_satisfied = coverage_total >= effective_required && effective_required > 0;
+  // STEP 3: Derived state assertions
+  if (to_order < -0.001 || !Number.isFinite(to_order)) console.error(`[SUPPLY_ASSERT] commitment=${c.id} to_order=${to_order} INVALID`);
+  if (available_to_install < -0.001) console.error(`[SUPPLY_ASSERT] commitment=${c.id} available_to_install=${available_to_install} NEGATIVE`);
+  if (effective_required < -0.001) console.error(`[SUPPLY_ASSERT] commitment=${c.id} effective_required=${effective_required} NEGATIVE`);
   return { required_total, qty_removed, effective_required, reserved_from_stock, covered_from_po, qty_installed, coverage_total, to_order, available_to_install, is_satisfied };
 }
 // ═══════════════════════════════════════════════════════════════════

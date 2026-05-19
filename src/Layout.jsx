@@ -24,6 +24,7 @@ import { useIsMobile } from "@/components/mobile/useIsMobile";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 import MobileCollapsibleHeader from "@/components/mobile/MobileCollapsibleHeader";
 import ActionAuditPanel from "@/components/dev/ActionAuditPanel";
+import SupplyDiagnosticPanel from "@/components/dev/SupplyDiagnosticPanel";
 import {
   Sidebar,
   SidebarContent,
@@ -766,6 +767,8 @@ export default function Layout({ children, currentPageName }) {
 
           {/* Admin-only Action Audit Panel */}
           <ActionAuditPanel />
+          {/* Admin-only Supply Diagnostic Panel (Step 7) */}
+          <SupplyDiagnosticPanel />
           </div>
           </SidebarProvider>
           );
