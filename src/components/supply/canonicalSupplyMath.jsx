@@ -103,3 +103,52 @@ export function assertSupplyInvariants(q, context = {}) {
 
   return violations;
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// STEP 3 — DEPRECATION WARNINGS
+// Log when legacy fields are read in calculations
+// ══════════════════════════════════════════════════════════════════════
+
+const LEGACY_FIELDS = ['qty_committed', 'qty_reserved', 'qty_to_order', 'qty_ordered', 'qty_received', 'qty_allocated', 'coverage_status'];
+const _warned = new Set();
+
+/**
+ * Warn once per field when a legacy field is accessed.
+ * Call from any code that touches commitment data for calculations.
+ */
+export function warnLegacyAccess(fieldName, context = '') {
+  if (!LEGACY_FIELDS.includes(fieldName)) return;
+  const key = `${fieldName}:${context}`;
+  if (_warned.has(key)) return;
+  _warned.add(key);
+  console.warn(`[LEGACY_DEPRECATION] Field "${fieldName}" accessed${context ? ` in ${context}` : ''}. Use canonical fields instead: required_total, reserved_from_stock, covered_from_po, qty_installed.`);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// STEP 6 — IMMUTABILITY GUARDS
+// Derived fields must NEVER be persisted — block accidental writes
+// ══════════════════════════════════════════════════════════════════════
+
+const DERIVED_FIELDS = ['qty_to_order', 'qty_to_install', 'coverage_status', 'coverage_total', 'to_order', 'available_to_install'];
+
+/**
+ * Validate a commitment update payload. Throws if it attempts to persist derived fields.
+ * Call before any PartCommitment.update() in frontend mutation hooks.
+ */
+export function guardDerivedFieldWrite(updatePayload, context = '') {
+  const violations = [];
+  for (const field of DERIVED_FIELDS) {
+    if (field in updatePayload) {
+      violations.push(field);
+    }
+  }
+  if (violations.length > 0) {
+    const msg = `[IMMUTABILITY_GUARD] Blocked write to derived fields: ${violations.join(', ')}${context ? ` (${context})` : ''}. These are computed, not persisted.`;
+    console.error(msg);
+    // Remove derived fields rather than throwing — self-healing
+    for (const field of violations) {
+      delete updatePayload[field];
+    }
+  }
+  return violations;
+}

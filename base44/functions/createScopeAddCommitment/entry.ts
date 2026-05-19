@@ -106,15 +106,6 @@ Deno.serve(async (req) => {
       planned_cost_total,
       planned_retail_total,
       
-      // Legacy fields (for compatibility)
-      qty_committed: deltaQty,
-      qty_to_order: deltaQty,
-      qty_ordered: 0,
-      qty_received: 0,
-      qty_reserved: 0,
-      qty_allocated: 0,
-      qty_cancelled: 0,
-      
       // Lifecycle tracking
       supply_source_type: 'VENDOR',
       order_line_item_ids: [],

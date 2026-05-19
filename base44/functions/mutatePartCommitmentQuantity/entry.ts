@@ -51,7 +51,6 @@ async function doIncrease(base44,c,part,delta,reason,uid,dry) {
     invoiced_qty:0,invoiced_amount:0,billing_status:'unbilled',commitment_status:'planned',coverage_status:'NOT_COVERED',
     source_type:'scope_addition',parent_commitment_id:c.id,allocation_source:'manual_commitment',
     unit_cost_snapshot:ucs,unit_retail_snapshot:urs,planned_cost_total:ucs*delta,planned_retail_total:urs*delta,
-    qty_committed:delta,qty_to_order:delta,qty_ordered:0,qty_received:0,qty_reserved:0,qty_allocated:0,qty_cancelled:0,
     supply_source_type:'VENDOR',order_line_item_ids:[],commitment_version:1,state_version:0,last_recomputed_at:new Date().toISOString(),
     pricing_integrity_status:ucs>0&&urs>0?'ok':'estimated_cost',requires_prepay:false
   });
@@ -67,9 +66,8 @@ async function doDecrease(base44,c,part,delta,reason,uid,dry) {
   if(cn.reserved_from_stock>0) return {success:false,error:`Cannot reduce: ${cn.reserved_from_stock} reserved`,code:'LIFECYCLE_PROGRESS_RESERVED'};
   if(tgt<0) return {success:false,error:'Cannot reduce below zero'};
   if(dry) return {dry_run:true,success:true,commitment_id:c.id,current_qty:cn.required_total,target_qty:tgt,delta};
-  const newGap=Math.max(0,tgt-cn.reserved_from_stock-cn.covered_from_po);
   const uc=c.unit_cost_snapshot||part?.cost||0, ur=c.unit_retail_snapshot||part?.retail_override||part?.retail_matrix_price||0;
-  await base44.asServiceRole.entities.PartCommitment.update(c.id,{required_total:tgt,qty_committed:tgt,qty_to_order:newGap,planned_cost_total:tgt*uc,planned_retail_total:tgt*ur,coverage_status:covSt(tgt,cn.reserved_from_stock,cn.covered_from_po)});
+  await base44.asServiceRole.entities.PartCommitment.update(c.id,{required_total:tgt,planned_cost_total:tgt*uc,planned_retail_total:tgt*ur});
   await mkEvent(base44,c,'QTY_DECREASED',{required_total:cn.required_total},{required_total:tgt,delta:-delta},uid,reason);
   return {success:true,commitment_id:c.id,qty_needed_new:tgt,warnings:[]};
 }
@@ -80,10 +78,10 @@ async function doReallocate(base44,c,part,qty,tgtProjId,reason,uid,dry) {
   if(qty>maxMov) return {success:false,error:`Cannot move >${maxMov}`};
   if(dry) return {dry_run:true,success:true,commitment_id:c.id,qty_to_move:qty,target_project_id:tgtProjId,target_project_name:tp.name,remaining_qty:cn.required_total-qty};
   const remQty=cn.required_total-qty, uc=c.unit_cost_snapshot||0, ur=c.unit_retail_snapshot||0;
-  const nc=await base44.asServiceRole.entities.PartCommitment.create({project_id:tgtProjId,part_id:c.part_id,required_total:qty,reserved_from_stock:0,covered_from_po:0,qty_installed:0,qty_committed:qty,qty_reserved:0,qty_to_order:qty,qty_ordered:0,qty_received:0,qty_cancelled:0,commitment_status:'planned',source_type:'split_commitment',parent_commitment_id:c.id,unit_cost_snapshot:uc,unit_retail_snapshot:ur,planned_cost_total:qty*uc,planned_retail_total:qty*ur,coverage_status:'NOT_COVERED',notes:`Reallocated from ${c.id}`});
+  const nc=await base44.asServiceRole.entities.PartCommitment.create({project_id:tgtProjId,part_id:c.part_id,required_total:qty,reserved_from_stock:0,covered_from_po:0,qty_installed:0,commitment_status:'planned',source_type:'split_commitment',parent_commitment_id:c.id,unit_cost_snapshot:uc,unit_retail_snapshot:ur,planned_cost_total:qty*uc,planned_retail_total:qty*ur,notes:`Reallocated from ${c.id}`});
   const relRes=Math.min(cn.reserved_from_stock,qty); if(relRes>0) await relReservations(base44,c.id,relRes,uid,`Reallocated to ${tgtProjId}`);
-  const newRes=Math.max(0,cn.reserved_from_stock-relRes), newGap=Math.max(0,remQty-newRes-cn.covered_from_po);
-  await base44.asServiceRole.entities.PartCommitment.update(c.id,{required_total:remQty,reserved_from_stock:newRes,qty_committed:remQty,qty_reserved:newRes,qty_to_order:newGap,planned_cost_total:remQty*uc,planned_retail_total:remQty*ur,coverage_status:covSt(remQty,newRes,cn.covered_from_po)});
+  const newRes=Math.max(0,cn.reserved_from_stock-relRes);
+  await base44.asServiceRole.entities.PartCommitment.update(c.id,{required_total:remQty,reserved_from_stock:newRes,planned_cost_total:remQty*uc,planned_retail_total:remQty*ur});
   await mkEvent(base44,c,'REALLOCATED',{required_total:cn.required_total},{required_total:remQty,moved_qty:qty,target_project_id:tgtProjId,new_commitment_id:nc.id},uid,reason);
   return {success:true,message:`Moved ${qty} units`,commitment_id:c.id,new_commitment_id:nc.id,qty_needed_new:remQty,warnings:[]};
 }
@@ -92,12 +90,12 @@ async function doCancelUnordered(base44,c,part,qty,reason,uid,dry) {
   detectMM(c); const cn=readCn(c), unord=Math.max(0,cn.required_total-cn.covered_from_po);
   if(qty>unord) return {success:false,error:`Can only cancel unordered (${unord})`};
   if(dry) return {dry_run:true,success:true,commitment_id:c.id,qty_to_cancel:qty,unordered_qty:unord};
-  const newQty=cn.required_total-qty, newCanc=(c.qty_cancelled||0)+qty;
+  const newQty=cn.required_total-qty;
   const rfGap=Math.min(qty,cn.gap), rfRes=qty-rfGap;
   if(rfRes>0) await relReservations(base44,c.id,rfRes,uid,`Cancelled: ${reason}`);
-  const newRes=Math.max(0,cn.reserved_from_stock-rfRes), newGap=Math.max(0,newQty-newRes-cn.covered_from_po);
+  const newRes=Math.max(0,cn.reserved_from_stock-rfRes);
   const uc=c.unit_cost_snapshot||0, ur=c.unit_retail_snapshot||0;
-  await base44.asServiceRole.entities.PartCommitment.update(c.id,{required_total:newQty,reserved_from_stock:newRes,qty_committed:newQty,qty_cancelled:newCanc,qty_reserved:newRes,qty_to_order:newGap,planned_cost_total:newQty*uc,planned_retail_total:newQty*ur,coverage_status:covSt(newQty,newRes,cn.covered_from_po)});
+  await base44.asServiceRole.entities.PartCommitment.update(c.id,{required_total:newQty,reserved_from_stock:newRes,planned_cost_total:newQty*uc,planned_retail_total:newQty*ur});
   await mkEvent(base44,c,'QTY_CANCELLED',{required_total:cn.required_total},{required_total:newQty,qty_cancelled:newCanc},uid,reason);
   return {success:true,commitment_id:c.id,qty_needed_new:newQty,cancelled_qty:newCanc,warnings:[]};
 }
@@ -107,11 +105,11 @@ async function doSplit(base44,c,part,qty,reason,uid,dry) {
   if(qty>=cn.required_total) return {success:false,error:'Split must be less than total'};
   if(dry) return {dry_run:true,success:true,commitment_id:c.id,qty_to_split:qty,remaining_qty:cn.required_total-qty};
   const remQty=cn.required_total-qty, uc=c.unit_cost_snapshot||0, ur=c.unit_retail_snapshot||0;
-  const nc=await base44.asServiceRole.entities.PartCommitment.create({project_id:c.project_id,part_id:c.part_id,required_total:qty,reserved_from_stock:0,covered_from_po:0,qty_installed:0,qty_committed:qty,qty_reserved:0,qty_to_order:qty,qty_ordered:0,qty_received:0,qty_cancelled:0,commitment_status:'planned',source_type:'split_commitment',parent_commitment_id:c.id,unit_cost_snapshot:uc,unit_retail_snapshot:ur,planned_cost_total:qty*uc,planned_retail_total:qty*ur,coverage_status:'NOT_COVERED',notes:`Split from ${c.id}`});
+  const nc=await base44.asServiceRole.entities.PartCommitment.create({project_id:c.project_id,part_id:c.part_id,required_total:qty,reserved_from_stock:0,covered_from_po:0,qty_installed:0,commitment_status:'planned',source_type:'split_commitment',parent_commitment_id:c.id,unit_cost_snapshot:uc,unit_retail_snapshot:ur,planned_cost_total:qty*uc,planned_retail_total:qty*ur,notes:`Split from ${c.id}`});
   const splitRes=cn.required_total>0?Math.min(cn.reserved_from_stock,Math.round(qty*(cn.reserved_from_stock/cn.required_total))):0;
   if(splitRes>0) await relReservations(base44,c.id,splitRes,uid,`Split: ${reason}`);
-  const newRes=Math.max(0,cn.reserved_from_stock-splitRes), newGap=Math.max(0,remQty-newRes-cn.covered_from_po);
-  await base44.asServiceRole.entities.PartCommitment.update(c.id,{required_total:remQty,reserved_from_stock:newRes,qty_committed:remQty,qty_reserved:newRes,qty_to_order:newGap,planned_cost_total:remQty*uc,planned_retail_total:remQty*ur,coverage_status:covSt(remQty,newRes,cn.covered_from_po)});
+  const newRes=Math.max(0,cn.reserved_from_stock-splitRes);
+  await base44.asServiceRole.entities.PartCommitment.update(c.id,{required_total:remQty,reserved_from_stock:newRes,planned_cost_total:remQty*uc,planned_retail_total:remQty*ur});
   await mkEvent(base44,c,'COMMITMENT_SPLIT',{required_total:cn.required_total},{required_total:remQty,split_qty:qty,new_commitment_id:nc.id},uid,reason);
   return {success:true,message:`Split ${qty} units`,commitment_id:c.id,new_commitment_id:nc.id,qty_needed_new:remQty,warnings:[]};
 }
@@ -155,7 +153,6 @@ Deno.serve(async (req) => {
           console.error(`[MUTATE_QTY_INVARIANT] Auto-correcting commitment ${uc.id}: reserved ${cn.reserved_from_stock} -> ${inv.corrected_reserved}`);
           await base44.asServiceRole.entities.PartCommitment.update(uc.id, {
             reserved_from_stock: inv.corrected_reserved,
-            qty_reserved: inv.corrected_reserved,
             integrity_warning: true,
             integrity_warning_details: `INVARIANT_CORRECTED after ${action_type}: reserved reduced from ${cn.reserved_from_stock} to ${inv.corrected_reserved}`,
           });

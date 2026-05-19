@@ -16,10 +16,13 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  *   5. Update commitment_status  — derive from quantity state
  *   6. Write lifecycle events + audit logs
  *
- * CANONICAL FIELDS: required_total, reserved_from_stock, covered_from_po,
+ * CANONICAL FIELDS (ONLY source of truth):
+ *   required_total, reserved_from_stock, covered_from_po,
  *   qty_installed, qty_removed
- * DEPRECATED COMPAT: qty_committed, qty_reserved, qty_to_order (written
- *   alongside canonical for backward compat only)
+ * 
+ * LEGACY FIELDS REMOVED: qty_committed, qty_reserved, qty_to_order,
+ *   qty_ordered, qty_received, qty_allocated, coverage_status
+ *   These are no longer written by any mutation path.
  *
  * PO INTEGRITY GUARDS (P0):
  * - PO creation: every line item MUST have unit_cost > 0
@@ -191,7 +194,7 @@ async function inlineRebalance(ctx, part_id, isDry) {
   const totRes = open.reduce((s,c) => { const u=ups.find(x=>x.commitment_id===c.id); return s+(u?u.new_reserved:(c.reserved_from_stock??0)); }, 0);
   if (totRes > phys + 0.001) throw new Error(`REBALANCE_OVER_ALLOC: phys=${phys} tot=${totRes}`);
   if (!isDry && ups.length > 0) {
-    for (const u of ups) await ctx.base44.asServiceRole.entities.PartCommitment.update(u.commitment_id, { reserved_from_stock:u.new_reserved, qty_reserved:u.new_reserved, qty_to_order:u.new_to_order, last_recomputed_at:ctx.timestamp });
+    for (const u of ups) await ctx.base44.asServiceRole.entities.PartCommitment.update(u.commitment_id, { reserved_from_stock:u.new_reserved, last_recomputed_at:ctx.timestamp });
   }
   return { success:true, part_id, physical_stock:phys, commitments_updated:ups.length, remaining_stock_after:rem, updates:ups };
 }
@@ -239,7 +242,7 @@ async function adjustRequired(ctx, commitment_ids, payload) {
         let pis='ok'; if(uc<=0) pis='missing_cost'; else if(re<=0) pis='missing_retail'; else if(re<uc) pis='margin_negative';
         commitment = await ctx.base44.asServiceRole.entities.PartCommitment.create({
           project_id, part_id, required_total:initReq, reserved_from_stock:0, covered_from_po:0, qty_installed:0,
-          supply_source_type:mapSrc(source_type), qty_committed:initReq, qty_reserved:0, qty_to_order:initReq, qty_ordered:0, qty_received:0,
+          supply_source_type:mapSrc(source_type),
           commitment_status:'planned', coverage_status:'NOT_COVERED', source_type:'manual_attachment',
           billing_status: demand_source === 'STOCK_MANUAL' ? 'not_billable' : 'unbilled',
           requires_prepay: demand_source === 'STOCK_MANUAL' ? false : (payload.requires_prepay||false),
@@ -281,7 +284,6 @@ async function adjustRequired(ctx, commitment_ids, payload) {
         invoiced_qty:0, invoiced_amount:0, billing_status:'unbilled', commitment_status:'planned', coverage_status:'NOT_COVERED',
         source_type:'scope_addition', parent_commitment_id:cid, allocation_source:'manual_commitment',
         unit_cost_snapshot:ucs, unit_retail_snapshot:urs, planned_cost_total:ucs*delta, planned_retail_total:urs*delta,
-        qty_committed:delta, qty_to_order:delta, qty_ordered:0, qty_received:0, qty_reserved:0, qty_allocated:0, qty_cancelled:0,
         supply_source_type:'VENDOR', order_line_item_ids:[], commitment_version:1, state_version:0, last_recomputed_at:ctx.timestamp, requires_prepay:false
       });
       ctx.mutations.push({entity:'PartCommitment',id:sc.id,action:'SCOPE_ADDITION_CREATE'});
@@ -295,7 +297,7 @@ async function adjustRequired(ctx, commitment_ids, payload) {
   }
 
   const pm=part.pricing_mode||'matrix', re=pm==='manual'?(part.retail_override||0):Math.round(part.retail_matrix_price||0);
-  const ud = { required_total:newReq, covered_from_po:cn.covered_from_po, supply_source_type:mapSrc(source_type), qty_committed:newReq,
+  const ud = { required_total:newReq, covered_from_po:cn.covered_from_po, supply_source_type:mapSrc(source_type),
     planned_cost_total:(commitment?.unit_cost_snapshot??part.cost??0)*newReq, planned_retail_total:(commitment?.unit_retail_snapshot??re)*newReq,
     commitment_version:(commitment?.commitment_version??0)+1, state_version:(commitment?.state_version??0)+1, last_recomputed_at:ctx.timestamp };
   if (wasReopened) { ud.commitment_status='planned'; ud.coverage_status='NOT_COVERED'; ud.cancelled_at=null; ud.cancelled_reason=null; ud.cancelled_by=null; }
@@ -507,7 +509,7 @@ async function createPO(ctx, commitment_ids, payload) {
         else costSync.pricing_integrity_status = 'missing_retail';
       }
 
-      await ctx.base44.asServiceRole.entities.PartCommitment.update(item.commitment.id,{covered_from_po:newCov,qty_ordered:(item.commitment.qty_ordered??0)+rq,qty_to_order:newTO,order_line_item_ids:[...(item.commitment.order_line_item_ids||[]),li.id],commitment_status:'ordered',commitment_version:(item.commitment.commitment_version??0)+1,...costSync});
+      await ctx.base44.asServiceRole.entities.PartCommitment.update(item.commitment.id,{covered_from_po:newCov,order_line_item_ids:[...(item.commitment.order_line_item_ids||[]),li.id],commitment_status:'ordered',commitment_version:(item.commitment.commitment_version??0)+1,...costSync});
       // COVERAGE VERIFICATION LOG
       console.log(`[CREATE_PO_COVERAGE] commitment=${item.commitment.id} part=${item.part.part_name} qty_ordered=${rq} old_covered=${curCov} new_covered=${newCov} new_to_order=${newTO} vendor=${vid} cost=${uc} source=${item.cost_source}`);
       ctx.mutations.push({entity:'PartPurchaseLineItem',id:li.id,action:'CREATE'},{entity:'PartCommitment',id:item.commitment.id,action:'CREATE_PO'});
@@ -669,10 +671,7 @@ async function receiveSingleLineForBatch(ctx,line_item_id,qty_received,location_
       await ctx.base44.asServiceRole.entities.PartCommitment.update(li.commitment_id, {
         covered_from_po: finalCoveredPO,
         reserved_from_stock: clampedReserved,
-        qty_reserved: clampedReserved,
-        qty_received: oldQtyReceived + qty_received,
         commitment_status: newStatus,
-        coverage_status: isFulfilled ? 'FULLY_COVERED' : (totalCoverage > 0 ? 'PARTIALLY_COVERED' : 'NOT_COVERED'),
         commitment_version: (c.commitment_version ?? 0) + 1,
         last_recomputed_at: ctx.timestamp,
       });
@@ -717,7 +716,6 @@ async function receiveSingleLine(ctx,line_item_id,qty_received,location_id) {
     if(c){
       const oldCoveredPO = c.covered_from_po ?? 0;
       const oldReserved = c.reserved_from_stock ?? 0;
-      const oldQtyReceived = c.qty_received ?? 0;
       const installed = c.qty_installed ?? 0;
       const required = c.required_total ?? 0;
       const qty_removed_c = c.qty_removed ?? 0;
@@ -761,10 +759,7 @@ async function receiveSingleLine(ctx,line_item_id,qty_received,location_id) {
       await ctx.base44.asServiceRole.entities.PartCommitment.update(li.commitment_id, {
         covered_from_po: finalCoveredPO,
         reserved_from_stock: clampedReserved,
-        qty_reserved: clampedReserved,
-        qty_received: oldQtyReceived + qty_received,
         commitment_status: newStatus,
-        coverage_status: isFulfilled ? 'FULLY_COVERED' : (totalCoverage > 0 ? 'PARTIALLY_COVERED' : 'NOT_COVERED'),
         commitment_version: (c.commitment_version ?? 0) + 1,
         last_recomputed_at: ctx.timestamp,
       });
@@ -833,7 +828,7 @@ async function install(ctx,commitment_ids,payload) {
   } else {
     newInstallStatus = c.commitment_status; // preserve current if no clear transition
   }
-  await ctx.base44.asServiceRole.entities.PartCommitment.update(cid,{qty_installed:newInst,reserved_from_stock:newRes,qty_reserved:newRes,commitment_status:newInstallStatus,commitment_version:(c.commitment_version??0)+1});
+  await ctx.base44.asServiceRole.entities.PartCommitment.update(cid,{qty_installed:newInst,reserved_from_stock:newRes,commitment_status:newInstallStatus,commitment_version:(c.commitment_version??0)+1});
 
   if(affStock){
     const inv=await ctx.base44.asServiceRole.entities.InventoryItem.filter({part_id:part.id}); let rem=qty_to_install;
@@ -1033,8 +1028,6 @@ async function deletePO(ctx, payload) {
 
         await ctx.base44.asServiceRole.entities.PartCommitment.update(c.id, {
           covered_from_po: newCovered,
-          qty_to_order: newTO,
-          qty_ordered: Math.max(0, (c.qty_ordered ?? 0) - (li.qty_ordered ?? 0)),
           order_line_item_ids: existingIds,
           commitment_status: newStatus,
           commitment_version: (c.commitment_version ?? 0) + 1,

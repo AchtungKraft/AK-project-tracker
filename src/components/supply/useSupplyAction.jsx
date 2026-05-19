@@ -27,6 +27,16 @@ import { forceAppRefresh, extractRefreshContext } from "@/components/supply/forc
  * ══════════════════════════════════════════════════════════════════════
  */
 
+// STEP 7 — CONCURRENCY GUARD: Prevents rapid-fire duplicate submissions
+const _inflightKeys = new Set();
+
+function makeInflightKey(action_type, commitment_ids, payload) {
+  // Key = action + sorted commitment IDs + essential payload fields
+  const ids = [...(commitment_ids || [])].sort().join(',');
+  const sig = [payload.part_id, payload.project_id, payload.order_id, payload.line_item_id].filter(Boolean).join(':');
+  return `${action_type}|${ids}|${sig}`;
+}
+
 export function useSupplyAction(options = {}) {
   const queryClient = useQueryClient();
   const { onSuccess, onError, showSuccessToast = false } = options;
@@ -34,18 +44,28 @@ export function useSupplyAction(options = {}) {
   // Base mutation for all supply actions
   const mutation = useMutation({
     mutationFn: async ({ action_type, commitment_ids = [], payload = {}, dry_run = false }) => {
-      const response = await base44.functions.invoke('executeSupplyAction', {
-        action_type,
-        commitment_ids,
-        payload,
-        dry_run
-      });
-
-      const result = response.data;
-      if (result.error) {
-        throw new Error(result.error);
+      // STEP 7: Concurrency guard — block duplicate in-flight mutations
+      const flightKey = makeInflightKey(action_type, commitment_ids, payload);
+      if (!dry_run && _inflightKeys.has(flightKey)) {
+        throw new Error(`DUPLICATE_MUTATION_BLOCKED: ${action_type} already in flight`);
       }
-      return { ...result, _payload: payload, _action_type: action_type };
+      if (!dry_run) _inflightKeys.add(flightKey);
+      try {
+        const response = await base44.functions.invoke('executeSupplyAction', {
+          action_type,
+          commitment_ids,
+          payload,
+          dry_run
+        });
+
+        const result = response.data;
+        if (result.error) {
+          throw new Error(result.error);
+        }
+        return { ...result, _payload: payload, _action_type: action_type };
+      } finally {
+        _inflightKeys.delete(flightKey);
+      }
     },
     onSuccess: async (data, variables) => {
       if (!variables.dry_run) {
