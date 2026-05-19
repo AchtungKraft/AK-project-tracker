@@ -113,11 +113,15 @@ Deno.serve(async (req) => {
         sum + (c.covered_from_po ?? 0), 0);
       
       // CANONICAL: To Order = sum of gaps across all commitments
+      // Gap = effective_required - reserved - covered - installed
       const to_order = partCommitments.reduce((sum, c) => {
         const req = c.required_total ?? 0;
+        const removed = c.qty_removed ?? 0;
+        const eff = Math.max(0, req - removed);
         const res = c.reserved_from_stock ?? 0;
         const cov = c.covered_from_po ?? 0;
-        return sum + Math.max(0, req - res - cov);
+        const inst = c.qty_installed ?? 0;
+        return sum + Math.max(0, eff - res - cov - inst);
       }, 0);
       
       // CANONICAL: Installed = sum of qty_installed across all commitments

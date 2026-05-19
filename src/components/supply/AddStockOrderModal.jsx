@@ -93,25 +93,28 @@ export default function AddStockOrderModal({ open, onClose, onSuccess }) {
           part_id: selectedPartId,
           required_total_set: qty,
           source_type: 'STOCK',
+          // Metadata applied atomically during create/update
+          demand_source: 'STOCK_MANUAL',
+          stock_reason: reason,
+          notes: notes || `Manual stock order: ${reason}`,
         },
       });
 
       if (response.data?.error) throw new Error(response.data.error);
 
-      // Set demand_source and billing_status on the commitment
-      const commitmentId = response.data?.commitment_id;
-      if (commitmentId) {
-        await base44.entities.PartCommitment.update(commitmentId, {
-          demand_source: 'STOCK_MANUAL',
-          stock_reason: reason,
-          billing_status: 'not_billable',
-          requires_prepay: false,
-          notes: notes || `Manual stock order: ${reason}`,
-        });
-      }
-
-      toast.success(`Stock order created: ${selectedPart?.part_name} x${qty}`);
+      const qtyResult = response.data?.required_total ?? qty;
+      toast.success(`Added ${qtyResult} to AK Stock order needs for ${selectedPart?.part_name}`);
+      
+      // Invalidate ALL supply-related caches
       queryClient.invalidateQueries({ queryKey: ['opsSupplyView'] });
+      queryClient.invalidateQueries({ queryKey: ['partsInventoryView'] });
+      queryClient.invalidateQueries({ queryKey: ['globalSupplyQueues'] });
+      queryClient.invalidateQueries({ queryKey: ['parts'] });
+      queryClient.invalidateQueries({ queryKey: ['partCommitments'] });
+      queryClient.invalidateQueries({ queryKey: ['commitments'] });
+      queryClient.invalidateQueries({ queryKey: ['partSupplyUsage'] });
+      queryClient.invalidateQueries({ queryKey: ['stockReorder'] });
+      
       onSuccess?.();
       handleClose();
     } catch (err) {

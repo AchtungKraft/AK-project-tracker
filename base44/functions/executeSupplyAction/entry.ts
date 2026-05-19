@@ -209,7 +209,7 @@ async function inlineRecompute(ctx, part_id, isDry) {
 // ── ACTIONS ──
 
 async function adjustRequired(ctx, commitment_ids, payload) {
-  const { required_total_delta, required_total_set, new_required_total, source_type='SHOP_PURCHASED', project_id, part_id, reopen_if_closed=false } = payload;
+  const { required_total_delta, required_total_set, new_required_total, source_type='SHOP_PURCHASED', project_id, part_id, reopen_if_closed=false, demand_source, stock_reason, notes: payloadNotes } = payload;
   const effSet = required_total_set ?? new_required_total;
   if (effSet === undefined && required_total_delta === undefined) throw new Error('required_total_delta or required_total_set required');
   let cid = commitment_ids?.[0], commitment=null, part=null, isNew=false, wasReopened=false;
@@ -234,10 +234,15 @@ async function adjustRequired(ctx, commitment_ids, payload) {
         commitment = await ctx.base44.asServiceRole.entities.PartCommitment.create({
           project_id, part_id, required_total:initReq, reserved_from_stock:0, covered_from_po:0, qty_installed:0,
           supply_source_type:mapSrc(source_type), qty_committed:initReq, qty_reserved:0, qty_to_order:initReq, qty_ordered:0, qty_received:0,
-          commitment_status:'planned', coverage_status:'NOT_COVERED', source_type:'manual_attachment', billing_status:'unbilled',
-          requires_prepay:payload.requires_prepay||false, unit_cost_snapshot:uc, unit_retail_snapshot:re,
+          commitment_status:'planned', coverage_status:'NOT_COVERED', source_type:'manual_attachment',
+          billing_status: demand_source === 'STOCK_MANUAL' ? 'not_billable' : 'unbilled',
+          requires_prepay: demand_source === 'STOCK_MANUAL' ? false : (payload.requires_prepay||false),
+          unit_cost_snapshot:uc, unit_retail_snapshot:re,
           planned_cost_total:uc*initReq, planned_retail_total:re*initReq, pricing_integrity_status:pis,
-          commitment_version:1, state_version:1, last_recomputed_at:ctx.timestamp
+          commitment_version:1, state_version:1, last_recomputed_at:ctx.timestamp,
+          ...(demand_source ? { demand_source } : {}),
+          ...(stock_reason ? { stock_reason } : {}),
+          ...(payloadNotes ? { notes: payloadNotes } : {}),
         });
         cid=commitment.id; isNew=true;
         ctx.mutations.push({entity:'PartCommitment',id:cid,action:'CREATE'});
@@ -249,6 +254,11 @@ async function adjustRequired(ctx, commitment_ids, payload) {
   if (!commitment&&cid) { const [c]=await ctx.base44.entities.PartCommitment.filter({id:cid}); commitment=c; if(!c) throw new Error('Commitment not found'); if(reopen_if_closed&&['closed','cancelled'].includes(c.commitment_status)) wasReopened=true; }
   if (!part) { const [p]=await ctx.base44.entities.Part.filter({id:commitment?.part_id||part_id}); part=p; if(!p) throw new Error('Part not found'); }
 
+  // For brand-new commitments (dry_run=true path), synthesize a virtual commitment for readCanonical
+  if (!commitment && isNew) {
+    const initReq = effSet !== undefined ? Math.max(0, effSet) : Math.max(1, required_total_delta ?? 1);
+    commitment = { id: 'NEW', required_total: initReq, qty_removed: 0, reserved_from_stock: 0, covered_from_po: 0, qty_installed: 0, commitment_status: 'planned' };
+  }
   const cn = readCanonical(commitment, ctx);
   const curReq = cn.required_total;
   let newReq = effSet!==undefined ? Math.max(0,effSet) : Math.max(0,curReq+(required_total_delta??0));
@@ -283,6 +293,10 @@ async function adjustRequired(ctx, commitment_ids, payload) {
     planned_cost_total:(commitment?.unit_cost_snapshot??part.cost??0)*newReq, planned_retail_total:(commitment?.unit_retail_snapshot??re)*newReq,
     commitment_version:(commitment?.commitment_version??0)+1, state_version:(commitment?.state_version??0)+1, last_recomputed_at:ctx.timestamp };
   if (wasReopened) { ud.commitment_status='planned'; ud.coverage_status='NOT_COVERED'; ud.cancelled_at=null; ud.cancelled_reason=null; ud.cancelled_by=null; }
+  if (demand_source) { ud.demand_source = demand_source; }
+  if (stock_reason) { ud.stock_reason = stock_reason; }
+  if (payloadNotes) { ud.notes = payloadNotes; }
+  if (demand_source === 'STOCK_MANUAL') { ud.billing_status = 'not_billable'; ud.requires_prepay = false; }
   if (!isNew&&cid) await ctx.base44.asServiceRole.entities.PartCommitment.update(cid, ud);
   ctx.mutations.push({entity:'PartCommitment',id:cid,action:'ADJUST_REQUIRED'});
 
