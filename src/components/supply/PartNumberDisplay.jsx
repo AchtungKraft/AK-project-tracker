@@ -10,14 +10,20 @@ import { cn } from "@/lib/utils";
  * Supports click-to-copy and graceful fallback for missing numbers.
  */
 export function resolveVendorPartNumber(item) {
-  return (
-    item?.vendor_part_number ||
-    item?.part?.vendor_part_number ||
-    item?.manufacturer_part_number ||
-    item?.sku ||
-    item?.part_number ||
-    null
-  );
+  // Direct fields first
+  if (item?.vendor_part_number) return item.vendor_part_number;
+  if (item?.part?.vendor_part_number) return item.part.vendor_part_number;
+
+  // Check vendor_sources array (from getOpsSupplyView read model)
+  const sources = item?.vendor_sources || item?.sources || [];
+  if (sources.length > 0) {
+    const preferred = sources.find(s => s.is_preferred && s.vendor_part_number);
+    if (preferred) return preferred.vendor_part_number;
+    const any = sources.find(s => s.vendor_part_number);
+    if (any) return any.vendor_part_number;
+  }
+
+  return item?.manufacturer_part_number || item?.sku || item?.part_number || null;
 }
 
 export default function PartNumberDisplay({ vendorPartNumber, internalPartNumber, compact = false, className }) {
