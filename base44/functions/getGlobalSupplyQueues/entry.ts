@@ -88,7 +88,14 @@ Deno.serve(async (req) => {
       // CANONICAL GAP: effective_required - reserved - covered - installed
       const canonical_to_order = Math.max(0, effective_required - reserved_from_stock - covered_from_po - qtyInstalled);
       
-      const isFundingBlocked = exposureGap > poolBalance && exposureGap > 0;
+      // CANONICAL: AK STOCK / not_billable commitments are NEVER funding-blocked
+      const isNotBillable = c.billing_status === 'not_billable';
+      const isSystemProject = project?.is_system_project === true;
+      const isFundingBlocked = !isNotBillable && !isSystemProject && exposureGap > poolBalance && exposureGap > 0;
+
+      // CANONICAL: qty_to_install uses reserved_from_stock (available physical stock allocated)
+      // NOT qty_received which is a running total that doesn't reflect current allocation state
+      const available_to_install = Math.max(0, Math.min(reserved_from_stock + covered_from_po - qtyInstalled, effective_required - qtyInstalled));
 
       return {
         commitment_id: c.id,
@@ -99,6 +106,8 @@ Deno.serve(async (req) => {
         vendor_id: vendor?.id,
         vendor_name: vendor?.vendor_name || 'No Vendor',
         commitment_status: c.commitment_status,
+        demand_source: c.demand_source || 'PROJECT',
+        billing_status: c.billing_status || 'unbilled',
         
         qty_committed: required_total,
         qty_ordered: qtyOrdered,
@@ -106,7 +115,7 @@ Deno.serve(async (req) => {
         qty_installed: qtyInstalled,
         qty_to_order: canonical_to_order,
         qty_to_receive: Math.max(0, qtyOrdered - qtyReceived),
-        qty_to_install: Math.max(0, qtyReceived - qtyInstalled),
+        qty_to_install: available_to_install,
         
         // Canonical supply fields for downstream consumers
         required_total,
