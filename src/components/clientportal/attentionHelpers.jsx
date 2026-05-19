@@ -63,11 +63,11 @@ export const ATTENTION_BADGE_CONFIG = {
     textClass: "text-orange-400",
   },
   approved_recent: {
-    label: "Completed",
+    label: "Approved",
     color: "green",
-    bgClass: "bg-green-600/20",
-    borderClass: "border-green-600/50",
-    textClass: "text-green-400",
+    bgClass: "bg-emerald-600/20",
+    borderClass: "border-emerald-500/50",
+    textClass: "text-emerald-400",
   },
 };
 
@@ -207,6 +207,7 @@ export function buildAttentionList(projectGroups) {
       ...group.draft,
       ...group.awaiting_client,
       ...group.client_replied,
+      ...group.recently_approved,
       ...group.approved,
     ];
 
