@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,7 @@ import { CopyRequestLinkButton } from "./ClientLinksCopyButtons";
 import { getRequestTypeInfo } from "./utils";
 import { isRequestOverdue, sortOverdueFirst, countOverdue, RECENTLY_APPROVED_WINDOW_HOURS } from "./lifecycleHelpers";
 import InlineDueDatePicker, { BulkDueDatePicker } from "./InlineDueDatePicker";
+
 
 // Lifecycle bucket configurations
 export const LIFECYCLE_BUCKETS = {
@@ -79,7 +80,7 @@ export const LIFECYCLE_BUCKETS = {
 // Use centralized type info from utils
 
 // Request card component with overdue visual + inline due date + quick actions
-const RequestCard = ({ request, bucket, getProjectClientSlug, onUpdateDueDate }) => {
+export const RequestCard = ({ request, bucket, getProjectClientSlug, onUpdateDueDate }) => {
   const isDraft = bucket === 'draft';
   const isRecentApproval = bucket === 'recently_approved';
   const isArchiveApproval = bucket === 'approved';
@@ -194,16 +195,21 @@ const RequestCard = ({ request, bucket, getProjectClientSlug, onUpdateDueDate })
   );
 };
 
+// Buckets that use compact progressive disclosure
+const COMPACT_BUCKETS = new Set(['awaiting_client', 'client_replied', 'recently_approved']);
+const MAX_VISIBLE_DEFAULT = 2;
+
 // Lifecycle bucket section within a project
 export default function LifecycleBucketSection({ 
   bucket, 
   requests, 
   getProjectClientSlug,
   onUpdateDueDate,
-  defaultCollapsed = false 
+  defaultCollapsed = false,
 }) {
   const config = LIFECYCLE_BUCKETS[bucket];
   const Icon = config.icon;
+  const [showAll, setShowAll] = useState(false);
   
   // Overdue-first sorting inside each bucket
   const sortedRequests = useMemo(() => {
@@ -213,6 +219,13 @@ export default function LifecycleBucketSection({
   const overdueCount = useMemo(() => countOverdue(requests, bucket), [requests, bucket]);
   
   if (requests.length === 0) return null;
+  
+  // Progressive disclosure: cap visible cards for dense buckets
+  const useCompact = COMPACT_BUCKETS.has(bucket) && sortedRequests.length > MAX_VISIBLE_DEFAULT;
+  const visibleRequests = useCompact && !showAll 
+    ? sortedRequests.slice(0, MAX_VISIBLE_DEFAULT) 
+    : sortedRequests;
+  const hiddenCount = sortedRequests.length - visibleRequests.length;
 
   const handleBulkDateChange = async (date) => {
     if (!onUpdateDueDate) return;
@@ -250,7 +263,7 @@ export default function LifecycleBucketSection({
       
       {/* Request Cards */}
       <div className="p-2 space-y-2 bg-black/20">
-        {sortedRequests.map(request => (
+        {visibleRequests.map(request => (
           <RequestCard 
             key={request.id} 
             request={request} 
@@ -259,6 +272,16 @@ export default function LifecycleBucketSection({
             onUpdateDueDate={onUpdateDueDate}
           />
         ))}
+        
+        {hiddenCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowAll(true)}
+            className="w-full text-center py-2 text-xs text-gray-400 hover:text-white bg-gray-800/40 rounded-lg border border-gray-700/40 hover:border-gray-600 transition-colors"
+          >
+            + {hiddenCount} more request{hiddenCount !== 1 ? 's' : ''}
+          </button>
+        )}
       </div>
     </div>
   );

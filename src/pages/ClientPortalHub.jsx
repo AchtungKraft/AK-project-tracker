@@ -44,6 +44,7 @@ import ClientPortalAdminTab from "@/components/clientportal/ClientPortalAdminTab
 import ProjectLifecycleCard from "@/components/clientportal/ProjectLifecycleCard";
 import RecentlyApprovedStrip from "@/components/clientportal/RecentlyApprovedStrip";
 import ClientPortalCalendarView from "@/components/clientportal/ClientPortalCalendarView";
+import ColumnBoardView from "@/components/clientportal/ColumnBoardView";
 import { 
   groupRequestsByProjectAndLifecycle, 
   SORT_MODE_OPTIONS,
@@ -61,7 +62,7 @@ export default function ClientPortalHub() {
   const [sortMode, setSortMode] = useState('due_date');
   const [lifecycleQuickFilter, setLifecycleQuickFilter] = useState('all');
   const [boardViewMode, setBoardViewMode] = useState(() => {
-    return localStorage.getItem('clientportal_board_view') || 'card';
+    return localStorage.getItem('clientportal_board_view') || 'column';
   });
   
   // Persist board view mode
@@ -698,18 +699,25 @@ export default function ClientPortalHub() {
               <Tabs value={boardViewMode} onValueChange={handleBoardViewModeChange}>
                 <TabsList className="bg-gray-800/80 border border-gray-700 p-1 h-auto">
                   <TabsTrigger 
+                    value="column" 
+                    className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-1.5 text-xs md:text-sm"
+                  >
+                    <LayoutDashboard className="w-4 h-4" />
+                    <span className="hidden sm:inline">Board</span>
+                  </TabsTrigger>
+                  <TabsTrigger 
                     value="card" 
                     className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-1.5 text-xs md:text-sm"
                   >
                     <LayoutGrid className="w-4 h-4" />
-                    <span className="hidden sm:inline">Card View</span>
+                    <span className="hidden sm:inline">By Project</span>
                   </TabsTrigger>
                   <TabsTrigger 
                     value="calendar" 
                     className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-1.5 text-xs md:text-sm"
                   >
                     <Calendar className="w-4 h-4" />
-                    <span className="hidden sm:inline">Calendar View</span>
+                    <span className="hidden sm:inline">Calendar</span>
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -719,7 +727,34 @@ export default function ClientPortalHub() {
               </p>
             </div>
             
-            {/* Card View */}
+            {/* Column Board View — workflow-first with project grouping */}
+            {boardViewMode === 'column' && (
+              filteredProjectData.length === 0 ? (
+                <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
+                  <CardContent className="p-8 md:p-12 text-center">
+                    <div className="flex items-center justify-center w-16 h-16 rounded-full bg-gray-800 mx-auto mb-4">
+                      <LayoutDashboard className="w-8 h-8 text-gray-500" />
+                    </div>
+                    <h3 className="text-xl font-semibold text-white mb-2">No Feedback Requests</h3>
+                    <p className="text-gray-400">
+                      {lifecycleQuickFilter !== 'all' 
+                        ? `No requests match the "${lifecycleQuickFilter.replace('_', ' ')}" filter.`
+                        : 'No feedback requests match the current filters.'}
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <ColumnBoardView
+                  filteredProjectData={filteredProjectData}
+                  projects={projects}
+                  getProjectClientSlug={getProjectClientSlug}
+                  onUpdateDueDate={handleUpdateRequestDueDate}
+                  lifecycleQuickFilter={lifecycleQuickFilter}
+                />
+              )
+            )}
+
+            {/* Card View — project-first */}
             {boardViewMode === 'card' && (
               <>
                 {/* Global Recently Approved Strip — top of board */}
