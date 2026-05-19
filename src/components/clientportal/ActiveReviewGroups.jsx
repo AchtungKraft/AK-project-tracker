@@ -94,17 +94,6 @@ export default function ActiveReviewGroups({ items, onUpdateDueDate }) {
       )}
 
       {groups.map(group => {
-        // Single-item project: render card directly
-        if (group.items.length === 1) {
-          return (
-            <AttentionCard
-              key={group.items[0].requestId}
-              item={group.items[0]}
-              onUpdateDueDate={onUpdateDueDate}
-            />
-          );
-        }
-
         const isCollapsed = collapsed[group.clientKey] === true;
         const reviewCount = group.items.filter(i => i.request?.review_state === 'in_review').length;
 

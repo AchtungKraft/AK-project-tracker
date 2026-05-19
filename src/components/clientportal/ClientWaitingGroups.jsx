@@ -93,17 +93,6 @@ export default function ClientWaitingGroups({ items, onUpdateDueDate }) {
       )}
 
       {groups.map(group => {
-        // Single-item project: render card directly
-        if (group.items.length === 1) {
-          return (
-            <AttentionCard
-              key={group.items[0].requestId}
-              item={group.items[0]}
-              onUpdateDueDate={onUpdateDueDate}
-            />
-          );
-        }
-
         const isCollapsed = collapsed[group.clientKey] === true;
         return (
           <div key={group.clientKey} className="rounded-lg bg-gray-900/30 border border-gray-800/60 overflow-hidden">
