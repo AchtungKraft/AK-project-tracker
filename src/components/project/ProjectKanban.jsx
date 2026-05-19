@@ -29,14 +29,17 @@ const getCategoryPath = (categoryId, categories) => {
   return category.name;
 };
 
-export default function ProjectKanban({ projectId, sharedData = {} }) {
+export default function ProjectKanban({ projectId, sharedData = {}, groupBy: externalGroupBy, subGroupBy: externalSubGroupBy }) {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const [showManageBuckets, setShowManageBuckets] = useState(false);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
-  const [groupBy, setGroupBy] = useState('buckets');
-  const [subGroupBy, setSubGroupBy] = useState('status');
+  // Use lifted state from parent when available, fall back to local state for standalone usage
+  const [localGroupBy, setLocalGroupBy] = useState('buckets');
+  const [localSubGroupBy, setLocalSubGroupBy] = useState('status');
+  const groupBy = externalGroupBy ?? localGroupBy;
+  const subGroupBy = externalSubGroupBy ?? localSubGroupBy;
 
   // Access canonical completion flow from context (if available)
   const taskInteraction = useTaskInteractionContext();
@@ -343,67 +346,69 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
   return (
     <>
       <div className={cn("space-y-4", isMobile && "space-y-2")}>
-        {/* Header */}
-        <div className={cn("space-y-3", isMobile && "space-y-2")}>
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className={cn("font-bold text-white", isMobile ? "text-base" : "text-xl")}>Task Groups</h2>
-              <p className="text-sm text-gray-400 hidden md:block">Drag tasks to organize</p>
+        {/* Controls header only shown in standalone mode (no external groupBy prop) */}
+        {externalGroupBy == null && (
+          <div className={cn("space-y-3", isMobile && "space-y-2")}>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className={cn("font-bold text-white", isMobile ? "text-base" : "text-xl")}>Task Groups</h2>
+                <p className="text-sm text-gray-400 hidden md:block">Drag tasks to organize</p>
+              </div>
             </div>
-          </div>
-          <div className={cn("flex flex-wrap gap-2", isMobile && "gap-1.5")}>
-            <Select value={groupBy} onValueChange={setGroupBy}>
-              <SelectTrigger className={cn(
-                "bg-gray-900/50 border-gray-700 text-white",
-                isMobile ? "w-32 h-8 text-xs" : "w-40 text-sm"
-              )}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="buckets">Custom Buckets</SelectItem>
-                <SelectItem value="status">Group by Status</SelectItem>
-                <SelectItem value="assigned">Group by Assigned</SelectItem>
-                <SelectItem value="category">Group by Category</SelectItem>
-              </SelectContent>
-            </Select>
-            {groupBy === 'buckets' && (
-              <Select value={subGroupBy} onValueChange={setSubGroupBy}>
+            <div className={cn("flex flex-wrap gap-2", isMobile && "gap-1.5")}>
+              <Select value={groupBy} onValueChange={setLocalGroupBy}>
                 <SelectTrigger className={cn(
                   "bg-gray-900/50 border-gray-700 text-white",
-                  isMobile ? "w-28 h-8 text-xs" : "w-36 text-sm"
+                  isMobile ? "w-32 h-8 text-xs" : "w-40 text-sm"
                 )}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="status">Sub: Status</SelectItem>
-                  <SelectItem value="assigned">Sub: Assigned</SelectItem>
-                  <SelectItem value="category">Sub: Category</SelectItem>
+                  <SelectItem value="buckets">Custom Buckets</SelectItem>
+                  <SelectItem value="status">Group by Status</SelectItem>
+                  <SelectItem value="assigned">Group by Assigned</SelectItem>
+                  <SelectItem value="category">Group by Category</SelectItem>
                 </SelectContent>
               </Select>
-            )}
-            <Button
-              onClick={() => setShowCreateTask(true)}
-              size="sm"
-              className={cn("bg-red-600 hover:bg-red-700 gap-2", isMobile && "h-8 px-2 text-xs")}
-            >
-              <Plus className={isMobile ? "w-3.5 h-3.5" : "w-4 h-4"} />
-              <span className="hidden sm:inline">New Task</span>
-              <span className="sm:hidden">New</span>
-            </Button>
-            {groupBy === 'buckets' && (
+              {groupBy === 'buckets' && (
+                <Select value={subGroupBy} onValueChange={setLocalSubGroupBy}>
+                  <SelectTrigger className={cn(
+                    "bg-gray-900/50 border-gray-700 text-white",
+                    isMobile ? "w-28 h-8 text-xs" : "w-36 text-sm"
+                  )}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="status">Sub: Status</SelectItem>
+                    <SelectItem value="assigned">Sub: Assigned</SelectItem>
+                    <SelectItem value="category">Sub: Category</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
               <Button
-                onClick={() => setShowManageBuckets(true)}
+                onClick={() => setShowCreateTask(true)}
                 size="sm"
-                variant="outline"
-                className={cn("border-gray-700 gap-2", isMobile && "h-8 px-2 text-xs")}
+                className={cn("bg-red-600 hover:bg-red-700 gap-2", isMobile && "h-8 px-2 text-xs")}
               >
-                <Settings className={isMobile ? "w-3.5 h-3.5" : "w-4 h-4"} />
-                <span className="hidden sm:inline">Manage Buckets</span>
-                <span className="sm:hidden">Manage</span>
+                <Plus className={isMobile ? "w-3.5 h-3.5" : "w-4 h-4"} />
+                <span className="hidden sm:inline">New Task</span>
+                <span className="sm:hidden">New</span>
               </Button>
-            )}
+              {groupBy === 'buckets' && (
+                <Button
+                  onClick={() => setShowManageBuckets(true)}
+                  size="sm"
+                  variant="outline"
+                  className={cn("border-gray-700 gap-2", isMobile && "h-8 px-2 text-xs")}
+                >
+                  <Settings className={isMobile ? "w-3.5 h-3.5" : "w-4 h-4"} />
+                  <span className="hidden sm:inline">Manage Buckets</span>
+                  <span className="sm:hidden">Manage</span>
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {groupBy === 'buckets' && sortedBuckets.length === 0 ? (
           <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg p-8 text-center">
@@ -800,14 +805,15 @@ export default function ProjectKanban({ projectId, sharedData = {} }) {
         )}
       </div>
 
-      {showManageBuckets && (
+      {/* Modals only in standalone mode — when used from ProjectOverview, parent owns modals */}
+      {externalGroupBy == null && showManageBuckets && (
         <ManageBucketsModal
           projectId={projectId}
           onClose={() => setShowManageBuckets(false)}
         />
       )}
 
-      {showCreateTask && (
+      {externalGroupBy == null && showCreateTask && (
         <CreateTaskModal
           projectId={projectId}
           onClose={() => setShowCreateTask(false)}

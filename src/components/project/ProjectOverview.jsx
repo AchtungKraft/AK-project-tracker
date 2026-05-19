@@ -19,6 +19,9 @@ import ImageModal from "../ui/ImageModal";
 import ProjectKanban from "./ProjectKanban";
 import CompletedTasksSection from "./CompletedTasksSection";
 import TaskViewSwitcher from "../tasks/TaskViewSwitcher";
+import ProjectTaskControls from "./ProjectTaskControls";
+import ManageBucketsModal from "./ManageBucketsModal";
+import CreateTaskModal from "../tasks/CreateTaskModal";
 import ProjectCalendarView from "./ProjectCalendarView";
 import PriorityExecutionView from "../priorities/PriorityExecutionView";
 import ShopPriorityView from "../priorities/ShopPriorityView";
@@ -45,6 +48,11 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
   const [viewMode, setViewMode] = useState(() => resolveProjectOverviewView(projectId));
   const [selectedTask, setSelectedTask] = useState(null);
   const [pendingPriorityTask, setPendingPriorityTask] = useState(null);
+  // Lifted task control state — shared across all views
+  const [groupBy, setGroupBy] = useState('buckets');
+  const [subGroupBy, setSubGroupBy] = useState('status');
+  const [showCreateTask, setShowCreateTask] = useState(false);
+  const [showManageBuckets, setShowManageBuckets] = useState(false);
   const [formData, setFormData] = useState({
     name: project?.name || "",
     client_name: project?.client_name || "",
@@ -400,6 +408,16 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
           />
         </div>
 
+        {/* Shared Task Controls — visible across ALL views */}
+        <ProjectTaskControls
+          groupBy={groupBy}
+          setGroupBy={setGroupBy}
+          subGroupBy={subGroupBy}
+          setSubGroupBy={setSubGroupBy}
+          onCreateTask={() => setShowCreateTask(true)}
+          onManageBuckets={() => setShowManageBuckets(true)}
+        />
+
         {/* Task Views */}
         {viewMode === 'card' && (
           <>
@@ -413,7 +431,9 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
                 onUpdateStartDate: handleUpdateStartDate,
                 onTogglePriority: wrappedTogglePriority,
                 showInlineControls: true,
-              }} 
+              }}
+              groupBy={groupBy}
+              subGroupBy={subGroupBy}
             />
             <CompletedTasksSection projectId={projectId} sharedData={{ ...sharedData, tasks: allProjectTasks }} />
           </>
@@ -595,6 +615,20 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
         incompleteChecklistCount={pendingTimeCompletion?.incompleteChecklistCount || 0}
         isLoading={isUpdating}
       />
+
+      {/* Shared modals — lifted from ProjectKanban so they work across all views */}
+      {showManageBuckets && (
+        <ManageBucketsModal
+          projectId={projectId}
+          onClose={() => setShowManageBuckets(false)}
+        />
+      )}
+      {showCreateTask && (
+        <CreateTaskModal
+          projectId={projectId}
+          onClose={() => setShowCreateTask(false)}
+        />
+      )}
     </>
   );
 }
