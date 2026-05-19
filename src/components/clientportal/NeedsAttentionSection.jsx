@@ -120,7 +120,7 @@ const NeedsAttentionSection = ({
 
   if (attentionItems.length === 0) return null;
 
-  const actionableCount = attentionItems.filter(i => i.type !== 'approved_recent').length;
+  const actionableCount = attentionItems.length;
 
   return (
     <Card className="bg-gradient-to-r from-red-950/40 to-orange-950/40 backdrop-blur-xl border-2 border-red-500/50 shadow-lg shadow-red-900/20">
@@ -161,11 +161,7 @@ const NeedsAttentionSection = ({
           ))}
         </div>
 
-        {/* Resolved Section — below the board */}
-        <ResolvedSection
-          items={columnData.resolved || []}
-          onUpdateDueDate={onUpdateDueDate}
-        />
+        {/* Resolved section removed — approved items now appear inline in Active Review */}
       </CardContent>
     </Card>
   );

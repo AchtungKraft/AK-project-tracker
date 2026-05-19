@@ -391,8 +391,8 @@ export function groupByColumn(attentionItems) {
   return {
     needs_sending: attentionItems.filter(i => i.type === 'needs_sending'),
     client_waiting: attentionItems.filter(i => i.type === 'needs_response'),
-    review_active: attentionItems.filter(i => i.type === 'needs_review' || i.type === 'overdue'),
+    review_active: attentionItems.filter(i => i.type === 'needs_review' || i.type === 'overdue' || i.type === 'approved_recent'),
     follow_up: followUp,
-    resolved: attentionItems.filter(i => i.type === 'approved_recent'),
+    resolved: [],
   };
 }

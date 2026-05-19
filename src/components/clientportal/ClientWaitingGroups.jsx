@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { ChevronDown, ChevronRight, ChevronsUpDown, FolderKanban } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { getWaitingTimeLabel } from "./attentionHelpers";
 import { getTime } from "./feedbackTimeline";
 import AttentionCard from "./AttentionCard";
 
@@ -39,19 +38,16 @@ export default function ClientWaitingGroups({ items, onUpdateDueDate }) {
   const groups = useMemo(() => groupByProject(items), [items]);
   const allKeys = useMemo(() => groups.map(g => g.clientKey), [groups]);
 
-  const hasMultipleGroups = groups.length > 1;
-  const needsGrouping = groups.some(g => g.items.length > 1);
-
+  // Multi-request groups default collapsed; single-request default expanded
   const [collapsed, setCollapsed] = useState(() => {
     const saved = loadState();
     if (saved) {
       const merged = {};
-      allKeys.forEach(k => { merged[k] = saved[k] !== undefined ? saved[k] : false; });
+      allKeys.forEach((k, i) => { merged[k] = saved[k] !== undefined ? saved[k] : (groups[i]?.items.length > 1); });
       return merged;
     }
-    // Default expanded for client waiting (urgent)
     const init = {};
-    allKeys.forEach(k => { init[k] = false; });
+    groups.forEach(g => { init[g.clientKey] = g.items.length > 1; });
     return init;
   });
 
@@ -61,10 +57,12 @@ export default function ClientWaitingGroups({ items, onUpdateDueDate }) {
     setCollapsed(prev => {
       const next = { ...prev };
       let changed = false;
-      allKeys.forEach(k => { if (next[k] === undefined) { next[k] = false; changed = true; } });
+      groups.forEach(g => {
+        if (next[g.clientKey] === undefined) { next[g.clientKey] = g.items.length > 1; changed = true; }
+      });
       return changed ? next : prev;
     });
-  }, [allKeys]);
+  }, [groups]);
 
   const toggleProject = useCallback((key) => {
     setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
@@ -82,23 +80,12 @@ export default function ClientWaitingGroups({ items, onUpdateDueDate }) {
 
   if (groups.length === 0) return null;
 
-  // If no project has more than 1 item and there's only 1 group, render flat
-  if (!needsGrouping && !hasMultipleGroups) {
-    return (
-      <div className="space-y-1.5">
-        {items.map(item => (
-          <AttentionCard key={item.requestId} item={item} onUpdateDueDate={onUpdateDueDate} />
-        ))}
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-1">
+    <div className="space-y-2.5">
       {groups.length > 1 && (
         <button
           onClick={toggleAll}
-          className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-300 transition-colors px-1 mb-1"
+          className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-300 transition-colors px-1 mb-0.5"
         >
           <ChevronsUpDown className="w-3 h-3" />
           {allCollapsed ? "Expand All" : "Collapse All"}
@@ -106,7 +93,7 @@ export default function ClientWaitingGroups({ items, onUpdateDueDate }) {
       )}
 
       {groups.map(group => {
-        // Single-item project: render card directly, no wrapper
+        // Single-item project: render card directly
         if (group.items.length === 1) {
           return (
             <AttentionCard
@@ -119,25 +106,28 @@ export default function ClientWaitingGroups({ items, onUpdateDueDate }) {
 
         const isCollapsed = collapsed[group.clientKey] === true;
         return (
-          <div key={group.clientKey} className="border-b border-gray-800/40 last:border-b-0">
+          <div key={group.clientKey} className="rounded-lg bg-gray-900/30 border border-gray-800/60 overflow-hidden">
+            {/* Project group header */}
             <button
               onClick={() => toggleProject(group.clientKey)}
-              className="w-full flex items-center gap-2 px-2 py-2 rounded-md hover:bg-gray-800/40 transition-colors text-left"
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-left transition-all duration-150 hover:bg-red-950/20 group/header"
             >
-              {isCollapsed
-                ? <ChevronRight className="w-3.5 h-3.5 text-gray-500 shrink-0" />
-                : <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-              }
-              <FolderKanban className="w-3.5 h-3.5 text-red-400/60 shrink-0" />
-              <span className="text-xs font-semibold text-gray-200 truncate flex-1 min-w-0">
+              <div className="shrink-0 text-gray-500 group-hover/header:text-gray-300 transition-colors">
+                {isCollapsed
+                  ? <ChevronRight className="w-3.5 h-3.5" />
+                  : <ChevronDown className="w-3.5 h-3.5" />
+                }
+              </div>
+              <FolderKanban className="w-3.5 h-3.5 text-red-400/70 shrink-0" />
+              <span className="text-[13px] font-semibold text-gray-100 group-hover/header:text-white truncate flex-1 min-w-0 transition-colors">
                 {group.clientName}
               </span>
               <div className="flex items-center gap-1.5 shrink-0">
-                <Badge className="bg-gray-800 text-gray-400 border-gray-700 text-[10px] px-1.5 py-0">
+                <Badge className="bg-red-500/15 text-red-300 border-red-500/30 text-[10px] px-1.5 py-0">
                   {group.items.length}
                 </Badge>
                 {group.overdueCount > 0 && (
-                  <Badge className="bg-red-600/20 text-red-400 border-red-600/40 text-[10px] px-1.5 py-0">
+                  <Badge className="bg-red-600/25 text-red-400 border-red-600/40 text-[10px] px-1.5 py-0 font-semibold">
                     {group.overdueCount} overdue
                   </Badge>
                 )}
@@ -145,7 +135,7 @@ export default function ClientWaitingGroups({ items, onUpdateDueDate }) {
             </button>
 
             {!isCollapsed && (
-              <div className="pl-2 pb-2 space-y-1.5">
+              <div className="px-2 pb-2.5 pt-1 space-y-1.5 border-t border-gray-800/40">
                 {group.items.map(item => (
                   <AttentionCard
                     key={item.requestId}

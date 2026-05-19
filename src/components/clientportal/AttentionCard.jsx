@@ -78,6 +78,8 @@ export default function AttentionCard({ item, onUpdateDueDate, muted = false }) 
   let cardClasses;
   if (isOverdue) {
     cardClasses = 'bg-red-950/30 border-red-500/50 border-l-4 border-l-red-500';
+  } else if (type === 'approved_recent') {
+    cardClasses = 'border-l-[3px] border-l-emerald-500 bg-emerald-950/25 border border-emerald-500/30 hover:border-emerald-400/50 hover:bg-emerald-950/35';
   } else if (type === 'follow_up' && risk) {
     const borderWidth = risk === 'high' ? 'border-l-[4px] border-2' : 'border-l-[3px]';
     cardClasses = `${borderWidth} ${borderColor} ${RISK_BG[risk]} hover:border-gray-500 hover:bg-gray-900/80`;
@@ -128,7 +130,7 @@ export default function AttentionCard({ item, onUpdateDueDate, muted = false }) 
           </div>
 
           {/* Title */}
-          <h4 className="font-medium text-sm text-white group-hover/card:text-red-400 transition-colors line-clamp-1 mb-1">
+          <h4 className="font-medium text-sm text-white group-hover/card:text-red-400 transition-colors line-clamp-2 mb-1">
             {request.title}
           </h4>
 
