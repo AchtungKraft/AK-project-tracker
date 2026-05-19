@@ -221,9 +221,10 @@ Deno.serve(async (req) => {
       const inv = partInventoryMap.get(c.part_id);
       if (!inv) continue;
       
-      const reserved = c.reserved_from_stock ?? c.qty_reserved ?? 0;
-      const covered = c.covered_from_po ?? c.qty_ordered ?? 0;
-      const required = c.required_total ?? c.qty_committed ?? 0;
+      // CANONICAL: No legacy fallbacks — use canonical fields only
+      const reserved = c.reserved_from_stock ?? 0;
+      const covered = c.covered_from_po ?? 0;
+      const required = c.required_total ?? 0;
       
       inv.reserved_global += reserved;
       inv.on_order_global += covered;
@@ -250,12 +251,12 @@ Deno.serve(async (req) => {
       const category = part?.part_category_id ? categoryMap.get(part.part_category_id) : null;
       const commitmentLineItems = lineItemsByCommitment.get(c.id) || [];
 
-      // Canonical quantities
-      const required_total = c.required_total ?? c.qty_committed ?? 0;
+      // CANONICAL quantities — no legacy fallbacks
+      const required_total = c.required_total ?? 0;
       const qty_removed = c.qty_removed ?? 0;
       const effective_required = Math.max(0, required_total - qty_removed);
-      let reserved_from_stock = c.reserved_from_stock ?? c.qty_reserved ?? 0;
-      const covered_from_po = c.covered_from_po ?? c.qty_ordered ?? 0;
+      let reserved_from_stock = c.reserved_from_stock ?? 0;
+      const covered_from_po = c.covered_from_po ?? 0;
       const qty_installed = c.qty_installed ?? 0;
 
       // AUTO-ALLOCATION — uses effective_required (excludes qty_removed)

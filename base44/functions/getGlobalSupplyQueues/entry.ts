@@ -1,9 +1,39 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 /**
  * getGlobalSupplyQueues - Canonical read model for global work queues
- * Optimized to fetch only necessary data
+ * 
+ * USES CANONICAL SUPPLY MATH — same formulas as getPartsInventoryView and getOpsSupplyView.
+ * See components/supply/canonicalSupplyMath.js for the reference implementation.
  */
+
+// ═══════════════════════════════════════════════════════════════════
+// CANONICAL SUPPLY MATH (inlined — must match canonicalSupplyMath.js)
+// ═══════════════════════════════════════════════════════════════════
+function readCanonicalQty(c) {
+  const required_total = c.required_total ?? 0;
+  const qty_removed = c.qty_removed ?? 0;
+  const effective_required = Math.max(0, required_total - qty_removed);
+  const reserved_from_stock = c.reserved_from_stock ?? 0;
+  const covered_from_po = c.covered_from_po ?? 0;
+  const qty_installed = c.qty_installed ?? 0;
+  const coverage_total = reserved_from_stock + covered_from_po + qty_installed;
+  const to_order = Math.max(0, effective_required - coverage_total);
+  const available_to_install = Math.max(0, Math.min(
+    reserved_from_stock + covered_from_po - qty_installed,
+    effective_required - qty_installed
+  ));
+  const is_satisfied = coverage_total >= effective_required && effective_required > 0;
+  return { required_total, qty_removed, effective_required, reserved_from_stock, covered_from_po, qty_installed, coverage_total, to_order, available_to_install, is_satisfied };
+}
+
+function isCommitmentFundingBlocked(c, project, poolBalance) {
+  if (c.billing_status === 'not_billable') return false;
+  if (project?.is_system_project === true) return false;
+  const exposureGap = c.exposure_gap || 0;
+  return exposureGap > poolBalance && exposureGap > 0;
+}
+// ═══════════════════════════════════════════════════════════════════
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -19,13 +49,8 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
-    
-    if (!user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    // Fetch only essential entities for queue building
-    // PERF FIX: Removed Vendor.list() global scan - will scope after parts
     const [projects, commitments, pools, inventoryItems] = await Promise.all([
       base44.entities.Project.list('-created_date', 100),
       base44.entities.PartCommitment.filter({ commitment_status: { $ne: 'cancelled' } }),
@@ -33,69 +58,48 @@ Deno.serve(async (req) => {
       base44.entities.InventoryItem.filter({ quantity_on_hand: { $gt: 0 } }),
     ]);
 
-    // PERF FIX: Scope parts to only those referenced by commitments
     const partIdsFromCommitments = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
     const parts = partIdsFromCommitments.length > 0
       ? await base44.entities.Part.filter({ id: { $in: partIdsFromCommitments } })
       : [];
 
-    // PERF FIX: Scope vendors to only those referenced by parts
     const vendorIdsFromParts = [...new Set(parts.map(p => p.default_vendor_id).filter(Boolean))];
     const vendors = vendorIdsFromParts.length > 0
       ? await base44.entities.Vendor.filter({ id: { $in: vendorIdsFromParts } })
       : [];
 
-    // Build lookup maps
     const projectMap = new Map(projects.map(p => [p.id, p]));
     const partMap = new Map(parts.map(p => [p.id, p]));
     const vendorMap = new Map(vendors.map(v => [v.id, v]));
-    
-    // Group pools by project for balance calculation
+
     const poolByProject = new Map();
     pools.forEach(p => {
       if (!poolByProject.has(p.project_id)) poolByProject.set(p.project_id, []);
       poolByProject.get(p.project_id).push(p);
     });
-
     const getProjectPoolBalance = (projectId) => {
-      const projectPools = poolByProject.get(projectId) || [];
-      return projectPools.reduce((sum, p) => sum + (p.balance || 0), 0);
+      return (poolByProject.get(projectId) || []).reduce((sum, p) => sum + (p.balance || 0), 0);
     };
 
-    // Enrich commitment with computed fields
-    // CANONICAL: Uses the same gap formula as getPartsInventoryView
+    // Enrich commitment using CANONICAL MATH ONLY
     const enrichCommitment = (c) => {
       const project = projectMap.get(c.project_id);
       const part = partMap.get(c.part_id);
       const vendor = part ? vendorMap.get(part.default_vendor_id) : null;
       const poolBalance = getProjectPoolBalance(c.project_id);
-      
+
+      // CANONICAL: All quantities via shared helper
+      const q = readCanonicalQty(c);
+
+      // CANONICAL: Funding blocked uses shared helper
+      const fundingBlocked = isCommitmentFundingBlocked(c, project, poolBalance);
+
       const exposureGap = c.exposure_gap || 0;
       const plannedRetail = c.planned_retail_total || 0;
       const coveredRetail = c.covered_retail_total || 0;
       const coveragePercent = plannedRetail > 0 ? Math.round((coveredRetail / plannedRetail) * 100) : 0;
-      
-      // CANONICAL FIELDS (same as executeSupplyAction readCanonical)
-      const required_total = c.required_total || 0;
-      const qty_removed = c.qty_removed || 0;
-      const effective_required = Math.max(0, required_total - qty_removed);
-      const reserved_from_stock = c.reserved_from_stock || 0;
-      const covered_from_po = c.covered_from_po || 0;
-      const qtyInstalled = c.qty_installed || 0;
       const qtyOrdered = c.qty_ordered || 0;
       const qtyReceived = c.qty_received || 0;
-      
-      // CANONICAL GAP: effective_required - reserved - covered - installed
-      const canonical_to_order = Math.max(0, effective_required - reserved_from_stock - covered_from_po - qtyInstalled);
-      
-      // CANONICAL: AK STOCK / not_billable commitments are NEVER funding-blocked
-      const isNotBillable = c.billing_status === 'not_billable';
-      const isSystemProject = project?.is_system_project === true;
-      const isFundingBlocked = !isNotBillable && !isSystemProject && exposureGap > poolBalance && exposureGap > 0;
-
-      // CANONICAL: qty_to_install uses reserved_from_stock (available physical stock allocated)
-      // NOT qty_received which is a running total that doesn't reflect current allocation state
-      const available_to_install = Math.max(0, Math.min(reserved_from_stock + covered_from_po - qtyInstalled, effective_required - qtyInstalled));
 
       return {
         commitment_id: c.id,
@@ -108,28 +112,29 @@ Deno.serve(async (req) => {
         commitment_status: c.commitment_status,
         demand_source: c.demand_source || 'PROJECT',
         billing_status: c.billing_status || 'unbilled',
-        
-        qty_committed: required_total,
+
+        // CANONICAL quantities from shared math
+        qty_committed: q.required_total,
         qty_ordered: qtyOrdered,
         qty_received: qtyReceived,
-        qty_installed: qtyInstalled,
-        qty_to_order: canonical_to_order,
+        qty_installed: q.qty_installed,
+        qty_to_order: q.to_order,
         qty_to_receive: Math.max(0, qtyOrdered - qtyReceived),
-        qty_to_install: available_to_install,
-        
-        // Canonical supply fields for downstream consumers
-        required_total,
-        effective_required,
-        reserved_from_stock,
-        covered_from_po,
-        
+        qty_to_install: q.available_to_install,
+
+        required_total: q.required_total,
+        effective_required: q.effective_required,
+        reserved_from_stock: q.reserved_from_stock,
+        covered_from_po: q.covered_from_po,
+
         exposure_gap: exposureGap,
         planned_retail: plannedRetail,
         coverage_percent: coveragePercent,
         pool_balance: poolBalance,
-        
-        is_funding_blocked: isFundingBlocked,
-        is_orderable: !isFundingBlocked && canonical_to_order > 0,
+
+        is_funding_blocked: fundingBlocked,
+        is_orderable: !fundingBlocked && q.to_order > 0,
+        is_satisfied: q.is_satisfied,
       };
     };
 
@@ -145,35 +150,34 @@ Deno.serve(async (req) => {
       overdrawn_pools: { label: 'Overdrawn Pools', items: [], total_deficit: 0 },
     };
 
-    // Categorize commitments into queues
     commitments.forEach(c => {
       const enriched = enrichCommitment(c);
-      
+
       if (enriched.is_funding_blocked) {
         queues.need_funding.items.push(enriched);
         queues.need_funding.total_exposure += enriched.exposure_gap;
       }
-      
+
       if (enriched.is_orderable) {
         queues.ready_to_order.items.push(enriched);
         queues.ready_to_order.total_value += enriched.planned_retail;
       }
-      
+
       if (['ordered', 'partially_received'].includes(enriched.commitment_status)) {
         queues.on_order.items.push(enriched);
         queues.on_order.total_pending += enriched.qty_to_receive;
       }
-      
+
       if (enriched.qty_to_receive > 0) {
         queues.ready_to_receive.items.push(enriched);
         queues.ready_to_receive.total_qty += enriched.qty_to_receive;
       }
-      
+
       if (enriched.qty_to_install > 0) {
         queues.ready_to_install.items.push(enriched);
         queues.ready_to_install.total_qty += enriched.qty_to_install;
       }
-      
+
       if (enriched.qty_installed > 0 && enriched.coverage_percent < 100) {
         queues.installed_uncovered.items.push(enriched);
         queues.installed_uncovered.total_exposure += enriched.exposure_gap;
@@ -206,17 +210,11 @@ Deno.serve(async (req) => {
       queues.overdrawn_pools.total_deficit += Math.abs(Math.min(0, p.balance || 0));
     });
 
-    // Summary counts
     const summary = Object.fromEntries(
       Object.entries(queues).map(([key, val]) => [key, val.items.length])
     );
 
-    return Response.json({
-      success: true,
-      timestamp: new Date().toISOString(),
-      summary,
-      queues,
-    });
+    return Response.json({ success: true, timestamp: new Date().toISOString(), summary, queues });
 
   } catch (error) {
     console.error("getGlobalSupplyQueues error:", error);
