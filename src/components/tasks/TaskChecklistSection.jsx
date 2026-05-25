@@ -5,10 +5,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ListChecks, ChevronDown, ChevronRight, Trash2, Loader2, ArrowUp, ArrowDown, Pencil } from "lucide-react";
+import { ListChecks, ChevronDown, ChevronRight, Trash2, Loader2, ArrowUp, ArrowDown, Pencil, ClipboardPaste } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { getNextSortOrder, updateChecklistOrder } from "./checklistHelpers";
+import BulkChecklistImportModal from "./BulkChecklistImportModal";
 
 export default function TaskChecklistSection({ taskId }) {
   const queryClient = useQueryClient();
@@ -18,6 +19,8 @@ export default function TaskChecklistSection({ taskId }) {
   const [manualCollapse, setManualCollapse] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editingText, setEditingText] = useState("");
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkImporting, setBulkImporting] = useState(false);
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['taskChecklistItems', 'task', taskId],
@@ -165,6 +168,16 @@ export default function TaskChecklistSection({ taskId }) {
             {completedCount} / {totalCount}
           </Badge>
         )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={(e) => { e.stopPropagation(); setBulkOpen(true); }}
+          className="ml-auto h-7 px-2 text-xs text-gray-400 hover:text-white hover:bg-gray-800 gap-1"
+        >
+          <ClipboardPaste className="w-3.5 h-3.5" />
+          Paste List
+        </Button>
       </button>
 
       {/* Content */}
@@ -300,6 +313,29 @@ export default function TaskChecklistSection({ taskId }) {
           </div>
         </div>
       )}
+
+      {/* Bulk import modal */}
+      <BulkChecklistImportModal
+        open={bulkOpen}
+        onOpenChange={setBulkOpen}
+        isImporting={bulkImporting}
+        onImport={async (parsedItems) => {
+          setBulkImporting(true);
+          const startOrder = getNextSortOrder(items);
+          const records = parsedItems.map((item, idx) => ({
+            task_id: taskId,
+            title: item.label,
+            is_complete: item.completed,
+            completed_at: item.completed ? new Date().toISOString() : null,
+            sort_order: startOrder + (idx + 1) * 10,
+            visibility: "internal",
+          }));
+          await base44.entities.TaskChecklistItem.bulkCreate(records);
+          invalidateChecklist();
+          setBulkImporting(false);
+          setBulkOpen(false);
+        }}
+      />
     </div>
   );
 }
