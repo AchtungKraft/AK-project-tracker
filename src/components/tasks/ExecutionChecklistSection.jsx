@@ -4,10 +4,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Loader2, Plus, Pencil, Trash2, ArrowUp, ArrowDown } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, ArrowUp, ArrowDown, ClipboardPaste } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { getNextSortOrder, updateChecklistOrder } from "./checklistHelpers";
+import BulkChecklistImportModal from "./BulkChecklistImportModal";
 
 /**
  * Execution-first checklist: checkbox + label only.
@@ -25,6 +26,8 @@ export default function ExecutionChecklistSection({ taskId, variant = "full" }) 
   const [editingId, setEditingId] = useState(null);
   const [editingText, setEditingText] = useState("");
   const [isReordering, setIsReordering] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkImporting, setBulkImporting] = useState(false);
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['taskChecklistItems', 'task', taskId],
@@ -283,8 +286,8 @@ export default function ExecutionChecklistSection({ taskId, variant = "full" }) 
         )}
       </div>
 
-      {/* Add item */}
-      <div className="mt-2">
+      {/* Add item + Paste List */}
+      <div className="mt-2 flex items-center gap-2">
         <Input
           ref={inputRef}
           value={newItemTitle}
@@ -292,9 +295,41 @@ export default function ExecutionChecklistSection({ taskId, variant = "full" }) 
           onKeyDown={handleKeyDown}
           placeholder="Add item…"
           disabled={createMutation.isPending}
-          className="bg-gray-800/50 border-gray-700 text-white text-sm h-10"
+          className="bg-gray-800/50 border-gray-700 text-white text-sm h-10 flex-1"
         />
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => setBulkOpen(true)}
+          className="h-10 px-2.5 text-xs text-gray-400 hover:text-white hover:bg-gray-800 gap-1 shrink-0"
+        >
+          <ClipboardPaste className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Paste List</span>
+        </Button>
       </div>
+
+      <BulkChecklistImportModal
+        open={bulkOpen}
+        onOpenChange={setBulkOpen}
+        isImporting={bulkImporting}
+        onImport={async (parsedItems) => {
+          setBulkImporting(true);
+          const startOrder = getNextSortOrder(items);
+          const records = parsedItems.map((item, idx) => ({
+            task_id: taskId,
+            title: item.label,
+            is_complete: item.completed,
+            completed_at: item.completed ? new Date().toISOString() : null,
+            sort_order: startOrder + (idx + 1) * 10,
+            visibility: "internal",
+          }));
+          await base44.entities.TaskChecklistItem.bulkCreate(records);
+          invalidateChecklist();
+          setBulkImporting(false);
+          setBulkOpen(false);
+        }}
+      />
     </div>
   );
 }
