@@ -15,7 +15,8 @@ import {
   Wrench, Minus, Plus,
 } from "lucide-react";
 import { toast } from "sonner";
-import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
+import { extractRefreshContext } from "@/components/supply/forceAppRefresh";
+import { refreshForGenericSupply } from "@/components/supply/tieredSupplyRefresh";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { cn } from "@/lib/utils";
 import RemovalSuccessView from "./RemovalSuccessView";
@@ -92,11 +93,13 @@ export default function RemovePartCreditModal({
     },
     onSuccess: async (data) => {
       setSuccessResult(data);
-      await forceAppRefresh(queryClient, {
-        partIds: commitment.part_id ? [commitment.part_id] : [],
-        projectIds: commitment.project_id ? [commitment.project_id] : [],
-        commitmentIds: [commitment.id],
+      // TIERED REFRESH: Part removal uses generic supply (T1+T4)
+      const context = extractRefreshContext(data, {
+        part_id: commitment.part_id,
+        project_id: commitment.project_id,
+        commitment_id: commitment.id,
       });
+      await refreshForGenericSupply(queryClient, context, data);
       onSuccess?.();
     },
     onError: (error) => {

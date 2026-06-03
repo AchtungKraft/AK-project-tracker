@@ -15,7 +15,8 @@ import { Package, MapPin, AlertTriangle, Plus, Archive } from "lucide-react";
 import ConfirmInventoryActionModal from "@/components/inventory/ConfirmInventoryActionModal";
 import { PartTypeBadge } from "@/components/parts/PartTypeSelector";
 import { useSupplyAction } from "@/components/supply/useProjectSupplyView";
-import { forceAppRefresh, extractRefreshContext } from "@/components/supply/forceAppRefresh";
+import { extractRefreshContext } from "@/components/supply/forceAppRefresh";
+import { refreshForAdjustStock } from "@/components/supply/tieredSupplyRefresh";
 
 /**
  * ReceiveInventoryModal - PHASE 12R CONTROLLED HYBRID
@@ -141,10 +142,10 @@ export default function ReceiveInventoryModal({
     onSuccess: async (result) => {
       console.log("[ReceiveInventoryModal] addStockMutation.onSuccess", result);
       
-      // PHASE 17: Deterministic refresh
+      // TIERED REFRESH: ADD_STOCK uses refreshForAdjustStock (T1+T3+T4)
       try {
         const context = extractRefreshContext(result, { part_id: result?.part_id || part?.id });
-        await forceAppRefresh(queryClient, context);
+        await refreshForAdjustStock(queryClient, context, result);
       } catch (refreshErr) {
         console.error("[ReceiveInventoryModal] Refresh error (non-fatal):", refreshErr);
       }

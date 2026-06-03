@@ -41,7 +41,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
+import { extractRefreshContext } from "@/components/supply/forceAppRefresh";
+import { refreshForGenericSupply } from "@/components/supply/tieredSupplyRefresh";
 import { normalizePreviewResponse, EMPTY_PREVIEW } from "@/components/supply/previewResponseAdapter";
 
 const ACTION_TYPES = {
@@ -212,12 +213,13 @@ export const InlineQtyStepper = ({ commitment, onMutationSuccess, disabled = fal
     onSuccess: async (data) => {
       toast.success(`Quantity updated to ${data.required_total}`);
       
-      // PHASE 17: Deterministic refresh
-      await forceAppRefresh(queryClient, {
-        partIds: commitment?.part_id ? [commitment.part_id] : [],
-        projectIds: commitment?.project_id ? [commitment.project_id] : [],
-        commitmentIds: [commitment.id],
+      // TIERED REFRESH: ADJUST_REQUIRED uses generic supply (T1+T4)
+      const context = extractRefreshContext(data, {
+        part_id: commitment?.part_id,
+        project_id: commitment?.project_id,
+        commitment_id: commitment?.id,
       });
+      await refreshForGenericSupply(queryClient, context, data);
       onMutationSuccess?.();
       
       setShowConfirmModal(false);
@@ -449,12 +451,13 @@ export default function CommitmentQuantityManager({
     onSuccess: async (data) => {
       if (data.success) {
         toast.success(`Quantity updated to ${data.required_total}`);
-        // PHASE 17: Deterministic refresh
-        await forceAppRefresh(queryClient, {
-          partIds: safeCommitment?.part_id ? [safeCommitment.part_id] : [],
-          projectIds: safeCommitment?.project_id ? [safeCommitment.project_id] : [],
-          commitmentIds: safeCommitment ? [safeCommitment.id] : [],
+        // TIERED REFRESH: ADJUST_REQUIRED uses generic supply (T1+T4)
+        const context = extractRefreshContext(data, {
+          part_id: safeCommitment?.part_id,
+          project_id: safeCommitment?.project_id,
+          commitment_id: safeCommitment?.id,
         });
+        await refreshForGenericSupply(queryClient, context, data);
         onSuccess?.();
         onClose?.();
       } else {

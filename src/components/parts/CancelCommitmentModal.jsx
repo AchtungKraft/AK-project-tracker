@@ -9,7 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Package, XCircle } from "lucide-react";
 import { toast } from "sonner";
-import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
+import { extractRefreshContext } from "@/components/supply/forceAppRefresh";
+import { refreshForGenericSupply } from "@/components/supply/tieredSupplyRefresh";
 
 /**
  * CancelCommitmentModal - Handle commitment cancellation with validation
@@ -47,12 +48,13 @@ export default function CancelCommitmentModal({
       return response.data;
     },
     onSuccess: async (data) => {
-      // PHASE 17: Deterministic refresh
-      await forceAppRefresh(queryClient, {
-        partIds: commitment?.part_id ? [commitment.part_id] : [],
-        projectIds: commitment?.project_id ? [commitment.project_id] : [],
-        commitmentIds: [commitment.id],
+      // TIERED REFRESH: Cancel uses generic supply (T1+T4)
+      const context = extractRefreshContext(data, {
+        part_id: commitment?.part_id,
+        project_id: commitment?.project_id,
+        commitment_id: commitment?.id,
       });
+      await refreshForGenericSupply(queryClient, context, data);
       
       if (data.creditCreated) {
         toast.success('Commitment cancelled - credit pool created for scope reduction');
@@ -88,13 +90,14 @@ export default function CancelCommitmentModal({
       
       return response.data;
     },
-    onSuccess: async () => {
-      // PHASE 17: Deterministic refresh
-      await forceAppRefresh(queryClient, {
-        partIds: commitment?.part_id ? [commitment.part_id] : [],
-        projectIds: commitment?.project_id ? [commitment.project_id] : [],
-        commitmentIds: [commitment.id],
+    onSuccess: async (data) => {
+      // TIERED REFRESH: Reduce uses generic supply (T1+T4)
+      const context = extractRefreshContext(data, {
+        part_id: commitment?.part_id,
+        project_id: commitment?.project_id,
+        commitment_id: commitment?.id,
       });
+      await refreshForGenericSupply(queryClient, context, data);
       toast.success('Commitment quantity reduced');
       onSuccess?.();
       onClose();
