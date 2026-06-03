@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { forceAppRefresh, extractRefreshContext } from "./forceAppRefresh";
+import { extractRefreshContext } from "./forceAppRefresh";
+import { getTieredRefresh } from "./tieredSupplyRefresh";
 import { 
   normalizeProjectId, 
   normalizeId,
@@ -265,11 +266,13 @@ export function useSupplyAction(options = {}) {
     onSuccess: async (data, variables) => {
       console.log("[useSupplyAction] SUCCESS", { action: variables.action_type, data });
       
-      // PHASE 17: Use forceAppRefresh for deterministic refresh
+      // TIERED REFRESH: Action-specific invalidation replaces monolithic forceAppRefresh
       if (!variables.dry_run) {
         try {
           const context = extractRefreshContext(data, variables.payload);
-          await forceAppRefresh(queryClient, context);
+          const actionType = data._action_type || variables.action_type;
+          const refreshFn = getTieredRefresh(actionType);
+          await refreshFn(queryClient, context, data);
         } catch (refreshErr) {
           console.error("[useSupplyAction] Refresh error (non-fatal):", refreshErr);
         }

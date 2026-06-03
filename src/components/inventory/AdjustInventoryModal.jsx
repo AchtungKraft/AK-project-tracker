@@ -13,7 +13,8 @@ import LocationSelect from "@/components/common/LocationSelect";
 import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
 import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
-import { forceAppRefresh, extractRefreshContext } from "@/components/supply/forceAppRefresh";
+import { extractRefreshContext } from "@/components/supply/forceAppRefresh";
+import { refreshForAdjustStock } from "@/components/supply/tieredSupplyRefresh";
 
 /**
  * Reason codes that are simple manual adjustments — no supply-chain side effects.
@@ -181,9 +182,9 @@ export default function AdjustInventoryModal({ onClose, preselectedPartId }) {
           );
         }
       } else {
-        // FULL SUPPLY-CHAIN REFRESH — confirmed PO/commitment/project linkage
+        // TIERED REFRESH — PO-linked reasons use refreshForAdjustStock (≤20 requests)
         const context = extractRefreshContext(result, { part_id: partId });
-        await forceAppRefresh(queryClient, context);
+        await refreshForAdjustStock(queryClient, context, result);
         
         if (import.meta.env.DEV) {
           const refs = [
@@ -194,9 +195,9 @@ export default function AdjustInventoryModal({ onClose, preselectedPartId }) {
           console.log(
             `[PartsPerf] AdjustInventory\n` +
             `  reason: ${reason}\n` +
-            `  refreshMode: full (forceAppRefresh)\n` +
+            `  refreshMode: tiered (refreshForAdjustStock)\n` +
             `  crossDomainRefs: ${refs}\n` +
-            `  estimatedRequests: ~55`
+            `  estimatedRequests: ≤20`
           );
         }
       }
