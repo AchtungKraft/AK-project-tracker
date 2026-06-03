@@ -1,7 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
-import { forceAppRefresh, extractRefreshContext } from "@/components/supply/forceAppRefresh";
+import { extractRefreshContext } from "@/components/supply/forceAppRefresh";
+import { getTieredRefresh } from "@/components/supply/tieredSupplyRefresh";
 
 /**
  * ══════════════════════════════════════════════════════════════════════
@@ -15,11 +16,11 @@ import { forceAppRefresh, extractRefreshContext } from "@/components/supply/forc
  *      InventoryItem, or InstalledPart entities directly.
  *   2. Legacy services (commitmentService.*) are hard-deprecated for
  *      lifecycle mutations and will throw errors if called.
- *   3. Every mutation triggers forceAppRefresh for deterministic UI update.
+ *   3. Every mutation triggers tiered refresh for action-specific UI update.
  *   4. Recompute + rebalance happen server-side inside executeSupplyAction.
  *      No frontend code should attempt to recompute inventory state.
  * 
- * PHASE 17: Uses forceAppRefresh for deterministic post-mutation refresh
+ * TIERED REFRESH: Uses getTieredRefresh for action-specific invalidation
  * 
  * Usage:
  *   const { install, reverseInstall, receive, cancelCommitment } = useSupplyAction();
@@ -69,9 +70,11 @@ export function useSupplyAction(options = {}) {
     },
     onSuccess: async (data, variables) => {
       if (!variables.dry_run) {
-        // PHASE 17: Use forceAppRefresh for deterministic refresh
+        // TIERED REFRESH: Action-specific invalidation replaces monolithic forceAppRefresh
         const context = extractRefreshContext(data, variables.payload);
-        await forceAppRefresh(queryClient, context);
+        const actionType = data._action_type || variables.action_type;
+        const refreshFn = getTieredRefresh(actionType);
+        await refreshFn(queryClient, context, data);
       }
       if (showSuccessToast && data._action_type) {
         toast.success(`${data._action_type} completed`);
@@ -201,8 +204,8 @@ export function useSupplyAction(options = {}) {
     reverseInstall,
     cancelCommitment,
     
-    // Manual refresh via forceAppRefresh
-    forceRefresh: (context = {}) => forceAppRefresh(queryClient, context)
+    // Manual refresh via tiered refresh (generic fallback)
+    forceRefresh: (context = {}) => getTieredRefresh('GENERIC')(queryClient, context)
   };
 }
 

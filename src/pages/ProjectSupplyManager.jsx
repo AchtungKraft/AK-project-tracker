@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -43,7 +43,7 @@ import BlockedActionResolutionModal from "@/components/supply/BlockedActionResol
 import CommitmentQuantityDrawer from "@/components/parts/CommitmentQuantityDrawer";
 import CoverageDiagnosticsPanel from "@/components/parts/CoverageDiagnosticsPanel";
 import { useProjectSupplyView } from "@/components/supply/useProjectSupplyView";
-import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
+// forceAppRefresh removed — PSM uses targeted invalidation + tiered refresh via useSupplyAction
 import SafeRenderBoundary from "@/components/ui/SafeRenderBoundary";
 import AddPartButton from "@/components/supply/AddPartButton";
 import ForwardInvoiceDashboard from "@/components/financial/ForwardInvoiceDashboard";
@@ -555,33 +555,36 @@ export default function ProjectSupplyManager() {
   // Now using PSMGroupedView component for GNO-style card layout.
 
   // CANONICAL: Single refresh handler for ALL modal success callbacks.
-  // Uses forceAppRefresh for comprehensive cross-domain invalidation + refetch.
+  // Uses tiered generic refresh — modals that go through useSupplyAction already
+  // do their own tiered refresh, so this is a lightweight follow-up for PSM's own queries.
   const handleModalSuccess = useCallback(async () => {
-    await forceAppRefresh(queryClient, { projectIds: [projectId] });
+    // Targeted PSM refresh — only what this page actually consumes
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['projectSupplyView', projectId] }),
+      queryClient.invalidateQueries({ queryKey: ['projectSupplyView'] }),
+      queryClient.invalidateQueries({ queryKey: ['servicesView'] }),
+      queryClient.invalidateQueries({ queryKey: ['projectPurchaseOrders', projectId] }),
+      queryClient.invalidateQueries({ queryKey: ['supplyProductionGate'] }),
+    ]);
+    // Active refetch only for the primary data source
+    await queryClient.refetchQueries({ queryKey: ['projectSupplyView', projectId], type: 'active' });
   }, [queryClient, projectId]);
 
-  // BULLETPROOF REFRESH: Detect when ANY modal closes and force refetch.
-  // Child modals use their own internal useSupplyAction which calls forceAppRefresh,
-  // but that may not reliably refetch the PSM's projectSupplyView due to staleTime.
-  // This ensures the PSM always gets fresh data when a modal dismisses.
-  const anyModalOpen = !!(
-    orderModalPart || deltaOrderCommitment || installModal || reverseInstallModal ||
-    receiveModal || cancelModal || removeCreditModal || qtyManagerDrawer ||
-    pricingEditorCommitment || showBulkPOPreview || vendorPickerCommitment ||
-    blockedItems || selectedPartId || showBackfillModal || resolveNeedTarget
-  );
-  const prevModalOpen = useRef(anyModalOpen);
-  useEffect(() => {
-    if (prevModalOpen.current && !anyModalOpen) {
-      // A modal just closed — force refetch
-      refetchSupply();
-    }
-    prevModalOpen.current = anyModalOpen;
-  }, [anyModalOpen, refetchSupply]);
+  // Modal-close refresh REMOVED — tiered refresh + handleModalSuccess now invalidate
+  // projectSupplyView, which triggers automatic refetch for active observers.
+  // The old pattern caused a guaranteed duplicate network request on every modal close.
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await forceAppRefresh(queryClient, { projectIds: [projectId] });
+    // PSM-specific targeted refresh — only what this page consumes
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['projectSupplyView', projectId] }),
+      queryClient.invalidateQueries({ queryKey: ['projectSupplyView'] }),
+      queryClient.invalidateQueries({ queryKey: ['servicesView'] }),
+      queryClient.invalidateQueries({ queryKey: ['supplyProductionGate'] }),
+      queryClient.invalidateQueries({ queryKey: ['projectPurchaseOrders', projectId] }),
+    ]);
+    await queryClient.refetchQueries({ queryKey: ['projectSupplyView', projectId], type: 'active' });
     setIsRefreshing(false);
   };
 

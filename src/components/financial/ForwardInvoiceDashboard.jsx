@@ -59,7 +59,7 @@ import {
 } from "./useProjectInvoiceView";
 import { useBillingAndProcurementStates } from "./useFinancialProjectsView";
 import { billingKeys, invoiceKeys, creditKeys } from "./queryKeyFactories";
-import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
+// forceAppRefresh removed — mark_exported uses targeted invoice invalidation
 import CreditSummaryStrip from "./CreditSummaryStrip";
 import ApplyCreditModal from "./ApplyCreditModal";
 import CreateProjectInvoiceModal from "./CreateProjectInvoiceModal";
@@ -238,7 +238,9 @@ export default function ForwardInvoiceDashboard({ projectId }) {
         // Mark as exported - update entity directly
         await base44.entities.ProjectInvoice.update(invoiceId, { qb_exported: true });
         toast.success('Marked as exported');
-        await forceAppRefresh(queryClient, { projectIds: [projectId] });
+        // Targeted: only refresh invoice view for this project
+        await queryClient.invalidateQueries({ queryKey: invoiceKeys.view(normalizedProjectId) });
+        refetch();
       }
       audit.trackSuccess('qb_export', { action });
     } catch (error) {
