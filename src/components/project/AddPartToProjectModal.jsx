@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search, Plus, Package, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import UnifiedAddPartModal from "../parts/UnifiedAddPartModal";
-import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
+import { refreshForGenericSupply } from "@/components/supply/tieredSupplyRefresh";
 
 export default function AddPartToProjectModal({ projectId, onClose, onSuccess, onError }) {
   const queryClient = useQueryClient();
@@ -102,8 +102,8 @@ export default function AddPartToProjectModal({ projectId, onClose, onSuccess, o
       }
     },
     onSuccess: async (result) => {
-      // PHASE 17: Deterministic refresh
-      await forceAppRefresh(queryClient, {
+      // BATCH 1: Tiered refresh — generic supply (ADJUST_REQUIRED path)
+      await refreshForGenericSupply(queryClient, {
         partIds: selectedPartId ? [selectedPartId] : [],
         projectIds: [projectId],
         commitmentIds: result.commitment_id ? [result.commitment_id] : [],

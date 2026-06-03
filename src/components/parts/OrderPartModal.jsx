@@ -11,7 +11,7 @@ import { Loader2, Plus, ShoppingCart, AlertTriangle, ExternalLink, DollarSign } 
 import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
 import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
-import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
+import { refreshForCreatePO } from "@/components/supply/tieredSupplyRefresh";
 
 /**
  * CANONICAL SUPPLY FLOW ENFORCED - PHASE 10B
@@ -125,14 +125,15 @@ export default function OrderPartModal({
       return { 
         orderId: response.data.created_orders?.[0]?.order_id, 
         part_id: part.part_id,
-        commitment_id: part.commitment_id
+        commitment_id: part.commitment_id,
       };
     },
-    onSuccess: async ({ orderId, part_id }) => {
-      // PHASE 17: Deterministic refresh
-      await forceAppRefresh(queryClient, {
+    onSuccess: async ({ orderId, part_id, commitment_id }) => {
+      // BATCH 1: Tiered refresh — CREATE_PO path
+      await refreshForCreatePO(queryClient, {
         partIds: [part_id],
         orderIds: orderId ? [orderId] : [],
+        commitmentIds: commitment_id ? [commitment_id] : [],
       });
       
       toast.success('Part added to order');

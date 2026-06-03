@@ -23,7 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Package, Plus, AlertTriangle, Loader2 } from "lucide-react";
 import { CommitmentActions } from "../financial/financialMutationGuard";
-import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
+import { refreshForCreatePO } from "@/components/supply/tieredSupplyRefresh";
 
 /**
  * DeltaOrderModal - Create additional orders for existing commitments
@@ -59,8 +59,8 @@ export default function DeltaOrderModal({ commitment, part, onClose }) {
       });
     },
     onSuccess: async (result) => {
-      // PHASE 17: Deterministic refresh
-      await forceAppRefresh(queryClient, {
+      // BATCH 1: Tiered refresh — CREATE_PO path (delta orders create PO lines)
+      await refreshForCreatePO(queryClient, {
         partIds: part?.id ? [part.id] : [],
         projectIds: commitment?.project_id ? [commitment.project_id] : [],
         commitmentIds: [commitment.id],

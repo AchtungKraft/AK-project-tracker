@@ -21,7 +21,8 @@ import {
 } from "@/components/ui/select";
 import { Warehouse, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
-import { forceAppRefresh, extractRefreshContext } from "@/components/supply/forceAppRefresh";
+import { extractRefreshContext } from "@/components/supply/forceAppRefresh";
+import { refreshForGenericSupply } from "@/components/supply/tieredSupplyRefresh";
 
 /**
  * AddStockOrderModal — Creates a STOCK_MANUAL PartCommitment on AK_STOCK project.
@@ -107,12 +108,9 @@ export default function AddStockOrderModal({ open, onClose, onSuccess }) {
       const qtyResult = result?.required_total ?? qty;
       toast.success(`Added ${qtyResult} to AK Stock order needs for ${selectedPart?.part_name}`);
       
-      // Deterministic cache invalidation via canonical refresh path
+      // BATCH 1: Tiered refresh — generic supply (stock commitment creation)
       const context = extractRefreshContext(result, { part_id: selectedPartId, project_id: stockProject.id });
-      await forceAppRefresh(queryClient, context);
-      // Also invalidate stock-specific queries not covered by forceAppRefresh
-      queryClient.invalidateQueries({ queryKey: ['stockCommitments'] });
-      queryClient.invalidateQueries({ queryKey: ['akStockProject'] });
+      await refreshForGenericSupply(queryClient, context, result);
       
       onSuccess?.();
       handleClose();

@@ -12,7 +12,8 @@ import LocationSelect from "@/components/common/LocationSelect";
 import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
 import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
-import { forceAppRefresh, extractRefreshContext } from "@/components/supply/forceAppRefresh";
+import { extractRefreshContext } from "@/components/supply/forceAppRefresh";
+import { refreshForAdjustStock } from "@/components/supply/tieredSupplyRefresh";
 
 /**
  * AddInventoryModal - Add inventory for a part
@@ -87,9 +88,9 @@ export default function AddInventoryModal({ onClose, preselectedPartId }) {
       return response.data;
     },
     onSuccess: async (result) => {
-      // Deterministic refresh
+      // BATCH 1: Tiered refresh — ADJUST_STOCK path (inventory add)
       const context = extractRefreshContext(result, { part_id: formData.part_id });
-      await forceAppRefresh(queryClient, context);
+      await refreshForAdjustStock(queryClient, context, result);
       
       const qtyAdded = result.qty_added ?? Number(formData.quantity_on_hand);
       const newStock = result.new_physical_stock;

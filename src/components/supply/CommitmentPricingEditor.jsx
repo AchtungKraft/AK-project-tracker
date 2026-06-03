@@ -15,7 +15,7 @@ import { Separator } from "@/components/ui/separator";
 import { Loader2, DollarSign, RotateCcw, Lock, AlertTriangle, Calculator, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
-import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
+import { refreshForGenericSupply } from "@/components/supply/tieredSupplyRefresh";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { CostModeBadge, RetailModeBadge } from "@/components/supply/PricingModeBadge";
@@ -79,7 +79,11 @@ export default function CommitmentPricingEditor({ commitment, open, onClose, onS
     try {
       await base44.entities.PartCommitment.update(commitment.id, updates);
       toast.success("Manual override active — pricing updated");
-      await forceAppRefresh(queryClient, { commitmentIds: [commitment.id] });
+      await refreshForGenericSupply(queryClient, {
+        partIds: commitment.part_id ? [commitment.part_id] : [],
+        projectIds: commitment.project_id ? [commitment.project_id] : [],
+        commitmentIds: [commitment.id],
+      });
       onSuccess?.();
       onClose();
     } catch (err) {
@@ -102,7 +106,11 @@ export default function CommitmentPricingEditor({ commitment, open, onClose, onS
         skip_retail_update: false,
       });
       toast.success("Cost override cleared — synced from PO");
-      await forceAppRefresh(queryClient, { commitmentIds: [commitment.id] });
+      await refreshForGenericSupply(queryClient, {
+        partIds: commitment.part_id ? [commitment.part_id] : [],
+        projectIds: commitment.project_id ? [commitment.project_id] : [],
+        commitmentIds: [commitment.id],
+      });
       onSuccess?.();
       onClose();
     } catch (err) {
@@ -124,7 +132,11 @@ export default function CommitmentPricingEditor({ commitment, open, onClose, onS
         retail_override: false,
       });
       toast.success("Retail reset from matrix");
-      await forceAppRefresh(queryClient, { commitmentIds: [commitment.id] });
+      await refreshForGenericSupply(queryClient, {
+        partIds: commitment.part_id ? [commitment.part_id] : [],
+        projectIds: commitment.project_id ? [commitment.project_id] : [],
+        commitmentIds: [commitment.id],
+      });
       onSuccess?.();
       onClose();
     } catch (err) {
