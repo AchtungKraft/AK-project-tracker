@@ -94,6 +94,9 @@ export default function AddPartModal({ onClose }) {
     onSuccess: async () => {
       // Targeted invalidation — just refresh the parts list
       await queryClient.invalidateQueries({ queryKey: ['parts'] });
+      if (import.meta.env.DEV) {
+        console.log('[PartsPerf] CreatePart (AddPartModal) | Requests: 1 | Invalidations: 1 | Refetches: 1');
+      }
       toast.success('Part created successfully');
       onClose();
     },

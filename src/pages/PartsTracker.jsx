@@ -43,6 +43,9 @@ export default function PartsTracker() {
                   queryClient.invalidateQueries({ queryKey: ['inventoryItems'] }),
                   queryClient.invalidateQueries({ queryKey: ['inventoryLocations'] }),
                 ]);
+                if (import.meta.env.DEV) {
+                  console.log('[PartsPerf] RefreshPartsTracker | Requests: 4 | Invalidations: 4 | Refetches: 4');
+                }
                 setIsRefreshing(false);
               }}
               variant="outline"

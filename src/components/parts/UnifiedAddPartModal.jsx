@@ -16,7 +16,7 @@ import PartTypeSelector from "./PartTypeSelector";
 import PartPricingFields from "./PartPricingFields";
 import PartVendorSourcesSection from "./PartVendorSourcesSection";
 import { PART_TYPES, getPartTypeBehavior, getPartTypeFieldVisibility, applyPartTypeDefaults } from "./partTypeBehavior";
-import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
+// forceAppRefresh removed — part creation uses targeted invalidation only
 
 const normalizeUrl = (url) => {
   if (!url) return null;
@@ -167,10 +167,6 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
   const createPartMutation = useMutation({
     mutationFn: (data) => base44.entities.Part.create(data),
     onSuccess: async (newPart) => {
-      const partIds = newPart?.id ? [newPart.id] : [];
-      const projectIds = [];
-      const commitmentIds = [];
-
       // GUARD: Enforce single preferred on create
       const preferredSources = vendorSources.filter(s => s.is_preferred);
       if (preferredSources.length > 1) {
@@ -202,9 +198,8 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
       
       // CANONICAL SUPPLY FLOW ENFORCED
       if (projectId) {
-        projectIds.push(projectId);
         try {
-          const response = await base44.functions.invoke('commitmentService', {
+          await base44.functions.invoke('commitmentService', {
             action: 'addPartToProject',
             project_id: projectId,
             part_id: newPart.id,
@@ -213,16 +208,25 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
             source_surface: 'UnifiedAddPartModal',
             requested_by: 'user'
           });
-
-          if (response.data?.success && response.data.commitment_id) {
-            commitmentIds.push(response.data.commitment_id);
-          }
         } catch (error) {
           console.error('Failed to create commitment:', error);
         }
       }
       
-      await forceAppRefresh(queryClient, { partIds, projectIds, commitmentIds });
+      // Targeted invalidation — only what's needed
+      const invalidations = [
+        queryClient.invalidateQueries({ queryKey: ['parts'] }),
+      ];
+      if (projectId) {
+        // Also refresh project supply view if adding to a project
+        invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectSupplyView', String(projectId)] }));
+        invalidations.push(queryClient.invalidateQueries({ queryKey: ['projectCommitments', String(projectId)] }));
+      }
+      await Promise.all(invalidations);
+      
+      if (import.meta.env.DEV) {
+        console.log(`[PartsPerf] CreatePart (UnifiedAddPartModal) | Requests: ${projectId ? 3 : 1} | Invalidations: ${invalidations.length} | Refetches: ${invalidations.length}`);
+      }
       
       toast.success('Part created successfully');
       onClose();

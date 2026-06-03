@@ -41,6 +41,13 @@ export default function StockReorder() {
   const [activeTab, setActiveTab] = useState('risk');
   const [syncing, setSyncing] = useState(false);
 
+  const refDataOptions = {
+    staleTime: 60000,
+    gcTime: 300000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  };
+
   // Fetch parts with inventory view
   const { data: partsInventoryView = [], isLoading: loadingInventory } = useQuery({
     queryKey: ['partsInventoryView'],
@@ -48,16 +55,25 @@ export default function StockReorder() {
       const res = await base44.functions.invoke('getPartsInventoryView', {});
       return res.data?.parts || [];
     },
+    ...refDataOptions,
   });
 
   const { data: parts = [], isLoading: loadingParts } = useQuery({
     queryKey: ['parts'],
     queryFn: () => base44.entities.Part.list('-updated_date', 500),
+    ...refDataOptions,
   });
 
   const { data: vendors = [] } = useQuery({
-    queryKey: ['vendors'],
-    queryFn: () => base44.entities.Vendor.list(),
+    queryKey: ['referenceData', 'vendors'],
+    queryFn: async () => {
+      const list = await base44.entities.Vendor.list();
+      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    },
+    staleTime: 300000,
+    gcTime: 600000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   // Fetch AK_STOCK commitments
@@ -70,6 +86,7 @@ export default function StockReorder() {
       });
       return projects[0] || null;
     },
+    ...refDataOptions,
   });
 
   const { data: stockCommitments = [] } = useQuery({
@@ -79,6 +96,7 @@ export default function StockReorder() {
       commitment_status: { $ne: 'cancelled' },
     }),
     enabled: !!akStockProject?.id,
+    ...refDataOptions,
   });
 
   // Build lookup map

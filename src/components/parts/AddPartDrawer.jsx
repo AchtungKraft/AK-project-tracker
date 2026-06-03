@@ -12,7 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { Loader2, Upload, Camera, Trash2, Star, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
+// forceAppRefresh removed — part creation uses targeted invalidation only
 
 export default function AddPartDrawer({ onClose }) {
   const queryClient = useQueryClient();
@@ -101,10 +101,12 @@ export default function AddPartDrawer({ onClose }) {
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Part.create(data),
-    onSuccess: async (newPart) => {
-      await forceAppRefresh(queryClient, {
-        partIds: newPart?.id ? [newPart.id] : [],
-      });
+    onSuccess: async () => {
+      // Targeted invalidation — only refresh the parts list
+      await queryClient.invalidateQueries({ queryKey: ['parts'] });
+      if (import.meta.env.DEV) {
+        console.log('[PartsPerf] CreatePart (AddPartDrawer) | Requests: 1 | Invalidations: 1 | Refetches: 1');
+      }
       toast.success('Part created successfully');
       onClose();
     },

@@ -380,6 +380,9 @@ export default function PartModal({ part, partId, onClose }) {
       // Reset initialized ref so formData picks up new data
       initializedPartIdRef.current = null;
       
+      if (import.meta.env.DEV) {
+        console.log('[PartsPerf] UpdatePart (PartModal) | Requests: 1 | Invalidations: 4 | Refetches: 1');
+      }
       toast.success('Part updated');
       setEditing(false);
     },
@@ -394,6 +397,9 @@ export default function PartModal({ part, partId, onClose }) {
         queryClient.invalidateQueries({ queryKey: ['part', activePart.id] }),
         queryClient.invalidateQueries({ queryKey: ['partsInventoryView'] }),
       ]);
+      if (import.meta.env.DEV) {
+        console.log('[PartsPerf] DeletePart (PartModal) | Requests: 1 | Invalidations: 3 | Refetches: 3');
+      }
       toast.success('Part deleted');
       onClose();
     },
