@@ -16,12 +16,34 @@ import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { forceAppRefresh, extractRefreshContext } from "@/components/supply/forceAppRefresh";
 
 /**
+ * Reason codes that are simple manual adjustments — no supply-chain side effects.
+ * These get targeted refresh (≤8 requests) instead of full forceAppRefresh (~55).
+ */
+const MANUAL_REASONS = new Set([
+  'correction',   // Count correction (add or remove)
+  'shop_use',     // Shop use / non-project consume
+  'damage',       // Damaged/defective
+  'shrinkage',    // Shrinkage/loss
+  'obsolete',     // Obsolete inventory
+  'return',       // Customer return
+]);
+
+/**
+ * Reason codes that affect supply chain (PO, reorder, commitments).
+ * These still require full forceAppRefresh.
+ */
+// 'receiving' and 'reorder' are PO-linked — keep full refresh
+
+/**
  * AdjustInventoryModal - Add or remove inventory for a part
  * 
  * CANONICAL: Routes through executeSupplyAction ADJUST_STOCK
  * Supports both additions and removals with reason codes
  * All inventory mutations through dispatcher
- * Uses unified invalidation helper
+ * 
+ * TIERED REFRESH:
+ *   Manual reasons → targeted invalidation (≤8 requests)
+ *   PO-linked reasons → full forceAppRefresh (supply chain consistency)
  */
 export default function AdjustInventoryModal({ onClose, preselectedPartId }) {
   const queryClient = useQueryClient();
@@ -117,9 +139,36 @@ export default function AdjustInventoryModal({ onClose, preselectedPartId }) {
       return response.data;
     },
     onSuccess: async (result) => {
-      // Deterministic refresh
-      const context = extractRefreshContext(result, { part_id: formData.part_id });
-      await forceAppRefresh(queryClient, context);
+      const reason = formData.reason;
+      const partId = formData.part_id;
+      const isManual = MANUAL_REASONS.has(reason);
+      
+      if (isManual) {
+        // TARGETED REFRESH — manual adjustments don't affect supply chain
+        const invalidations = [
+          queryClient.invalidateQueries({ queryKey: ['parts'] }),
+          queryClient.invalidateQueries({ queryKey: ['partsInventoryView'] }),
+          queryClient.invalidateQueries({ queryKey: ['part', partId] }),
+          queryClient.invalidateQueries({ queryKey: ['partsInventoryView', partId] }),
+          queryClient.invalidateQueries({ queryKey: ['inventoryLocations', partId] }),
+          queryClient.invalidateQueries({ queryKey: ['inventoryItems'] }),
+          // Stock thresholds may change — refresh reorder views
+          queryClient.invalidateQueries({ queryKey: ['stockCommitments'] }),
+        ];
+        await Promise.all(invalidations);
+        
+        if (import.meta.env.DEV) {
+          console.log(`[PartsPerf] AdjustInventory (manual: ${reason}) | Requests: 1 | Invalidations: ${invalidations.length} | Refetches: ≤${invalidations.length}`);
+        }
+      } else {
+        // FULL SUPPLY-CHAIN REFRESH — PO-linked reasons (receiving, reorder)
+        const context = extractRefreshContext(result, { part_id: partId });
+        await forceAppRefresh(queryClient, context);
+        
+        if (import.meta.env.DEV) {
+          console.log(`[PartsPerf] AdjustInventory (supply: ${reason}) | forceAppRefresh | Full supply chain refresh`);
+        }
+      }
       
       const action = direction === 'add' ? 'Added' : 'Removed';
       const qtyAdj = result.qty_adjusted ?? Number(formData.quantity);
