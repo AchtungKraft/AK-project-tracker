@@ -143,8 +143,21 @@ export default function AdjustInventoryModal({ onClose, preselectedPartId }) {
       const partId = formData.part_id;
       const isManual = MANUAL_REASONS.has(reason);
       
-      if (isManual) {
-        // TARGETED REFRESH — manual adjustments don't affect supply chain
+      // DEFENSIVE GUARD: Even if reason is non-manual, verify actual cross-domain
+      // references exist before allowing full supply-chain refresh. If the backend
+      // returned no project/PO/commitment references, downgrade to targeted.
+      const hasCrossDomainRef = !!(
+        result.project_id ||
+        result.order_id ||
+        result.commitment_id ||
+        result.supply_action_id ||
+        result.po_line_item_id
+      );
+      
+      const useTargeted = isManual || !hasCrossDomainRef;
+      
+      if (useTargeted) {
+        // TARGETED REFRESH — manual adjustments or no cross-domain references
         const invalidations = [
           queryClient.invalidateQueries({ queryKey: ['parts'] }),
           queryClient.invalidateQueries({ queryKey: ['partsInventoryView'] }),
@@ -158,15 +171,33 @@ export default function AdjustInventoryModal({ onClose, preselectedPartId }) {
         await Promise.all(invalidations);
         
         if (import.meta.env.DEV) {
-          console.log(`[PartsPerf] AdjustInventory (manual: ${reason}) | Requests: 1 | Invalidations: ${invalidations.length} | Refetches: ≤${invalidations.length}`);
+          const downgraded = !isManual && !hasCrossDomainRef;
+          console.log(
+            `[PartsPerf] AdjustInventory\n` +
+            `  reason: ${reason}\n` +
+            `  refreshMode: targeted${downgraded ? ' (downgraded — no cross-domain refs)' : ''}\n` +
+            `  invalidations: ${invalidations.length}\n` +
+            `  estimatedRequests: ≤${invalidations.length + 1}`
+          );
         }
       } else {
-        // FULL SUPPLY-CHAIN REFRESH — PO-linked reasons (receiving, reorder)
+        // FULL SUPPLY-CHAIN REFRESH — confirmed PO/commitment/project linkage
         const context = extractRefreshContext(result, { part_id: partId });
         await forceAppRefresh(queryClient, context);
         
         if (import.meta.env.DEV) {
-          console.log(`[PartsPerf] AdjustInventory (supply: ${reason}) | forceAppRefresh | Full supply chain refresh`);
+          const refs = [
+            result.project_id && `project:${result.project_id}`,
+            result.order_id && `order:${result.order_id}`,
+            result.commitment_id && `commitment:${result.commitment_id}`,
+          ].filter(Boolean).join(', ');
+          console.log(
+            `[PartsPerf] AdjustInventory\n` +
+            `  reason: ${reason}\n` +
+            `  refreshMode: full (forceAppRefresh)\n` +
+            `  crossDomainRefs: ${refs}\n` +
+            `  estimatedRequests: ~55`
+          );
         }
       }
       
