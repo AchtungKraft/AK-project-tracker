@@ -1,0 +1,34 @@
+{
+  "name": "PartJournalEntry",
+  "type": "object",
+  "properties": {
+    "part_id": {
+      "type": "string",
+      "description": "Reference to Part"
+    },
+    "content": {
+      "type": "string",
+      "description": "Journal entry content/notes"
+    },
+    "photos": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Array of photo URLs"
+    },
+    "url": {
+      "type": "string",
+      "description": "Related URL for this entry"
+    },
+    "entry_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Date of journal entry"
+    }
+  },
+  "required": [
+    "part_id",
+    "content"
+  ]
+}

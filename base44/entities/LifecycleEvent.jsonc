@@ -1,0 +1,162 @@
+{
+  "name": "LifecycleEvent",
+  "type": "object",
+  "properties": {
+    "commitment_id": {
+      "type": "string",
+      "description": "Reference to PartCommitment"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "CLIENT_INVOICED",
+        "CLIENT_PAID",
+        "CLIENT_PAYMENT_REVERSED",
+        "PO_CREATED",
+        "PART_RECEIVED",
+        "PART_INSTALLED",
+        "STATUS_OVERRIDE",
+        "COMMITMENT_CREATED",
+        "COMMITMENT_CANCELLED",
+        "BILLING_STATUS_CHANGED",
+        "PROCUREMENT_STATUS_CHANGED",
+        "QTY_INCREASED",
+        "QTY_DECREASED",
+        "REALLOCATED",
+        "QTY_CANCELLED",
+        "COMMITMENT_SPLIT",
+        "STOCK_RESERVED",
+        "STOCK_RELEASED",
+        "ADDED_TO_ORDER_QUEUE",
+        "STOCK_RESERVED_MANUAL",
+        "STOCK_RELEASED_MANUAL",
+        "ADDED_TO_ORDER_QUEUE_MANUAL",
+        "REMOVED_FROM_ORDER_QUEUE",
+        "ACTION_UNDONE",
+        "DRIFT_REPAIRED"
+      ],
+      "description": "Type of lifecycle event"
+    },
+    "previous_state": {
+      "type": "string",
+      "description": "JSON string of previous state values"
+    },
+    "new_state": {
+      "type": "string",
+      "description": "JSON string of new state values"
+    },
+    "old_values": {
+      "type": "string",
+      "description": "JSON string of old values before mutation"
+    },
+    "new_values": {
+      "type": "string",
+      "description": "JSON string of new values after mutation"
+    },
+    "before_state": {
+      "type": "string",
+      "description": "JSON string of state before event (unified engine)"
+    },
+    "after_state": {
+      "type": "string",
+      "description": "JSON string of state after event (unified engine)"
+    },
+    "metadata": {
+      "type": "string",
+      "description": "JSON string of additional metadata (PO number, costs, etc.)"
+    },
+    "trigger_source": {
+      "type": "string",
+      "enum": [
+        "USER_ACTION",
+        "SYSTEM_AUTOMATION",
+        "INVOICE_BATCH",
+        "ORDER_CREATION",
+        "RECEIVING",
+        "INSTALLATION",
+        "MIGRATION",
+        "PAYMENT_REVERSAL",
+        "QTY_MUTATION",
+        "COVERAGE_ACTION",
+        "UNDO_ACTION",
+        "UNIFIED_ENGINE"
+      ],
+      "description": "What triggered this event"
+    },
+    "triggered_by": {
+      "type": "string",
+      "description": "User email who triggered the event"
+    },
+    "user_id": {
+      "type": "string",
+      "description": "User who triggered the event (deprecated, use triggered_by)"
+    },
+    "actor_email": {
+      "type": "string",
+      "description": "User email who performed the action (unified engine)"
+    },
+    "actor_id": {
+      "type": "string",
+      "description": "User ID who performed the action (unified engine)"
+    },
+    "reason": {
+      "type": "string",
+      "description": "User-provided reason for the change"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional context or notes"
+    },
+    "part_id": {
+      "type": "string",
+      "description": "Reference to Part (denormalized for queries)"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project (denormalized for queries)"
+    },
+    "order_id": {
+      "type": "string",
+      "description": "Reference to Order (for PO/receiving events)"
+    },
+    "line_item_id": {
+      "type": "string",
+      "description": "Reference to PartPurchaseLineItem"
+    },
+    "vendor_id": {
+      "type": "string",
+      "description": "Reference to Vendor"
+    },
+    "qty_delta": {
+      "type": "number",
+      "description": "Quantity change for this event"
+    },
+    "event_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the event occurred"
+    },
+    "reversal_reference_id": {
+      "type": "string",
+      "description": "Reference to original event if this is a reversal"
+    },
+    "is_reversible": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this event can be undone"
+    },
+    "undone_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this event was undone"
+    },
+    "undone_by_event_id": {
+      "type": "string",
+      "description": "Reference to the ACTION_UNDONE event that reversed this"
+    }
+  },
+  "required": [
+    "commitment_id",
+    "event_type"
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "name": "CarModel",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Car model name (e.g., 911, Cayenne)"
+    },
+    "car_make_id": {
+      "type": "string",
+      "description": "Reference to CarMake (parent)"
+    },
+    "description": {
+      "type": "string",
+      "description": "Model description"
+    },
+    "color": {
+      "type": "string",
+      "default": "#3B82F6",
+      "description": "Hex color for visual identification"
+    },
+    "active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this model is available for selection"
+    },
+    "sort_order": {
+      "type": "number",
+      "default": 0,
+      "description": "Display order"
+    }
+  },
+  "required": [
+    "name",
+    "car_make_id"
+  ]
+}

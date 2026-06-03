@@ -1,0 +1,29 @@
+{
+  "name": "Comment",
+  "type": "object",
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "description": "Reference to Task"
+    },
+    "user_id": {
+      "type": "string",
+      "description": "Reference to User who commented"
+    },
+    "content": {
+      "type": "string",
+      "description": "Comment text"
+    },
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Optional image URLs"
+    }
+  },
+  "required": [
+    "task_id",
+    "content"
+  ]
+}

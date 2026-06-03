@@ -1,0 +1,111 @@
+{
+  "name": "Project",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Project name"
+    },
+    "client_name": {
+      "type": "string",
+      "description": "Client name"
+    },
+    "client_email": {
+      "type": "string",
+      "description": "Client email"
+    },
+    "client_phone": {
+      "type": "string",
+      "description": "Client phone"
+    },
+    "vin": {
+      "type": "string",
+      "description": "VIN or Chassis number"
+    },
+    "project_type_id": {
+      "type": "string",
+      "description": "Reference to ProjectType"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Project start date"
+    },
+    "target_completion": {
+      "type": "string",
+      "format": "date",
+      "description": "Target completion date"
+    },
+    "status_id": {
+      "type": "string",
+      "description": "Reference to StatusList"
+    },
+    "assigned_team": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Array of TeamMember IDs assigned to this project"
+    },
+    "progress_percent": {
+      "type": "number",
+      "default": 0,
+      "description": "Auto-calculated from completed tasks"
+    },
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Array of project/car image URLs"
+    },
+    "featured_image_url": {
+      "type": "string",
+      "description": "URL of the featured image to display on cards"
+    },
+    "is_shareable": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this project can be shared via public link"
+    },
+    "client_last_viewed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When a client last viewed this project portal"
+    },
+    "financial_model_version": {
+      "type": "string",
+      "enum": [
+        "forward"
+      ],
+      "default": "forward",
+      "description": "Financial model version. LOCKED to 'forward' (InvoiceBatch-based billing). Legacy pool model removed in Phase 9E."
+    },
+    "financial_model_migrated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When project was migrated to forward model"
+    },
+    "financial_model_migrated_by": {
+      "type": "string",
+      "description": "User who migrated project to forward model"
+    },
+    "is_system_project": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, this is a system project (e.g., AK_STOCK) hidden from client views and excluded from invoicing"
+    },
+    "system_project_type": {
+      "type": "string",
+      "enum": [
+        "AK_STOCK",
+        "INTERNAL",
+        "WARRANTY"
+      ],
+      "description": "Type of system project for special handling"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

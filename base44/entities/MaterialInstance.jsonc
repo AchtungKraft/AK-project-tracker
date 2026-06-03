@@ -1,0 +1,69 @@
+{
+  "name": "MaterialInstance",
+  "type": "object",
+  "properties": {
+    "instance_name": {
+      "type": "string",
+      "description": "Name/identifier for this unique physical part"
+    },
+    "part_id": {
+      "type": "string",
+      "description": "Reference to Part (optional - for catalog parts)"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project (optional - for project-specific materials)"
+    },
+    "origin_type": {
+      "type": "string",
+      "enum": [
+        "client_supplied",
+        "vehicle_removed",
+        "fabricated",
+        "refurbished",
+        "purchased_non_catalog"
+      ],
+      "description": "Source/origin of this physical part"
+    },
+    "origin_notes": {
+      "type": "string",
+      "description": "Notes about the origin/source of this part"
+    },
+    "current_location_id": {
+      "type": "string",
+      "description": "Reference to Location where this instance is currently stored"
+    },
+    "condition_status": {
+      "type": "string",
+      "enum": [
+        "unknown",
+        "inspection_required",
+        "repair_required",
+        "ready",
+        "installed",
+        "scrapped"
+      ],
+      "default": "unknown",
+      "description": "Current condition/status of the physical part"
+    },
+    "media": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Photos/media of this specific instance"
+    },
+    "installed_part_id": {
+      "type": "string",
+      "description": "Reference to InstalledPart when this instance is installed"
+    },
+    "inventory_item_id": {
+      "type": "string",
+      "description": "Reference to InventoryItem if derived from catalog inventory"
+    }
+  },
+  "required": [
+    "instance_name",
+    "origin_type"
+  ]
+}

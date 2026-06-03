@@ -1,0 +1,61 @@
+{
+  "name": "ProjectClientAccess",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project"
+    },
+    "client_contact_id": {
+      "type": "string",
+      "description": "Reference to ClientContact"
+    },
+    "access_role": {
+      "type": "string",
+      "enum": [
+        "viewer",
+        "commenter",
+        "approver"
+      ],
+      "default": "approver",
+      "description": "Level of access for this client"
+    },
+    "access_status": {
+      "type": "string",
+      "enum": [
+        "invited",
+        "active",
+        "revoked"
+      ],
+      "default": "active",
+      "description": "Current access status"
+    },
+    "share_token": {
+      "type": "string",
+      "description": "Unique token for shareable URL"
+    },
+    "url_slug": {
+      "type": "string",
+      "description": "Custom URL slug for friendly access links"
+    },
+    "invite_sent_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the invite was sent"
+    },
+    "last_viewed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When client last viewed the portal"
+    },
+    "last_notification_sent_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the last access notification was sent"
+    }
+  },
+  "required": [
+    "project_id",
+    "client_contact_id"
+  ]
+}

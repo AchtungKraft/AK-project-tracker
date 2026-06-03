@@ -1,0 +1,84 @@
+{
+  "name": "VendorInvoice",
+  "type": "object",
+  "properties": {
+    "invoice_number": {
+      "type": "string",
+      "description": "Vendor's invoice number"
+    },
+    "invoice_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date on the invoice"
+    },
+    "vendor_id": {
+      "type": "string",
+      "description": "Reference to Vendor"
+    },
+    "order_id": {
+      "type": "string",
+      "description": "Reference to Purchase Order"
+    },
+    "freight_cost": {
+      "type": "number",
+      "default": 0,
+      "description": "Shipping/freight charges"
+    },
+    "tax_cost": {
+      "type": "number",
+      "default": 0,
+      "description": "Tax amount"
+    },
+    "subtotal": {
+      "type": "number",
+      "default": 0,
+      "description": "Sum of line item costs before freight/tax"
+    },
+    "total_invoice_cost": {
+      "type": "number",
+      "default": 0,
+      "description": "Total invoice amount"
+    },
+    "invoice_status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "received",
+        "approved",
+        "posted",
+        "paid"
+      ],
+      "default": "draft",
+      "description": "Invoice processing status"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Invoice notes"
+    },
+    "invoice_photos": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Photos/scans of the invoice"
+    },
+    "approved_by": {
+      "type": "string",
+      "description": "User who approved the invoice"
+    },
+    "approved_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When invoice was approved"
+    },
+    "posted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When invoice was posted to accounting"
+    }
+  },
+  "required": [
+    "invoice_number",
+    "vendor_id"
+  ]
+}

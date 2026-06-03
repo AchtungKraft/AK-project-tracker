@@ -1,0 +1,32 @@
+{
+  "name": "ProjectKanbanBucket",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Bucket name (e.g., Week 1, High Priority)"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project"
+    },
+    "order": {
+      "type": "number",
+      "default": 0,
+      "description": "Display order on the Kanban board"
+    },
+    "color": {
+      "type": "string",
+      "default": "#3B82F6",
+      "description": "Hex color for bucket header"
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional description for the bucket"
+    }
+  },
+  "required": [
+    "name",
+    "project_id"
+  ]
+}

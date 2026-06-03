@@ -1,0 +1,109 @@
+{
+  "name": "CommitmentAuditLog",
+  "type": "object",
+  "properties": {
+    "commitment_id": {
+      "type": "string",
+      "description": "Reference to PartCommitment"
+    },
+    "action_type": {
+      "type": "string",
+      "enum": [
+        "create",
+        "update",
+        "delete",
+        "status_change",
+        "qty_change",
+        "validation_error",
+        "version_conflict",
+        "SCOPE_ADD",
+        "UPWARD_MUTATION_BLOCKED"
+      ],
+      "description": "Type of action logged"
+    },
+    "previous_values": {
+      "type": "object",
+      "description": "Snapshot of values before change"
+    },
+    "new_values": {
+      "type": "object",
+      "description": "Snapshot of values after change"
+    },
+    "previous_state": {
+      "type": "string",
+      "description": "JSON stringified previous state"
+    },
+    "new_state": {
+      "type": "string",
+      "description": "JSON stringified new state"
+    },
+    "attempted_state": {
+      "type": "string",
+      "description": "JSON stringified attempted state (for blocked mutations)"
+    },
+    "trigger_source": {
+      "type": "string",
+      "enum": [
+        "receiving",
+        "install",
+        "allocation",
+        "manual",
+        "migration",
+        "sync",
+        "cancel",
+        "delta_model",
+        "scope_add"
+      ],
+      "description": "What triggered this change"
+    },
+    "triggered_by": {
+      "type": "string",
+      "description": "User or system that triggered the change"
+    },
+    "actor_email": {
+      "type": "string",
+      "description": "Email of actor who performed the action"
+    },
+    "mutation_source": {
+      "type": "string",
+      "description": "Source function/flow that attempted the mutation"
+    },
+    "delta_qty": {
+      "type": "number",
+      "description": "Quantity delta for scope additions"
+    },
+    "parent_commitment_id": {
+      "type": "string",
+      "description": "Parent commitment ID for scope additions"
+    },
+    "created_commitment_id": {
+      "type": "string",
+      "description": "ID of newly created commitment (for scope additions)"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the action occurred"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes about the action"
+    },
+    "validation_passed": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether quantity validation passed"
+    },
+    "validation_errors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of validation errors if any"
+    }
+  },
+  "required": [
+    "commitment_id",
+    "action_type"
+  ]
+}

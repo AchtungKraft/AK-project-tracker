@@ -1,0 +1,84 @@
+{
+  "name": "PartProjectRequirement",
+  "type": "object",
+  "_DEPRECATED": "2026-02-20 - FULLY DEPRECATED AND DATA PURGED. Use PartCommitment as the ONLY canonical source for part-to-project assignment. This entity schema is retained for reference only - no data exists.",
+  "_CANONICAL_REPLACEMENT": "PartCommitment",
+  "properties": {
+    "part_id": {
+      "type": "string",
+      "description": "DEPRECATED - Reference to Part"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "DEPRECATED - Reference to Project"
+    },
+    "qty_needed": {
+      "type": "number",
+      "default": 1,
+      "description": "DEPRECATED - Use PartCommitment.required_total"
+    },
+    "qty_allocated": {
+      "type": "number",
+      "default": 0,
+      "description": "DEPRECATED - Use PartCommitment.reserved_from_stock"
+    },
+    "qty_ordered": {
+      "type": "number",
+      "default": 0,
+      "description": "DEPRECATED - Use PartCommitment.covered_from_po"
+    },
+    "qty_installed": {
+      "type": "number",
+      "default": 0,
+      "description": "DEPRECATED - Use PartCommitment.qty_installed"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Needed",
+        "Partially Allocated",
+        "Allocated",
+        "Ordered",
+        "Partially Received",
+        "Ready",
+        "Partially Installed",
+        "Installed"
+      ],
+      "default": "Needed",
+      "description": "DEPRECATED - Use PartCommitment.commitment_status"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "Low",
+        "Normal",
+        "High",
+        "Critical"
+      ],
+      "default": "Normal",
+      "description": "DEPRECATED"
+    },
+    "notes": {
+      "type": "string",
+      "description": "DEPRECATED - Use PartCommitment.notes"
+    },
+    "target_install_date": {
+      "type": "string",
+      "format": "date",
+      "description": "DEPRECATED"
+    },
+    "is_deprecated": {
+      "type": "boolean",
+      "default": true,
+      "description": "ENTITY IS FULLY DEPRECATED - DO NOT USE"
+    },
+    "commitment_id": {
+      "type": "string",
+      "description": "DEPRECATED - Migration reference only"
+    }
+  },
+  "required": [
+    "part_id",
+    "qty_needed"
+  ]
+}

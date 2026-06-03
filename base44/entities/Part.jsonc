@@ -1,0 +1,238 @@
+{
+  "name": "Part",
+  "type": "object",
+  "properties": {
+    "part_name": {
+      "type": "string",
+      "description": "Name of the part"
+    },
+    "vendor_part_number": {
+      "type": "string",
+      "description": "Vendor's part number/SKU"
+    },
+    "part_category_id": {
+      "type": "string",
+      "description": "Reference to PartCategory - primary classification for supply grouping and reporting"
+    },
+    "category": {
+      "type": "string",
+      "description": "DEPRECATED: Use part_category_id. Kept for migration compatibility."
+    },
+    "car_make_id": {
+      "type": "string",
+      "description": "Reference to CarMake"
+    },
+    "car_model_id": {
+      "type": "string",
+      "description": "Reference to CarModel"
+    },
+    "car_year_id": {
+      "type": "string",
+      "description": "Reference to CarYear"
+    },
+    "default_vendor_id": {
+      "type": "string",
+      "description": "Preferred vendor for ordering"
+    },
+    "cost": {
+      "type": "number",
+      "description": "Authoritative vendor cost (what we pay) - ADMIN ONLY"
+    },
+    "default_cost": {
+      "type": "number",
+      "description": "DEPRECATED: Use 'cost' field. Kept for migration compatibility."
+    },
+    "retail_matrix_price": {
+      "type": "number",
+      "description": "System-calculated retail price from markup matrix"
+    },
+    "retail_override": {
+      "type": "number",
+      "description": "Manual override for retail price (takes precedence over matrix)"
+    },
+    "default_retail": {
+      "type": "number",
+      "description": "DEPRECATED: Use retail_matrix_price or retail_override. Kept for compatibility."
+    },
+    "pricing_mode": {
+      "type": "string",
+      "enum": [
+        "matrix",
+        "manual"
+      ],
+      "default": "matrix",
+      "description": "Whether retail is calculated from matrix or manually set"
+    },
+    "applied_markup_pct": {
+      "type": "number",
+      "description": "Snapshot of markup percentage applied (null for manual pricing)"
+    },
+    "is_cost_verified": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether cost has been verified from vendor source"
+    },
+    "needs_cost_review": {
+      "type": "boolean",
+      "default": false,
+      "description": "Flag indicating cost needs manual review (contamination suspected)"
+    },
+    "cost_source": {
+      "type": "string",
+      "enum": [
+        "vendor",
+        "invoice",
+        "manual",
+        "unknown"
+      ],
+      "default": "unknown",
+      "description": "Origin of the cost value"
+    },
+    "last_cost_update_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When cost was last updated"
+    },
+    "last_cost_update_by": {
+      "type": "string",
+      "description": "User who last updated cost"
+    },
+    "physical_stock": {
+      "type": "number",
+      "default": 0,
+      "description": "CANONICAL: Actual physical inventory count - ONLY modified by RECEIVE/INSTALL actions"
+    },
+    "allocated_stock": {
+      "type": "number",
+      "default": 0,
+      "description": "DERIVED: SUM(reserved_from_stock) across commitments - READ ONLY, computed by resolver"
+    },
+    "on_order": {
+      "type": "number",
+      "default": 0,
+      "description": "DERIVED: SUM(open PO line qty remaining) - READ ONLY, computed by resolver"
+    },
+    "reorder_point": {
+      "type": "number",
+      "default": 0,
+      "description": "Minimum inventory level before reorder alert"
+    },
+    "reorder_quantity": {
+      "type": "number",
+      "default": 1,
+      "description": "Quantity to order when restocking"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Part description and notes"
+    },
+    "photos": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Array of photo URLs"
+    },
+    "featured_photo": {
+      "type": "string",
+      "description": "URL of the featured/primary photo"
+    },
+    "order_url": {
+      "type": "string",
+      "description": "URL for ordering this part"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether part is active in catalog"
+    },
+    "part_type": {
+      "type": "string",
+      "enum": [
+        "PURCHASED_VENDOR",
+        "AK_MANUFACTURED",
+        "CLIENT_SUPPLIED",
+        "TAKE_OFF",
+        "STOCK_AK",
+        "WARRANTY_REPLACEMENT"
+      ],
+      "default": "PURCHASED_VENDOR",
+      "description": "Classification of part type affecting pricing and workflow behavior"
+    },
+    "is_archived": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether part is archived"
+    },
+    "archived_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the part was archived"
+    },
+    "archived_by": {
+      "type": "string",
+      "description": "User who archived the part"
+    },
+    "archive_reason": {
+      "type": "string",
+      "description": "Reason for archiving the part"
+    },
+    "archived_context": {
+      "type": "string",
+      "enum": [
+        "project_change",
+        "vendor_change",
+        "duplicate_entry",
+        "discontinued",
+        "entered_in_error",
+        "superseded"
+      ],
+      "description": "Context for why part was archived"
+    },
+    "requires_vendor_purchase": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this part requires a vendor purchase order"
+    },
+    "requires_vendor_payment": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this part requires payment to a vendor"
+    },
+    "requires_client_billing": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this part should be billed to the client"
+    },
+    "affects_inventory": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this part affects inventory counts"
+    },
+    "affects_margin": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this part contributes to margin calculations"
+    },
+    "is_asset_recovery": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this part represents asset recovery"
+    },
+    "production_cost": {
+      "type": "number",
+      "description": "Internal production cost for AK_MANUFACTURED parts"
+    },
+    "handling_fee": {
+      "type": "number",
+      "description": "Service/handling fee for CLIENT_SUPPLIED parts"
+    },
+    "resale_value": {
+      "type": "number",
+      "description": "Estimated resale value for TAKE_OFF parts"
+    }
+  },
+  "required": [
+    "part_name"
+  ]
+}

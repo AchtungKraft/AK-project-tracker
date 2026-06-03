@@ -1,0 +1,51 @@
+{
+  "name": "EmailTemplate",
+  "type": "object",
+  "properties": {
+    "template_key": {
+      "type": "string",
+      "enum": [
+        "needs_review",
+        "bulk_review",
+        "journal_entry",
+        "status_update",
+        "welcome"
+      ],
+      "description": "Unique identifier for the email template"
+    },
+    "template_name": {
+      "type": "string",
+      "description": "Display name for the template"
+    },
+    "subject_template": {
+      "type": "string",
+      "description": "Email subject line template with placeholders like {project_name}, {request_title}"
+    },
+    "body_intro": {
+      "type": "string",
+      "description": "Opening paragraph of the email body"
+    },
+    "item_format": {
+      "type": "string",
+      "description": "Format for list items (if applicable)"
+    },
+    "button_text": {
+      "type": "string",
+      "description": "Text for the call-to-action button"
+    },
+    "closing_text": {
+      "type": "string",
+      "description": "Closing/signature text"
+    },
+    "active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this template is active"
+    }
+  },
+  "required": [
+    "template_key",
+    "template_name",
+    "subject_template"
+  ]
+}

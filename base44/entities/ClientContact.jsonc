@@ -1,0 +1,94 @@
+{
+  "name": "ClientContact",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Client contact name"
+    },
+    "email": {
+      "type": "string",
+      "description": "Client email address"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Client phone number (required for SMS/WhatsApp notifications)"
+    },
+    "role_title": {
+      "type": "string",
+      "description": "Client role or title"
+    },
+    "active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this contact is active"
+    },
+    "url_slug": {
+      "type": "string",
+      "description": "Custom URL slug for the client's portal (e.g. client-name)"
+    },
+    "notify_email": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this contact wants email notifications"
+    },
+    "notify_sms": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this contact wants SMS notifications"
+    },
+    "notify_whatsapp": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this contact wants WhatsApp notifications"
+    },
+    "last_opt_in_source": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "client"
+      ],
+      "description": "Who last changed the notification preferences"
+    },
+    "opt_in_email_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When email notifications were opted into (compliance timestamp)"
+    },
+    "opt_in_sms_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When SMS notifications were opted into (compliance timestamp)"
+    },
+    "opt_in_whatsapp_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When WhatsApp notifications were opted into (compliance timestamp)"
+    },
+    "opt_in_source": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "client"
+      ],
+      "description": "Source of the most recent opt-in action"
+    },
+    "opt_in_method": {
+      "type": "string",
+      "enum": [
+        "portal",
+        "admin",
+        "import"
+      ],
+      "description": "Method used for the most recent opt-in (portal UI, admin dashboard, or data import)"
+    },
+    "opt_in_ip_address": {
+      "type": "string",
+      "description": "IP address captured at time of opt-in (for compliance)"
+    }
+  },
+  "required": [
+    "name",
+    "email"
+  ]
+}

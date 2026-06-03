@@ -17,7 +17,6 @@ import { Switch } from "@/components/ui/switch";
 import { Loader2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import PartPricingFields from "./PartPricingFields";
-import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 const buildPartPayload = (formData) => ({
   part_name: formData.part_name,
@@ -53,46 +52,52 @@ export default function AddPartModal({ onClose }) {
     global_all_builds: false
   });
 
+  const refDataOptions = {
+    staleTime: 300000,
+    gcTime: 600000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  };
+
   const { data: categories = [] } = useQuery({
-    queryKey: ['partCategories'],
+    queryKey: ['referenceData', 'partCategories'],
     queryFn: async () => {
       const list = await base44.entities.PartCategory.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    ...refDataOptions,
   });
 
   const { data: vendors = [] } = useQuery({
-    queryKey: ['vendors'],
+    queryKey: ['referenceData', 'vendors'],
     queryFn: async () => {
       const list = await base44.entities.Vendor.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    ...refDataOptions,
   });
 
   const { data: locations = [] } = useQuery({
-    queryKey: ['locations'],
+    queryKey: ['referenceData', 'locations'],
     queryFn: async () => {
       const list = await base44.entities.Location.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    ...refDataOptions,
   });
 
   const createMutation = useMutation({
     mutationFn: (data) => {
       const payload = buildPartPayload(data);
-      console.log("CREATE PART PAYLOAD", payload);
       return base44.entities.Part.create(payload);
     },
-    onSuccess: async (newPart) => {
-      // PHASE 17: Deterministic refresh
-      await forceAppRefresh(queryClient, {
-        partIds: newPart?.id ? [newPart.id] : [],
-      });
+    onSuccess: async () => {
+      // Targeted invalidation — just refresh the parts list
+      await queryClient.invalidateQueries({ queryKey: ['parts'] });
       toast.success('Part created successfully');
       onClose();
     },
     onError: (error) => {
-      console.error("CREATE PART ERROR", error);
       toast.error(error?.message || 'Failed to create part');
     }
   });

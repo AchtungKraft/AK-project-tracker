@@ -1,0 +1,51 @@
+{
+  "name": "InventoryReceipt",
+  "type": "object",
+  "properties": {
+    "receipt_number": {
+      "type": "string",
+      "description": "Auto-generated receipt number (format: RCV-YYYYMMDD-SEQ)"
+    },
+    "order_id": {
+      "type": "string",
+      "description": "Reference to Order (optional - for vendor PO receiving)"
+    },
+    "vendor_id": {
+      "type": "string",
+      "description": "Reference to Vendor (optional - for direct vendor receiving)"
+    },
+    "received_by": {
+      "type": "string",
+      "description": "Reference to TeamMember who received"
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Date and time of receiving"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Receiving notes"
+    },
+    "receipt_photos": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Photos of received items/packaging"
+    },
+    "receipt_status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "completed"
+      ],
+      "default": "draft",
+      "description": "Status of the receipt"
+    }
+  },
+  "required": [
+    "received_by",
+    "received_at"
+  ]
+}

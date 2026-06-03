@@ -1,0 +1,116 @@
+{
+  "name": "InventoryMutationLog",
+  "type": "object",
+  "properties": {
+    "idempotency_key": {
+      "type": "string",
+      "description": "Unique key to prevent duplicate mutations"
+    },
+    "mutation_type": {
+      "type": "string",
+      "enum": [
+        "receive",
+        "move",
+        "install",
+        "reversal",
+        "adjustment"
+      ],
+      "description": "Type of mutation performed"
+    },
+    "part_id": {
+      "type": "string",
+      "description": "Reference to Part"
+    },
+    "from_location_id": {
+      "type": "string",
+      "description": "Source location (for moves/installs)"
+    },
+    "to_location_id": {
+      "type": "string",
+      "description": "Destination location (for receives/moves)"
+    },
+    "qty": {
+      "type": "number",
+      "description": "Quantity mutated"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project (for installs)"
+    },
+    "commitment_id": {
+      "type": "string",
+      "description": "Reference to PartCommitment"
+    },
+    "task_part_link_id": {
+      "type": "string",
+      "description": "Reference to TaskPartLink"
+    },
+    "inventory_item_id": {
+      "type": "string",
+      "description": "Reference to InventoryItem affected"
+    },
+    "result_status": {
+      "type": "string",
+      "enum": [
+        "success",
+        "failed",
+        "rolled_back"
+      ],
+      "default": "success",
+      "description": "Outcome of the mutation"
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Error message if failed"
+    },
+    "error_code": {
+      "type": "string",
+      "description": "Error code if failed"
+    },
+    "execution_time_ms": {
+      "type": "number",
+      "description": "Time taken to execute mutation in milliseconds"
+    },
+    "user_id": {
+      "type": "string",
+      "description": "User who performed mutation"
+    },
+    "audit_log_id": {
+      "type": "string",
+      "description": "Reference to InventoryAuditLog created"
+    },
+    "mutation_record_id": {
+      "type": "string",
+      "description": "ID of record created (InstalledPart, InventoryItem, etc.)"
+    },
+    "reversed_mutation_id": {
+      "type": "string",
+      "description": "Reference to original mutation if this is a reversal"
+    },
+    "is_reversed": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this mutation has been reversed"
+    },
+    "reversed_by_mutation_id": {
+      "type": "string",
+      "description": "Reference to reversal mutation if reversed"
+    },
+    "qty_before": {
+      "type": "number",
+      "description": "Inventory quantity before mutation"
+    },
+    "qty_after": {
+      "type": "number",
+      "description": "Inventory quantity after mutation"
+    },
+    "payload_snapshot": {
+      "type": "string",
+      "description": "JSON snapshot of original request payload"
+    }
+  },
+  "required": [
+    "mutation_type",
+    "user_id"
+  ]
+}

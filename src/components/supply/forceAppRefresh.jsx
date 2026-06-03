@@ -167,159 +167,57 @@ export async function forceAppRefresh(queryClient, options = {}) {
   // Wait for all invalidations to complete
   await Promise.all(invalidations);
   
-  // === PHASE 2: Deterministic refetch of critical queries ===
-  // These are actively refetched to ensure UI updates immediately
+  // === PHASE 2: Selective refetch — ONLY active (mounted) queries ===
+  // Invalidation above already marks everything stale.
+  // We only need to actively refetch queries that are currently rendered.
+  // Unmounted queries will refetch lazily when their component mounts again.
   
   const refetches = [];
   
-  // Core queries that must always be fresh
+  // Core parts query — only if someone is looking at the list right now
   refetches.push(
-    queryClient.refetchQueries({ 
-      queryKey: ['parts'],
-      type: refetchActive ? 'active' : 'all'
-    }),
-    queryClient.refetchQueries({ 
-      queryKey: ['partsInventoryView'],
-      type: refetchActive ? 'active' : 'all'
-    }),
-    queryClient.refetchQueries({ 
-      queryKey: ['partCommitments'],
-      type: refetchActive ? 'active' : 'all'
-    }),
+    queryClient.refetchQueries({ queryKey: ['parts'], type: 'active' }),
   );
   
-  // Supply views - critical for real-time accuracy
-  refetches.push(
-    queryClient.refetchQueries({ 
-      queryKey: ['opsSupplyView'],
-      type: refetchActive ? 'active' : 'all'
-    }),
-    queryClient.refetchQueries({ 
-      queryKey: ['projectSupplyView'],
-      type: refetchActive ? 'active' : 'all'
-    }),
-    // PO Receiving views - must refetch after RECEIVE actions
-    queryClient.refetchQueries({ 
-      queryKey: ['poReceivingView'],
-      type: 'active'
-    }),
-  );
-  
-  // CANONICAL FINANCIAL REFETCH - scoped by project ID
-  // Use exact keys to avoid partial matching issues
-  normalizedProjectIds.forEach(id => {
-    refetches.push(
-      queryClient.refetchQueries({ 
-        queryKey: ['billingProcurementStates', id],
-        type: 'all'
-      }),
-      queryClient.refetchQueries({ 
-        queryKey: ['projectInvoicesView', id],
-        type: 'all'
-      }),
-      queryClient.refetchQueries({ 
-        queryKey: ['creditAllocations', id],
-        type: 'all'
-      }),
-    );
-  });
-  
-  // Global financial queries (no project scope)
-  refetches.push(
-    queryClient.refetchQueries({ 
-      queryKey: ['creditLedger'],
-      type: refetchActive ? 'active' : 'all'
-    }),
-    queryClient.refetchQueries({ 
-      queryKey: ['financialProjectsView'],
-      type: refetchActive ? 'active' : 'all'
-    }),
-    queryClient.refetchQueries({ 
-      queryKey: ['billablePartsView'],
-      type: refetchActive ? 'active' : 'all'
-    }),
-    // Invoice view internal keys used by ForwardInvoiceDashboard
-    queryClient.refetchQueries({ 
-      queryKey: ['projectInvoiceCommitments'],
-      type: refetchActive ? 'active' : 'all'
-    }),
-    queryClient.refetchQueries({ 
-      queryKey: ['projectInvoices'],
-      type: 'all' // Always refetch all invoice lists
-    }),
-    queryClient.refetchQueries({ 
-      queryKey: ['projectInvoiceLines'],
-      type: refetchActive ? 'active' : 'all'
-    }),
-    queryClient.refetchQueries({ 
-      queryKey: ['projectCreditLedger'],
-      type: refetchActive ? 'active' : 'all'
-    }),
-    queryClient.refetchQueries({ 
-      queryKey: ['projectCreditAllocations'],
-      type: refetchActive ? 'active' : 'all'
-    }),
-  );
-  
-  // Scoped refetches for affected parts
+  // Scoped refetches for affected parts — only active observers
   partIds.forEach(id => {
     refetches.push(
-      queryClient.refetchQueries({ 
-        queryKey: ['part', id],
-        type: refetchActive ? 'active' : 'all'
-      }),
-      queryClient.refetchQueries({ 
-        queryKey: ['partsInventoryView', id],
-        type: refetchActive ? 'active' : 'all'
-      }),
+      queryClient.refetchQueries({ queryKey: ['part', id], type: 'active' }),
+      queryClient.refetchQueries({ queryKey: ['partsInventoryView', id], type: 'active' }),
     );
   });
   
-  // PHASE 5: Scoped refetches for affected projects - DETERMINISTIC
-  // When projectId provided, ALWAYS invalidate + refetch these critical keys
-  projectIds.forEach(id => {
+  // Supply views — only if actively mounted
+  refetches.push(
+    queryClient.refetchQueries({ queryKey: ['opsSupplyView'], type: 'active' }),
+    queryClient.refetchQueries({ queryKey: ['projectSupplyView'], type: 'active' }),
+    queryClient.refetchQueries({ queryKey: ['poReceivingView'], type: 'active' }),
+  );
+  
+  // Scoped project refetches — only active observers
+  normalizedProjectIds.forEach(id => {
     refetches.push(
-      queryClient.refetchQueries({ 
-        queryKey: ['projectSupplyView', id],
-        type: 'all' // Deterministic: always refetch
-      }),
-      // CANONICAL: billingProcurementStates is THE source of truth for exposure
-      queryClient.refetchQueries({ 
-        queryKey: ['billingProcurementStates', id],
-        type: 'all' // Deterministic: always refetch
-      }),
-      // Invoice history views - must stay in sync
-      queryClient.refetchQueries({ 
-        queryKey: ['projectInvoicesView', id],
-        type: 'all' // Deterministic: always refetch
-      }),
-      queryClient.refetchQueries({ 
-        queryKey: ['projectInvoiceCommitments', id],
-        type: 'all' // Deterministic: always refetch
-      }),
-      queryClient.refetchQueries({ 
-        queryKey: ['projectInvoices', id],
-        type: 'all' // Deterministic: always refetch
-      }),
-      queryClient.refetchQueries({ 
-        queryKey: ['projectInvoiceLines', id],
-        type: 'all' // Deterministic: always refetch
-      }),
-      // Credit queries must sync immediately
-      queryClient.refetchQueries({ 
-        queryKey: ['projectCreditLedger', id],
-        type: 'all' // Deterministic: always refetch
-      }),
-      queryClient.refetchQueries({ 
-        queryKey: ['projectCreditAllocations', id],
-        type: 'all' // Deterministic: always refetch
-      }),
-      queryClient.refetchQueries({ 
-        queryKey: ['creditAllocations', id],
-        type: 'all' // Deterministic: always refetch
-      }),
+      queryClient.refetchQueries({ queryKey: ['projectSupplyView', id], type: 'active' }),
+      queryClient.refetchQueries({ queryKey: ['billingProcurementStates', id], type: 'active' }),
+      queryClient.refetchQueries({ queryKey: ['projectInvoicesView', id], type: 'active' }),
+      queryClient.refetchQueries({ queryKey: ['projectInvoiceCommitments', id], type: 'active' }),
+      queryClient.refetchQueries({ queryKey: ['projectInvoices', id], type: 'active' }),
+      queryClient.refetchQueries({ queryKey: ['projectInvoiceLines', id], type: 'active' }),
+      queryClient.refetchQueries({ queryKey: ['projectCreditLedger', id], type: 'active' }),
+      queryClient.refetchQueries({ queryKey: ['projectCreditAllocations', id], type: 'active' }),
+      queryClient.refetchQueries({ queryKey: ['creditAllocations', id], type: 'active' }),
     );
   });
+  
+  // Global financial — only active
+  refetches.push(
+    queryClient.refetchQueries({ queryKey: ['creditLedger'], type: 'active' }),
+    queryClient.refetchQueries({ queryKey: ['financialProjectsView'], type: 'active' }),
+    queryClient.refetchQueries({ queryKey: ['billablePartsView'], type: 'active' }),
+    queryClient.refetchQueries({ queryKey: ['projectInvoices'], type: 'active' }),
+    queryClient.refetchQueries({ queryKey: ['projectCreditLedger'], type: 'active' }),
+    queryClient.refetchQueries({ queryKey: ['projectCreditAllocations'], type: 'active' }),
+  );
   
   // Wait for all refetches to complete
   await Promise.all(refetches);

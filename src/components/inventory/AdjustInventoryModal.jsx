@@ -27,15 +27,18 @@ export default function AdjustInventoryModal({ onClose, preselectedPartId }) {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   
-  // Get default cost from part if preselected
+  // Get default cost from part if preselected — fetch single part, not entire list
   const { data: preselectedPart } = useQuery({
     queryKey: ['part', preselectedPartId],
     queryFn: async () => {
       if (!preselectedPartId) return null;
-      const allParts = await base44.entities.Part.list();
-      return allParts.find(p => p.id === preselectedPartId);
+      const rows = await base44.entities.Part.filter({ id: preselectedPartId });
+      return rows?.[0] ?? null;
     },
     enabled: !!preselectedPartId,
+    staleTime: 60000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   const [direction, setDirection] = useState('add');
@@ -58,9 +61,14 @@ export default function AdjustInventoryModal({ onClose, preselectedPartId }) {
     }
   }, [preselectedPart]);
 
+  // Only fetch full parts list if no part is preselected (for the selector dropdown)
   const { data: parts = [] } = useQuery({
     queryKey: ['parts'],
-    queryFn: () => base44.entities.Part.list()
+    queryFn: () => base44.entities.Part.list(),
+    enabled: !preselectedPartId,
+    staleTime: 60000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   // Reason options based on direction

@@ -1,0 +1,44 @@
+{
+  "name": "VendorPayment",
+  "type": "object",
+  "properties": {
+    "invoice_id": {
+      "type": "string",
+      "description": "Reference to VendorInvoice"
+    },
+    "payment_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date payment was made"
+    },
+    "payment_method": {
+      "type": "string",
+      "enum": [
+        "check",
+        "ach",
+        "wire",
+        "credit_card",
+        "cash",
+        "other"
+      ],
+      "description": "Method of payment"
+    },
+    "amount_paid": {
+      "type": "number",
+      "description": "Amount of payment"
+    },
+    "payment_reference": {
+      "type": "string",
+      "description": "Check number, transaction ID, etc."
+    },
+    "notes": {
+      "type": "string",
+      "description": "Payment notes"
+    }
+  },
+  "required": [
+    "invoice_id",
+    "payment_date",
+    "amount_paid"
+  ]
+}

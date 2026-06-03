@@ -1,0 +1,37 @@
+{
+  "name": "StatusList",
+  "type": "object",
+  "properties": {
+    "scope": {
+      "type": "string",
+      "enum": [
+        "Project",
+        "Task"
+      ],
+      "description": "Whether this status applies to Projects or Tasks"
+    },
+    "label": {
+      "type": "string",
+      "description": "Status display label"
+    },
+    "color": {
+      "type": "string",
+      "default": "#EF4444",
+      "description": "Hex color for status pill"
+    },
+    "active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this status is available for selection"
+    },
+    "sort_order": {
+      "type": "number",
+      "default": 0,
+      "description": "Display order"
+    }
+  },
+  "required": [
+    "scope",
+    "label"
+  ]
+}

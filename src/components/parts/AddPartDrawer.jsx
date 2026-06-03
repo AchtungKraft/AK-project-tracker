@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { Loader2, Upload, Camera, Trash2, Star, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 
 export default function AddPartDrawer({ onClose }) {
   const queryClient = useQueryClient();
@@ -37,58 +38,73 @@ export default function AddPartDrawer({ onClose }) {
     global_all_builds: false
   });
 
+  const refDataOptions = {
+    staleTime: 300000,
+    gcTime: 600000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  };
+
   const { data: categories = [] } = useQuery({
-    queryKey: ['partCategories'],
+    queryKey: ['referenceData', 'partCategories'],
     queryFn: async () => {
       const list = await base44.entities.PartCategory.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    ...refDataOptions,
   });
 
   const { data: vendors = [] } = useQuery({
-    queryKey: ['vendors'],
+    queryKey: ['referenceData', 'vendors'],
     queryFn: async () => {
       const list = await base44.entities.Vendor.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    ...refDataOptions,
   });
 
   const { data: locations = [] } = useQuery({
-    queryKey: ['locations'],
+    queryKey: ['referenceData', 'locations'],
     queryFn: async () => {
       const list = await base44.entities.Location.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    ...refDataOptions,
   });
 
   const { data: makes = [] } = useQuery({
-    queryKey: ['carMakes'],
+    queryKey: ['referenceData', 'carMakes'],
     queryFn: async () => {
       const list = await base44.entities.CarMake.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    ...refDataOptions,
   });
 
   const { data: models = [] } = useQuery({
-    queryKey: ['carModels'],
+    queryKey: ['referenceData', 'carModels'],
     queryFn: async () => {
       const list = await base44.entities.CarModel.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    ...refDataOptions,
   });
 
   const { data: years = [] } = useQuery({
-    queryKey: ['carYears'],
+    queryKey: ['referenceData', 'carYears'],
     queryFn: async () => {
       const list = await base44.entities.CarYear.list();
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
+    ...refDataOptions,
   });
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Part.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['parts'] });
+    onSuccess: async (newPart) => {
+      await forceAppRefresh(queryClient, {
+        partIds: newPart?.id ? [newPart.id] : [],
+      });
       toast.success('Part created successfully');
       onClose();
     },

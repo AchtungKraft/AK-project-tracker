@@ -1,0 +1,57 @@
+{
+  "name": "VendorInvoiceLineItem",
+  "type": "object",
+  "properties": {
+    "invoice_id": {
+      "type": "string",
+      "description": "Reference to VendorInvoice"
+    },
+    "purchase_line_item_id": {
+      "type": "string",
+      "description": "Reference to PartPurchaseLineItem"
+    },
+    "part_id": {
+      "type": "string",
+      "description": "Reference to Part"
+    },
+    "description": {
+      "type": "string",
+      "description": "Line item description from invoice"
+    },
+    "qty_invoiced": {
+      "type": "number",
+      "default": 0,
+      "description": "Quantity on the invoice"
+    },
+    "actual_unit_cost": {
+      "type": "number",
+      "description": "Actual cost per unit from invoice"
+    },
+    "extended_cost": {
+      "type": "number",
+      "description": "qty_invoiced * actual_unit_cost"
+    },
+    "freight_allocation": {
+      "type": "number",
+      "default": 0,
+      "description": "Allocated freight cost for this line"
+    },
+    "landed_unit_cost": {
+      "type": "number",
+      "description": "Actual cost + allocated freight per unit"
+    },
+    "variance_amount": {
+      "type": "number",
+      "description": "Difference from PO unit cost"
+    },
+    "variance_pct": {
+      "type": "number",
+      "description": "Percentage variance from PO"
+    }
+  },
+  "required": [
+    "invoice_id",
+    "qty_invoiced",
+    "actual_unit_cost"
+  ]
+}

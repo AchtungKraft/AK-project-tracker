@@ -1,0 +1,59 @@
+{
+  "name": "InventoryTransfer",
+  "type": "object",
+  "properties": {
+    "part_id": {
+      "type": "string",
+      "description": "Reference to Part"
+    },
+    "inventory_item_id": {
+      "type": "string",
+      "description": "Reference to InventoryItem being moved"
+    },
+    "from_location_id": {
+      "type": "string",
+      "description": "Reference to source Location"
+    },
+    "to_location_id": {
+      "type": "string",
+      "description": "Reference to destination Location"
+    },
+    "qty_moved": {
+      "type": "number",
+      "description": "Quantity transferred"
+    },
+    "transfer_reason": {
+      "type": "string",
+      "enum": [
+        "restock",
+        "project_staging",
+        "consolidation",
+        "correction",
+        "return_to_stock",
+        "other"
+      ],
+      "default": "other",
+      "description": "Reason for the transfer"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes about the transfer"
+    },
+    "transfer_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "completed",
+        "cancelled"
+      ],
+      "default": "completed",
+      "description": "Status of the transfer"
+    }
+  },
+  "required": [
+    "part_id",
+    "from_location_id",
+    "to_location_id",
+    "qty_moved"
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "name": "ProjectCreditLedger",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project"
+    },
+    "source_invoice_id": {
+      "type": "string",
+      "description": "Reference to ProjectInvoice that created this credit (overpayment or reversal)"
+    },
+    "credit_amount": {
+      "type": "number",
+      "description": "Original credit amount"
+    },
+    "remaining_amount": {
+      "type": "number",
+      "description": "Remaining credit balance"
+    },
+    "applied_to_invoice_id": {
+      "type": "string",
+      "description": "Reference to ProjectInvoice where credit was applied (if fully used)"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Notes about credit usage"
+    },
+    "credit_idempotency_key": {
+      "type": "string",
+      "description": "Idempotency key for credit application (prevents double-apply)"
+    },
+    "payment_idempotency_key": {
+      "type": "string",
+      "description": "Idempotency key for payment credit application"
+    },
+    "reversed_from_invoice_id": {
+      "type": "string",
+      "description": "Reference to cancelled invoice this credit was reversed from"
+    },
+    "reversal_idempotency_key": {
+      "type": "string",
+      "description": "Idempotency key for reversal (prevents double-reversal)"
+    }
+  },
+  "required": [
+    "project_id",
+    "source_invoice_id",
+    "credit_amount",
+    "remaining_amount"
+  ]
+}

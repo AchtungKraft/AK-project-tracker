@@ -1,0 +1,78 @@
+{
+  "name": "InventoryItem",
+  "type": "object",
+  "properties": {
+    "part_id": {
+      "type": "string",
+      "description": "Reference to Part definition"
+    },
+    "location_id": {
+      "type": "string",
+      "description": "Reference to Location where this inventory is stored"
+    },
+    "quantity_on_hand": {
+      "type": "number",
+      "default": 0,
+      "description": "Total physical quantity at this location"
+    },
+    "quantity_reserved": {
+      "type": "number",
+      "default": 0,
+      "description": "Quantity reserved for projects (not yet installed)"
+    },
+    "purchase_cost": {
+      "type": "number",
+      "description": "Actual cost paid per unit for this inventory batch"
+    },
+    "purchase_order_id": {
+      "type": "string",
+      "description": "Reference to Order this inventory came from"
+    },
+    "received_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date inventory was received"
+    },
+    "lot_number": {
+      "type": "string",
+      "description": "Batch/lot identifier for tracking"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Notes about this inventory batch"
+    },
+    "receipt_id": {
+      "type": "string",
+      "description": "Reference to InventoryReceipt (Phase 1)"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "vendor_order",
+        "internal_transfer",
+        "material_conversion",
+        "manual_entry",
+        "client_supplied",
+        "vehicle_removed"
+      ],
+      "description": "Origin type for provenance tracking (Phase 1)"
+    },
+    "source_reference_id": {
+      "type": "string",
+      "description": "Reference to source record for traceability (Phase 1)"
+    },
+    "requires_inspection": {
+      "type": "boolean",
+      "default": false,
+      "description": "Flag indicating inspection needed before use (Phase 1)"
+    },
+    "material_instance_id": {
+      "type": "string",
+      "description": "Optional reference to MaterialInstance for unique physical part tracking (Phase 1 Stabilization)"
+    }
+  },
+  "required": [
+    "part_id",
+    "quantity_on_hand"
+  ]
+}

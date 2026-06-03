@@ -1,0 +1,65 @@
+{
+  "name": "ToDoListTask",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "description": "Reference to ClientFeedbackRequest"
+    },
+    "group_id": {
+      "type": "string",
+      "description": "Reference to TaskGroup (optional)"
+    },
+    "title": {
+      "type": "string",
+      "description": "The to-do item text"
+    },
+    "is_complete": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the task is complete"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the task was completed"
+    },
+    "assigned_to_id": {
+      "type": "string",
+      "description": "ID of the assigned user (User or ClientContact)"
+    },
+    "assigned_to_type": {
+      "type": "string",
+      "enum": [
+        "internal_user",
+        "client_contact"
+      ],
+      "description": "Type of assignee"
+    },
+    "details": {
+      "type": "string",
+      "description": "Additional details for the task"
+    },
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Array of image URLs"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Due date for the task"
+    },
+    "order": {
+      "type": "number",
+      "default": 0,
+      "description": "Display order within group for drag-and-drop sorting"
+    }
+  },
+  "required": [
+    "request_id",
+    "title"
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "name": "CreditAllocation",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project"
+    },
+    "credit_ledger_id": {
+      "type": "string",
+      "description": "Reference to ProjectCreditLedger"
+    },
+    "commitment_id": {
+      "type": "string",
+      "description": "Reference to PartCommitment (nullable for project-level allocations)"
+    },
+    "invoice_id": {
+      "type": "string",
+      "description": "Reference to ProjectInvoice (nullable)"
+    },
+    "invoice_batch_id": {
+      "type": "string",
+      "description": "Reference to InvoiceBatch (nullable)"
+    },
+    "amount_applied": {
+      "type": "number",
+      "description": "Amount of credit applied (positive value)"
+    },
+    "allocation_mode": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "manual"
+      ],
+      "default": "auto",
+      "description": "Whether allocation was automatic or manual"
+    },
+    "allocation_key": {
+      "type": "string",
+      "description": "Deterministic hash for idempotency checks"
+    },
+    "is_reversed": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this allocation has been reversed"
+    },
+    "reversed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When allocation was reversed"
+    },
+    "reversed_by": {
+      "type": "string",
+      "description": "User who reversed the allocation"
+    },
+    "reversal_reason": {
+      "type": "string",
+      "description": "Reason for reversal"
+    }
+  },
+  "required": [
+    "project_id",
+    "credit_ledger_id",
+    "amount_applied"
+  ]
+}

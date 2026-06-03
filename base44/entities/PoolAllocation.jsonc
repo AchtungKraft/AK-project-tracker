@@ -1,0 +1,54 @@
+{
+  "name": "PoolAllocation",
+  "type": "object",
+  "_DEPRECATED": "2026-02-20 - DEPRECATED in Phase 9E. Forward model uses InvoiceBatch exclusively. This schema retained for reference only.",
+  "_MIGRATION_STATUS": "PURGE_PENDING - Use purgeLegacyPools function to remove remaining data",
+  "properties": {
+    "pool_id": {
+      "type": "string",
+      "description": "DEPRECATED - Reference to BillingPool"
+    },
+    "commitment_id": {
+      "type": "string",
+      "description": "DEPRECATED - Reference to PartCommitment"
+    },
+    "amount_allocated": {
+      "type": "number",
+      "description": "DEPRECATED - Amount allocated from pool"
+    },
+    "allocation_type": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "system_credit",
+        "auto_suggested",
+        "migrated"
+      ],
+      "default": "manual",
+      "description": "DEPRECATED"
+    },
+    "is_reversed": {
+      "type": "boolean",
+      "default": false,
+      "description": "DEPRECATED"
+    },
+    "reversed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "DEPRECATED"
+    },
+    "reversed_by": {
+      "type": "string",
+      "description": "DEPRECATED"
+    },
+    "notes": {
+      "type": "string",
+      "description": "DEPRECATED"
+    }
+  },
+  "required": [
+    "pool_id",
+    "commitment_id",
+    "amount_allocated"
+  ]
+}

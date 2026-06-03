@@ -1,0 +1,112 @@
+{
+  "name": "ClientFeedbackComment",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "description": "Reference to ClientFeedbackRequest"
+    },
+    "author_type": {
+      "type": "string",
+      "enum": [
+        "client_contact",
+        "internal_user"
+      ],
+      "description": "Type of author"
+    },
+    "author_id": {
+      "type": "string",
+      "description": "ID of the author (ClientContact or User)"
+    },
+    "body": {
+      "type": "string",
+      "description": "LEGACY: Plain text comment. Preserved for backward compatibility."
+    },
+    "content_html": {
+      "type": "string",
+      "description": "Rich HTML content from WYSIWYG editor. Primary content field for new comments."
+    },
+    "content_fallback": {
+      "type": "string",
+      "description": "Plain text fallback extracted from content_html."
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Structured hyperlinks with metadata"
+    },
+    "photos": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Array of photo URLs attached to this comment"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Array of file attachments"
+    },
+    "visibility": {
+      "type": "string",
+      "enum": [
+        "client_visible",
+        "internal_only"
+      ],
+      "default": "client_visible",
+      "description": "Whether client can see this comment"
+    },
+    "target_type": {
+      "type": "string",
+      "enum": [
+        "request",
+        "attachment_image"
+      ],
+      "default": "request",
+      "description": "What this comment is targeting"
+    },
+    "target_attachment_id": {
+      "type": "string",
+      "description": "If targeting an image, the attachment ID"
+    },
+    "posted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Server timestamp when comment was posted"
+    }
+  },
+  "required": [
+    "request_id",
+    "author_type",
+    "author_id"
+  ]
+}

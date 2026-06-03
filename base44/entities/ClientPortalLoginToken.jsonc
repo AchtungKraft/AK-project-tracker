@@ -1,0 +1,29 @@
+{
+  "name": "ClientPortalLoginToken",
+  "type": "object",
+  "properties": {
+    "client_contact_id": {
+      "type": "string",
+      "description": "Reference to ClientContact"
+    },
+    "token_hash": {
+      "type": "string",
+      "description": "Hashed token for security"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When token expires"
+    },
+    "used_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When token was used"
+    }
+  },
+  "required": [
+    "client_contact_id",
+    "token_hash",
+    "expires_at"
+  ]
+}

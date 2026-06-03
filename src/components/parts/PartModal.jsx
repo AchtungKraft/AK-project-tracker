@@ -32,7 +32,7 @@ import PartVendorSourcesSection from "./PartVendorSourcesSection";
 import LocationSelect from "@/components/common/LocationSelect";
 import AdjustInventoryModal from "../inventory/AdjustInventoryModal";
 import AddToBuildModal from "./AddToBuildModal";
-import { forceAppRefresh, extractRefreshContext } from "@/components/supply/forceAppRefresh";
+// forceAppRefresh removed — PartModal now uses targeted invalidation only
 
 // Helper to cancel all part-scoped queries for a given partId
 const cancelPartQueries = (queryClient, partId) => {
@@ -367,21 +367,18 @@ export default function PartModal({ part, partId, onClose }) {
   const updateMutation = useMutation({
     mutationFn: (data) => base44.entities.Part.update(activePart.id, data),
     onSuccess: async () => {
-      // DEV: Phase 1E - Verify DB persisted photos
-      if (import.meta.env.DEV) {
-        try {
-          const [verifyPart] = await base44.entities.Part.filter({ id: activePart.id });
-          console.log('[UPLOAD_DEBUG E] After save, DB photos:', {
-            photosLength: verifyPart?.photos?.length || 0,
-            photos: verifyPart?.photos,
-          });
-        } catch (err) {
-          console.error('[UPLOAD_DEBUG E] Verification failed:', err);
-        }
-      }
+      // Targeted invalidation — only this part + the parts list
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['part', activePart.id] }),
+        queryClient.invalidateQueries({ queryKey: ['parts'] }),
+        queryClient.invalidateQueries({ queryKey: ['partsInventoryView', activePart.id] }),
+        queryClient.invalidateQueries({ queryKey: ['partSupplyUsage', activePart.id] }),
+      ]);
+      // Refetch only what's active
+      await queryClient.refetchQueries({ queryKey: ['parts'], type: 'active' });
       
-      // PHASE 17: Deterministic refresh - invalidate + refetch
-      await forceAppRefresh(queryClient, { partIds: [activePart.id] });
+      // Reset initialized ref so formData picks up new data
+      initializedPartIdRef.current = null;
       
       toast.success('Part updated');
       setEditing(false);
@@ -391,8 +388,12 @@ export default function PartModal({ part, partId, onClose }) {
   const deleteMutation = useMutation({
     mutationFn: () => base44.entities.Part.delete(activePart.id),
     onSuccess: async () => {
-      // PHASE 17: Deterministic refresh for delete
-      await forceAppRefresh(queryClient, { partIds: [activePart.id] });
+      // Targeted invalidation for delete — just the list and part-scoped queries
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['parts'] }),
+        queryClient.invalidateQueries({ queryKey: ['part', activePart.id] }),
+        queryClient.invalidateQueries({ queryKey: ['partsInventoryView'] }),
+      ]);
       toast.success('Part deleted');
       onClose();
     },
@@ -706,10 +707,11 @@ export default function PartModal({ part, partId, onClose }) {
     );
   }
   
-  // PERF FIX: Part load error - show error state, don't spin forever
+  // PERF FIX: Part load error - show error state with Retry action
   if (partLoadError) {
-    const errorMessage = partError?.status === 429 
-      ? 'Rate limited - please wait a moment and try again' 
+    const is429 = partError?.status === 429 || partError?.response?.status === 429;
+    const errorMessage = is429 
+      ? 'Rate limited — please wait a moment and try again' 
       : 'Unable to load part details';
     return (
       <Dialog open={true} onOpenChange={handleClose}>
@@ -720,8 +722,14 @@ export default function PartModal({ part, partId, onClose }) {
               {errorMessage}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end pt-4">
+          <div className="flex justify-end gap-2 pt-4">
             <Button variant="outline" onClick={handleClose}>Close</Button>
+            <Button 
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => queryClient.refetchQueries({ queryKey: ['part', partId] })}
+            >
+              Retry
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -1506,13 +1514,10 @@ export default function PartModal({ part, partId, onClose }) {
         {showAddInventoryModal && activePart && (
           <AdjustInventoryModal
             preselectedPartId={activePart.id}
-            onClose={async () => {
+            onClose={() => {
               setShowAddInventoryModal(false);
-              // PHASE 16: Invalidate + explicit refetch
-              await forceAppRefresh(queryClient, { partIds: [activePart.id] });
               queryClient.invalidateQueries({ queryKey: ['partsInventoryView', activePart.id] });
               queryClient.invalidateQueries({ queryKey: ['inventoryLocations', activePart.id] });
-              await refetchInventory();
             }}
           />
         )}
@@ -1521,12 +1526,9 @@ export default function PartModal({ part, partId, onClose }) {
         {showAddToBuildModal && activePart && (
           <AddToBuildModal
             part={activePart}
-            onClose={async () => {
+            onClose={() => {
               setShowAddToBuildModal(false);
-              // PHASE 16: Invalidate + explicit refetch
-              await forceAppRefresh(queryClient, { partIds: [activePart.id] });
               queryClient.invalidateQueries({ queryKey: ['partsInventoryView', activePart.id] });
-              await refetchInventory();
             }}
           />
         )}
@@ -1592,11 +1594,12 @@ export default function PartModal({ part, partId, onClose }) {
       {showAddInventoryModal && activePart && (
         <AdjustInventoryModal
           preselectedPartId={activePart.id}
-          onClose={async () => {
+          onClose={() => {
             setShowAddInventoryModal(false);
-            // PHASE 17: Deterministic refresh
-            await forceAppRefresh(queryClient, { partIds: [activePart.id] });
-            await refetchInventory();
+            // AdjustInventoryModal already calls forceAppRefresh on success
+            // Just refetch the part-scoped inventory view
+            queryClient.invalidateQueries({ queryKey: ['partsInventoryView', activePart.id] });
+            queryClient.invalidateQueries({ queryKey: ['inventoryLocations', activePart.id] });
           }}
         />
       )}
@@ -1605,11 +1608,10 @@ export default function PartModal({ part, partId, onClose }) {
       {showAddToBuildModal && activePart && (
         <AddToBuildModal
           part={activePart}
-          onClose={async () => {
+          onClose={() => {
             setShowAddToBuildModal(false);
-            // PHASE 17: Deterministic refresh
-            await forceAppRefresh(queryClient, { partIds: [activePart.id] });
-            await refetchInventory();
+            // AddToBuildModal already calls forceAppRefresh on success
+            queryClient.invalidateQueries({ queryKey: ['partsInventoryView', activePart.id] });
           }}
         />
       )}

@@ -1,0 +1,40 @@
+{
+  "name": "PartPricing",
+  "type": "object",
+  "properties": {
+    "part_id": {
+      "type": "string",
+      "description": "Reference to Part"
+    },
+    "vendor_id": {
+      "type": "string",
+      "description": "Reference to Vendor (optional - null means default pricing)"
+    },
+    "unit_cost": {
+      "type": "number",
+      "description": "Cost per unit from this vendor"
+    },
+    "unit_retail": {
+      "type": "number",
+      "description": "Retail/sell price per unit"
+    },
+    "effective_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date this pricing becomes effective"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date this pricing expires (null = current)"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Pricing notes (bulk discounts, etc.)"
+    }
+  },
+  "required": [
+    "part_id",
+    "unit_cost"
+  ]
+}

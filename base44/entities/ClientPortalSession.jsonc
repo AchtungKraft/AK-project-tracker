@@ -1,0 +1,29 @@
+{
+  "name": "ClientPortalSession",
+  "type": "object",
+  "properties": {
+    "client_contact_id": {
+      "type": "string",
+      "description": "Reference to ClientContact"
+    },
+    "session_token_hash": {
+      "type": "string",
+      "description": "Hashed session token"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When session expires"
+    },
+    "last_seen_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last activity timestamp"
+    }
+  },
+  "required": [
+    "client_contact_id",
+    "session_token_hash",
+    "expires_at"
+  ]
+}

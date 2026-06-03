@@ -1,0 +1,107 @@
+{
+  "name": "JournalEntry",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project"
+    },
+    "headline": {
+      "type": "string",
+      "description": "Headline/title for the journal entry"
+    },
+    "content": {
+      "type": "string",
+      "description": "LEGACY: Plain text journal entry content. Preserved for backward compatibility."
+    },
+    "content_html": {
+      "type": "string",
+      "description": "Rich HTML content from WYSIWYG editor. Primary content field for new entries."
+    },
+    "photos": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Array of gallery photo URLs (separate from inline images in content_html)"
+    },
+    "entry_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Date of journal entry"
+    },
+    "url": {
+      "type": "string",
+      "description": "LEGACY: Single related URL. Preserved for backward compatibility. Use links[] for new entries."
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable unique ID for this link"
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name for the link"
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional description"
+          },
+          "url": {
+            "type": "string",
+            "description": "Link URL"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "external",
+              "document",
+              "video",
+              "image",
+              "drive",
+              "supplier",
+              "reference"
+            ],
+            "description": "Link type for visual treatment"
+          }
+        }
+      },
+      "description": "Structured hyperlinks with metadata"
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "uploaded_date": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "description": "Document attachments (PDFs, images, CAD files, etc.)"
+    },
+    "visibility": {
+      "type": "string",
+      "enum": [
+        "internal",
+        "client"
+      ],
+      "default": "internal",
+      "description": "Whether this entry is visible to clients or internal only"
+    }
+  },
+  "required": [
+    "project_id"
+  ]
+}

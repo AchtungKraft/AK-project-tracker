@@ -1,0 +1,18 @@
+{
+  "name": "POSequence",
+  "type": "object",
+  "properties": {
+    "year": {
+      "type": "number",
+      "description": "Calendar year for this sequence"
+    },
+    "last_sequence": {
+      "type": "number",
+      "default": 0,
+      "description": "Last used sequence number for this year"
+    }
+  },
+  "required": [
+    "year"
+  ]
+}

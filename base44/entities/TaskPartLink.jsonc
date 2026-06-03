@@ -1,0 +1,59 @@
+{
+  "name": "TaskPartLink",
+  "type": "object",
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "description": "Reference to Task"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project (denormalized for queries)"
+    },
+    "part_id": {
+      "type": "string",
+      "description": "Reference to Part"
+    },
+    "commitment_id": {
+      "type": "string",
+      "description": "Reference to PartCommitment (optional)"
+    },
+    "qty_allocated": {
+      "type": "number",
+      "default": 0,
+      "description": "Quantity allocated to this task"
+    },
+    "qty_installed": {
+      "type": "number",
+      "default": 0,
+      "description": "Quantity installed for this task"
+    },
+    "install_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "partial",
+        "complete"
+      ],
+      "default": "pending",
+      "description": "Installation status for this task-part link"
+    },
+    "installed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When installation was completed"
+    },
+    "installed_by": {
+      "type": "string",
+      "description": "Reference to TeamMember who installed"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Notes about this task-part association"
+    }
+  },
+  "required": [
+    "task_id",
+    "part_id"
+  ]
+}

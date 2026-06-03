@@ -36,7 +36,13 @@ export default function PartsTracker() {
             <Button
               onClick={async () => {
                 setIsRefreshing(true);
-                await queryClient.invalidateQueries();
+                // Targeted refresh — only parts-related queries, not the entire app
+                await Promise.all([
+                  queryClient.invalidateQueries({ queryKey: ['parts'] }),
+                  queryClient.invalidateQueries({ queryKey: ['partsInventoryView'] }),
+                  queryClient.invalidateQueries({ queryKey: ['inventoryItems'] }),
+                  queryClient.invalidateQueries({ queryKey: ['inventoryLocations'] }),
+                ]);
                 setIsRefreshing(false);
               }}
               variant="outline"

@@ -1,0 +1,103 @@
+{
+  "name": "InstalledPart",
+  "type": "object",
+  "properties": {
+    "part_id": {
+      "type": "string",
+      "description": "Reference to Part"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Reference to Task (optional - for task-level tracking)"
+    },
+    "task_part_link_id": {
+      "type": "string",
+      "description": "Reference to TaskPartLink (optional)"
+    },
+    "requirement_id": {
+      "type": "string",
+      "description": "Reference to PartProjectRequirement"
+    },
+    "commitment_id": {
+      "type": "string",
+      "description": "Reference to PartCommitment"
+    },
+    "inventory_item_id": {
+      "type": "string",
+      "description": "Reference to InventoryItem consumed"
+    },
+    "qty_consumed": {
+      "type": "number",
+      "default": 1,
+      "description": "Quantity installed in this record"
+    },
+    "unit_cost_at_install": {
+      "type": "number",
+      "description": "Locked cost per unit at time of installation"
+    },
+    "extended_cost": {
+      "type": "number",
+      "description": "qty_consumed \u00d7 unit_cost_at_install"
+    },
+    "installed_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the part was installed"
+    },
+    "installed_by": {
+      "type": "string",
+      "description": "Team member who installed"
+    },
+    "category_id": {
+      "type": "string",
+      "description": "Part category for cost grouping (denormalized)"
+    },
+    "location_id": {
+      "type": "string",
+      "description": "Location from which part was consumed"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Installation notes"
+    },
+    "is_reversed": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this installation has been reversed"
+    },
+    "reversed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When installation was reversed"
+    },
+    "reversed_by": {
+      "type": "string",
+      "description": "User who reversed the installation"
+    },
+    "reversal_reason": {
+      "type": "string",
+      "description": "Reason for reversal"
+    },
+    "reversal_type": {
+      "type": "string",
+      "enum": [
+        "scope_reduction",
+        "warranty",
+        "error",
+        "upgrade_swap",
+        "other"
+      ],
+      "description": "Type of reversal"
+    }
+  },
+  "required": [
+    "part_id",
+    "project_id",
+    "qty_consumed",
+    "unit_cost_at_install"
+  ]
+}

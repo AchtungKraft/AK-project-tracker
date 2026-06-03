@@ -1,0 +1,63 @@
+{
+  "name": "ClientFeedbackDecision",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "description": "Reference to ClientFeedbackRequest"
+    },
+    "decided_by_type": {
+      "type": "string",
+      "enum": [
+        "client_contact",
+        "internal_user"
+      ],
+      "description": "Type of decision maker"
+    },
+    "decided_by_id": {
+      "type": "string",
+      "description": "ID of decision maker"
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "approved",
+        "changes_requested",
+        "rejected"
+      ],
+      "description": "The decision made"
+    },
+    "note": {
+      "type": "string",
+      "description": "Note explaining the decision"
+    },
+    "target_type": {
+      "type": "string",
+      "enum": [
+        "request",
+        "attachment_image"
+      ],
+      "default": "request",
+      "description": "What this decision is for"
+    },
+    "target_attachment_id": {
+      "type": "string",
+      "description": "If targeting an image, the attachment ID"
+    },
+    "target_image_url": {
+      "type": "string",
+      "description": "Direct URL of the image being decided on"
+    },
+    "decided_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When decision was made"
+    }
+  },
+  "required": [
+    "request_id",
+    "decided_by_type",
+    "decided_by_id",
+    "decision"
+  ]
+}

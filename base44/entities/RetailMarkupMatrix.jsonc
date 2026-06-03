@@ -1,0 +1,36 @@
+{
+  "name": "RetailMarkupMatrix",
+  "type": "object",
+  "properties": {
+    "min_cost": {
+      "type": "number",
+      "description": "Inclusive lower bound for this tier"
+    },
+    "max_cost": {
+      "type": "number",
+      "description": "Exclusive upper bound; null means no upper limit"
+    },
+    "markup_pct": {
+      "type": "number",
+      "description": "Markup percentage as decimal (e.g. 0.75 = 75%)"
+    },
+    "label": {
+      "type": "string",
+      "description": "Human-readable tier name"
+    },
+    "active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this tier is active"
+    },
+    "sort_order": {
+      "type": "number",
+      "default": 0,
+      "description": "Display order"
+    }
+  },
+  "required": [
+    "min_cost",
+    "markup_pct"
+  ]
+}

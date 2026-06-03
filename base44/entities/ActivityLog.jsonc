@@ -1,0 +1,33 @@
+{
+  "name": "ActivityLog",
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "Action performed (e.g., 'Part Added', 'Status Changed')"
+    },
+    "related_part_id": {
+      "type": "string",
+      "description": "Reference to Part"
+    },
+    "related_project_id": {
+      "type": "string",
+      "description": "Reference to Project (Build)"
+    },
+    "related_order_id": {
+      "type": "string",
+      "description": "Reference to Order"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Action details"
+    },
+    "user_email": {
+      "type": "string",
+      "description": "User who performed the action"
+    }
+  },
+  "required": [
+    "action"
+  ]
+}

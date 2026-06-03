@@ -1,0 +1,88 @@
+{
+  "name": "BillingPool",
+  "type": "object",
+  "_DEPRECATED": "2026-02-20 - DEPRECATED in Phase 9E. Forward model uses InvoiceBatch exclusively. This schema retained for reference only.",
+  "_MIGRATION_STATUS": "PURGE_PENDING - Use purgeLegacyPools function to remove remaining data",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "DEPRECATED - Reference to Project"
+    },
+    "pool_name": {
+      "type": "string",
+      "description": "DEPRECATED - Name of this billing pool"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "invoiced",
+        "paid",
+        "closed",
+        "overdrawn"
+      ],
+      "default": "draft",
+      "description": "DEPRECATED - Current status of the billing pool"
+    },
+    "invoiced_amount": {
+      "type": "number",
+      "default": 0,
+      "description": "DEPRECATED - Use InvoiceBatch.total_amount"
+    },
+    "paid_amount": {
+      "type": "number",
+      "default": 0,
+      "description": "DEPRECATED - Use InvoiceBatch payment tracking"
+    },
+    "allocated_total": {
+      "type": "number",
+      "default": 0,
+      "description": "DEPRECATED - Sum of all active PoolAllocations"
+    },
+    "charges_total": {
+      "type": "number",
+      "default": 0,
+      "description": "DEPRECATED - Sum of all active PoolCharges"
+    },
+    "balance": {
+      "type": "number",
+      "default": 0,
+      "description": "DEPRECATED - Use InvoiceBatch outstanding calculation"
+    },
+    "pool_version": {
+      "type": "number",
+      "default": 1,
+      "description": "DEPRECATED"
+    },
+    "invoice_batch_id": {
+      "type": "string",
+      "description": "DEPRECATED - Reference to InvoiceBatch"
+    },
+    "qb_invoice_number": {
+      "type": "string",
+      "description": "DEPRECATED - Use InvoiceBatch.invoice_number"
+    },
+    "qb_exported_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "DEPRECATED - Use InvoiceBatch.exported_at"
+    },
+    "notes": {
+      "type": "string",
+      "description": "DEPRECATED"
+    },
+    "closed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "DEPRECATED"
+    },
+    "closed_by": {
+      "type": "string",
+      "description": "DEPRECATED"
+    }
+  },
+  "required": [
+    "project_id",
+    "pool_name"
+  ]
+}

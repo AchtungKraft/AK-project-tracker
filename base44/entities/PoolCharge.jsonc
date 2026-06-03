@@ -1,0 +1,77 @@
+{
+  "name": "PoolCharge",
+  "type": "object",
+  "_DEPRECATED": "2026-02-20 - DEPRECATED in Phase 9E. Forward model uses InvoiceBatch exclusively. This schema retained for reference only.",
+  "_MIGRATION_STATUS": "PURGE_PENDING - Use purgeLegacyPools function to remove remaining data",
+  "properties": {
+    "pool_id": {
+      "type": "string",
+      "description": "DEPRECATED - Reference to BillingPool"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "DEPRECATED - Reference to Project"
+    },
+    "related_commitment_id": {
+      "type": "string",
+      "description": "DEPRECATED"
+    },
+    "related_po_line_id": {
+      "type": "string",
+      "description": "DEPRECATED"
+    },
+    "related_vendor_invoice_id": {
+      "type": "string",
+      "description": "DEPRECATED"
+    },
+    "charge_type": {
+      "type": "string",
+      "enum": [
+        "tariff",
+        "freight",
+        "shipping",
+        "import_duty",
+        "vendor_fee",
+        "adjustment",
+        "manual"
+      ],
+      "description": "DEPRECATED"
+    },
+    "description": {
+      "type": "string",
+      "description": "DEPRECATED"
+    },
+    "amount": {
+      "type": "number",
+      "description": "DEPRECATED"
+    },
+    "source_reference_id": {
+      "type": "string",
+      "description": "DEPRECATED"
+    },
+    "is_reversed": {
+      "type": "boolean",
+      "default": false,
+      "description": "DEPRECATED"
+    },
+    "reversed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "DEPRECATED"
+    },
+    "reversed_by": {
+      "type": "string",
+      "description": "DEPRECATED"
+    },
+    "reversal_reason": {
+      "type": "string",
+      "description": "DEPRECATED"
+    }
+  },
+  "required": [
+    "pool_id",
+    "project_id",
+    "charge_type",
+    "amount"
+  ]
+}

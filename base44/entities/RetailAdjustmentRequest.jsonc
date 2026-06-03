@@ -1,0 +1,111 @@
+{
+  "name": "RetailAdjustmentRequest",
+  "type": "object",
+  "properties": {
+    "commitment_id": {
+      "type": "string",
+      "description": "Reference to PartCommitment with negative/low margin"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project"
+    },
+    "part_id": {
+      "type": "string",
+      "description": "Reference to Part"
+    },
+    "old_retail": {
+      "type": "number",
+      "description": "Original unit_retail_snapshot at time of request"
+    },
+    "actual_unit_cost": {
+      "type": "number",
+      "description": "Actual cost that triggered the request"
+    },
+    "required_total": {
+      "type": "number",
+      "description": "Quantity at time of request"
+    },
+    "suggested_retail": {
+      "type": "number",
+      "description": "Matrix-computed retail based on new cost (rounded to $1)"
+    },
+    "margin_pct_current": {
+      "type": "number",
+      "description": "Current margin percentage (negative if cost > retail)"
+    },
+    "margin_pct_suggested": {
+      "type": "number",
+      "description": "Margin percentage if suggested_retail applied"
+    },
+    "reason_code": {
+      "type": "string",
+      "enum": [
+        "COST_INCREASE_FROM_INVOICE",
+        "MANUAL_REVIEW",
+        "NEGATIVE_MARGIN_DETECTED",
+        "COST_EXCEEDS_RETAIL"
+      ],
+      "description": "Why this request was created"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "OPEN",
+        "APPROVED_RETAIL_CHANGE",
+        "WAIVED",
+        "CLOSED"
+      ],
+      "default": "OPEN",
+      "description": "Resolution status"
+    },
+    "resolution_action": {
+      "type": "string",
+      "enum": [
+        "RETAIL_UPDATED",
+        "INVOICE_OVERRIDE",
+        "NO_ACTION",
+        "PENDING"
+      ],
+      "default": "PENDING",
+      "description": "What action was taken"
+    },
+    "new_retail_approved": {
+      "type": "number",
+      "description": "New retail if approved (for audit trail)"
+    },
+    "override_reason": {
+      "type": "string",
+      "description": "Manager reason for waiving or approving"
+    },
+    "resolved_by": {
+      "type": "string",
+      "description": "User who resolved the request"
+    },
+    "resolved_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When request was resolved"
+    },
+    "invoice_id": {
+      "type": "string",
+      "description": "Reference to vendor invoice that triggered cost update"
+    },
+    "vendor_id": {
+      "type": "string",
+      "description": "Vendor from invoice"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    }
+  },
+  "required": [
+    "commitment_id",
+    "project_id",
+    "part_id",
+    "old_retail",
+    "actual_unit_cost",
+    "reason_code"
+  ]
+}

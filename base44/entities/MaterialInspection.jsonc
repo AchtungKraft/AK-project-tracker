@@ -1,0 +1,54 @@
+{
+  "name": "MaterialInspection",
+  "type": "object",
+  "properties": {
+    "material_instance_id": {
+      "type": "string",
+      "description": "Reference to MaterialInstance being inspected"
+    },
+    "inspected_by": {
+      "type": "string",
+      "description": "Reference to TeamMember who performed inspection"
+    },
+    "inspection_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Date and time of inspection"
+    },
+    "condition_notes": {
+      "type": "string",
+      "description": "Notes on the condition of the material"
+    },
+    "repair_required": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether repair is needed"
+    },
+    "repair_description": {
+      "type": "string",
+      "description": "Description of required repairs"
+    },
+    "inspection_photos": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Photos from inspection"
+    },
+    "inspection_status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "completed",
+        "approved"
+      ],
+      "default": "open",
+      "description": "Status of the inspection"
+    }
+  },
+  "required": [
+    "material_instance_id",
+    "inspected_by",
+    "inspection_date"
+  ]
+}

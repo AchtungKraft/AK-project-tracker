@@ -1,0 +1,63 @@
+{
+  "name": "ClientFeedbackAttachment",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "description": "Reference to ClientFeedbackRequest"
+    },
+    "comment_id": {
+      "type": "string",
+      "description": "Reference to ClientFeedbackComment if attached to comment"
+    },
+    "attachment_type": {
+      "type": "string",
+      "enum": [
+        "image",
+        "link",
+        "file"
+      ],
+      "description": "Type of attachment"
+    },
+    "file_url": {
+      "type": "string",
+      "description": "URL for image or file"
+    },
+    "link_url": {
+      "type": "string",
+      "description": "URL for link attachment"
+    },
+    "label": {
+      "type": "string",
+      "description": "Optional label for attachment"
+    },
+    "sort_order": {
+      "type": "number",
+      "default": 0,
+      "description": "Display order"
+    },
+    "created_by_type": {
+      "type": "string",
+      "enum": [
+        "client_contact",
+        "internal_user"
+      ],
+      "description": "Type of creator"
+    },
+    "created_by_id": {
+      "type": "string",
+      "description": "ID of creator"
+    },
+    "posted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Server timestamp when attachment was created"
+    }
+  },
+  "required": [
+    "request_id",
+    "attachment_type",
+    "created_by_type",
+    "created_by_id"
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "name": "ClientFeedbackTaskLink",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Reference to Task"
+    },
+    "feedback_request_id": {
+      "type": "string",
+      "description": "Reference to ClientFeedbackRequest"
+    },
+    "feedback_attachment_id": {
+      "type": "string",
+      "description": "Reference to specific image attachment"
+    },
+    "created_by_user_id": {
+      "type": "string",
+      "description": "User who created the link"
+    }
+  },
+  "required": [
+    "project_id",
+    "task_id",
+    "created_by_user_id"
+  ]
+}

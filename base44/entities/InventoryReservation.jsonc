@@ -1,0 +1,60 @@
+{
+  "name": "InventoryReservation",
+  "type": "object",
+  "properties": {
+    "inventory_item_id": {
+      "type": "string",
+      "description": "Reference to InventoryItem being reserved"
+    },
+    "part_id": {
+      "type": "string",
+      "description": "Reference to Part"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project"
+    },
+    "commitment_id": {
+      "type": "string",
+      "description": "Reference to PartCommitment"
+    },
+    "qty_reserved": {
+      "type": "number",
+      "default": 0,
+      "description": "Quantity reserved from this inventory item"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "released",
+        "consumed"
+      ],
+      "default": "active",
+      "description": "Reservation status"
+    },
+    "released_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When reservation was released"
+    },
+    "released_by": {
+      "type": "string",
+      "description": "User who released the reservation"
+    },
+    "release_reason": {
+      "type": "string",
+      "description": "Reason for releasing reservation"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    }
+  },
+  "required": [
+    "inventory_item_id",
+    "part_id",
+    "project_id",
+    "qty_reserved"
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "name": "PartBuildAssignment",
+  "type": "object",
+  "properties": {
+    "part_id": {
+      "type": "string",
+      "description": "Reference to Part"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project (Build)"
+    },
+    "needed_status": {
+      "type": "string",
+      "enum": [
+        "On-Hand",
+        "Need to Buy",
+        "On-Order"
+      ],
+      "default": "Need to Buy",
+      "description": "Status for this assignment"
+    },
+    "qty_needed": {
+      "type": "number",
+      "default": 1,
+      "description": "Quantity needed for this build"
+    },
+    "qty_reserved": {
+      "type": "number",
+      "default": 0,
+      "description": "Quantity reserved for this build"
+    },
+    "order_id": {
+      "type": "string",
+      "description": "Reference to Order/PO"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Assignment-specific notes"
+    },
+    "default_cost": {
+      "type": "number",
+      "description": "Source cost for pricing calculation"
+    },
+    "unit_retail": {
+      "type": "number",
+      "description": "Calculated retail price (materialized)"
+    },
+    "applied_markup_pct": {
+      "type": "number",
+      "description": "Snapshot of markup percentage used"
+    },
+    "pricing_source": {
+      "type": "string",
+      "enum": [
+        "matrix",
+        "override"
+      ],
+      "default": "matrix",
+      "description": "Source of the pricing calculation"
+    },
+    "pricing_locked": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, pricing will not auto-update"
+    },
+    "unit_retail_override": {
+      "type": "number",
+      "description": "Manual override for unit retail when pricing_locked is true"
+    },
+    "is_deprecated": {
+      "type": "boolean",
+      "default": true,
+      "description": "DEPRECATED: This entity is frozen. Use PartCommitment instead."
+    },
+    "deprecated_reason": {
+      "type": "string",
+      "default": "Replaced by PartCommitment entity. No new records allowed.",
+      "description": "Explanation of deprecation"
+    }
+  },
+  "required": [
+    "part_id",
+    "project_id"
+  ]
+}

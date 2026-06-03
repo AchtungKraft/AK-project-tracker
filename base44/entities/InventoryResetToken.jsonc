@@ -1,0 +1,54 @@
+{
+  "name": "InventoryResetToken",
+  "type": "object",
+  "properties": {
+    "token": {
+      "type": "string",
+      "description": "Unique reset token ID"
+    },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "all",
+        "part_ids",
+        "vendor_id",
+        "project_id"
+      ],
+      "description": "Scope of the reset operation"
+    },
+    "scope_params": {
+      "type": "object",
+      "description": "Parameters for the scope (part_ids array, vendor_id, project_id)"
+    },
+    "part_ids_affected": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of part IDs that will be reset"
+    },
+    "summary": {
+      "type": "object",
+      "description": "Preview summary: parts_with_stock, total_physical_stock, commitments_affected, etc."
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Token expiration timestamp"
+    },
+    "used_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When token was consumed (null if unused)"
+    },
+    "used_by": {
+      "type": "string",
+      "description": "User who consumed the token"
+    }
+  },
+  "required": [
+    "token",
+    "scope",
+    "expires_at"
+  ]
+}

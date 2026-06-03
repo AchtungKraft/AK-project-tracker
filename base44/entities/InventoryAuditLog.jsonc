@@ -1,0 +1,119 @@
+{
+  "name": "InventoryAuditLog",
+  "type": "object",
+  "properties": {
+    "part_id": {
+      "type": "string",
+      "description": "Reference to Part"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project (if applicable)"
+    },
+    "commitment_id": {
+      "type": "string",
+      "description": "Reference to PartCommitment (if applicable)"
+    },
+    "inventory_item_id": {
+      "type": "string",
+      "description": "Reference to InventoryItem (if applicable)"
+    },
+    "action_type": {
+      "type": "string",
+      "enum": [
+        "receive",
+        "move",
+        "install",
+        "archive",
+        "unarchive",
+        "delete",
+        "billing_change",
+        "cost_update",
+        "quantity_adjust",
+        "commitment_create",
+        "commitment_update",
+        "commitment_cancel",
+        "ADD_STOCK",
+        "REMOVE_STOCK",
+        "ADJUST_STOCK_ADD",
+        "ADJUST_STOCK_REMOVE"
+      ],
+      "description": "Type of action performed"
+    },
+    "qty_before": {
+      "type": "number",
+      "description": "Quantity before the action"
+    },
+    "qty_after": {
+      "type": "number",
+      "description": "Quantity after the action"
+    },
+    "qty_changed": {
+      "type": "number",
+      "description": "Quantity changed by the action"
+    },
+    "qty_delta": {
+      "type": "number",
+      "description": "Delta quantity (alias for qty_changed)"
+    },
+    "old_qty": {
+      "type": "number",
+      "description": "Old quantity (alias for qty_before)"
+    },
+    "new_qty": {
+      "type": "number",
+      "description": "New quantity (alias for qty_after)"
+    },
+    "location_id": {
+      "type": "string",
+      "description": "Location involved in the action"
+    },
+    "from_location_id": {
+      "type": "string",
+      "description": "Source location (for moves)"
+    },
+    "to_location_id": {
+      "type": "string",
+      "description": "Destination location (for moves)"
+    },
+    "old_value": {
+      "type": "string",
+      "description": "Previous value (for status/billing changes)"
+    },
+    "new_value": {
+      "type": "string",
+      "description": "New value (for status/billing changes)"
+    },
+    "adjustment_reason": {
+      "type": "string",
+      "description": "Structured reason code for inventory adjustments"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Notes about the action"
+    },
+    "performed_by": {
+      "type": "string",
+      "description": "User who performed the action"
+    },
+    "performed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the action was performed"
+    },
+    "related_entity_type": {
+      "type": "string",
+      "description": "Type of related entity (e.g., VendorInvoice, Order)"
+    },
+    "related_entity_id": {
+      "type": "string",
+      "description": "ID of related entity"
+    }
+  },
+  "required": [
+    "part_id",
+    "action_type",
+    "performed_by",
+    "performed_at"
+  ]
+}
