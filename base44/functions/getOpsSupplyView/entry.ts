@@ -15,34 +15,17 @@ async function fetchWithRetry(fn, { retries = 2, delay = 800 } = {}) {
   }
 }
 
-// ── Controlled batching — adaptive size, 150ms gap ────────────────
-async function runBatched(tasks, batchSize = 3, delay = 150) {
-  const results = [];
-  for (let i = 0; i < tasks.length; i += batchSize) {
-    const batch = tasks.slice(i, i + batchSize);
-    const batchResults = await Promise.all(batch.map(fn => fn()));
-    results.push(...batchResults);
-    if (i + batchSize < tasks.length) {
-      const jitter = Math.random() * 150;
-      await new Promise(r => setTimeout(r, delay + jitter));
-    }
-  }
-  return results;
-}
-
 // ── Server-side response cache DISABLED ──────────────────────────
-// Previously cached responses for 15s, but this caused stale data after mutations.
-// Frontend query cache (React Query) handles caching. Backend must always return fresh data.
 function getCached(_key, _ttl) { return null; }
 function setCache(_key, _data) { /* no-op */ }
 
 /**
  * getOpsSupplyView - Canonical read model for operations/global supply state
  * 
- * Modes:
- * - ORDERING: Items needing PO creation
- * - RECEIVING: Items with on-order qty waiting to be received
- * - ALL: Full queue view
+ * OPTIMIZATION PHASE 2:
+ * - Replaced sequential runBatched() with direct Promise.all (no 150ms gaps)
+ * - Merged phases 2+3 into 2 parallel rounds (was 4 sequential runBatched rounds)
+ * - Same response shape, faster execution
  */
 
 Deno.serve(async (req) => {
@@ -66,7 +49,6 @@ Deno.serve(async (req) => {
 
     const { mode = 'ORDERING', filters = {} } = await req.json();
 
-    // ── Cache check (15s TTL) ──
     const cacheKey = `opsSupply:${mode}:${JSON.stringify(filters)}`;
     const cachedResult = getCached(cacheKey);
     if (cachedResult) {
@@ -75,13 +57,14 @@ Deno.serve(async (req) => {
 
     const _perfStart = Date.now();
     
-    // PHASE 1: Fetch commitments (scoped filter)
+    // ══════════════════════════════════════════════════════════════
+    // PHASE 1: Fetch commitments (scoped filter) — must be first for ID derivation
+    // ══════════════════════════════════════════════════════════════
     const commitmentFilter = { commitment_status: { $ne: 'cancelled' } };
     if (filters.project_id) commitmentFilter.project_id = filters.project_id;
     
     const commitments = await base44.entities.PartCommitment.filter(commitmentFilter, '-created_date', 1000);
     
-    // ── EARLY EXIT: No commitments = empty response ──
     if (commitments.length === 0) {
       const emptyResponse = {
         success: true,
@@ -95,33 +78,31 @@ Deno.serve(async (req) => {
       return Response.json(emptyResponse);
     }
     
-    // PHASE 2: Derive scoped IDs
+    // Derive scoped IDs
     const commitmentIds = commitments.map(c => c.id);
     const commitmentPartIds = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
     const commitmentProjectIds = [...new Set(commitments.map(c => c.project_id).filter(Boolean))];
     
-    // ── Adaptive batch size based on data volume ──
-    const adaptiveBatch = commitmentPartIds.length > 40 ? 2 : 3;
-    
-    // PHASE 3: Fetch parts + projects + vendorSources + lineItems + invoices ALL IN PARALLEL
-    // (Previously: 4 sequential runBatched rounds → now 2 parallel groups)
-    const [parts, projects, vendorSources, lineItems, projectInvoices] = await runBatched([
-      () => commitmentPartIds.length > 0
+    // ══════════════════════════════════════════════════════════════
+    // PHASE 2: ALL independent reads in ONE Promise.all (no runBatched, no 150ms gaps)
+    // ══════════════════════════════════════════════════════════════
+    const [parts, projects, vendorSources, lineItems, projectInvoices] = await Promise.all([
+      commitmentPartIds.length > 0
         ? fetchWithRetry(() => base44.entities.Part.filter({ id: { $in: commitmentPartIds } }))
-        : Promise.resolve([]),
-      () => commitmentProjectIds.length > 0
+        : [],
+      commitmentProjectIds.length > 0
         ? fetchWithRetry(() => base44.entities.Project.filter({ id: { $in: commitmentProjectIds } }))
-        : Promise.resolve([]),
-      () => commitmentPartIds.length > 0
+        : [],
+      commitmentPartIds.length > 0
         ? fetchWithRetry(() => base44.entities.PartVendorSource.filter({ part_id: { $in: commitmentPartIds }, is_active: true }))
-        : Promise.resolve([]),
-      () => commitmentIds.length > 0
+        : [],
+      commitmentIds.length > 0
         ? fetchWithRetry(() => base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } }))
-        : Promise.resolve([]),
-      () => commitmentProjectIds.length > 0
+        : [],
+      commitmentProjectIds.length > 0
         ? fetchWithRetry(() => base44.entities.ProjectInvoice.filter({ project_id: { $in: commitmentProjectIds } }))
-        : Promise.resolve([]),
-    ], adaptiveBatch, 150);
+        : [],
+    ]);
 
     // Build source lookup by part
     const sourcesByPart = new Map();
@@ -130,7 +111,7 @@ Deno.serve(async (req) => {
       sourcesByPart.get(s.part_id).push(s);
     }
     
-    // Derive vendor IDs, category IDs, order IDs, invoice IDs from fetched data
+    // Derive dependent IDs from Phase 2 results
     const derivedVendorIds = [...new Set([
       ...parts.map(p => p.default_vendor_id).filter(Boolean),
       ...vendorSources.map(s => s.vendor_id).filter(Boolean),
@@ -139,22 +120,23 @@ Deno.serve(async (req) => {
     const orderIds = [...new Set(lineItems.map(li => li.order_id).filter(Boolean))];
     const invoiceIds = projectInvoices.map(i => i.id);
 
-    // PHASE 4: Fetch vendors + categories + orders + invoiceLines IN PARALLEL
-    // (Previously: vendors/categories in one batch, then lineItems/invoices, then orders/invoiceLines — 3 rounds)
-    const [vendors, categories, orders, projectInvoiceLines] = await runBatched([
-      () => derivedVendorIds.length > 0
+    // ══════════════════════════════════════════════════════════════
+    // PHASE 3: Dependent reads — direct Promise.all (no runBatched, no gaps)
+    // ══════════════════════════════════════════════════════════════
+    const [vendors, categories, orders, projectInvoiceLines] = await Promise.all([
+      derivedVendorIds.length > 0
         ? fetchWithRetry(() => base44.entities.Vendor.filter({ id: { $in: derivedVendorIds } }))
-        : Promise.resolve([]),
-      () => derivedCategoryIds.length > 0
+        : [],
+      derivedCategoryIds.length > 0
         ? fetchWithRetry(() => base44.entities.PartCategory.filter({ id: { $in: derivedCategoryIds } }))
-        : Promise.resolve([]),
-      () => orderIds.length > 0
+        : [],
+      orderIds.length > 0
         ? fetchWithRetry(() => base44.entities.Order.filter({ id: { $in: orderIds } }))
-        : Promise.resolve([]),
-      () => invoiceIds.length > 0
+        : [],
+      invoiceIds.length > 0
         ? fetchWithRetry(() => base44.entities.ProjectInvoiceLine.filter({ invoice_id: { $in: invoiceIds } }))
-        : Promise.resolve([]),
-    ], adaptiveBatch, 150);
+        : [],
+    ]);
 
     // Build lookup maps
     const partMap = new Map(parts.map(p => [p.id, p]));
@@ -221,14 +203,12 @@ Deno.serve(async (req) => {
       const inv = partInventoryMap.get(c.part_id);
       if (!inv) continue;
       
-      // CANONICAL: No legacy fallbacks — use canonical fields only
       const reserved = c.reserved_from_stock ?? 0;
       const covered = c.covered_from_po ?? 0;
       const required = c.required_total ?? 0;
       
       inv.reserved_global += reserved;
       inv.on_order_global += covered;
-      // CANONICAL: Use effective_required (accounts for qty_removed) not required_total
       const eff_req = Math.max(0, required - (c.qty_removed ?? 0));
       inv.to_order_global += Math.max(0, eff_req - reserved - covered - (c.qty_installed ?? 0));
     }
@@ -241,7 +221,6 @@ Deno.serve(async (req) => {
     const viewModels = commitments.map(c => {
       const part = partMap.get(c.part_id);
       const project = projectMap.get(c.project_id);
-      // CANONICAL VENDOR RESOLUTION: PartVendorSource first, then Part.default_vendor_id
       const partSources_forVendor = sourcesByPart.get(c.part_id) || [];
       const preferredVendorSource = partSources_forVendor.find(s => s.is_preferred && s.is_active !== false)
         || partSources_forVendor.find(s => s.is_active !== false)
@@ -251,7 +230,6 @@ Deno.serve(async (req) => {
       const category = part?.part_category_id ? categoryMap.get(part.part_category_id) : null;
       const commitmentLineItems = lineItemsByCommitment.get(c.id) || [];
 
-      // CANONICAL quantities — no legacy fallbacks
       const required_total = c.required_total ?? 0;
       const qty_removed = c.qty_removed ?? 0;
       const effective_required = Math.max(0, required_total - qty_removed);
@@ -259,7 +237,7 @@ Deno.serve(async (req) => {
       const covered_from_po = c.covered_from_po ?? 0;
       const qty_installed = c.qty_installed ?? 0;
 
-      // AUTO-ALLOCATION — uses effective_required (excludes qty_removed)
+      // AUTO-ALLOCATION
       const partInvForAlloc = partInventoryMap.get(c.part_id);
       const gap = Math.max(0, effective_required - reserved_from_stock - covered_from_po - qty_installed);
       if (gap > 0 && partInvForAlloc && partInvForAlloc.available > 0) {
@@ -283,8 +261,6 @@ Deno.serve(async (req) => {
 
       const received_qty = commitmentLineItems.reduce((sum, li) => sum + (li.qty_received || 0), 0);
 
-      // Coverage status
-      // CANONICAL: coverage_status MUST include qty_installed in total coverage
       const total_covered = reserved_from_stock + covered_from_po + qty_installed;
       let coverage_status;
       if (total_covered >= effective_required && effective_required > 0) coverage_status = 'FULL';
@@ -293,9 +269,6 @@ Deno.serve(async (req) => {
       else coverage_status = 'NONE';
       const coverage_percent = effective_required > 0 ? Math.round((total_covered / effective_required) * 100) : 0;
 
-      // ══════════════════════════════════════════════════════════════
-      // COST AUTHORITY LIFECYCLE — PO cost is ACTUAL truth
-      // ══════════════════════════════════════════════════════════════
       const hasPOLines = commitmentLineItems.length > 0;
       const hasReceived = commitmentLineItems.some(li => (li.qty_received || 0) > 0);
       const hasInstalled = qty_installed > 0;
@@ -310,7 +283,6 @@ Deno.serve(async (req) => {
       let cost_source = 'planned';
 
       if (hasPOLines) {
-        // PO cost = actual truth — weighted average from active PO lines
         let poTotalCost = 0, poTotalQty = 0;
         for (const li of commitmentLineItems) {
           if (li.status !== 'Cancelled') {
@@ -329,7 +301,6 @@ Deno.serve(async (req) => {
           cost_source = 'planned';
         }
       } else {
-        // No PO — fallback chain: vendor source → snapshot → part cost
         if (preferredSource?.unit_cost > 0) {
           resolved_unit_cost = preferredSource.unit_cost;
           cost_source_tag = `vendor_source:${preferredSource.id}`;
@@ -345,13 +316,9 @@ Deno.serve(async (req) => {
       
       const invalid_cost = resolved_unit_cost <= 0;
       const unit_cost = resolved_unit_cost;
-      // PHASE 4: Retail stays fixed (quoted price) — NEVER fallback to part retail
       const unit_retail = c.unit_retail_snapshot ?? 0;
       const resolved_cost_total = resolved_unit_cost * to_order;
 
-      // ══════════════════════════════════════════════════════════════
-      // PLANNED vs ACTUAL PRICING (Financial Storytelling)
-      // ══════════════════════════════════════════════════════════════
       const planned_unit_cost = c.unit_cost_snapshot ?? 0;
       const planned_unit_retail = c.unit_retail_snapshot ?? 0;
       const planned_cost_total_val = planned_unit_cost * effective_required;
@@ -364,15 +331,12 @@ Deno.serve(async (req) => {
       const margin_delta = actual_margin - planned_margin;
 
       const resolved_margin = actual_margin;
-      // CANONICAL: cost-based exposure = max(0, actual_cost - invoiced_amount)
       const planned_cost_for_commitment = actual_cost_total;
       const cost_at_risk = Math.max(0, planned_cost_for_commitment - (c.invoiced_amount ?? 0));
 
       const source_type = mapSourceType(c.supply_source_type);
 
-      // PREPAY GATING
       const requires_prepay = c.requires_prepay === true;
-      // CANONICAL: has_vendor is true if ANY PartVendorSource exists OR Part.default_vendor_id is set
       const has_vendor = !!vendor || partSources_forVendor.length > 0;
       
       const prepayContext = {
@@ -497,7 +461,6 @@ Deno.serve(async (req) => {
         planned_cost_total: planned_cost_total_val,
         planned_retail_total,
 
-        // PLANNED vs ACTUAL PRICING
         planned_unit_cost,
         planned_unit_retail,
         actual_unit_cost,
@@ -506,7 +469,6 @@ Deno.serve(async (req) => {
         actual_margin,
         margin_delta,
 
-        // CANONICAL: cost-based exposure only
         cost_at_risk,
         resolved_exposure: cost_at_risk,
         billing_status: c.billing_status || 'billable',
@@ -557,7 +519,6 @@ Deno.serve(async (req) => {
         categoryId: category?.id || null,
         categoryObj: category ? { id: category.id, name: category.name } : null,
         categoryName: category?.name || null,
-        // CANONICAL derived supply fields
         effective_required,
         coverage_qty: totalCoverage,
         to_order_qty: to_order,
@@ -566,7 +527,6 @@ Deno.serve(async (req) => {
         allowed: {
           canCreatePO: is_orderable,
           canCreateDeltaOrder: covered_from_po > 0 && to_order === 0,
-          // CANONICAL: canReceive = commitment has PO coverage AND coverage < effective_required
           canReceive: covered_from_po > 0 && totalCoverage < effective_required,
           canInstall: available_to_install > 0 && qty_installed < effective_required,
           canReverseInstall: qty_installed > 0,
@@ -582,8 +542,6 @@ Deno.serve(async (req) => {
           commitment_status: c.commitment_status,
         },
 
-        // CANONICAL: Per-commitment quantity integrity state
-        // ONLY quantity violations — financial conditions NEVER appear here
         integrity: (() => {
           if (qty_removed <= 0) return { quantity_valid: true, violations: [], quantity_violation: false, blocking: false, valid: true };
           const TOL = 0.001;
@@ -600,14 +558,13 @@ Deno.serve(async (req) => {
       };
     });
 
-    // Filter by mode — CANONICAL: uses needs_order / commitment_fulfilled flags
+    // Filter by mode
     let filtered = viewModels;
     switch (mode) {
       case 'ORDERING':
         filtered = viewModels.filter(vm => vm.needs_order === true && vm.source_type === 'SHOP_PURCHASED');
         break;
       case 'RECEIVING':
-        // CANONICAL: Items with PO coverage that are NOT fulfilled
         filtered = viewModels.filter(vm => 
           vm.commitment_fulfilled !== true && (vm.covered_from_po ?? 0) > 0 && vm.needs_order !== true
         );
@@ -642,7 +599,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Compute summary statistics
     const summary = {
       total_items: filtered.length,
       total_qty_to_order: filtered.reduce((sum, vm) => sum + vm.to_order, 0),
@@ -653,7 +609,6 @@ Deno.serve(async (req) => {
       funding_blocked_count: filtered.filter(vm => vm.is_funding_blocked).length,
     };
 
-    // Get unique values for filter dropdowns
     const filterOptions = {
       projects: [...new Set(filtered.map(vm => vm.project_id).filter(Boolean))]
         .map(id => ({ id, name: projectMap.get(id)?.name || 'Unknown' })),
@@ -672,6 +627,8 @@ Deno.serve(async (req) => {
         invoices: projectInvoices.length,
       },
       filteredCount: filtered.length,
+      phases: '3 (was 4 runBatched)',
+      optimization: 'v2-no-runBatched'
     });
     
     const responsePayload = {
@@ -731,7 +688,6 @@ function computeNextAction(commitment, partHasVendor, prepayContext = {}) {
     requires_prepay = false,
   } = commitment;
 
-  // CANONICAL: effective_required = required_total - qty_removed
   const effective_required = Math.max(0, required_total - qty_removed);
   const totalCoverage = reserved_from_stock + covered_from_po + qty_installed;
   const to_order = Math.max(0, effective_required - totalCoverage);
@@ -761,7 +717,6 @@ function computeNextAction(commitment, partHasVendor, prepayContext = {}) {
   if (to_order > 0) {
     return { next_action: 'CREATE_PO', block_reason_code: null, prepay_diagnostics };
   }
-  // CANONICAL: "needs receive" = commitment has PO coverage but total coverage < effective_required
   if (covered_from_po > 0 && totalCoverage < effective_required) {
     return { next_action: 'RECEIVE', block_reason_code: null, prepay_diagnostics };
   }

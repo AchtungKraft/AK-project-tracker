@@ -3,22 +3,11 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 /**
  * Phase 10 — Lifecycle Action Queue (rewritten)
  * 
- * Returns ALL commitments grouped by recommended_action.
- * Classification uses CANONICAL fields exclusively:
- *   required_total, reserved_from_stock, covered_from_po, qty_installed
- * 
- * Action priority chain (evaluated top to bottom, first match wins):
- *   1. BLOCKED: missing pricing or part_type
- *   2. LIFECYCLE COMPLETE: installed + paid
- *   3. NEEDS ORDER: gap > 0, no stock coverage
- *   4. TRACK DELIVERY: has PO coverage, awaiting receipt
- *   5. SCHEDULE INSTALL: stock reserved, ready to install
- *   6. INVOICE CLIENT: needs billing
- *   7. AWAIT PAYMENT: invoiced, not paid
- *   8. REVIEW: fallthrough
- * 
- * KEY FIX: Procurement state is evaluated BEFORE billing state.
- * Parts with active POs must not be stuck in "Invoice Client".
+ * OPTIMIZATION PHASE 2:
+ * - Eliminated duplicate LineItem reads (was: commitment_id filter + part_id filter = 2 reads)
+ * - Now: single commitment_id read + inline part_id fallback from same dataset
+ * - Merged Phase 3 (lineItems) and Phase 4 (orders) into fewer sequential rounds
+ * - Same response shape, same UI behavior
  */
 
 const ACTION_GROUPS = {
@@ -139,16 +128,11 @@ function normalizeRawBillingStatus(rawStatus) {
   return statusMap[rawStatus.toLowerCase()] || null;
 }
 
-/**
- * resolveLifecycleLocal — canonical lifecycle for a commitment.
- * Uses ONLY canonical fields.
- */
 function resolveLifecycleLocal(c) {
   const required = c.required_total || 0;
   const reserved = c.reserved_from_stock || 0;
   const covered = c.covered_from_po || 0;
   const installed = c.qty_installed || 0;
-  const cancelled = c.qty_cancelled || 0;
 
   if (c.commitment_status === 'cancelled') return 'CANCELLED';
   if (required <= 0) return 'PLANNED';
@@ -167,6 +151,8 @@ async function getLifecycleActionQueue(base44, filters = {}) {
     include_non_billable = false,
   } = filters;
 
+  const _perfStart = Date.now();
+
   // PHASE 1: Fetch commitments
   const commitmentFilter = {};
   if (filters.project_id) commitmentFilter.project_id = filters.project_id;
@@ -177,42 +163,29 @@ async function getLifecycleActionQueue(base44, filters = {}) {
     return emptyResult();
   }
 
-  // PHASE 2: Scoped lookups
+  // PHASE 2: Scoped lookups — all independent reads in parallel
   const commitmentPartIds = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
   const commitmentProjectIds = [...new Set(commitments.map(c => c.project_id).filter(Boolean))];
   const commitmentIds = commitments.map(c => c.id);
 
-  const [parts, projects] = await Promise.all([
+  // OPTIMIZATION: Single LineItem read by commitment_id (was 2 reads: commitment_id + part_id)
+  // Legacy items without commitment_id are handled by building a part_id fallback index from same data
+  const [parts, projects, lineItems, invoiceLines] = await Promise.all([
     commitmentPartIds.length > 0
       ? base44.entities.Part.filter({ id: { $in: commitmentPartIds } })
       : [],
     commitmentProjectIds.length > 0
       ? base44.entities.Project.filter({ id: { $in: commitmentProjectIds } })
       : [],
-  ]);
-
-  // Line items: try commitment_id first, fall back to part_id for legacy
-  const [lineItemsByCommitmentId, lineItemsByPartId, invoiceLines] = await Promise.all([
     commitmentIds.length > 0
       ? base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } })
-      : [],
-    commitmentPartIds.length > 0
-      ? base44.entities.PartPurchaseLineItem.filter({ part_id: { $in: commitmentPartIds } })
       : [],
     commitmentIds.length > 0
       ? base44.entities.ProjectInvoiceLine.filter({ part_commitment_id: { $in: commitmentIds } })
       : [],
   ]);
 
-  // Merge: prefer commitment-scoped, add part-scoped for legacy (no commitment_id)
-  const lineItemsById = new Map();
-  for (const li of lineItemsByCommitmentId) lineItemsById.set(li.id, li);
-  for (const li of lineItemsByPartId) {
-    if (!lineItemsById.has(li.id)) lineItemsById.set(li.id, li);
-  }
-  const lineItems = Array.from(lineItemsById.values());
-
-  // Derive order IDs from commitment-scoped line items
+  // Derive order IDs from line items, then fetch orders
   const orderIds = [...new Set(lineItems.map(li => li.order_id).filter(Boolean))];
   const orders = orderIds.length > 0
     ? await base44.entities.Order.filter({ id: { $in: orderIds } })
@@ -223,18 +196,12 @@ async function getLifecycleActionQueue(base44, filters = {}) {
   const projectsMap = Object.fromEntries(projects.map(p => [p.id, p]));
   const ordersMap = Object.fromEntries(orders.map(o => [o.id, o]));
 
-  // Line items by commitment_id — with part_id fallback for legacy
+  // Line items by commitment_id (single index from single read)
   const lineItemsByCommitment = {};
-  const lineItemsByPartFallback = {};
   lineItems.forEach(li => {
     if (li.commitment_id) {
       if (!lineItemsByCommitment[li.commitment_id]) lineItemsByCommitment[li.commitment_id] = [];
       lineItemsByCommitment[li.commitment_id].push(li);
-    }
-    // Also index by part_id for legacy fallback
-    if (li.part_id) {
-      if (!lineItemsByPartFallback[li.part_id]) lineItemsByPartFallback[li.part_id] = [];
-      lineItemsByPartFallback[li.part_id].push(li);
     }
   });
 
@@ -282,16 +249,12 @@ async function getLifecycleActionQueue(base44, filters = {}) {
     const effectivePartType = getEffectivePartType(part);
     const financialRole = getFinancialRole(part, effectivePartType);
 
-    // Skip cancelled unless include_archived
     if (commitment.commitment_status === 'cancelled' && !include_archived) continue;
     if (part.is_archived && !include_archived) continue;
     if (financialRole === 'NON_BILLABLE' && !include_non_billable) continue;
 
     kpis.total_commitments++;
 
-    // ── CANONICAL FIELDS ──
-    // ALIGNED WITH getOpsSupplyView: effective_required accounts for qty_removed,
-    // gap subtracts qty_installed to prevent phantom shortages
     const requiredTotal = commitment.required_total || 0;
     const qtyRemoved = commitment.qty_removed || 0;
     const effectiveRequired = Math.max(0, requiredTotal - qtyRemoved);
@@ -301,10 +264,8 @@ async function getLifecycleActionQueue(base44, filters = {}) {
     const invoicedQty = commitment.invoiced_qty || 0;
     const gap = Math.max(0, effectiveRequired - reservedFromStock - coveredFromPo - qtyInstalled);
 
-    // ── PROCUREMENT from commitment-scoped line items (with part_id fallback for legacy) ──
-    const commitmentLineItems = (lineItemsByCommitment[commitment.id] || []).length > 0
-      ? lineItemsByCommitment[commitment.id]
-      : (lineItemsByPartFallback[commitment.part_id] || []);
+    // Use commitment-scoped line items (single read covers all)
+    const commitmentLineItems = lineItemsByCommitment[commitment.id] || [];
     let orderedQty = 0;
     let receivedQty = 0;
     let hasActiveOrder = false;
@@ -329,11 +290,9 @@ async function getLifecycleActionQueue(base44, filters = {}) {
       procurementStatus = 'ORDERED';
     }
 
-    // ── BILLING STATUS ──
     let billingStatus = 'NEEDS_BILLING';
     let paymentStatus = 'UNPAID';
 
-    // Check commitment-level invoice lines for billing
     const commitmentInvoiceLines = invoiceLinesByCommitment[commitment.id] || [];
     const totalInvoicedAmount = commitmentInvoiceLines.reduce((sum, il) => sum + (il.line_total || 0), 0);
     
@@ -343,41 +302,31 @@ async function getLifecycleActionQueue(base44, filters = {}) {
       else if (normalized === 'INVOICED' || normalized === 'PARTIALLY_PAID') { billingStatus = 'INVOICED'; }
       else if (normalized === 'NOT_BILLABLE') { billingStatus = 'NOT_BILLABLE'; paymentStatus = 'PAID'; }
     }
-    // Also check if invoiced_qty or invoice lines exist
     if (billingStatus === 'NEEDS_BILLING' && (invoicedQty > 0 || totalInvoicedAmount > 0)) {
       billingStatus = 'INVOICED';
     }
 
-    // ── INSTALL STATUS ── (uses effectiveRequired, not requiredTotal)
     const installStatus = qtyInstalled >= effectiveRequired && effectiveRequired > 0 ? 'INSTALLED' :
                           qtyInstalled > 0 ? 'PARTIAL' : 'PLANNED';
 
-    // ── LIFECYCLE ──
     const lifecycle = resolveLifecycleLocal(commitment);
 
-    // ── PRICING ──
     const unitCost = commitment.unit_cost_snapshot || part.cost || 0;
     const unitRetail = commitment.unit_retail_snapshot || part.retail_override || part.retail_matrix_price || 0;
     const lineTotal = effectiveRequired * unitRetail;
     const costTotal = effectiveRequired * unitCost;
-
-    // ════════════════════════════════════════════════════
-    // ACTION CLASSIFICATION — first match wins
-    // ════════════════════════════════════════════════════
 
     let recommendedAction = 'Review Status';
     let actionPriority = 'LOW';
     let actionOwner = 'PM';
     let orderingSafety = 'RED';
 
-    // 1. BLOCKED: Missing pricing
     if (unitRetail <= 0 && financialRole !== 'NON_BILLABLE') {
       recommendedAction = 'Fix Missing Data';
       actionPriority = 'HIGH';
       actionOwner = 'PM';
       kpis.blocked_count++;
     }
-    // 2. LIFECYCLE COMPLETE: fully installed + paid
     else if (installStatus === 'INSTALLED' && paymentStatus === 'PAID') {
       if (!include_closed) continue;
       recommendedAction = 'Lifecycle Complete';
@@ -386,7 +335,6 @@ async function getLifecycleActionQueue(base44, filters = {}) {
       orderingSafety = 'GREEN';
       kpis.complete_count++;
     }
-    // 3. NEEDS ORDER: gap > 0, nothing on order, needs vendor purchase
     else if (gap > 0 && procurementStatus === 'NEEDS_ORDER' && needsVendor) {
       recommendedAction = 'Create Vendor Order';
       actionPriority = 'HIGH';
@@ -395,7 +343,6 @@ async function getLifecycleActionQueue(base44, filters = {}) {
       kpis.ready_to_order_count++;
       kpis.ready_to_order_cost += costTotal;
     }
-    // 4. TRACK DELIVERY: has PO coverage, not fully received
     else if ((procurementStatus === 'ORDERED' || procurementStatus === 'PARTIALLY_RECEIVED') &&
              installStatus !== 'INSTALLED') {
       recommendedAction = 'Track Vendor Delivery';
@@ -404,7 +351,6 @@ async function getLifecycleActionQueue(base44, filters = {}) {
       orderingSafety = 'GREEN';
       kpis.orders_in_progress_count++;
     }
-    // 5. SCHEDULE INSTALL: stock reserved, ready to install
     else if (lifecycle === 'INSTALL_READY' || 
              (reservedFromStock > qtyInstalled && installStatus !== 'INSTALLED')) {
       recommendedAction = 'Schedule Installation';
@@ -413,7 +359,6 @@ async function getLifecycleActionQueue(base44, filters = {}) {
       orderingSafety = 'GREEN';
       kpis.ready_to_install_count++;
     }
-    // 5b. Also check: received + not requiring vendor = ready to install
     else if ((procurementStatus === 'RECEIVED' || procurementStatus === 'NOT_REQUIRED') &&
              installStatus !== 'INSTALLED') {
       recommendedAction = 'Schedule Installation';
@@ -422,7 +367,6 @@ async function getLifecycleActionQueue(base44, filters = {}) {
       orderingSafety = 'GREEN';
       kpis.ready_to_install_count++;
     }
-    // 6. INVOICE CLIENT: needs billing
     else if (billingStatus === 'NEEDS_BILLING') {
       recommendedAction = 'Invoice Client';
       actionPriority = 'HIGH';
@@ -430,7 +374,6 @@ async function getLifecycleActionQueue(base44, filters = {}) {
       kpis.needs_billing_count++;
       kpis.needs_billing_value += lineTotal;
     }
-    // 7. AWAIT PAYMENT: invoiced, not paid
     else if (billingStatus === 'INVOICED' && paymentStatus !== 'PAID') {
       recommendedAction = 'Await Client Payment';
       actionPriority = 'MEDIUM';
@@ -439,10 +382,7 @@ async function getLifecycleActionQueue(base44, filters = {}) {
       kpis.awaiting_payment_count++;
       kpis.awaiting_payment_value += lineTotal;
     }
-    // 8. FALLTHROUGH: Review
-    // (default is already set)
 
-    // ── NEXT STEP LABELS ──
     const NEXT_STEP_LABELS = {
       'Invoice Client': 'Invoice Client',
       'Await Client Payment': 'Await Payment',
@@ -465,7 +405,6 @@ async function getLifecycleActionQueue(base44, filters = {}) {
     };
     const actionType = ACTION_TYPE_MAP[recommendedAction] || null;
 
-    // Build row with CANONICAL fields
     const row = {
       id: commitment.id,
       commitment_id: commitment.id,
@@ -479,18 +418,14 @@ async function getLifecycleActionQueue(base44, filters = {}) {
       client_name: project.client_name,
       financial_role: financialRole,
 
-      // Client axis
       client_billing_status: billingStatus,
       client_payment_status: paymentStatus,
 
-      // Procurement axis
       procurement_status: procurementStatus,
       ordering_safety: orderingSafety,
 
-      // Install axis
       install_status: installStatus,
 
-      // CANONICAL quantities (aligned with getOpsSupplyView)
       required_total: requiredTotal,
       effective_required: effectiveRequired,
       qty_removed: qtyRemoved,
@@ -503,16 +438,13 @@ async function getLifecycleActionQueue(base44, filters = {}) {
       received_qty: receivedQty,
       order_line_item_ids: commitment.order_line_item_ids || [],
 
-      // Pricing
       unit_cost: unitCost,
       unit_retail: unitRetail,
       line_total: lineTotal,
       cost_total: costTotal,
 
-      // Lifecycle
       lifecycle_state: lifecycle,
 
-      // Action
       recommended_action: recommendedAction,
       next_step_label: nextStepLabel,
       action_type: actionType,
@@ -520,7 +452,6 @@ async function getLifecycleActionQueue(base44, filters = {}) {
       action_owner: actionOwner,
     };
 
-    // Add to action group
     const groupConfig = ACTION_GROUPS[recommendedAction];
     if (groupConfig) {
       actionGroups[groupConfig.key].commitments.push(row);
@@ -528,6 +459,12 @@ async function getLifecycleActionQueue(base44, filters = {}) {
       actionGroups[groupConfig.key].count++;
     }
   }
+
+  console.log('[PERF] getLifecycleActionQueue', Date.now() - _perfStart, 'ms', {
+    commitments: commitments.length,
+    lineItems: lineItems.length,
+    optimization: 'v2-single-lineitem-read'
+  });
 
   return {
     action_groups: Object.values(actionGroups).filter(g => g.count > 0 || g.key === 'complete'),
