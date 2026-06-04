@@ -184,7 +184,7 @@ export default function ClientFeedbackDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
       // Soft-invalidate hub queries — mark stale but don't force refetch
-      queryClient.invalidateQueries({ queryKey: ['allFeedbackRequests'], refetchType: 'none' });
+      queryClient.invalidateQueries({ queryKey: ['clientPortalHubData'], refetchType: 'none' });
     }
   });
 

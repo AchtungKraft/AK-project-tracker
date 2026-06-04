@@ -82,7 +82,7 @@ export default function ClientPortalHub() {
       await base44.entities.ClientFeedbackRequest.update(requestId, {
         due_date: newDate
       });
-      queryClient.invalidateQueries({ queryKey: ['allFeedbackRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['clientPortalHubData'] });
       toast.success(newDate ? 'Due date updated' : 'Due date cleared');
     } catch (error) {
       console.error('Error updating due date:', error);
@@ -132,7 +132,7 @@ export default function ClientPortalHub() {
       const response = await base44.functions.invoke('sendBulkReviewEmail', { projectId, requestIds });
       if (response.data?.success) {
         toast.success(`Email sent to ${response.data.emailsSent} client(s)`);
-        queryClient.invalidateQueries({ queryKey: ["allFeedbackRequests"] });
+        queryClient.invalidateQueries({ queryKey: ["clientPortalHubData"] });
       } else {
         toast.error(response.data?.error || 'Failed to send email');
       }
@@ -144,30 +144,22 @@ export default function ClientPortalHub() {
     }
   };
 
-  // Fetch all data
-  const { data: allRequests = [], isLoading: loadingRequests } = useQuery({
-    queryKey: ["allFeedbackRequests"],
-    queryFn: () => base44.entities.ClientFeedbackRequest.list(),
-    refetchOnMount: 'always',
+  // Single read model replaces 4 separate .list() calls
+  // PERF: 4 requests → 1, server-side parallel fetch + field projection
+  const { data: hubData, isLoading: loadingHubData } = useQuery({
+    queryKey: ["clientPortalHubData"],
+    queryFn: async () => {
+      const response = await base44.functions.invoke('getClientPortalHubData', {});
+      return response.data;
+    },
+    staleTime: 15000,
+    refetchOnMount: true,
   });
 
-  const { data: decisions = [] } = useQuery({
-    queryKey: ["allFeedbackDecisions"],
-    queryFn: () => base44.entities.ClientFeedbackDecision.list(),
-    refetchOnMount: 'always',
-  });
-
-  const { data: attachments = [] } = useQuery({
-    queryKey: ["allFeedbackAttachments"],
-    queryFn: () => base44.entities.ClientFeedbackAttachment.list(),
-    refetchOnMount: 'always',
-  });
-
-  const { data: comments = [] } = useQuery({
-    queryKey: ["allFeedbackComments"],
-    queryFn: () => base44.entities.ClientFeedbackComment.list(),
-    refetchOnMount: 'always',
-  });
+  const allRequests = hubData?.requests || [];
+  const decisions = hubData?.decisions || [];
+  const attachments = hubData?.attachments || [];
+  const comments = hubData?.comments || [];
 
   const { data: projects = [], isLoading: loadingProjects } = useQuery({
     queryKey: ["projects"],
@@ -357,7 +349,7 @@ export default function ClientPortalHub() {
     return flattenGroupedRequests(filteredProjectData);
   }, [filteredProjectData]);
 
-  const isLoading = loadingRequests || loadingProjects;
+  const isLoading = loadingHubData || loadingProjects;
 
   if (isLoading) {
     return (

@@ -1,6 +1,6 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
-// Retry wrapper with higher resilience for rate limits
+// Retry wrapper — only retries 429s
 async function withRetry(fn, retries = 3, delayMs = 500) {
     try {
         return await fn();
@@ -14,15 +14,13 @@ async function withRetry(fn, retries = 3, delayMs = 500) {
     }
 }
 
-// Safe array coercion — prevents .map crashes when filter returns non-array
 function safeArray(val) {
     return Array.isArray(val) ? val : [];
 }
 
-// Small delay between sequential calls to avoid bursts
-const pause = (ms = 50) => new Promise(r => setTimeout(r, ms));
+// PERF: All pause() calls removed — they were artificial 50ms delays.
+// Retry wrapper handles actual rate limits. Removing eliminates ~350-450ms.
 
-// Centralized request type UI mapping
 const REQUEST_TYPE_UI = {
     question: { label: "Question", color: "#3b82f6" },
     feedback_needed: { label: "Review Required", color: "#6366f1" },
@@ -39,6 +37,8 @@ const getRequestTypeInfo = (type) => {
 };
 
 Deno.serve(async (req) => {
+    const startTime = Date.now();
+
     if (req.method === 'OPTIONS') {
         return new Response(null, {
             headers: {
@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
             });
         }
 
-        // --- SEQUENTIAL QUERIES WITH RETRY (rate-limit safe) ---
+        // ── PHASE 1: Auth gate — project + contact resolution (sequential, has early exits) ──
 
         // 1. Fetch project
         const projectResults = safeArray(await withRetry(() =>
@@ -91,11 +91,10 @@ Deno.serve(async (req) => {
             });
         }
 
-        // 2. Resolve client contact — skip lookup if ID was passed through from projects page
+        // 2. Resolve client contact — skip lookup if ID was passed through
         let clientContactId = clientContactIdPassthrough || null;
         let contactFromSlug = null;
         if (!clientContactId && slug) {
-            await pause();
             const contactResults = safeArray(await withRetry(() =>
                 base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug, active: true })
             ));
@@ -109,7 +108,7 @@ Deno.serve(async (req) => {
             clientContactId = contactFromSlug.id;
         }
 
-        // 3. Access check — critical gate, no artificial delay before this
+        // 3. Access check — critical gate
         const filter = { project_id: projectId, access_status: 'active' };
         if (token) filter.share_token = token;
         if (clientContactId) filter.client_contact_id = clientContactId;
@@ -127,43 +126,39 @@ Deno.serve(async (req) => {
 
         const access = accesses[0];
 
-        // 4. Fetch ClientContact for consent data — reuse slug lookup if available
-        let clientContact = contactFromSlug;
-        if (!clientContact) {
-            await pause();
-            const contactFetch = safeArray(await withRetry(() =>
+        // ── PHASE 2: Parallel fetch — contact + requests are independent ──
+        const contactPromise = contactFromSlug
+            ? Promise.resolve(contactFromSlug)
+            : withRetry(() =>
                 base44.asServiceRole.entities.ClientContact.filter({ id: access.client_contact_id })
-            ));
-            clientContact = contactFetch[0] || null;
-        }
+              ).then(r => safeArray(r)[0] || null);
 
-        // 5. Fetch feedback requests
-        await pause();
-        const allRequests = safeArray(await withRetry(() =>
+        const requestsPromise = withRetry(() =>
             base44.asServiceRole.entities.ClientFeedbackRequest.filter({ project_id: projectId })
-        ));
+        ).then(r => safeArray(r));
+
+        const [clientContact, allRequests] = await Promise.all([contactPromise, requestsPromise]);
 
         const visibleRequests = allRequests.filter(r => r.status !== 'draft');
         const requestIdArray = visibleRequests.map(r => r.id);
 
-        // 6. Fetch feedback data — SEQUENTIAL to avoid rate limit bursts
+        // ── PHASE 3: Parallel fetch — comments, decisions, attachments are independent ──
         let allComments = [], allDecisions = [], allAttachments = [];
         if (requestIdArray.length > 0) {
-            await pause();
-            allComments = safeArray(await withRetry(() =>
-                base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: { $in: requestIdArray } }, '-created_date', 500)
-            ));
-            await pause();
-            allDecisions = safeArray(await withRetry(() =>
-                base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: { $in: requestIdArray } }, '-created_date', 500)
-            ));
-            await pause();
-            allAttachments = safeArray(await withRetry(() =>
-                base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: { $in: requestIdArray } }, '-created_date', 500)
-            ));
+            [allComments, allDecisions, allAttachments] = await Promise.all([
+                withRetry(() =>
+                    base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: { $in: requestIdArray } }, '-created_date', 500)
+                ).then(r => safeArray(r)),
+                withRetry(() =>
+                    base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: { $in: requestIdArray } }, '-created_date', 500)
+                ).then(r => safeArray(r)),
+                withRetry(() =>
+                    base44.asServiceRole.entities.ClientFeedbackAttachment.filter({ request_id: { $in: requestIdArray } }, '-created_date', 500)
+                ).then(r => safeArray(r)),
+            ]);
         }
 
-        // --- BUILD RESPONSE ---
+        // ── BUILD RESPONSE (identical shape) ──
 
         const minimalRequests = visibleRequests.map(r => {
             const typeInfo = getRequestTypeInfo(r.request_type);
@@ -234,15 +229,15 @@ Deno.serve(async (req) => {
             last_viewed_at: new Date().toISOString()
         }).catch(() => {});
 
-        // Determine consent completion:
-        // - Has at least one explicit opt-in date, OR
-        // - Is a legacy contact where email is not explicitly disabled (notify_email !== false)
-        //   Legacy contacts were created before the consent system and implicitly receive emails
+        // Consent resolution
         const hasExplicitOptIn = !!(clientContact?.opt_in_email_date || clientContact?.opt_in_sms_date || clientContact?.opt_in_whatsapp_date);
         const isLegacyEmailConsent = clientContact && clientContact.notify_email !== false && !hasExplicitOptIn;
         const hasCompletedConsent = clientContact
             ? (hasExplicitOptIn || isLegacyEmailConsent)
             : false;
+
+        const executionTime = Date.now() - startTime;
+        console.log(`[publicClientPortalData] ${executionTime}ms | ${visibleRequests.length} requests, ${allComments.length} comments, ${allDecisions.length} decisions, ${allAttachments.length} attachments`);
 
         return Response.json({
             success: true,
@@ -270,12 +265,9 @@ Deno.serve(async (req) => {
 
     } catch (error) {
         console.error('UPSTREAM PORTAL FAILURE', {
-            slug,
-            projectId,
             message: error.message,
             status: error?.status,
         });
-        // Never crash the endpoint for client portal reads — return safe empty shape
         return Response.json({
             success: false,
             error: error.message,

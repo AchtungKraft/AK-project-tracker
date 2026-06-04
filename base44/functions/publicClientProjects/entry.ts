@@ -1,6 +1,6 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
-// Simple retry wrapper for rate-limit resilience
+// Retry wrapper for rate-limit resilience — only retries 429s
 async function withRetry(fn, retries = 2, delayMs = 300) {
     try {
         return await fn();
@@ -14,9 +14,13 @@ async function withRetry(fn, retries = 2, delayMs = 300) {
     }
 }
 
-const pause = (ms = 50) => new Promise(r => setTimeout(r, ms));
+// PERF: All pause() calls removed — they were artificial 50ms delays
+// added as a precaution against rate limits. The retry wrapper handles
+// actual 429s. Removing eliminates ~250-350ms artificial latency.
 
 Deno.serve(async (req) => {
+    const startTime = Date.now();
+
     if (req.method === 'OPTIONS') {
         return new Response(null, {
             headers: {
@@ -51,6 +55,7 @@ Deno.serve(async (req) => {
             });
         }
 
+        // ── PHASE 1: Resolve client identity (sequential — has early exit) ──
         let clientContactId;
         let contact;
         
@@ -78,7 +83,6 @@ Deno.serve(async (req) => {
             }
             clientContactId = accesses[0].client_contact_id;
             
-            await pause();
             const contacts = await withRetry(() =>
                 base44.asServiceRole.entities.ClientContact.filter({ id: clientContactId })
             );
@@ -92,35 +96,38 @@ Deno.serve(async (req) => {
             });
         }
 
-        // Sequential fetches with retry to avoid rate limit bursts
-        await pause();
-        const accesses = await withRetry(() =>
-            base44.asServiceRole.entities.ProjectClientAccess.filter({ 
-                client_contact_id: clientContactId,
-                access_status: 'active'
-            })
-        );
+        // ── PHASE 2: Parallel fetch — all independent reads at once ──
+        // accesses, statuses, projectTypes, and clientPages are all independent
+        const [accesses, statuses, projectTypes, clientPages] = await Promise.all([
+            withRetry(() =>
+                base44.asServiceRole.entities.ProjectClientAccess.filter({ 
+                    client_contact_id: clientContactId,
+                    access_status: 'active'
+                })
+            ),
+            withRetry(() =>
+                base44.asServiceRole.entities.StatusList.filter({ scope: 'Project', active: true })
+            ),
+            withRetry(() =>
+                base44.asServiceRole.entities.ProjectType.filter({ active: true })
+            ),
+            withRetry(() =>
+                base44.asServiceRole.entities.ClientPage.filter({
+                    client_contact_id: clientContactId,
+                    status: 'published'
+                })
+            ).catch(() => []),
+        ]);
 
-        await pause();
-        const statuses = await withRetry(() =>
-            base44.asServiceRole.entities.StatusList.filter({ scope: 'Project', active: true })
-        );
-
-        await pause();
-        const projectTypes = await withRetry(() =>
-            base44.asServiceRole.entities.ProjectType.filter({ active: true })
-        );
-
-        // Fetch all projects in a single query using $in operator
+        // ── PHASE 3: Fetch projects (depends on accesses from phase 2) ──
         const projectIds = accesses.map(a => a.project_id);
-        await pause();
         const projects = projectIds.length > 0 
             ? await withRetry(() =>
                 base44.asServiceRole.entities.Project.filter({ id: { $in: projectIds } })
               )
             : [];
 
-        // Return minimal data — include client_contact_id so downstream calls can skip slug lookup
+        // ── BUILD RESPONSE ──
         const minimalContact = {
             id: contact.id,
             name: contact.name,
@@ -162,20 +169,6 @@ Deno.serve(async (req) => {
                 color: t.color
             }));
 
-        // Fetch published client pages
-        await pause();
-        let clientPages = [];
-        try {
-            clientPages = await withRetry(() =>
-                base44.asServiceRole.entities.ClientPage.filter({
-                    client_contact_id: clientContactId,
-                    status: 'published'
-                })
-            );
-        } catch (e) {
-            console.warn('Failed to fetch client pages:', e.message);
-        }
-
         const minimalPages = clientPages.map(p => ({
             id: p.id,
             title: p.title,
@@ -186,6 +179,9 @@ Deno.serve(async (req) => {
             visibility: p.visibility,
             updated_date: p.updated_date
         }));
+
+        const executionTime = Date.now() - startTime;
+        console.log(`[publicClientProjects] ${executionTime}ms | ${projects.length} projects, ${accesses.length} accesses`);
 
         return Response.json({
             success: true,
