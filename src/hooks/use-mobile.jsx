@@ -1,5 +1,13 @@
 import * as React from "react"
 
+/**
+ * MOBILE_BREAKPOINT — must stay in sync with components/mobile/useIsMobile.
+ *
+ * Desktop: >= 768px  (includes large iPads)
+ * Mobile:  <  768px  (phones only)
+ *
+ * No tablet tier. Large iPads always get the desktop sidebar.
+ */
 const MOBILE_BREAKPOINT = 768
 
 export function useIsMobile() {

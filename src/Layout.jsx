@@ -25,6 +25,7 @@ import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer
 import MobileCollapsibleHeader from "@/components/mobile/MobileCollapsibleHeader";
 import ActionAuditPanel from "@/components/dev/ActionAuditPanel";
 import SupplyDiagnosticPanel from "@/components/dev/SupplyDiagnosticPanel";
+import ViewportDiagnostic from "@/components/dev/ViewportDiagnostic";
 import {
   Sidebar,
   SidebarContent,
@@ -561,6 +562,8 @@ export default function Layout({ children, currentPageName }) {
           navigationItems={navigationItems}
           currentPath={location.pathname}
         />
+        {/* Temporary viewport diagnostic — activate with localStorage ak_debug_viewport=true */}
+        <ViewportDiagnostic />
       </div>
     );
   }
@@ -769,6 +772,8 @@ export default function Layout({ children, currentPageName }) {
           <ActionAuditPanel />
           {/* Admin-only Supply Diagnostic Panel (Step 7) */}
           <SupplyDiagnosticPanel />
+          {/* Temporary viewport diagnostic — activate with localStorage ak_debug_viewport=true */}
+          <ViewportDiagnostic />
           </div>
           </SidebarProvider>
           );
