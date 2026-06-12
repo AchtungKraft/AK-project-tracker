@@ -79,7 +79,7 @@ export default function MediaReplaceModal({ asset, open, onClose, onSuccess }) {
         <DialogHeader>
           <DialogTitle className="text-white flex items-center gap-2">
             <Replace className="w-5 h-5 text-blue-400" />
-            Replace Image
+            Replace Record — URL Will Change
           </DialogTitle>
         </DialogHeader>
 
@@ -88,11 +88,11 @@ export default function MediaReplaceModal({ asset, open, onClose, onSuccess }) {
             <p className="text-sm text-gray-400">
               Replace <span className="text-purple-400 font-mono">{asset.file_name}</span> with a new file.
             </p>
-            <div className="bg-yellow-900/20 border border-yellow-700/30 rounded-lg p-2.5 text-xs text-yellow-300/90">
-              <strong>⚠ Storage Limitation:</strong> Base44 generates a new URL for each upload.
-              The old URL will stop working. The MediaAsset record will point to the new URL,
-              so references using this record's ID will auto-update, but any
-              hardcoded URL references elsewhere will need manual updating.
+            <div className="bg-red-900/20 border border-red-700/30 rounded-lg p-2.5 text-xs text-red-300/90 space-y-1.5">
+              <p><strong>⚠ This will NOT update hardcoded references already using the old URL.</strong></p>
+              <p>Base44 generates a <strong>new URL</strong> for each upload — in-place overwrite at the same path is not supported.
+              The old file will still exist at its original URL. This action updates the MediaAsset record pointer only.</p>
+              <p className="text-yellow-300/80">Any entity fields, client pages, or external links using the old URL will continue pointing to the old image.</p>
             </div>
           </div>
 
@@ -147,7 +147,7 @@ export default function MediaReplaceModal({ asset, open, onClose, onSuccess }) {
             className="bg-blue-600 hover:bg-blue-700 gap-2"
           >
             {replacing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Replace className="w-4 h-4" />}
-            Replace Image
+            Replace Record (New URL)
           </Button>
         </DialogFooter>
       </DialogContent>

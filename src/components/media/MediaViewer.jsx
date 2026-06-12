@@ -97,7 +97,7 @@ export default function MediaViewer({ asset, open, onClose, onReplace, onArchive
               <Download className="w-4 h-4" /> Download
             </Button>
             <Button onClick={() => onReplace(asset)} variant="outline" size="sm" className="border-blue-700 text-blue-400 gap-2">
-              <Replace className="w-4 h-4" /> Replace
+              <Replace className="w-4 h-4" /> Replace Record
             </Button>
             {asset.archived ? (
               <Button onClick={() => onUnarchive(asset)} variant="outline" size="sm" className="border-green-700 text-green-400 gap-2">

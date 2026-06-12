@@ -82,70 +82,72 @@ export default function MediaLibrary() {
     setIsRefreshing(false);
   }, [queryClient]);
 
-  const handleGoToUrl = useCallback((url) => {
-    const relativePath = parseMediaUrl(url);
-    if (!relativePath) {
-      toast.error('Could not parse URL');
-      return;
-    }
+  const handleGoToUrl = useCallback(async (url) => {
+    const cleanUrl = url.trim();
 
-    // Try direct match first
-    const match = allAssets.find(a =>
-      a.full_relative_path === relativePath ||
-      a.public_url === url ||
-      a.file_url === url
+    // Try to find existing asset by URL match
+    const existingMatch = allAssets.find(a =>
+      a.public_url === cleanUrl || a.file_url === cleanUrl ||
+      a.full_relative_path === parseMediaUrl(cleanUrl)
     );
 
-    if (match) {
-      setCurrentPath(match.folder_path || '');
+    if (existingMatch) {
+      setCurrentPath(existingMatch.folder_path || '');
       setViewMode('folder');
       setSearchTerm('');
       setStatusFilter('all');
-      setSelectedAsset(match);
-      toast.success(`Found: ${match.file_name}`);
+      setSelectedAsset(existingMatch);
+      toast.success(`Found: ${existingMatch.file_name}`);
       return;
     }
 
-    // Try filename match within parsed folder
-    const parts = relativePath.split('/');
-    const fileName = parts.pop();
-    const folderPath = parts.join('/');
+    // No existing record — probe the URL to see if it loads
+    toast.info('No existing record — probing URL...');
 
-    const folderMatch = allAssets.find(a =>
-      a.file_name === fileName && (a.folder_path || '') === folderPath
-    );
+    const loaded = await new Promise((resolve) => {
+      const img = new window.Image();
+      img.onload = () => resolve(true);
+      img.onerror = () => resolve(false);
+      img.src = cleanUrl + (cleanUrl.includes('?') ? '&' : '?') + '_probe=' + Date.now();
+      setTimeout(() => resolve(false), 8000);
+    });
 
-    if (folderMatch) {
-      setCurrentPath(folderMatch.folder_path || '');
-      setViewMode('folder');
-      setSearchTerm('');
-      setStatusFilter('all');
-      setSelectedAsset(folderMatch);
-      toast.success(`Found: ${folderMatch.file_name}`);
+    if (!loaded) {
+      toast.error('URL could not be loaded — image may not exist or is inaccessible');
       return;
     }
 
-    // Broad search fallback
-    const broadMatch = allAssets.find(a =>
-      (a.file_name && relativePath.includes(a.file_name)) ||
-      (a.public_url && a.public_url.includes(relativePath))
-    );
+    // Image loads — auto-create MediaAsset record
+    const fileName = cleanUrl.split('/').pop()?.split('?')[0] || 'unknown';
+    const pathMatch = cleanUrl.match(/images\/public\/(.+?)(\?|$)/);
+    const relativePath = pathMatch ? pathMatch[1] : fileName;
+    const folderParts = relativePath.split('/');
+    const folderPath = folderParts.length > 1 ? folderParts.slice(0, -1).join('/') : '';
 
-    if (broadMatch) {
-      setCurrentPath(broadMatch.folder_path || '');
-      setViewMode('folder');
-      setSearchTerm('');
-      setStatusFilter('all');
-      setSelectedAsset(broadMatch);
-      toast.success(`Found: ${broadMatch.file_name}`);
-      return;
-    }
+    const newAsset = await base44.entities.MediaAsset.create({
+      file_name: fileName,
+      full_relative_path: relativePath,
+      folder_path: folderPath,
+      public_url: cleanUrl,
+      file_url: cleanUrl,
+      type: 'image',
+      status: 'active',
+      archived: false,
+      version: 1,
+      source_context: 'upload',
+      notes: 'Auto-registered via Go To URL',
+    });
 
-    setSearchTerm(relativePath);
-    setViewMode('grid');
-    setStatusFilter('all');
-    toast.info('No exact match — showing search results');
-  }, [allAssets]);
+    toast.success(`Image found & registered: ${fileName}`);
+    invalidate();
+
+    // Navigate to it
+    setCurrentPath(folderPath);
+    setViewMode('folder');
+    setSearchTerm('');
+    setStatusFilter('active');
+    setSelectedAsset(newAsset);
+  }, [allAssets, invalidate]);
 
   const handleArchive = useCallback(async (asset) => {
     const user = await base44.auth.me();

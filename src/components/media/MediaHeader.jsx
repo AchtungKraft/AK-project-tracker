@@ -36,7 +36,7 @@ export default function MediaHeader({
           <div>
             <h1 className="text-xl md:text-3xl font-bold text-white">MEDIA LIBRARY</h1>
             <p className="text-xs md:text-sm text-gray-400">
-              {totalAssets} assets • Manage public image assets
+              {totalAssets} tracked assets • Use Audit to discover more
             </p>
           </div>
         </div>
