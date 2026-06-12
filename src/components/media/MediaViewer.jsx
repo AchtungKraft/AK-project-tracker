@@ -123,7 +123,7 @@ export default function MediaViewer({ asset, open, onClose, onReplace, onArchive
               <Download className="w-4 h-4" /> Download
             </Button>
             <Button onClick={() => onReplace(asset)} variant="outline" size="sm" className="border-orange-700 text-orange-400 gap-2">
-              <Replace className="w-4 h-4" /> Upload Replacement
+              <Replace className="w-4 h-4" /> Replace Everywhere
             </Button>
             {asset.archived ? (
               <Button onClick={() => onUnarchive(asset)} variant="outline" size="sm" className="border-green-700 text-green-400 gap-2">

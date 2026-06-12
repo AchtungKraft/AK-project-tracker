@@ -1,0 +1,83 @@
+{
+  "name": "MediaAssetMigration",
+  "type": "object",
+  "properties": {
+    "old_asset_id": {
+      "type": "string",
+      "description": "Reference to the original MediaAsset"
+    },
+    "new_asset_id": {
+      "type": "string",
+      "description": "Reference to the replacement MediaAsset"
+    },
+    "old_url": {
+      "type": "string",
+      "description": "The original URL that was replaced"
+    },
+    "new_url": {
+      "type": "string",
+      "description": "The replacement URL"
+    },
+    "references_found": {
+      "type": "number",
+      "default": 0,
+      "description": "Total number of URL references found"
+    },
+    "records_modified": {
+      "type": "number",
+      "default": 0,
+      "description": "Total number of entity records modified"
+    },
+    "migration_details": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "entity": {
+            "type": "string"
+          },
+          "record_id": {
+            "type": "string"
+          },
+          "record_name": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "match_type": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Detailed list of each reference that was updated"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "partial",
+        "failed"
+      ],
+      "default": "completed",
+      "description": "Migration outcome status"
+    },
+    "executed_by": {
+      "type": "string",
+      "description": "User who executed the migration"
+    },
+    "executed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When migration was executed"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional notes about the migration"
+    }
+  },
+  "required": [
+    "old_url",
+    "new_url"
+  ]
+}

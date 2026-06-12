@@ -15,7 +15,7 @@ import MediaReplaceModal from "@/components/media/MediaReplaceModal";
 import MediaBulkActions from "@/components/media/MediaBulkActions";
 import MediaMoveModal from "@/components/media/MediaMoveModal";
 import MediaStorageAudit from "@/components/media/MediaStorageAudit";
-import MediaUrlReferenceReplacer from "@/components/media/MediaUrlReferenceReplacer";
+import MigrationPreview from "@/components/media/MigrationPreview";
 import {
   parseMediaUrl, extractFolders, getAssetsInFolder,
   sortAssets, searchAssets, filterByStatus
@@ -42,7 +42,7 @@ export default function MediaLibrary() {
   const [showAudit, setShowAudit] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [isMoving, setIsMoving] = useState(false);
-  const [referenceReplacer, setReferenceReplacer] = useState(null); // { oldUrl, newUrl }
+  const [migrationData, setMigrationData] = useState(null); // { oldAsset, newAsset, oldUrl, newUrl }
 
   // Data
   const { data: allAssets = [], isLoading } = useQuery({
@@ -329,9 +329,9 @@ export default function MediaLibrary() {
         open={!!replaceAsset}
         onClose={() => setReplaceAsset(null)}
         onSuccess={() => { setReplaceAsset(null); invalidate(); }}
-        onFindReferences={(oldUrl, newUrl) => {
+        onStartMigration={(data) => {
           setReplaceAsset(null);
-          setReferenceReplacer({ oldUrl, newUrl });
+          setMigrationData(data);
         }}
       />
 
@@ -351,11 +351,11 @@ export default function MediaLibrary() {
         onRefresh={invalidate}
       />
 
-      <MediaUrlReferenceReplacer
-        open={!!referenceReplacer}
-        onClose={() => setReferenceReplacer(null)}
-        oldUrl={referenceReplacer?.oldUrl || ''}
-        newUrl={referenceReplacer?.newUrl || ''}
+      <MigrationPreview
+        open={!!migrationData}
+        onClose={() => setMigrationData(null)}
+        migrationData={migrationData}
+        onComplete={() => { setMigrationData(null); invalidate(); }}
       />
     </div>
   );
