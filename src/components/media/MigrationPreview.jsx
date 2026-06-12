@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Loader2, CheckCircle2, AlertTriangle, ArrowRight, Copy, Search,
-  FileText, Database, Replace, XCircle
+  FileText, Database, Replace, XCircle, RefreshCw, Eye
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 const MATCH_TYPE_LABELS = {
@@ -26,6 +27,7 @@ const ENTITY_COLORS = {
   ClientFeedbackAttachment: 'bg-cyan-900/50 text-cyan-300',
   ClientFeedbackComment: 'bg-cyan-900/50 text-cyan-300',
   ClientFeedbackRequest: 'bg-cyan-900/50 text-cyan-300',
+  ClientFeedbackDecision: 'bg-cyan-900/50 text-cyan-300',
   BuildKnowledgeItem: 'bg-amber-900/50 text-amber-300',
   BuildKnowledgeProjectNote: 'bg-amber-900/50 text-amber-300',
   ProcedureEntry: 'bg-amber-900/50 text-amber-300',
@@ -38,6 +40,7 @@ const ENTITY_COLORS = {
  * Scans for references, shows migration preview, confirms & executes.
  */
 export default function MigrationPreview({ open, onClose, migrationData, onComplete }) {
+  const queryClient = useQueryClient();
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState(null);
   const [executing, setExecuting] = useState(false);
@@ -80,7 +83,57 @@ export default function MigrationPreview({ open, onClose, migrationData, onCompl
 
     setResult(response.data);
     setExecuting(false);
-    toast.success('Migration completed');
+
+    // Invalidate ALL relevant caches so UI views refresh with new URLs
+    invalidateAllCaches();
+
+    if (response.data.records_failed === 0) {
+      toast.success(`Migration complete — ${response.data.records_modified} record(s) updated and verified`);
+    } else {
+      toast.warning(`Migration partial — ${response.data.records_failed} record(s) failed`);
+    }
+  };
+
+  const invalidateAllCaches = () => {
+    // Media assets
+    queryClient.invalidateQueries({ queryKey: ['mediaAssets'] });
+
+    // Client feedback queries (internal detail page)
+    queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail'] });
+
+    // Client feedback queries (public client portal)
+    queryClient.invalidateQueries({ queryKey: ['clientRequestDetail'] });
+
+    // Client portal hub
+    queryClient.invalidateQueries({ queryKey: ['clientPortalHubData'] });
+
+    // Client portal data
+    queryClient.invalidateQueries({ queryKey: ['clientPortalData'] });
+
+    // Project detail queries
+    queryClient.invalidateQueries({ queryKey: ['projectDetail'] });
+    queryClient.invalidateQueries({ queryKey: ['projectSupplyView'] });
+
+    // Feedback-related entity queries
+    queryClient.invalidateQueries({ queryKey: ['clientFeedbackDecisions'] });
+
+    // Knowledge base queries
+    queryClient.invalidateQueries({ queryKey: ['buildKnowledge'] });
+
+    // Broad invalidation for any query containing feedback-related keys
+    queryClient.invalidateQueries({
+      predicate: (query) => {
+        const key = query.queryKey;
+        if (!Array.isArray(key)) return false;
+        const keyStr = JSON.stringify(key).toLowerCase();
+        return keyStr.includes('feedback') ||
+               keyStr.includes('comment') ||
+               keyStr.includes('attachment') ||
+               keyStr.includes('decision') ||
+               keyStr.includes('journal') ||
+               keyStr.includes('knowledge');
+      },
+    });
   };
 
   const handleClose = () => {
@@ -122,7 +175,7 @@ export default function MigrationPreview({ open, onClose, migrationData, onCompl
             <div className="text-center py-8">
               <Loader2 className="w-8 h-8 mx-auto mb-3 text-orange-400 animate-spin" />
               <p className="text-sm text-gray-400">Scanning all entities for references...</p>
-              <p className="text-xs text-gray-600 mt-1">Project, Part, JournalEntry, Comment, Knowledge, Feedback, Task...</p>
+              <p className="text-xs text-gray-600 mt-1">Project, Part, JournalEntry, Comment, Knowledge, Feedback, Decisions, Task...</p>
             </div>
           )}
 
@@ -272,6 +325,7 @@ function ScanResultsPreview({ scanResult, onConfirm, executing, onRescan }) {
             <li>Replace the old URL with the new URL in {scanResult.total_records} record(s)</li>
             <li>Mark the old MediaAsset as <strong>superseded</strong></li>
             <li>Create a MediaAssetMigration audit record</li>
+            <li>Verify each update by re-reading the modified record</li>
           </ul>
           <p className="mt-1 text-red-400/80">This cannot be automatically undone.</p>
         </div>
@@ -292,7 +346,13 @@ function ScanResultsPreview({ scanResult, onConfirm, executing, onRescan }) {
 }
 
 function MigrationResult({ result }) {
-  const isFullSuccess = result.records_failed === 0;
+  const isFullSuccess = result.records_failed === 0 && (result.records_unverified || 0) === 0;
+  const verifiedCount = result.records_verified || 0;
+  const unverifiedCount = result.records_unverified || 0;
+
+  // Separate details by status
+  const failedDetails = (result.details || []).filter(d => d.status === 'failed');
+  const unverifiedDetails = (result.details || []).filter(d => d.status === 'unverified');
 
   return (
     <div className="space-y-3">
@@ -311,16 +371,45 @@ function MigrationResult({ result }) {
         </p>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        <ResultStat label="References Updated" value={result.references_found} color="text-blue-400" />
-        <ResultStat label="Records Modified" value={result.records_modified} color="text-green-400" />
+      <div className="grid grid-cols-4 gap-2">
+        <ResultStat label="Records Updated" value={result.records_modified} color="text-blue-400" />
+        <ResultStat label="Verified" value={verifiedCount} color="text-green-400" />
+        <ResultStat label="Failed" value={result.records_failed} color={result.records_failed > 0 ? "text-red-400" : "text-gray-500"} />
         <ResultStat label="Old Asset" value="Superseded" color="text-yellow-400" />
       </div>
 
       {result.records_failed > 0 && (
-        <div className="bg-red-900/20 border border-red-700/30 rounded-lg p-2.5 text-xs text-red-300">
-          <XCircle className="w-4 h-4 inline mr-1" />
-          {result.records_failed} record(s) failed to update.
+        <div className="bg-red-900/20 border border-red-700/30 rounded-lg p-2.5 text-xs text-red-300 space-y-1">
+          <div className="flex items-center gap-1">
+            <XCircle className="w-4 h-4" />
+            <span className="font-medium">{result.records_failed} record(s) failed to update:</span>
+          </div>
+          {failedDetails.map((d, idx) => (
+            <div key={idx} className="flex items-center gap-2 ml-5">
+              <Badge className={ENTITY_COLORS[d.entity] || 'bg-gray-700 text-gray-300'} style={{ fontSize: '9px' }}>
+                {d.entity}
+              </Badge>
+              <span className="text-red-300/80">{d.record_name}.{d.field}</span>
+              {d.error && <span className="text-red-400/60 text-[9px]">({d.error})</span>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {unverifiedCount > 0 && (
+        <div className="bg-yellow-900/20 border border-yellow-700/30 rounded-lg p-2.5 text-xs text-yellow-300 space-y-1">
+          <div className="flex items-center gap-1">
+            <AlertTriangle className="w-4 h-4" />
+            <span className="font-medium">{unverifiedCount} record(s) updated but verification uncertain:</span>
+          </div>
+          {unverifiedDetails.map((d, idx) => (
+            <div key={idx} className="flex items-center gap-2 ml-5">
+              <Badge className={ENTITY_COLORS[d.entity] || 'bg-gray-700 text-gray-300'} style={{ fontSize: '9px' }}>
+                {d.entity}
+              </Badge>
+              <span className="text-yellow-300/80">{d.record_name}.{d.field}</span>
+            </div>
+          ))}
         </div>
       )}
 
@@ -330,6 +419,9 @@ function MigrationResult({ result }) {
           <div className="max-h-32 overflow-y-auto space-y-1">
             {result.details.map((d, idx) => (
               <div key={idx} className="flex items-center gap-2 text-xs">
+                {d.status === 'verified' && <CheckCircle2 className="w-3 h-3 text-green-500 flex-shrink-0" />}
+                {d.status === 'unverified' && <AlertTriangle className="w-3 h-3 text-yellow-500 flex-shrink-0" />}
+                {d.status === 'failed' && <XCircle className="w-3 h-3 text-red-500 flex-shrink-0" />}
                 <Badge className={ENTITY_COLORS[d.entity] || 'bg-gray-700 text-gray-300'} style={{ fontSize: '9px' }}>
                   {d.entity}
                 </Badge>
