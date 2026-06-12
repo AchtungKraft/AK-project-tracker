@@ -13,9 +13,20 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 const MATCH_TYPE_LABELS = {
-  array_element: 'URL in array',
-  exact_string: 'Exact field match',
-  text_contains: 'URL in text/HTML',
+  // Legacy labels (backwards compat)
+  array_element: 'Array Item',
+  exact_string: 'String Field',
+  text_contains: 'Text Embed',
+  // New deep-scan labels
+  string_field: 'String Field',
+  array_item: 'Array Item',
+  nested_object: 'Nested Object',
+  html_image: 'HTML Image',
+  html_background: 'HTML Background',
+  markdown_image: 'Markdown Image',
+  markdown_link: 'Markdown Link',
+  json_blob: 'JSON Blob',
+  text_embed: 'Text Embed',
 };
 
 const ENTITY_COLORS = {
@@ -34,6 +45,8 @@ const ENTITY_COLORS = {
   EmailTemplate: 'bg-green-900/50 text-green-300',
   Task: 'bg-red-900/50 text-red-300',
   ToDoListTask: 'bg-teal-900/50 text-teal-300',
+  PageBlock: 'bg-pink-900/50 text-pink-300',
+  SharedBlock: 'bg-pink-900/50 text-pink-300',
 };
 
 /**
@@ -179,7 +192,7 @@ export default function MigrationPreview({ open, onClose, migrationData, onCompl
             <div className="text-center py-8">
               <Loader2 className="w-8 h-8 mx-auto mb-3 text-orange-400 animate-spin" />
               <p className="text-sm text-gray-400">Scanning all entities for references...</p>
-              <p className="text-xs text-gray-600 mt-1">Project, Part, Journal, Comment, Knowledge, Feedback, Decision, Attachment, ToDo, Task...</p>
+              <p className="text-xs text-gray-600 mt-1">17 entity types — deep recursive scan (strings, arrays, nested objects, HTML, markdown)...</p>
             </div>
           )}
 
@@ -280,6 +293,17 @@ function ScanResultsPreview({ scanResult, onConfirm, executing, onRescan }) {
         </div>
       </div>
 
+      {/* Type summary breakdown */}
+      {scanResult.type_summary && Object.keys(scanResult.type_summary).length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {Object.entries(scanResult.type_summary).map(([type, count]) => (
+            <Badge key={type} variant="outline" className="text-[9px] border-gray-600 text-gray-400 gap-1">
+              {type} <span className="text-gray-300 font-bold">×{count}</span>
+            </Badge>
+          ))}
+        </div>
+      )}
+
       {/* Matches grouped by entity */}
       <div className="max-h-[40vh] overflow-y-auto space-y-3 pr-1">
         {Object.entries(grouped).map(([entity, entityMatches]) => (
@@ -298,12 +322,12 @@ function ScanResultsPreview({ scanResult, onConfirm, executing, onRescan }) {
                     <span className="text-xs text-gray-200 font-medium truncate">{match.record_name}</span>
                     <span className="text-[10px] text-gray-600 font-mono">.{match.field}</span>
                     <Badge variant="outline" className="text-[9px] border-gray-600 text-gray-500 ml-auto">
-                      {MATCH_TYPE_LABELS[match.match_type] || match.match_type}
+                      {match.match_type_label || MATCH_TYPE_LABELS[match.match_type] || match.match_type}
                       {match.match_count > 1 && ` ×${match.match_count}`}
                     </Badge>
                   </div>
-                  {/* Before/After for text_contains matches */}
-                  {match.match_type === 'text_contains' && match.before_value && (
+                  {/* Before/After snippets for text-containing matches */}
+                  {match.before_value && !['string_field', 'exact_string'].includes(match.match_type) && (
                     <div className="ml-5 space-y-0.5">
                       <div className="bg-red-950/30 rounded px-2 py-1">
                         <code className="text-[9px] text-red-300/80 break-all">{match.before_value}</code>
@@ -381,6 +405,17 @@ function MigrationResult({ result }) {
         <ResultStat label="Failed" value={result.records_failed} color={result.records_failed > 0 ? "text-red-400" : "text-gray-500"} />
       </div>
 
+      {/* Type summary breakdown */}
+      {result.type_summary && Object.keys(result.type_summary).length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {Object.entries(result.type_summary).map(([type, count]) => (
+            <Badge key={type} variant="outline" className="text-[9px] border-gray-600 text-gray-400 gap-1">
+              {type} <span className="text-gray-300 font-bold">×{count}</span>
+            </Badge>
+          ))}
+        </div>
+      )}
+
       {/* Detailed migration report table */}
       {details.length > 0 && (
         <div className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
@@ -419,7 +454,7 @@ function MigrationResult({ result }) {
                     </td>
                     <td className="px-3 py-1.5 text-gray-400 font-mono">{d.field}</td>
                     <td className="px-3 py-1.5 text-gray-500">
-                      {MATCH_TYPE_LABELS[d.match_type] || d.match_type}
+                      {d.match_type_label || MATCH_TYPE_LABELS[d.match_type] || d.match_type}
                     </td>
                   </tr>
                 ))}
