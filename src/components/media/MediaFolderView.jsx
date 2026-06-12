@@ -1,7 +1,7 @@
 import React from "react";
-import { Folder } from "lucide-react";
+import { Folder, Check } from "lucide-react";
 
-export default function MediaFolderView({ folders, assets, currentPath, onNavigateFolder, onSelectAsset }) {
+export default function MediaFolderView({ folders, assets, currentPath, onNavigateFolder, onSelectAsset, selectedIds, onToggleSelect }) {
   return (
     <div className="space-y-4">
       {/* Folders */}
@@ -30,13 +30,27 @@ export default function MediaFolderView({ folders, assets, currentPath, onNaviga
         <div>
           <h3 className="text-xs uppercase tracking-wider text-gray-500 mb-2 px-1">Files ({assets.length})</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-            {assets.map(asset => (
-              <button
+            {assets.map(asset => {
+              const isSelected = selectedIds?.has(asset.id);
+              return (
+              <div
                 key={asset.id}
-                onClick={() => onSelectAsset(asset)}
-                className="group relative bg-gray-800/50 hover:bg-gray-800 border border-gray-700 hover:border-purple-600/50 rounded-lg overflow-hidden transition-all"
+                className={`group relative bg-gray-800/50 hover:bg-gray-800 border rounded-lg overflow-hidden transition-all cursor-pointer ${
+                  isSelected ? 'border-purple-500 ring-1 ring-purple-500/30' : 'border-gray-700 hover:border-purple-600/50'
+                }`}
               >
-                <div className="aspect-square bg-gray-900/50 flex items-center justify-center overflow-hidden">
+                {/* Select checkbox */}
+                {onToggleSelect && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onToggleSelect(asset.id); }}
+                    className={`absolute top-2 left-2 z-10 w-5 h-5 rounded border flex items-center justify-center transition-colors ${
+                      isSelected ? 'bg-purple-600 border-purple-500' : 'bg-black/50 border-gray-500 opacity-0 group-hover:opacity-100'
+                    }`}
+                  >
+                    {isSelected && <Check className="w-3 h-3 text-white" />}
+                  </button>
+                )}
+                <div onClick={() => onSelectAsset(asset)} className="aspect-square bg-gray-900/50 flex items-center justify-center overflow-hidden">
                   <img
                     src={asset.public_url || asset.file_url}
                     alt={asset.file_name}
@@ -45,14 +59,15 @@ export default function MediaFolderView({ folders, assets, currentPath, onNaviga
                     onError={(e) => { e.target.style.display = 'none'; }}
                   />
                 </div>
-                <div className="p-2">
+                <div className="p-2" onClick={() => onSelectAsset(asset)}>
                   <p className="text-xs text-gray-300 truncate">{asset.file_name || asset.title || 'Untitled'}</p>
                   {asset.file_size && (
                     <p className="text-[10px] text-gray-500">{formatFileSize(asset.file_size)}</p>
                   )}
                 </div>
-              </button>
-            ))}
+              </div>
+              );
+            })}
           </div>
         </div>
       )}

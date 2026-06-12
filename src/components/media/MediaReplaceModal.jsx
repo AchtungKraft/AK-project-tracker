@@ -84,10 +84,17 @@ export default function MediaReplaceModal({ asset, open, onClose, onSuccess }) {
         </DialogHeader>
 
         <div className="space-y-4">
-          <p className="text-sm text-gray-400">
-            Replace <span className="text-purple-400 font-mono">{asset.file_name}</span> with a new file.
-            The URL will be updated but all references tracking this asset will remain linked.
-          </p>
+          <div className="space-y-2">
+            <p className="text-sm text-gray-400">
+              Replace <span className="text-purple-400 font-mono">{asset.file_name}</span> with a new file.
+            </p>
+            <div className="bg-yellow-900/20 border border-yellow-700/30 rounded-lg p-2.5 text-xs text-yellow-300/90">
+              <strong>⚠ Storage Limitation:</strong> Base44 generates a new URL for each upload.
+              The old URL will stop working. The MediaAsset record will point to the new URL,
+              so references using this record's ID will auto-update, but any
+              hardcoded URL references elsewhere will need manual updating.
+            </div>
+          </div>
 
           {/* Before / After */}
           <div className="grid grid-cols-2 gap-3">

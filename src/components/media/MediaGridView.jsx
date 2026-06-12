@@ -1,8 +1,8 @@
 import React from "react";
-import { Copy, ExternalLink, Image } from "lucide-react";
+import { Copy, ExternalLink, Image, Check } from "lucide-react";
 import { toast } from "sonner";
 
-export default function MediaGridView({ assets, onSelectAsset, onReplace, onArchive }) {
+export default function MediaGridView({ assets, onSelectAsset, onReplace, onArchive, selectedIds, onToggleSelect }) {
   const copyUrl = (e, asset) => {
     e.stopPropagation();
     navigator.clipboard.writeText(asset.public_url || asset.file_url);
@@ -11,12 +11,27 @@ export default function MediaGridView({ assets, onSelectAsset, onReplace, onArch
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-      {assets.map(asset => (
+      {assets.map(asset => {
+        const isSelected = selectedIds?.has(asset.id);
+        return (
         <div
           key={asset.id}
           onClick={() => onSelectAsset(asset)}
-          className="group relative bg-gray-800/50 hover:bg-gray-800 border border-gray-700 hover:border-purple-600/50 rounded-lg overflow-hidden transition-all cursor-pointer"
+          className={`group relative bg-gray-800/50 hover:bg-gray-800 border rounded-lg overflow-hidden transition-all cursor-pointer ${
+            isSelected ? 'border-purple-500 ring-1 ring-purple-500/30' : 'border-gray-700 hover:border-purple-600/50'
+          }`}
         >
+          {/* Select checkbox */}
+          {onToggleSelect && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onToggleSelect(asset.id); }}
+              className={`absolute top-2 left-2 z-10 w-5 h-5 rounded border flex items-center justify-center transition-colors ${
+                isSelected ? 'bg-purple-600 border-purple-500' : 'bg-black/50 border-gray-500 opacity-0 group-hover:opacity-100'
+              }`}
+            >
+              {isSelected && <Check className="w-3 h-3 text-white" />}
+            </button>
+          )}
           <div className="aspect-square bg-gray-900/50 flex items-center justify-center overflow-hidden relative">
             <img
               src={asset.public_url || asset.file_url}
@@ -62,7 +77,8 @@ export default function MediaGridView({ assets, onSelectAsset, onReplace, onArch
             </div>
           )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

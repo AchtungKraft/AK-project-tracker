@@ -1,15 +1,16 @@
 import React from "react";
-import { Copy, ExternalLink, Image } from "lucide-react";
+import { Copy, ExternalLink, Image, Check } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import moment from "moment";
 
-export default function MediaListView({ assets, onSelectAsset }) {
+export default function MediaListView({ assets, onSelectAsset, selectedIds, onToggleSelect }) {
   return (
     <div className="bg-gray-800/30 border border-gray-700 rounded-lg overflow-hidden">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-700 text-left">
+            {onToggleSelect && <th className="px-2 py-2 w-8"></th>}
             <th className="px-3 py-2 text-gray-400 font-medium text-xs w-10"></th>
             <th className="px-3 py-2 text-gray-400 font-medium text-xs">Filename</th>
             <th className="px-3 py-2 text-gray-400 font-medium text-xs hidden md:table-cell">Folder</th>
@@ -20,12 +21,26 @@ export default function MediaListView({ assets, onSelectAsset }) {
           </tr>
         </thead>
         <tbody>
-          {assets.map(asset => (
+          {assets.map(asset => {
+            const isSelected = selectedIds?.has(asset.id);
+            return (
             <tr
               key={asset.id}
               onClick={() => onSelectAsset(asset)}
-              className="border-b border-gray-800 hover:bg-gray-800/50 cursor-pointer transition-colors"
+              className={`border-b border-gray-800 hover:bg-gray-800/50 cursor-pointer transition-colors ${isSelected ? 'bg-purple-900/20' : ''}`}
             >
+              {onToggleSelect && (
+                <td className="px-2 py-2">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onToggleSelect(asset.id); }}
+                    className={`w-5 h-5 rounded border flex items-center justify-center ${
+                      isSelected ? 'bg-purple-600 border-purple-500' : 'border-gray-600 hover:border-gray-400'
+                    }`}
+                  >
+                    {isSelected && <Check className="w-3 h-3 text-white" />}
+                  </button>
+                </td>
+              )}
               <td className="px-3 py-2">
                 <div className="w-8 h-8 bg-gray-900 rounded overflow-hidden flex-shrink-0">
                   <img
@@ -80,7 +95,8 @@ export default function MediaListView({ assets, onSelectAsset }) {
                 </div>
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

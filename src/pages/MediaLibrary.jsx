@@ -12,6 +12,9 @@ import MediaListView from "@/components/media/MediaListView";
 import MediaViewer from "@/components/media/MediaViewer";
 import MediaUploadModal from "@/components/media/MediaUploadModal";
 import MediaReplaceModal from "@/components/media/MediaReplaceModal";
+import MediaBulkActions from "@/components/media/MediaBulkActions";
+import MediaMoveModal from "@/components/media/MediaMoveModal";
+import MediaStorageAudit from "@/components/media/MediaStorageAudit";
 import {
   parseMediaUrl, extractFolders, getAssetsInFolder,
   sortAssets, searchAssets, filterByStatus
@@ -30,6 +33,14 @@ export default function MediaLibrary() {
   const [showUpload, setShowUpload] = useState(false);
   const [replaceAsset, setReplaceAsset] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Multi-select
+  const [selectedIds, setSelectedIds] = useState(new Set());
+
+  // Modals
+  const [showAudit, setShowAudit] = useState(false);
+  const [showMoveModal, setShowMoveModal] = useState(false);
+  const [isMoving, setIsMoving] = useState(false);
 
   // Data
   const { data: allAssets = [], isLoading } = useQuery({
@@ -50,6 +61,20 @@ export default function MediaLibrary() {
   const folders = useMemo(() => extractFolders(filteredAssets, currentPath), [filteredAssets, currentPath]);
   const folderAssets = useMemo(() => getAssetsInFolder(filteredAssets, currentPath), [filteredAssets, currentPath]);
 
+  // Multi-select
+  const toggleSelect = useCallback((id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const invalidate = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['mediaAssets'] });
+  }, [queryClient]);
+
   // Handlers
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -64,27 +89,62 @@ export default function MediaLibrary() {
       return;
     }
 
-    // Find matching asset
+    // Try direct match first
     const match = allAssets.find(a =>
       a.full_relative_path === relativePath ||
       a.public_url === url ||
-      a.file_url === url ||
-      (a.file_name && relativePath.endsWith(a.file_name))
+      a.file_url === url
     );
 
     if (match) {
-      // Navigate to folder and select
       setCurrentPath(match.folder_path || '');
       setViewMode('folder');
       setSearchTerm('');
+      setStatusFilter('all');
       setSelectedAsset(match);
       toast.success(`Found: ${match.file_name}`);
-    } else {
-      // Try to search by partial match
-      setSearchTerm(relativePath);
-      setViewMode('grid');
-      toast.info('Searching for matching assets...');
+      return;
     }
+
+    // Try filename match within parsed folder
+    const parts = relativePath.split('/');
+    const fileName = parts.pop();
+    const folderPath = parts.join('/');
+
+    const folderMatch = allAssets.find(a =>
+      a.file_name === fileName && (a.folder_path || '') === folderPath
+    );
+
+    if (folderMatch) {
+      setCurrentPath(folderMatch.folder_path || '');
+      setViewMode('folder');
+      setSearchTerm('');
+      setStatusFilter('all');
+      setSelectedAsset(folderMatch);
+      toast.success(`Found: ${folderMatch.file_name}`);
+      return;
+    }
+
+    // Broad search fallback
+    const broadMatch = allAssets.find(a =>
+      (a.file_name && relativePath.includes(a.file_name)) ||
+      (a.public_url && a.public_url.includes(relativePath))
+    );
+
+    if (broadMatch) {
+      setCurrentPath(broadMatch.folder_path || '');
+      setViewMode('folder');
+      setSearchTerm('');
+      setStatusFilter('all');
+      setSelectedAsset(broadMatch);
+      toast.success(`Found: ${broadMatch.file_name}`);
+      return;
+    }
+
+    setSearchTerm(relativePath);
+    setViewMode('grid');
+    setStatusFilter('all');
+    toast.info('No exact match — showing search results');
   }, [allAssets]);
 
   const handleArchive = useCallback(async (asset) => {
@@ -97,8 +157,8 @@ export default function MediaLibrary() {
     });
     toast.success(`${asset.file_name} archived`);
     setSelectedAsset(null);
-    queryClient.invalidateQueries({ queryKey: ['mediaAssets'] });
-  }, [queryClient]);
+    invalidate();
+  }, [invalidate]);
 
   const handleUnarchive = useCallback(async (asset) => {
     await base44.entities.MediaAsset.update(asset.id, {
@@ -107,22 +167,49 @@ export default function MediaLibrary() {
     });
     toast.success(`${asset.file_name} restored`);
     setSelectedAsset(null);
-    queryClient.invalidateQueries({ queryKey: ['mediaAssets'] });
-  }, [queryClient]);
+    invalidate();
+  }, [invalidate]);
 
   const handleReplace = useCallback((asset) => {
     setSelectedAsset(null);
     setReplaceAsset(asset);
   }, []);
 
-  const handleUploadSuccess = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['mediaAssets'] });
-  }, [queryClient]);
+  // Bulk operations
+  const handleBulkArchive = useCallback(async () => {
+    const user = await base44.auth.me();
+    const ids = Array.from(selectedIds);
+    for (const id of ids) {
+      await base44.entities.MediaAsset.update(id, {
+        archived: true,
+        status: 'archived',
+        archived_at: new Date().toISOString(),
+        archived_by: user?.id,
+      });
+    }
+    toast.success(`${ids.length} asset(s) archived`);
+    setSelectedIds(new Set());
+    invalidate();
+  }, [selectedIds, invalidate]);
 
-  const handleReplaceSuccess = useCallback(() => {
-    setReplaceAsset(null);
-    queryClient.invalidateQueries({ queryKey: ['mediaAssets'] });
-  }, [queryClient]);
+  const handleBulkMove = useCallback(async (targetPath) => {
+    setIsMoving(true);
+    const ids = Array.from(selectedIds);
+    for (const id of ids) {
+      const asset = allAssets.find(a => a.id === id);
+      if (!asset) continue;
+      const newRelativePath = targetPath ? `${targetPath}/${asset.file_name}` : asset.file_name;
+      await base44.entities.MediaAsset.update(id, {
+        folder_path: targetPath,
+        full_relative_path: newRelativePath,
+      });
+    }
+    toast.success(`${ids.length} asset(s) moved to ${targetPath || '/'}`);
+    setSelectedIds(new Set());
+    setShowMoveModal(false);
+    setIsMoving(false);
+    invalidate();
+  }, [selectedIds, allAssets, invalidate]);
 
   // Loading
   if (isLoading) {
@@ -148,11 +235,12 @@ export default function MediaLibrary() {
           onUploadClick={() => setShowUpload(true)}
           onRefresh={handleRefresh}
           onGoToUrl={handleGoToUrl}
+          onAuditClick={() => setShowAudit(true)}
           isRefreshing={isRefreshing}
           totalAssets={allAssets.length}
         />
 
-        {/* Breadcrumbs — visible in folder mode */}
+        {/* Breadcrumbs */}
         {viewMode === 'folder' && (
           <MediaBreadcrumbs currentPath={currentPath} onNavigate={setCurrentPath} />
         )}
@@ -165,6 +253,8 @@ export default function MediaLibrary() {
             currentPath={currentPath}
             onNavigateFolder={setCurrentPath}
             onSelectAsset={setSelectedAsset}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
           />
         )}
 
@@ -177,6 +267,8 @@ export default function MediaLibrary() {
                 onSelectAsset={setSelectedAsset}
                 onReplace={handleReplace}
                 onArchive={handleArchive}
+                selectedIds={selectedIds}
+                onToggleSelect={toggleSelect}
               />
             ) : (
               <EmptyState />
@@ -188,13 +280,27 @@ export default function MediaLibrary() {
           <>
             <p className="text-xs text-gray-500">{filteredAssets.length} assets</p>
             {filteredAssets.length > 0 ? (
-              <MediaListView assets={filteredAssets} onSelectAsset={setSelectedAsset} />
+              <MediaListView
+                assets={filteredAssets}
+                onSelectAsset={setSelectedAsset}
+                selectedIds={selectedIds}
+                onToggleSelect={toggleSelect}
+              />
             ) : (
               <EmptyState />
             )}
           </>
         )}
       </div>
+
+      {/* Bulk Actions Bar */}
+      <MediaBulkActions
+        selectedIds={selectedIds}
+        allAssets={allAssets}
+        onClearSelection={() => setSelectedIds(new Set())}
+        onBulkArchive={handleBulkArchive}
+        onBulkMove={() => setShowMoveModal(true)}
+      />
 
       {/* Modals */}
       <MediaViewer
@@ -211,14 +317,30 @@ export default function MediaLibrary() {
         onClose={() => setShowUpload(false)}
         currentPath={currentPath}
         existingAssets={allAssets}
-        onSuccess={handleUploadSuccess}
+        onSuccess={invalidate}
       />
 
       <MediaReplaceModal
         asset={replaceAsset}
         open={!!replaceAsset}
         onClose={() => setReplaceAsset(null)}
-        onSuccess={handleReplaceSuccess}
+        onSuccess={() => { setReplaceAsset(null); invalidate(); }}
+      />
+
+      <MediaMoveModal
+        open={showMoveModal}
+        onClose={() => setShowMoveModal(false)}
+        assets={allAssets.filter(a => selectedIds.has(a.id))}
+        allAssets={allAssets}
+        onConfirm={handleBulkMove}
+        isLoading={isMoving}
+      />
+
+      <MediaStorageAudit
+        open={showAudit}
+        onClose={() => setShowAudit(false)}
+        allAssets={allAssets}
+        onRefresh={invalidate}
       />
     </div>
   );

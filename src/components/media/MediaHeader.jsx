@@ -4,14 +4,14 @@ import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
-import { Image, Upload, RefreshCw, Search, Link2, X, LayoutGrid, List, FolderOpen } from "lucide-react";
+import { Image, Upload, RefreshCw, Search, Link2, X, LayoutGrid, List, FolderOpen, ShieldCheck } from "lucide-react";
 
 export default function MediaHeader({
   searchTerm, onSearchChange,
   viewMode, onViewModeChange,
   statusFilter, onStatusFilterChange,
   sortBy, onSortByChange,
-  onUploadClick, onRefresh, onGoToUrl,
+  onUploadClick, onRefresh, onGoToUrl, onAuditClick,
   isRefreshing, totalAssets
 }) {
   const [urlInput, setUrlInput] = useState("");
@@ -41,6 +41,15 @@ export default function MediaHeader({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            onClick={onAuditClick}
+            variant="outline"
+            size="sm"
+            className="border-gray-700 text-white gap-2"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span className="hidden sm:inline">Audit</span>
+          </Button>
           <Button
             onClick={() => setShowUrlInput(!showUrlInput)}
             variant="outline"
