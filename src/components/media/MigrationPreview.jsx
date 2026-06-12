@@ -33,6 +33,7 @@ const ENTITY_COLORS = {
   ProcedureEntry: 'bg-amber-900/50 text-amber-300',
   EmailTemplate: 'bg-green-900/50 text-green-300',
   Task: 'bg-red-900/50 text-red-300',
+  ToDoListTask: 'bg-teal-900/50 text-teal-300',
 };
 
 /**
@@ -131,7 +132,10 @@ export default function MigrationPreview({ open, onClose, migrationData, onCompl
                keyStr.includes('attachment') ||
                keyStr.includes('decision') ||
                keyStr.includes('journal') ||
-               keyStr.includes('knowledge');
+               keyStr.includes('knowledge') ||
+               keyStr.includes('todo') ||
+               keyStr.includes('portal') ||
+               keyStr.includes('project');
       },
     });
   };
@@ -175,7 +179,7 @@ export default function MigrationPreview({ open, onClose, migrationData, onCompl
             <div className="text-center py-8">
               <Loader2 className="w-8 h-8 mx-auto mb-3 text-orange-400 animate-spin" />
               <p className="text-sm text-gray-400">Scanning all entities for references...</p>
-              <p className="text-xs text-gray-600 mt-1">Project, Part, JournalEntry, Comment, Knowledge, Feedback, Decisions, Task...</p>
+              <p className="text-xs text-gray-600 mt-1">Project, Part, Journal, Comment, Knowledge, Feedback, Decision, Attachment, ToDo, Task...</p>
             </div>
           )}
 
@@ -349,13 +353,11 @@ function MigrationResult({ result }) {
   const isFullSuccess = result.records_failed === 0 && (result.records_unverified || 0) === 0;
   const verifiedCount = result.records_verified || 0;
   const unverifiedCount = result.records_unverified || 0;
-
-  // Separate details by status
-  const failedDetails = (result.details || []).filter(d => d.status === 'failed');
-  const unverifiedDetails = (result.details || []).filter(d => d.status === 'unverified');
+  const details = result.details || [];
 
   return (
     <div className="space-y-3">
+      {/* Status banner */}
       <div className={`rounded-lg border p-4 text-center ${
         isFullSuccess
           ? 'bg-green-900/20 border-green-700/50'
@@ -371,65 +373,76 @@ function MigrationResult({ result }) {
         </p>
       </div>
 
-      <div className="grid grid-cols-4 gap-2">
+      {/* Summary stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <ResultStat label="References Found" value={result.references_found ?? details.length} color="text-blue-400" />
         <ResultStat label="Records Updated" value={result.records_modified} color="text-blue-400" />
         <ResultStat label="Verified" value={verifiedCount} color="text-green-400" />
         <ResultStat label="Failed" value={result.records_failed} color={result.records_failed > 0 ? "text-red-400" : "text-gray-500"} />
-        <ResultStat label="Old Asset" value="Superseded" color="text-yellow-400" />
       </div>
 
-      {result.records_failed > 0 && (
-        <div className="bg-red-900/20 border border-red-700/30 rounded-lg p-2.5 text-xs text-red-300 space-y-1">
-          <div className="flex items-center gap-1">
-            <XCircle className="w-4 h-4" />
-            <span className="font-medium">{result.records_failed} record(s) failed to update:</span>
+      {/* Detailed migration report table */}
+      {details.length > 0 && (
+        <div className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
+          <div className="px-3 py-2 border-b border-gray-700/50">
+            <h4 className="text-[10px] text-gray-500 uppercase tracking-wider">Migration Report</h4>
           </div>
-          {failedDetails.map((d, idx) => (
-            <div key={idx} className="flex items-center gap-2 ml-5">
-              <Badge className={ENTITY_COLORS[d.entity] || 'bg-gray-700 text-gray-300'} style={{ fontSize: '9px' }}>
-                {d.entity}
-              </Badge>
-              <span className="text-red-300/80">{d.record_name}.{d.field}</span>
-              {d.error && <span className="text-red-400/60 text-[9px]">({d.error})</span>}
+          <div className="max-h-[40vh] overflow-y-auto">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-gray-800">
+                <tr className="border-b border-gray-700/50">
+                  <th className="text-left px-3 py-1.5 text-gray-500 font-medium">Status</th>
+                  <th className="text-left px-3 py-1.5 text-gray-500 font-medium">Entity</th>
+                  <th className="text-left px-3 py-1.5 text-gray-500 font-medium">Record</th>
+                  <th className="text-left px-3 py-1.5 text-gray-500 font-medium">Field</th>
+                  <th className="text-left px-3 py-1.5 text-gray-500 font-medium">Type</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800">
+                {details.map((d, idx) => (
+                  <tr key={idx} className={
+                    d.status === 'failed' ? 'bg-red-950/20' :
+                    d.status === 'unverified' ? 'bg-yellow-950/20' : ''
+                  }>
+                    <td className="px-3 py-1.5">
+                      {d.status === 'verified' && <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />}
+                      {d.status === 'unverified' && <AlertTriangle className="w-3.5 h-3.5 text-yellow-500" />}
+                      {d.status === 'failed' && <XCircle className="w-3.5 h-3.5 text-red-500" />}
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <Badge className={ENTITY_COLORS[d.entity] || 'bg-gray-700 text-gray-300'} style={{ fontSize: '9px' }}>
+                        {d.entity}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-1.5 text-gray-300 truncate max-w-[140px]" title={d.record_name}>
+                      {d.record_name}
+                    </td>
+                    <td className="px-3 py-1.5 text-gray-400 font-mono">{d.field}</td>
+                    <td className="px-3 py-1.5 text-gray-500">
+                      {MATCH_TYPE_LABELS[d.match_type] || d.match_type}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {/* Failed details with errors */}
+          {details.filter(d => d.status === 'failed' && d.error).length > 0 && (
+            <div className="px-3 py-2 border-t border-red-700/30 bg-red-950/20 space-y-1">
+              <p className="text-[10px] text-red-400 uppercase tracking-wider font-medium">Failure Details</p>
+              {details.filter(d => d.status === 'failed' && d.error).map((d, idx) => (
+                <p key={idx} className="text-[10px] text-red-300/80">
+                  {d.entity}.{d.record_name}.{d.field}: {d.error}
+                </p>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       )}
 
-      {unverifiedCount > 0 && (
-        <div className="bg-yellow-900/20 border border-yellow-700/30 rounded-lg p-2.5 text-xs text-yellow-300 space-y-1">
-          <div className="flex items-center gap-1">
-            <AlertTriangle className="w-4 h-4" />
-            <span className="font-medium">{unverifiedCount} record(s) updated but verification uncertain:</span>
-          </div>
-          {unverifiedDetails.map((d, idx) => (
-            <div key={idx} className="flex items-center gap-2 ml-5">
-              <Badge className={ENTITY_COLORS[d.entity] || 'bg-gray-700 text-gray-300'} style={{ fontSize: '9px' }}>
-                {d.entity}
-              </Badge>
-              <span className="text-yellow-300/80">{d.record_name}.{d.field}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {result.details && result.details.length > 0 && (
-        <div className="bg-gray-800/50 rounded-lg border border-gray-700 p-3">
-          <h4 className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Modified Records</h4>
-          <div className="max-h-32 overflow-y-auto space-y-1">
-            {result.details.map((d, idx) => (
-              <div key={idx} className="flex items-center gap-2 text-xs">
-                {d.status === 'verified' && <CheckCircle2 className="w-3 h-3 text-green-500 flex-shrink-0" />}
-                {d.status === 'unverified' && <AlertTriangle className="w-3 h-3 text-yellow-500 flex-shrink-0" />}
-                {d.status === 'failed' && <XCircle className="w-3 h-3 text-red-500 flex-shrink-0" />}
-                <Badge className={ENTITY_COLORS[d.entity] || 'bg-gray-700 text-gray-300'} style={{ fontSize: '9px' }}>
-                  {d.entity}
-                </Badge>
-                <span className="text-gray-300 truncate">{d.record_name}</span>
-                <span className="text-gray-600 font-mono">.{d.field}</span>
-              </div>
-            ))}
-          </div>
+      {result.old_asset_superseded && (
+        <div className="bg-yellow-900/10 border border-yellow-700/20 rounded-lg p-2 text-center">
+          <p className="text-xs text-yellow-400">Old asset marked as <strong>superseded</strong></p>
         </div>
       )}
 

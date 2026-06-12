@@ -25,6 +25,7 @@ const SCAN_CONFIG = [
   { entity: 'ProcedureEntry',  arrayFields: ['image_urls'], stringFields: [], textFields: ['content_html'] },
   { entity: 'EmailTemplate',   arrayFields: [], stringFields: [], textFields: ['body_intro', 'closing_text'] },
   { entity: 'Task',            arrayFields: [], stringFields: [], textFields: ['description'] },
+  { entity: 'ToDoListTask',   arrayFields: ['images'], stringFields: [], textFields: ['details'] },
 ];
 
 // Base44 public file URL patterns — same file can appear under different hostnames
