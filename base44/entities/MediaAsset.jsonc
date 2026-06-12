@@ -2,9 +2,41 @@
   "name": "MediaAsset",
   "type": "object",
   "properties": {
+    "file_name": {
+      "type": "string",
+      "description": "Original filename of the asset"
+    },
+    "full_relative_path": {
+      "type": "string",
+      "description": "Full relative path from public root, e.g. 6913f39cea91db2169cc30c4/42d15fcc2_SCR-20260327-jdit.png"
+    },
+    "folder_path": {
+      "type": "string",
+      "description": "Folder portion of the path, e.g. 6913f39cea91db2169cc30c4"
+    },
+    "public_url": {
+      "type": "string",
+      "description": "Full public URL of the asset"
+    },
     "file_url": {
       "type": "string",
-      "description": "URL of the uploaded file"
+      "description": "Base44 file URL (from UploadFile integration)"
+    },
+    "mime_type": {
+      "type": "string",
+      "description": "MIME type, e.g. image/png"
+    },
+    "file_size": {
+      "type": "number",
+      "description": "File size in bytes"
+    },
+    "width": {
+      "type": "number",
+      "description": "Image width in pixels"
+    },
+    "height": {
+      "type": "number",
+      "description": "Image height in pixels"
     },
     "type": {
       "type": "string",
@@ -13,15 +45,88 @@
         "video",
         "document"
       ],
+      "default": "image",
       "description": "Asset type"
     },
     "title": {
       "type": "string",
-      "description": "Asset title/filename"
+      "description": "Display title (optional)"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Admin notes about this asset"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "archived"
+      ],
+      "default": "active",
+      "description": "Asset status"
+    },
+    "archived": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether asset is archived"
+    },
+    "archived_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When asset was archived"
+    },
+    "archived_by": {
+      "type": "string",
+      "description": "User who archived"
+    },
+    "version": {
+      "type": "number",
+      "default": 1,
+      "description": "Version number, incremented on replacement"
+    },
+    "replaced_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When asset was last replaced"
+    },
+    "replaced_by": {
+      "type": "string",
+      "description": "User who last replaced the asset"
+    },
+    "source_context": {
+      "type": "string",
+      "enum": [
+        "upload",
+        "journal",
+        "comment",
+        "feedback",
+        "procedure",
+        "knowledge",
+        "task",
+        "email",
+        "client_page",
+        "other"
+      ],
+      "default": "upload",
+      "description": "Where this asset was originally uploaded from"
+    },
+    "used_in_contexts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Future: list of contexts where this asset is referenced"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Tags for organization"
     }
   },
   "required": [
-    "file_url",
-    "type"
+    "file_name",
+    "public_url"
   ]
 }
