@@ -7,7 +7,7 @@ export default function MediaFolderView({ folders, assets, currentPath, onNaviga
       {/* Folders */}
       {folders.length > 0 && (
         <div>
-          <h3 className="text-xs uppercase tracking-wider text-gray-500 mb-2 px-1">Folders ({folders.length})</h3>
+          <h3 className="text-xs uppercase tracking-wider text-gray-500 mb-2 px-1">Indexed Paths ({folders.length})</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {folders.map(folder => (
               <button
@@ -75,7 +75,7 @@ export default function MediaFolderView({ folders, assets, currentPath, onNaviga
       {folders.length === 0 && assets.length === 0 && (
         <div className="text-center py-12 text-gray-500">
           <Folder className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p>This folder is empty</p>
+          <p>No indexed assets in this path</p>
         </div>
       )}
     </div>

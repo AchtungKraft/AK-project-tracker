@@ -71,6 +71,11 @@ export default function MediaGridView({ assets, onSelectAsset, onReplace, onArch
               ARCHIVED
             </div>
           )}
+          {asset.status === 'superseded' && !asset.archived && (
+            <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-yellow-900/80 text-yellow-300 text-[9px] rounded font-medium">
+              SUPERSEDED
+            </div>
+          )}
           {(asset.version || 0) > 1 && (
             <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-blue-900/80 text-blue-300 text-[9px] rounded font-medium">
               v{asset.version}

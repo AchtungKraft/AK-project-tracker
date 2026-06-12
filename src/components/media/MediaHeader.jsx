@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
-import { Image, Upload, RefreshCw, Search, Link2, X, LayoutGrid, List, FolderOpen, ShieldCheck } from "lucide-react";
+import { Image, Upload, RefreshCw, Search, Link2, X, LayoutGrid, List, FolderOpen, ShieldCheck, Plus } from "lucide-react";
 
 export default function MediaHeader({
   searchTerm, onSearchChange,
@@ -34,7 +34,7 @@ export default function MediaHeader({
             <Image className="w-5 h-5 md:w-6 md:h-6 text-purple-400" />
           </div>
           <div>
-            <h1 className="text-xl md:text-3xl font-bold text-white">MEDIA LIBRARY</h1>
+            <h1 className="text-xl md:text-3xl font-bold text-white">MEDIA INDEX</h1>
             <p className="text-xs md:text-sm text-gray-400">
               {totalAssets} tracked assets • Use Audit to discover more
             </p>
@@ -48,16 +48,15 @@ export default function MediaHeader({
             className="border-gray-700 text-white gap-2"
           >
             <ShieldCheck className="w-4 h-4" />
-            <span className="hidden sm:inline">Audit</span>
+            <span className="hidden sm:inline">Scan & Audit</span>
           </Button>
           <Button
             onClick={() => setShowUrlInput(!showUrlInput)}
-            variant="outline"
             size="sm"
-            className="border-gray-700 text-white gap-2"
+            className="bg-blue-600 hover:bg-blue-700 gap-2"
           >
-            <Link2 className="w-4 h-4" />
-            <span className="hidden sm:inline">Go To URL</span>
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Register URL</span>
           </Button>
           <Button
             onClick={onUploadClick}
@@ -83,14 +82,14 @@ export default function MediaHeader({
       {showUrlInput && (
         <div className="flex gap-2 bg-gray-800/50 p-3 rounded-lg border border-gray-700">
           <Input
-            placeholder="Paste image URL... e.g. https://media.base44.com/images/public/..."
+            placeholder="Paste any public image URL to register it..."
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleGoToUrl()}
             className="bg-gray-900/50 border-gray-600 text-white flex-1"
           />
-          <Button onClick={handleGoToUrl} size="sm" className="bg-purple-600 hover:bg-purple-700">
-            Go
+          <Button onClick={handleGoToUrl} size="sm" className="bg-blue-600 hover:bg-blue-700">
+            Register & Go
           </Button>
           <Button onClick={() => setShowUrlInput(false)} variant="ghost" size="icon" className="text-gray-400">
             <X className="w-4 h-4" />
@@ -146,6 +145,7 @@ export default function MediaHeader({
           <SelectContent>
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="archived">Archived</SelectItem>
+            <SelectItem value="superseded">Superseded</SelectItem>
             <SelectItem value="all">All</SelectItem>
           </SelectContent>
         </Select>

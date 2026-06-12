@@ -263,7 +263,7 @@ export default function MediaUploadModal({ open, onClose, currentPath, existingA
             </p>
             <div className="space-y-2">
               <Button onClick={() => handleDuplicateAction('replace')} variant="outline" className="w-full border-blue-700 text-blue-400 justify-start gap-2">
-                Replace Existing (preserve URL)
+                Upload New Version (URL will change)
               </Button>
               <Button onClick={() => handleDuplicateAction('rename')} variant="outline" className="w-full border-gray-600 justify-start gap-2">
                 Rename Automatically

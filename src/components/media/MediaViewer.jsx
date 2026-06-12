@@ -4,7 +4,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Copy, ExternalLink, Download, Replace, Archive, ArchiveRestore, X } from "lucide-react";
+import { Copy, ExternalLink, Download, Replace, Archive, ArchiveRestore, X, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import moment from "moment";
 
@@ -38,6 +38,12 @@ export default function MediaViewer({ asset, open, onClose, onReplace, onArchive
             {asset.archived && (
               <Badge className="bg-red-900/50 text-red-300 text-xs">Archived</Badge>
             )}
+            {asset.status === 'superseded' && (
+              <Badge className="bg-yellow-900/50 text-yellow-300 text-xs">Superseded</Badge>
+            )}
+            {asset.status === 'missing' && (
+              <Badge className="bg-red-900/50 text-red-300 text-xs">Missing</Badge>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -64,6 +70,7 @@ export default function MediaViewer({ asset, open, onClose, onReplace, onArchive
             <MetaField label="Modified" value={asset.updated_date ? moment(asset.updated_date).format('MMM D, YYYY h:mm A') : '—'} />
             {asset.replaced_at && <MetaField label="Last Replaced" value={moment(asset.replaced_at).format('MMM D, YYYY h:mm A')} />}
             {asset.source_context && <MetaField label="Source" value={asset.source_context} />}
+            {asset.status && <MetaField label="Status" value={asset.status} />}
           </div>
 
           {/* URL */}
@@ -76,6 +83,25 @@ export default function MediaViewer({ asset, open, onClose, onReplace, onArchive
               </Button>
             </div>
           </div>
+
+          {/* Superseded info */}
+          {asset.status === 'superseded' && asset.superseded_by_url && (
+            <div className="bg-yellow-900/20 border border-yellow-700/30 rounded-lg p-3">
+              <label className="text-[10px] text-yellow-500 uppercase tracking-wider">Superseded By</label>
+              <div className="flex items-center gap-2 mt-1">
+                <code className="text-xs text-yellow-300 flex-1 break-all">{asset.superseded_by_url}</code>
+                <Button onClick={() => { navigator.clipboard.writeText(asset.superseded_by_url); toast.success('Copied'); }} variant="ghost" size="icon" className="flex-shrink-0 h-7 w-7">
+                  <Copy className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+              {asset.superseded_at && (
+                <p className="text-[10px] text-yellow-500/60 mt-1">on {moment(asset.superseded_at).format('MMM D, YYYY h:mm A')}</p>
+              )}
+              {asset.replacement_note && (
+                <p className="text-xs text-gray-400 mt-1">{asset.replacement_note}</p>
+              )}
+            </div>
+          )}
 
           {/* Notes */}
           {asset.notes && (
@@ -96,8 +122,8 @@ export default function MediaViewer({ asset, open, onClose, onReplace, onArchive
             <Button onClick={handleDownload} variant="outline" size="sm" className="border-gray-600 gap-2">
               <Download className="w-4 h-4" /> Download
             </Button>
-            <Button onClick={() => onReplace(asset)} variant="outline" size="sm" className="border-blue-700 text-blue-400 gap-2">
-              <Replace className="w-4 h-4" /> Replace Record
+            <Button onClick={() => onReplace(asset)} variant="outline" size="sm" className="border-orange-700 text-orange-400 gap-2">
+              <Replace className="w-4 h-4" /> Upload Replacement
             </Button>
             {asset.archived ? (
               <Button onClick={() => onUnarchive(asset)} variant="outline" size="sm" className="border-green-700 text-green-400 gap-2">

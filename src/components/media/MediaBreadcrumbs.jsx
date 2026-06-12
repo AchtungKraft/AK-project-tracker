@@ -11,14 +11,7 @@ export default function MediaBreadcrumbs({ currentPath, onNavigate }) {
         className="flex items-center gap-1 hover:text-purple-400 transition-colors whitespace-nowrap flex-shrink-0"
       >
         <Home className="w-3.5 h-3.5" />
-        <span>Images</span>
-      </button>
-      <ChevronRight className="w-3 h-3 text-gray-600 flex-shrink-0" />
-      <button
-        onClick={() => onNavigate("")}
-        className="hover:text-purple-400 transition-colors whitespace-nowrap flex-shrink-0"
-      >
-        Public
+        <span>Index</span>
       </button>
       {parts.map((part, idx) => {
         const path = parts.slice(0, idx + 1).join('/');

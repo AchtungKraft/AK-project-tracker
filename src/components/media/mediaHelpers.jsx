@@ -103,6 +103,8 @@ export function searchAssets(assets, term) {
  */
 export function filterByStatus(assets, status) {
   if (status === 'all') return assets;
-  if (status === 'archived') return assets.filter(a => a.archived);
-  return assets.filter(a => !a.archived);
+  if (status === 'archived') return assets.filter(a => a.archived || a.status === 'archived');
+  if (status === 'superseded') return assets.filter(a => a.status === 'superseded');
+  // 'active' — show assets that are active (not archived, not superseded, not missing)
+  return assets.filter(a => !a.archived && a.status !== 'superseded' && a.status !== 'missing');
 }

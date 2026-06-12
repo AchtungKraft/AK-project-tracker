@@ -30,7 +30,7 @@ export default function MediaBulkActions({ selectedIds, allAssets, onClearSelect
         <Archive className="w-3.5 h-3.5" /> Archive
       </Button>
       <Button onClick={onBulkMove} variant="outline" size="sm" className="border-blue-700 text-blue-400 gap-1.5 text-xs">
-        <FolderInput className="w-3.5 h-3.5" /> Move
+        <FolderInput className="w-3.5 h-3.5" /> Move Index Record
       </Button>
       <button onClick={onClearSelection} className="text-gray-400 hover:text-white ml-1">
         <X className="w-4 h-4" />

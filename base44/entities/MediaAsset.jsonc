@@ -12,7 +12,7 @@
     },
     "folder_path": {
       "type": "string",
-      "description": "Folder portion of the path, e.g. 6913f39cea91db2169cc30c4"
+      "description": "Indexed folder portion of the path, e.g. 6913f39cea91db2169cc30c4"
     },
     "public_url": {
       "type": "string",
@@ -60,7 +60,9 @@
       "type": "string",
       "enum": [
         "active",
-        "archived"
+        "archived",
+        "missing",
+        "superseded"
       ],
       "default": "active",
       "description": "Asset status"
@@ -93,6 +95,27 @@
       "type": "string",
       "description": "User who last replaced the asset"
     },
+    "superseded_by_url": {
+      "type": "string",
+      "description": "URL of the replacement image"
+    },
+    "superseded_by_asset_id": {
+      "type": "string",
+      "description": "ID of the MediaAsset that replaced this one"
+    },
+    "superseded_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this asset was superseded"
+    },
+    "superseded_by_user": {
+      "type": "string",
+      "description": "User who superseded this asset"
+    },
+    "replacement_note": {
+      "type": "string",
+      "description": "Note explaining the replacement"
+    },
     "source_context": {
       "type": "string",
       "enum": [
@@ -115,7 +138,7 @@
       "items": {
         "type": "string"
       },
-      "description": "Future: list of contexts where this asset is referenced"
+      "description": "List of contexts where this asset is referenced"
     },
     "tags": {
       "type": "array",

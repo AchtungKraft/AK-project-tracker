@@ -199,7 +199,7 @@ const getNavigationSections = () => {
         { title: "Wiring Audit", url: createPageUrl("WiringAuditDashboard"), icon: Settings },
         { title: "Data Normalization", url: createPageUrl("SupplyNormalization"), icon: Settings },
         { title: "Data Alignment", url: createPageUrl("DataAlignmentDashboard"), icon: Settings },
-        { title: "Media Library", url: "/medialibrary", icon: Image },
+        { title: "Media Index", url: "/medialibrary", icon: Image },
       ],
     },
   ];

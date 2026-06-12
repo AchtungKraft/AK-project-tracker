@@ -8,7 +8,8 @@ import { FolderOpen, ChevronRight, Home, FolderInput, Loader2 } from "lucide-rea
 import { extractFolders } from "./mediaHelpers";
 
 /**
- * Modal to move assets to a different folder (metadata only — updates folder_path).
+ * Move Index Record — updates folder_path metadata only.
+ * Does NOT move physical files in Base44 storage.
  */
 export default function MediaMoveModal({ open, onClose, assets, allAssets, onConfirm, isLoading }) {
   const [targetPath, setTargetPath] = useState('');
@@ -41,7 +42,7 @@ export default function MediaMoveModal({ open, onClose, assets, allAssets, onCon
         <DialogHeader>
           <DialogTitle className="text-white flex items-center gap-2">
             <FolderInput className="w-5 h-5 text-blue-400" />
-            Move {assets.length} Asset{assets.length > 1 ? 's' : ''}
+            Move Index Record{assets.length > 1 ? 's' : ''} ({assets.length})
           </DialogTitle>
         </DialogHeader>
 
@@ -56,7 +57,7 @@ export default function MediaMoveModal({ open, onClose, assets, allAssets, onCon
 
           {/* Target folder */}
           <div>
-            <label className="text-xs text-gray-500 uppercase tracking-wider mb-2 block">Target Folder</label>
+            <label className="text-xs text-gray-500 uppercase tracking-wider mb-2 block">Target Indexed Path</label>
             <button
               onClick={() => setTargetPath('')}
               className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors ${

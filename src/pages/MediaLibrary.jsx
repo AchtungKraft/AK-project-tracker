@@ -15,6 +15,7 @@ import MediaReplaceModal from "@/components/media/MediaReplaceModal";
 import MediaBulkActions from "@/components/media/MediaBulkActions";
 import MediaMoveModal from "@/components/media/MediaMoveModal";
 import MediaStorageAudit from "@/components/media/MediaStorageAudit";
+import MediaUrlReferenceReplacer from "@/components/media/MediaUrlReferenceReplacer";
 import {
   parseMediaUrl, extractFolders, getAssetsInFolder,
   sortAssets, searchAssets, filterByStatus
@@ -41,6 +42,7 @@ export default function MediaLibrary() {
   const [showAudit, setShowAudit] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [isMoving, setIsMoving] = useState(false);
+  const [referenceReplacer, setReferenceReplacer] = useState(null); // { oldUrl, newUrl }
 
   // Data
   const { data: allAssets = [], isLoading } = useQuery({
@@ -327,6 +329,10 @@ export default function MediaLibrary() {
         open={!!replaceAsset}
         onClose={() => setReplaceAsset(null)}
         onSuccess={() => { setReplaceAsset(null); invalidate(); }}
+        onFindReferences={(oldUrl, newUrl) => {
+          setReplaceAsset(null);
+          setReferenceReplacer({ oldUrl, newUrl });
+        }}
       />
 
       <MediaMoveModal
@@ -343,6 +349,13 @@ export default function MediaLibrary() {
         onClose={() => setShowAudit(false)}
         allAssets={allAssets}
         onRefresh={invalidate}
+      />
+
+      <MediaUrlReferenceReplacer
+        open={!!referenceReplacer}
+        onClose={() => setReferenceReplacer(null)}
+        oldUrl={referenceReplacer?.oldUrl || ''}
+        newUrl={referenceReplacer?.newUrl || ''}
       />
     </div>
   );

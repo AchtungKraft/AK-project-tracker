@@ -173,9 +173,9 @@ export default function MediaStorageAudit({ open, onClose, allAssets, onRefresh 
   };
 
   const tabs = [
-    { key: 'scan', label: 'Entity Scan', icon: Database },
-    { key: 'probe', label: 'URL Probe & Register', icon: Link2 },
-    { key: 'capabilities', label: 'Platform Report', icon: HardDrive },
+    { key: 'scan', label: 'Scan App References', icon: Database },
+    { key: 'probe', label: 'Register URLs', icon: Link2 },
+    { key: 'capabilities', label: 'Platform Limitations', icon: HardDrive },
   ];
 
   return (
@@ -184,7 +184,7 @@ export default function MediaStorageAudit({ open, onClose, allAssets, onRefresh 
         <DialogHeader>
           <DialogTitle className="text-white flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-green-400" />
-            Storage Audit & Discovery
+            Scan & Audit — Media Index
           </DialogTitle>
         </DialogHeader>
 
@@ -205,15 +205,15 @@ export default function MediaStorageAudit({ open, onClose, allAssets, onRefresh 
         {activeTab === 'scan' && (
           <div className="space-y-4">
             <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-3 text-xs text-blue-300/90">
-              <strong>What this does:</strong> Scans app entities (Project, Part, JournalEntry, etc.) for image URLs
-              and checks which ones are missing MediaAsset records. This is a <em>usage-discovery</em> layer —
-              it finds images referenced in your data.
+              <strong>Scan App References:</strong> Scans entities (Project, Part, JournalEntry, Knowledge, Feedback, etc.) for image URLs
+              and checks which ones are missing from the Media Index. This finds images <em>already used</em> in your data —
+              it does not discover unused files in storage.
             </div>
 
             {!results && !scanning && (
               <div className="text-center py-6">
                 <Button onClick={runEntityScan} className="bg-green-600 hover:bg-green-700 gap-2">
-                  <Search className="w-4 h-4" /> Run Entity Scan
+                  <Search className="w-4 h-4" /> Scan App References
                 </Button>
               </div>
             )}
@@ -235,7 +235,7 @@ export default function MediaStorageAudit({ open, onClose, allAssets, onRefresh 
                 </div>
 
                 <div className="bg-gray-800/50 rounded-lg border border-gray-700 p-3">
-                  <h4 className="text-xs text-gray-500 uppercase tracking-wider mb-2">Entity Scan</h4>
+                  <h4 className="text-xs text-gray-500 uppercase tracking-wider mb-2">App References Scanned</h4>
                   {Object.entries(results.entityScanResults).map(([name, data]) => (
                     <div key={name} className="flex items-center justify-between text-sm py-0.5">
                       <span className="text-gray-300">{name}</span>
@@ -302,10 +302,10 @@ export default function MediaStorageAudit({ open, onClose, allAssets, onRefresh 
         {activeTab === 'probe' && (
           <div className="space-y-4">
             <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-3 text-xs text-blue-300/90">
-              <strong>What this does:</strong> Paste one or more image URLs (one per line).
-              The system will check if each URL loads, whether it already has a MediaAsset record,
-              and let you register any untracked images. Use this to manually add images that exist
-              in storage but aren't tracked.
+              <strong>Register Known URLs:</strong> Paste one or more image URLs (one per line).
+              The system will verify each URL loads, check if it's already in the Media Index,
+              and let you register any untracked images. Use this to manually index images
+              when you know the URL but they aren't referenced by any entity.
             </div>
 
             <Textarea
