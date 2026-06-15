@@ -119,16 +119,48 @@ function getFileName(f) {
   return f.name || f.label || f.file_url?.split('/').pop()?.split('?')[0] || 'file';
 }
 
-function isImageUrl(url) {
+function isImageUrl(url, fileName) {
   if (!url || typeof url !== 'string') return false;
   const clean = url.split('?')[0].toLowerCase();
-  return IMAGE_EXTENSIONS.some(ext => clean.endsWith('.' + ext));
+  // Check URL path for standard image file extensions
+  if (IMAGE_EXTENSIONS.some(ext => clean.endsWith('.' + ext))) return true;
+  // Check for image extensions anywhere in the URL path (Base44 encoded filenames)
+  if (IMAGE_EXTENSIONS.some(ext => clean.includes('.' + ext))) return true;
+  // Check the original file name for image extensions (covers extensionless URLs)
+  if (fileName && typeof fileName === 'string') {
+    const cleanName = fileName.split('?')[0].toLowerCase();
+    if (IMAGE_EXTENSIONS.some(ext => cleanName.endsWith('.' + ext))) return true;
+  }
+  return false;
+}
+
+// Determine if a file should be treated as an image, using all available data
+function classifyFile(f) {
+  const url = getFileUrl(f);
+  const name = getFileName(f);
+  const mimeType = (typeof f === 'object' && f !== null) ? (f.mimeType || f.mime_type || f.type || f.attachment_type || '') : '';
+  
+  // Check MIME type first (most reliable)
+  if (mimeType && mimeType.startsWith('image/')) return true;
+  // Check attachment_type field
+  if (typeof f === 'object' && f?.attachment_type === 'image') return true;
+  // Check URL + name for image extensions
+  if (isImageUrl(url, name)) return true;
+  return false;
 }
 
 async function checkUrlAccessible(url) {
   try {
-    const resp = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(4000) });
-    return resp.ok;
+    // Try HEAD first (fast), fall back to GET with range if HEAD fails
+    let resp = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(4000) }).catch(() => null);
+    if (resp?.ok) return true;
+    // Some CDNs reject HEAD — try a tiny GET range
+    resp = await fetch(url, {
+      method: 'GET',
+      headers: { 'Range': 'bytes=0-0' },
+      signal: AbortSignal.timeout(4000),
+    }).catch(() => null);
+    return resp?.ok || resp?.status === 206;
   } catch {
     return false;
   }
@@ -143,7 +175,7 @@ function buildFilesHtml(files, imageAccessMap) {
   for (const f of files) {
     const url = getFileUrl(f);
     const name = getFileName(f);
-    if (url && isImageUrl(url) && imageAccessMap.get(url)) {
+    if (url && classifyFile(f) && imageAccessMap.get(url)) {
       images.push({ url, name });
     } else {
       nonImages.push({ url, name });
@@ -157,7 +189,7 @@ function buildFilesHtml(files, imageAccessMap) {
   if (previewImages.length > 0) {
     const imgTags = previewImages.map(img =>
       `<div style="margin-bottom:12px;">
-        <img src="${img.url}" alt="${img.name}" style="max-width:560px;width:100%;height:auto;border-radius:8px;display:block;" />
+        <img src="${img.url}" alt="${img.name}" width="560" style="display:block;max-width:560px;width:100%;height:auto;border-radius:8px;" />
         <div style="font-size:11px;color:#999;margin-top:4px;">${img.name}</div>
       </div>`
     ).join('');
@@ -194,7 +226,7 @@ function buildFilesHtml(files, imageAccessMap) {
   // Images that failed access check — show as links
   const failedImages = files.filter(f => {
     const url = getFileUrl(f);
-    return url && isImageUrl(url) && !imageAccessMap.get(url);
+    return url && classifyFile(f) && !imageAccessMap.get(url);
   });
   if (failedImages.length > 0) {
     const fallbackItems = failedImages.map(f => {
@@ -358,22 +390,49 @@ Deno.serve(async (req) => {
     const commentText = getCommentText(comment);
     const subject = buildSubject(actionType, projectName);
 
+    // ── DEBUG: Log exact file payload received ──
+    console.log('[NOTIFICATION DEBUG] Raw files payload:', JSON.stringify(files));
+    if (files && files.length > 0) {
+      files.forEach((f, i) => {
+        const url = getFileUrl(f);
+        const name = getFileName(f);
+        const ext = url ? url.split('?')[0].split('.').pop().toLowerCase() : 'none';
+        const isImg = classifyFile(f);
+        const mimeType = (typeof f === 'object' && f !== null) ? (f.mimeType || f.mime_type || f.type || f.attachment_type || 'none') : 'none';
+        console.log(`[NOTIFICATION DEBUG] File[${i}]: name="${name}" url="${url || 'NULL'}" ext="${ext}" mime="${mimeType}" isImage=${isImg}`);
+      });
+    }
+
     // Pre-check image URL accessibility for inline previews
     let filesHtml = '';
     if (files && files.length > 0) {
       const imageAccessMap = new Map();
       const imageUrls = files
+        .filter(f => classifyFile(f))
         .map(f => getFileUrl(f))
-        .filter(url => url && isImageUrl(url));
+        .filter(url => !!url);
       const uniqueUrls = [...new Set(imageUrls)];
+
+      console.log(`[NOTIFICATION DEBUG] Image URLs to check: ${uniqueUrls.length}`, uniqueUrls);
 
       // Check all image URLs in parallel (with timeout)
       const accessResults = await Promise.all(
-        uniqueUrls.map(async url => ({ url, ok: await checkUrlAccessible(url) }))
+        uniqueUrls.map(async url => {
+          const resp = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(4000) }).catch(() => null);
+          const ok = resp?.ok || false;
+          const status = resp?.status || 'NETWORK_ERROR';
+          const contentType = resp?.headers?.get('content-type') || 'unknown';
+          console.log(`[NOTIFICATION DEBUG] URL check: ${url} → status=${status} content-type=${contentType} accessible=${ok}`);
+          return { url, ok };
+        })
       );
       for (const r of accessResults) imageAccessMap.set(r.url, r.ok);
 
       filesHtml = buildFilesHtml(files, imageAccessMap);
+      console.log(`[NOTIFICATION DEBUG] Generated filesHtml length: ${filesHtml.length}`);
+      console.log(`[NOTIFICATION DEBUG] Contains <img: ${filesHtml.includes('<img ')}`);
+      console.log(`[NOTIFICATION DEBUG] <img count: ${(filesHtml.match(/<img /g) || []).length}`);
+      console.log(`[NOTIFICATION DEBUG] filesHtml preview:`, filesHtml.substring(0, 500));
     }
 
     const html = buildNotificationHtml({
@@ -388,6 +447,14 @@ Deno.serve(async (req) => {
       newStatus,
       directLink,
     });
+
+    // ── DEBUG: Final email HTML analysis ───────────────
+    const imgTagCount = (html.match(/<img /g) || []).length;
+    const aTagCount = (html.match(/<a /g) || []).length;
+    console.log(`[NOTIFICATION DEBUG] Final email HTML: ${html.length} chars, <img> tags: ${imgTagCount}, <a> tags: ${aTagCount}`);
+    if (imgTagCount === 0 && files && files.length > 0) {
+      console.warn('[NOTIFICATION DEBUG] WARNING: No <img> tags in final HTML despite files being present!');
+    }
 
     // ── EMAIL TRANSPORT — direct Resend API call ───────────────
     const resendApiKey = Deno.env.get('RESEND_API_KEY');

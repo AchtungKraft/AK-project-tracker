@@ -200,16 +200,27 @@ Deno.serve(async (req) => {
                 (Array.isArray(commentData.files) && commentData.files.length > 0);
             const notifyActionType = hasUploads ? 'UPLOAD' : 'COMMENT';
 
-            // Build file list for notification
+            // Build file list for notification — MUST include file_url for image previews
             const notifyFiles = [];
             if (createdAttachments.length > 0) {
-                createdAttachments.forEach(att => notifyFiles.push({ name: att.label || att.file_url || 'file' }));
+                createdAttachments.forEach(att => notifyFiles.push({
+                    name: att.label || att.file_url || 'file',
+                    file_url: att.file_url || null,
+                    attachment_type: att.attachment_type || null,
+                }));
             }
             if (Array.isArray(commentData.photos)) {
-                commentData.photos.forEach((url, i) => notifyFiles.push({ name: `photo_${i + 1}.jpg` }));
+                commentData.photos.forEach((url, i) => notifyFiles.push({
+                    name: `photo_${i + 1}`,
+                    file_url: url,
+                    attachment_type: 'image',
+                }));
             }
             if (Array.isArray(commentData.files)) {
-                commentData.files.forEach(f => notifyFiles.push({ name: f.name || f.url || 'file' }));
+                commentData.files.forEach(f => notifyFiles.push({
+                    name: f.name || f.url || 'file',
+                    file_url: f.url || null,
+                }));
             }
 
             base44.asServiceRole.functions.invoke('sendClientActivityNotification', {
