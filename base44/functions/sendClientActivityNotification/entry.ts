@@ -103,7 +103,12 @@ function buildActionColor(actionType) {
 
 // ── IMAGE PREVIEW HELPERS ────────────────────────────────────────────
 
-const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'];
+// Extensions that email clients can render inline
+const RENDERABLE_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+// Extensions we recognize as images but cannot render inline in email
+const NON_RENDERABLE_IMAGE_EXTENSIONS = ['heic', 'heif', 'tiff', 'bmp', 'svg', 'avif'];
+// Combined for classification
+const ALL_IMAGE_EXTENSIONS = [...RENDERABLE_IMAGE_EXTENSIONS, ...NON_RENDERABLE_IMAGE_EXTENSIONS];
 const MAX_INLINE_PREVIEWS = 6;
 
 function getFileUrl(f) {
@@ -122,16 +127,24 @@ function getFileName(f) {
 function isImageUrl(url, fileName) {
   if (!url || typeof url !== 'string') return false;
   const clean = url.split('?')[0].toLowerCase();
-  // Check URL path for standard image file extensions
-  if (IMAGE_EXTENSIONS.some(ext => clean.endsWith('.' + ext))) return true;
-  // Check for image extensions anywhere in the URL path (Base44 encoded filenames)
-  if (IMAGE_EXTENSIONS.some(ext => clean.includes('.' + ext))) return true;
-  // Check the original file name for image extensions (covers extensionless URLs)
+  if (ALL_IMAGE_EXTENSIONS.some(ext => clean.endsWith('.' + ext))) return true;
+  if (ALL_IMAGE_EXTENSIONS.some(ext => clean.includes('.' + ext))) return true;
   if (fileName && typeof fileName === 'string') {
     const cleanName = fileName.split('?')[0].toLowerCase();
-    if (IMAGE_EXTENSIONS.some(ext => cleanName.endsWith('.' + ext))) return true;
+    if (ALL_IMAGE_EXTENSIONS.some(ext => cleanName.endsWith('.' + ext))) return true;
   }
   return false;
+}
+
+// Check if image format is renderable in email clients (Gmail, Outlook, Apple Mail)
+function isRenderableImage(f) {
+  const url = getFileUrl(f);
+  const name = getFileName(f);
+  const clean = (url || '').split('?')[0].toLowerCase();
+  const cleanName = (name || '').split('?')[0].toLowerCase();
+  return RENDERABLE_IMAGE_EXTENSIONS.some(ext =>
+    clean.endsWith('.' + ext) || clean.includes('.' + ext) || cleanName.endsWith('.' + ext)
+  );
 }
 
 // Determine if a file should be treated as an image, using all available data
@@ -167,49 +180,78 @@ async function checkUrlAccessible(url) {
 }
 
 function buildFilesHtml(files, imageAccessMap) {
-  if (!files || files.length === 0) return '';
+  if (!files || files.length === 0) return { html: '', stats: { total: 0, inlineImages: 0, fallbackLinks: 0 } };
 
-  const images = [];
-  const nonImages = [];
+  // Process files in ORIGINAL UPLOAD ORDER — no reordering
+  const renderableImages = [];  // Images we can show inline
+  const fallbackImages = [];    // Images that failed access or are non-renderable formats
+  const nonImageFiles = [];     // Non-image files
 
   for (const f of files) {
     const url = getFileUrl(f);
     const name = getFileName(f);
-    if (url && classifyFile(f) && imageAccessMap.get(url)) {
-      images.push({ url, name });
+    const isImage = classifyFile(f);
+    const renderable = isImage && isRenderableImage(f);
+    const accessible = url ? imageAccessMap.get(url) : false;
+
+    if (isImage && renderable && accessible) {
+      renderableImages.push({ url, name });
+    } else if (isImage) {
+      // Non-renderable format (HEIC/HEIF) or failed access — explicit fallback
+      fallbackImages.push({ url, name, reason: !renderable ? 'unsupported_format' : 'unavailable' });
     } else {
-      nonImages.push({ url, name });
+      nonImageFiles.push({ url, name });
     }
   }
 
   const parts = [];
 
-  // Inline image previews (max 6)
-  const previewImages = images.slice(0, MAX_INLINE_PREVIEWS);
+  // Inline image previews (max 6) — hero image first at 700px, rest at 500px
+  const previewImages = renderableImages.slice(0, MAX_INLINE_PREVIEWS);
   if (previewImages.length > 0) {
-    const imgTags = previewImages.map(img =>
-      `<div style="margin-bottom:12px;">
-        <img src="${img.url}" alt="${img.name}" width="560" style="display:block;max-width:560px;width:100%;height:auto;border-radius:8px;" />
+    const imgTags = previewImages.map((img, idx) => {
+      const isHero = idx === 0;
+      const maxW = isHero ? 700 : 500;
+      return `<div style="margin-bottom:12px;">
+        <img src="${img.url}" alt="${img.name}" width="${maxW}" style="display:block;max-width:${maxW}px;width:100%;height:auto;border-radius:8px;" />
         <div style="font-size:11px;color:#999;margin-top:4px;">${img.name}</div>
-      </div>`
-    ).join('');
+      </div>`;
+    }).join('');
 
-    const overflow = images.length > MAX_INLINE_PREVIEWS
-      ? `<div style="font-size:13px;color:#666;margin-top:4px;">+ ${images.length - MAX_INLINE_PREVIEWS} additional image${images.length - MAX_INLINE_PREVIEWS > 1 ? 's' : ''}</div>`
+    const overflow = renderableImages.length > MAX_INLINE_PREVIEWS
+      ? `<div style="font-size:13px;color:#666;margin-top:4px;">+ ${renderableImages.length - MAX_INLINE_PREVIEWS} additional image${renderableImages.length - MAX_INLINE_PREVIEWS > 1 ? 's' : ''}</div>`
       : '';
 
     parts.push(`
       <div style="margin:16px 20px;">
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#888;margin-bottom:10px;">Images (${images.length})</div>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#888;margin-bottom:10px;">Images (${renderableImages.length})</div>
         ${imgTags}
         ${overflow}
       </div>
     `);
   }
 
+  // Fallback images — explicit "preview unavailable" with link
+  if (fallbackImages.length > 0) {
+    const fallbackItems = fallbackImages.map(f => {
+      const label = f.reason === 'unsupported_format'
+        ? `${f.name} — <span style="color:#b45309;">Unsupported format</span>`
+        : `${f.name} — <span style="color:#b45309;">Image Preview Unavailable</span>`;
+      const link = f.url
+        ? ` — <a href="${f.url}" style="color:#2563eb;text-decoration:underline;">Open File →</a>`
+        : '';
+      return `<li style="margin:6px 0;font-size:13px;color:#444;">${label}${link}</li>`;
+    }).join('');
+    parts.push(`
+      <div style="margin:8px 20px 16px;">
+        <ul style="margin:0;padding-left:20px;">${fallbackItems}</ul>
+      </div>
+    `);
+  }
+
   // Non-image file links
-  if (nonImages.length > 0) {
-    const linkItems = nonImages.map(f => {
+  if (nonImageFiles.length > 0) {
+    const linkItems = nonImageFiles.map(f => {
       if (f.url) {
         return `<li style="margin:4px 0;font-size:13px;color:#444;">${f.name} — <a href="${f.url}" style="color:#2563eb;text-decoration:underline;">Open File →</a></li>`;
       }
@@ -217,31 +259,19 @@ function buildFilesHtml(files, imageAccessMap) {
     }).join('');
     parts.push(`
       <div style="margin:16px 20px;">
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#888;margin-bottom:6px;">Files (${nonImages.length})</div>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#888;margin-bottom:6px;">Files (${nonImageFiles.length})</div>
         <ul style="margin:0;padding-left:20px;">${linkItems}</ul>
       </div>
     `);
   }
 
-  // Images that failed access check — show as links
-  const failedImages = files.filter(f => {
-    const url = getFileUrl(f);
-    return url && classifyFile(f) && !imageAccessMap.get(url);
-  });
-  if (failedImages.length > 0) {
-    const fallbackItems = failedImages.map(f => {
-      const url = getFileUrl(f);
-      const name = getFileName(f);
-      return `<li style="margin:4px 0;font-size:13px;color:#444;">${name} — <a href="${url}" style="color:#2563eb;text-decoration:underline;">Open File →</a></li>`;
-    }).join('');
-    parts.push(`
-      <div style="margin:4px 20px 16px;">
-        <ul style="margin:0;padding-left:20px;">${fallbackItems}</ul>
-      </div>
-    `);
-  }
+  const stats = {
+    total: files.length,
+    inlineImages: previewImages.length,
+    fallbackLinks: fallbackImages.length + nonImageFiles.length,
+  };
 
-  return parts.join('');
+  return { html: parts.join(''), stats };
 }
 
 // ── EMAIL BUILDER ────────────────────────────────────────────────────
@@ -390,49 +420,29 @@ Deno.serve(async (req) => {
     const commentText = getCommentText(comment);
     const subject = buildSubject(actionType, projectName);
 
-    // ── DEBUG: Log exact file payload received ──
-    console.log('[NOTIFICATION DEBUG] Raw files payload:', JSON.stringify(files));
-    if (files && files.length > 0) {
-      files.forEach((f, i) => {
-        const url = getFileUrl(f);
-        const name = getFileName(f);
-        const ext = url ? url.split('?')[0].split('.').pop().toLowerCase() : 'none';
-        const isImg = classifyFile(f);
-        const mimeType = (typeof f === 'object' && f !== null) ? (f.mimeType || f.mime_type || f.type || f.attachment_type || 'none') : 'none';
-        console.log(`[NOTIFICATION DEBUG] File[${i}]: name="${name}" url="${url || 'NULL'}" ext="${ext}" mime="${mimeType}" isImage=${isImg}`);
-      });
-    }
-
     // Pre-check image URL accessibility for inline previews
     let filesHtml = '';
+    let fileStats = { total: 0, inlineImages: 0, fallbackLinks: 0 };
     if (files && files.length > 0) {
       const imageAccessMap = new Map();
       const imageUrls = files
-        .filter(f => classifyFile(f))
+        .filter(f => classifyFile(f) && isRenderableImage(f))
         .map(f => getFileUrl(f))
         .filter(url => !!url);
       const uniqueUrls = [...new Set(imageUrls)];
 
-      console.log(`[NOTIFICATION DEBUG] Image URLs to check: ${uniqueUrls.length}`, uniqueUrls);
-
-      // Check all image URLs in parallel (with timeout)
+      // Check all image URLs in parallel using robust HEAD→GET fallback
       const accessResults = await Promise.all(
         uniqueUrls.map(async url => {
-          const resp = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(4000) }).catch(() => null);
-          const ok = resp?.ok || false;
-          const status = resp?.status || 'NETWORK_ERROR';
-          const contentType = resp?.headers?.get('content-type') || 'unknown';
-          console.log(`[NOTIFICATION DEBUG] URL check: ${url} → status=${status} content-type=${contentType} accessible=${ok}`);
+          const ok = await checkUrlAccessible(url);
           return { url, ok };
         })
       );
       for (const r of accessResults) imageAccessMap.set(r.url, r.ok);
 
-      filesHtml = buildFilesHtml(files, imageAccessMap);
-      console.log(`[NOTIFICATION DEBUG] Generated filesHtml length: ${filesHtml.length}`);
-      console.log(`[NOTIFICATION DEBUG] Contains <img: ${filesHtml.includes('<img ')}`);
-      console.log(`[NOTIFICATION DEBUG] <img count: ${(filesHtml.match(/<img /g) || []).length}`);
-      console.log(`[NOTIFICATION DEBUG] filesHtml preview:`, filesHtml.substring(0, 500));
+      const result = buildFilesHtml(files, imageAccessMap);
+      filesHtml = result.html;
+      fileStats = result.stats;
     }
 
     const html = buildNotificationHtml({
@@ -448,12 +458,14 @@ Deno.serve(async (req) => {
       directLink,
     });
 
-    // ── DEBUG: Final email HTML analysis ───────────────
-    const imgTagCount = (html.match(/<img /g) || []).length;
-    const aTagCount = (html.match(/<a /g) || []).length;
-    console.log(`[NOTIFICATION DEBUG] Final email HTML: ${html.length} chars, <img> tags: ${imgTagCount}, <a> tags: ${aTagCount}`);
-    if (imgTagCount === 0 && files && files.length > 0) {
-      console.warn('[NOTIFICATION DEBUG] WARNING: No <img> tags in final HTML despite files being present!');
+    // Permanent file summary log
+    if (fileStats.total > 0) {
+      console.log(JSON.stringify({
+        event: 'NOTIFICATION_FILES_SUMMARY',
+        total: fileStats.total,
+        inlineImages: fileStats.inlineImages,
+        fallbackLinks: fileStats.fallbackLinks,
+      }));
     }
 
     // ── EMAIL TRANSPORT — direct Resend API call ───────────────
