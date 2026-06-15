@@ -23,7 +23,8 @@ const NOTIFICATION_RECIPIENTS = [
   'Sales@achtungkraft.com',
 ];
 
-const APP_BASE_URL = 'https://achtungkraft.base44.app';
+// Production internal app domain — must match sendRequestStatusUpdateEmail team links
+const APP_BASE_URL = 'https://projects.achtungkraft.com';
 
 // Action type → email subject template
 const SUBJECT_TEMPLATES = {
