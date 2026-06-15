@@ -184,6 +184,44 @@ Deno.serve(async (req) => {
             await base44.asServiceRole.entities.ClientFeedbackRequest.update(request.id, requestUpdateData);
         }
 
+        // ── INTERNAL NOTIFICATION — fire and forget ──────────────────
+        // Always client-originated (this endpoint requires token/slug)
+        {
+            // Resolve client name
+            let resolvedClientName = 'Client';
+            try {
+                const contactList = await base44.asServiceRole.entities.ClientContact.filter({ id: access.client_contact_id });
+                if (contactList[0]) resolvedClientName = contactList[0].name || resolvedClientName;
+            } catch (_) { /* non-critical */ }
+
+            // Determine action type — UPLOAD if files present, otherwise COMMENT
+            const hasUploads = (createdAttachments.length > 0) ||
+                (Array.isArray(commentData.photos) && commentData.photos.length > 0) ||
+                (Array.isArray(commentData.files) && commentData.files.length > 0);
+            const notifyActionType = hasUploads ? 'UPLOAD' : 'COMMENT';
+
+            // Build file list for notification
+            const notifyFiles = [];
+            if (createdAttachments.length > 0) {
+                createdAttachments.forEach(att => notifyFiles.push({ name: att.label || att.file_url || 'file' }));
+            }
+            if (Array.isArray(commentData.photos)) {
+                commentData.photos.forEach((url, i) => notifyFiles.push({ name: `photo_${i + 1}.jpg` }));
+            }
+            if (Array.isArray(commentData.files)) {
+                commentData.files.forEach(f => notifyFiles.push({ name: f.name || f.url || 'file' }));
+            }
+
+            base44.asServiceRole.functions.invoke('sendClientActivityNotification', {
+                projectId: request.project_id,
+                requestId,
+                clientName: resolvedClientName,
+                actionType: notifyActionType,
+                comment: commentBody || commentContentFallback || null,
+                files: notifyFiles.length > 0 ? notifyFiles : null,
+            }).catch(err => console.error('[NOTIFICATION] Failed:', err.message));
+        }
+
         return Response.json({
             success: true,
             comment: newComment,

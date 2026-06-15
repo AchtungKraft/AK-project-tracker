@@ -196,6 +196,28 @@ Deno.serve(async (req) => {
             console.log(`[STATUS UPDATE] Skipping - decision "${decision}" does not map to a status`);
         }
 
+        // ── INTERNAL NOTIFICATION — fire and forget ──────────────────
+        // Only send for client-originated decisions (not internal users)
+        if (decidedByType === 'client_contact') {
+            const notifyActionType = decision === 'approved' ? 'APPROVED' : 'REVISION_REQUESTED';
+            // Resolve client name
+            let resolvedClientName = 'Client';
+            try {
+                const contactList = await base44.asServiceRole.entities.ClientContact.filter({ id: decidedById });
+                if (contactList[0]) resolvedClientName = contactList[0].name || resolvedClientName;
+            } catch (_) { /* non-critical */ }
+
+            base44.asServiceRole.functions.invoke('sendClientActivityNotification', {
+                projectId: request.project_id,
+                requestId,
+                clientName: resolvedClientName,
+                actionType: notifyActionType,
+                comment: note || null,
+                previousStatus: request.status,
+                newStatus: updatedRequest?.status || request.status,
+            }).catch(err => console.error('[NOTIFICATION] Failed:', err.message));
+        }
+
         return Response.json({
             success: true,
             decisions,
