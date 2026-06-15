@@ -101,11 +101,122 @@ function buildActionColor(actionType) {
   return colors[actionType] || '#6b7280';
 }
 
+// ── IMAGE PREVIEW HELPERS ────────────────────────────────────────────
+
+const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'];
+const MAX_INLINE_PREVIEWS = 6;
+
+function getFileUrl(f) {
+  if (typeof f === 'string') return f;
+  return f.file_url || f.url || null;
+}
+
+function getFileName(f) {
+  if (typeof f === 'string') {
+    const decoded = decodeURIComponent(f).split('/').pop().split('?')[0];
+    return decoded || 'file';
+  }
+  return f.name || f.label || f.file_url?.split('/').pop()?.split('?')[0] || 'file';
+}
+
+function isImageUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  const clean = url.split('?')[0].toLowerCase();
+  return IMAGE_EXTENSIONS.some(ext => clean.endsWith('.' + ext));
+}
+
+async function checkUrlAccessible(url) {
+  try {
+    const resp = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(4000) });
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
+function buildFilesHtml(files, imageAccessMap) {
+  if (!files || files.length === 0) return '';
+
+  const images = [];
+  const nonImages = [];
+
+  for (const f of files) {
+    const url = getFileUrl(f);
+    const name = getFileName(f);
+    if (url && isImageUrl(url) && imageAccessMap.get(url)) {
+      images.push({ url, name });
+    } else {
+      nonImages.push({ url, name });
+    }
+  }
+
+  const parts = [];
+
+  // Inline image previews (max 6)
+  const previewImages = images.slice(0, MAX_INLINE_PREVIEWS);
+  if (previewImages.length > 0) {
+    const imgTags = previewImages.map(img =>
+      `<div style="margin-bottom:12px;">
+        <img src="${img.url}" alt="${img.name}" style="max-width:560px;width:100%;height:auto;border-radius:8px;display:block;" />
+        <div style="font-size:11px;color:#999;margin-top:4px;">${img.name}</div>
+      </div>`
+    ).join('');
+
+    const overflow = images.length > MAX_INLINE_PREVIEWS
+      ? `<div style="font-size:13px;color:#666;margin-top:4px;">+ ${images.length - MAX_INLINE_PREVIEWS} additional image${images.length - MAX_INLINE_PREVIEWS > 1 ? 's' : ''}</div>`
+      : '';
+
+    parts.push(`
+      <div style="margin:16px 20px;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#888;margin-bottom:10px;">Images (${images.length})</div>
+        ${imgTags}
+        ${overflow}
+      </div>
+    `);
+  }
+
+  // Non-image file links
+  if (nonImages.length > 0) {
+    const linkItems = nonImages.map(f => {
+      if (f.url) {
+        return `<li style="margin:4px 0;font-size:13px;color:#444;">${f.name} — <a href="${f.url}" style="color:#2563eb;text-decoration:underline;">Open File →</a></li>`;
+      }
+      return `<li style="margin:4px 0;font-size:13px;color:#444;">${f.name}</li>`;
+    }).join('');
+    parts.push(`
+      <div style="margin:16px 20px;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#888;margin-bottom:6px;">Files (${nonImages.length})</div>
+        <ul style="margin:0;padding-left:20px;">${linkItems}</ul>
+      </div>
+    `);
+  }
+
+  // Images that failed access check — show as links
+  const failedImages = files.filter(f => {
+    const url = getFileUrl(f);
+    return url && isImageUrl(url) && !imageAccessMap.get(url);
+  });
+  if (failedImages.length > 0) {
+    const fallbackItems = failedImages.map(f => {
+      const url = getFileUrl(f);
+      const name = getFileName(f);
+      return `<li style="margin:4px 0;font-size:13px;color:#444;">${name} — <a href="${url}" style="color:#2563eb;text-decoration:underline;">Open File →</a></li>`;
+    }).join('');
+    parts.push(`
+      <div style="margin:4px 20px 16px;">
+        <ul style="margin:0;padding-left:20px;">${fallbackItems}</ul>
+      </div>
+    `);
+  }
+
+  return parts.join('');
+}
+
 // ── EMAIL BUILDER ────────────────────────────────────────────────────
 
 function buildNotificationHtml({
   projectName, clientName, requestTitle, actionType,
-  timestamp, commentText, files, previousStatus, newStatus, directLink,
+  timestamp, commentText, filesHtml, previousStatus, newStatus, directLink,
 }) {
   const actionLabel = buildActionLabel(actionType);
   const actionColor = buildActionColor(actionType);
@@ -156,18 +267,9 @@ function buildNotificationHtml({
     `);
   }
 
-  // File uploads
-  if (files && files.length > 0) {
-    const fileList = files.map(f => {
-      const name = typeof f === 'string' ? f : (f.name || f.label || f.file_url || 'unnamed file');
-      return `<li style="margin:4px 0;font-size:13px;color:#444;">${name}</li>`;
-    }).join('');
-    sections.push(`
-      <div style="margin:16px 20px;">
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#888;margin-bottom:6px;">Files Uploaded (${files.length})</div>
-        <ul style="margin:0;padding-left:20px;">${fileList}</ul>
-      </div>
-    `);
+  // File uploads (with inline image previews)
+  if (filesHtml) {
+    sections.push(filesHtml);
   }
 
   // Direct link button
@@ -254,8 +356,25 @@ Deno.serve(async (req) => {
     const timestamp = formatTimestamp();
     const directLink = buildDirectLink(requestId);
     const commentText = getCommentText(comment);
-
     const subject = buildSubject(actionType, projectName);
+
+    // Pre-check image URL accessibility for inline previews
+    let filesHtml = '';
+    if (files && files.length > 0) {
+      const imageAccessMap = new Map();
+      const imageUrls = files
+        .map(f => getFileUrl(f))
+        .filter(url => url && isImageUrl(url));
+      const uniqueUrls = [...new Set(imageUrls)];
+
+      // Check all image URLs in parallel (with timeout)
+      const accessResults = await Promise.all(
+        uniqueUrls.map(async url => ({ url, ok: await checkUrlAccessible(url) }))
+      );
+      for (const r of accessResults) imageAccessMap.set(r.url, r.ok);
+
+      filesHtml = buildFilesHtml(files, imageAccessMap);
+    }
 
     const html = buildNotificationHtml({
       projectName,
@@ -264,7 +383,7 @@ Deno.serve(async (req) => {
       actionType,
       timestamp,
       commentText,
-      files,
+      filesHtml,
       previousStatus,
       newStatus,
       directLink,
