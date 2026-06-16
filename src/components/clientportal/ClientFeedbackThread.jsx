@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle2, AlertCircle, FileText, Upload, X, Loader2, Image as ImageIcon, Trash2 } from "lucide-react";
+import { CheckCircle2, AlertCircle, FileText, Upload, X, Loader2, Image as ImageIcon, Trash2, EyeOff } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -109,6 +109,9 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
     cardClassName = "bg-blue-900/30 backdrop-blur-xl border border-blue-500/50";
   } else if (isChangesRequestedDecision) {
     cardClassName = "bg-orange-900/30 backdrop-blur-xl border border-orange-500/50";
+  } else if (isInternalComment && event.comment?.visibility === 'internal_only') {
+    cardClassName = "backdrop-blur-xl border border-amber-500/50";
+    cardStyle = { backgroundColor: 'oklch(35% 0.06 80)' };
   } else if (isInternalComment) {
     cardClassName = "backdrop-blur-xl border border-green-500/50";
     cardStyle = { backgroundColor: 'oklch(39.3% 0.095 152.535)' };
@@ -128,7 +131,12 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
               FOR REVIEW
             </Badge>
           }
-          {isInternalComment &&
+          {isInternalComment && event.comment?.visibility === 'internal_only' &&
+          <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/50 border font-semibold text-xs">
+              <EyeOff className="w-3 h-3 mr-1 inline" /> INTERNAL ONLY
+            </Badge>
+          }
+          {isInternalComment && event.comment?.visibility !== 'internal_only' &&
           <Badge className="bg-green-500/20 text-green-400 border-green-500/50 border font-semibold text-xs">
               FOR REVIEW
             </Badge>
