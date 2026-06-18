@@ -27,6 +27,22 @@ const QUICK_FILTERS = [
   { key: "overdue", label: "Overdue", icon: Hourglass },
 ];
 
+// ── Derive a compact nav label from project name ──
+function compactLabel(project) {
+  const name = project.name || "";
+  // If short enough, use as-is
+  if (name.length <= 22) return name;
+  // Try "ClientLastName · Project" if client_name exists
+  if (project.client_name) {
+    const parts = project.client_name.trim().split(/\s+/);
+    const last = parts[parts.length - 1];
+    if (last && name.toLowerCase() !== last.toLowerCase()) {
+      return last + " · " + name.replace(project.client_name, "").replace(/^[\s\-–—·:]+/, "").trim() || name;
+    }
+  }
+  return name;
+}
+
 // ── Project row in the nav ──
 const ProjectRow = React.memo(function ProjectRow({
   project,
@@ -34,11 +50,12 @@ const ProjectRow = React.memo(function ProjectRow({
   isSelected,
   onToggle,
 }) {
+  const label = compactLabel(project);
   return (
     <button
       onClick={() => onToggle(project.id)}
       className={cn(
-        "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-sm transition-colors group",
+        "w-full flex items-center gap-1.5 px-1.5 py-[3px] rounded text-left text-[11px] leading-tight transition-colors group",
         isSelected
           ? "bg-red-600/20 text-white"
           : "text-gray-300 hover:bg-gray-800/60 hover:text-white"
@@ -46,21 +63,21 @@ const ProjectRow = React.memo(function ProjectRow({
     >
       <div
         className={cn(
-          "w-3.5 h-3.5 rounded border-2 shrink-0 flex items-center justify-center transition-colors",
+          "w-3 h-3 rounded-sm border shrink-0 flex items-center justify-center transition-colors",
           isSelected
             ? "bg-red-600 border-red-600"
             : "border-gray-600 group-hover:border-gray-400"
         )}
       >
         {isSelected && (
-          <svg viewBox="0 0 12 12" className="w-2.5 h-2.5 text-white fill-current">
-            <path d="M10 3L4.5 8.5 2 6" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          <svg viewBox="0 0 12 12" className="w-2 h-2 text-white fill-current">
+            <path d="M10 3L4.5 8.5 2 6" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         )}
       </div>
-      <span className="truncate flex-1 min-w-0" title={project.name}>{project.name}</span>
+      <span className="truncate flex-1 min-w-0" title={project.name}>{label}</span>
       {taskCount > 0 && (
-        <span className="text-xs text-gray-500 tabular-nums shrink-0">
+        <span className="text-[10px] text-gray-500 tabular-nums shrink-0">
           {taskCount}
         </span>
       )}
@@ -86,26 +103,26 @@ const TypeGroup = React.memo(function TypeGroup({
   const typeTaskCount = projects.reduce((sum, p) => sum + (taskCountByProject[p.id] || 0), 0);
 
   return (
-    <div className="mb-1">
+    <div className="mb-0.5">
       {/* Type header */}
-      <div className="flex items-center gap-1 group">
+      <div className="flex items-center gap-0.5 group">
         <button
           onClick={onToggleExpand}
           className="p-0.5 text-gray-500 hover:text-white transition-colors shrink-0"
         >
           {isExpanded ? (
-            <ChevronDown className="w-3.5 h-3.5" />
+            <ChevronDown className="w-3 h-3" />
           ) : (
-            <ChevronRight className="w-3.5 h-3.5" />
+            <ChevronRight className="w-3 h-3" />
           )}
         </button>
         <button
           onClick={() => onToggleType(typeId)}
-          className="flex items-center gap-2 flex-1 min-w-0 py-1 rounded-md hover:bg-gray-800/40 transition-colors px-1"
+          className="flex items-center gap-1.5 flex-1 min-w-0 py-0.5 rounded hover:bg-gray-800/40 transition-colors px-1"
         >
           <div
             className={cn(
-              "w-3.5 h-3.5 rounded border-2 shrink-0 flex items-center justify-center transition-colors",
+              "w-3 h-3 rounded-sm border shrink-0 flex items-center justify-center transition-colors",
               allSelected
                 ? "border-current bg-current"
                 : someSelected
@@ -117,8 +134,8 @@ const TypeGroup = React.memo(function TypeGroup({
             }
           >
             {allSelected && (
-              <svg viewBox="0 0 12 12" className="w-2.5 h-2.5 text-white fill-current">
-                <path d="M10 3L4.5 8.5 2 6" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              <svg viewBox="0 0 12 12" className="w-2 h-2 text-white fill-current">
+                <path d="M10 3L4.5 8.5 2 6" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             )}
             {someSelected && !allSelected && (
@@ -144,7 +161,7 @@ const TypeGroup = React.memo(function TypeGroup({
 
       {/* Project list */}
       {isExpanded && (
-        <div className="ml-4 mt-0.5 space-y-0.5">
+        <div className="ml-3.5 mt-px">
           {projects.map((project) => (
             <ProjectRow
               key={project.id}
@@ -304,8 +321,8 @@ export default function PriorityProjectNav({
   return (
     <div className="flex flex-col h-full">
       {/* Quick Filters */}
-      <div className="px-3 pt-3 pb-2 border-b border-gray-800">
-        <div className="flex flex-wrap gap-1">
+      <div className="px-2 pt-2 pb-1.5 border-b border-gray-800">
+        <div className="flex flex-wrap gap-0.5">
           {QUICK_FILTERS.map((qf) => {
             const Icon = qf.icon;
             const count = quickFilterCounts[qf.key] ?? 0;
@@ -333,21 +350,21 @@ export default function PriorityProjectNav({
       </div>
 
       {/* Search */}
-      <div className="px-3 py-2">
+      <div className="px-2 py-1.5">
         <div className="relative">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-500" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search projects..."
-            className="h-7 pl-7 pr-7 text-xs bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500"
+            className="h-6 pl-6 pr-6 text-[11px] bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500"
           />
           {search && (
             <button
               onClick={() => setSearch("")}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-3 h-3" />
             </button>
           )}
         </div>
@@ -355,9 +372,9 @@ export default function PriorityProjectNav({
 
       {/* Selection indicator */}
       {selectedProjectIds.length > 0 && (
-        <div className="px-3 pb-2 flex items-center justify-between">
+        <div className="px-2 pb-1 flex items-center justify-between">
           <span className="text-[10px] text-red-400 font-medium">
-            {selectedProjectIds.length} project{selectedProjectIds.length !== 1 ? "s" : ""} selected
+            {selectedProjectIds.length} selected
           </span>
           <button
             onClick={handleClearSelection}
@@ -369,7 +386,7 @@ export default function PriorityProjectNav({
       )}
 
       {/* Project tree */}
-      <div className="flex-1 overflow-y-auto px-2 pb-3 scrollbar-hide">
+      <div className="flex-1 overflow-y-auto px-1.5 pb-2 scrollbar-hide">
         {filteredTypeGroups.length === 0 ? (
           <p className="text-xs text-gray-600 text-center py-4">
             {search ? "No matching projects" : "No projects with tasks"}
