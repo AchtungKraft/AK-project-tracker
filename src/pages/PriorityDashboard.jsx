@@ -10,7 +10,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Flame, Loader2, FolderKanban, RefreshCw, LayoutGrid, Calendar, X, User, List, ClipboardCheck, PanelLeftOpen } from "lucide-react";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
-import MobileMetricPriorityGrid from "@/components/mobile/MobileMetricPriorityGrid";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import MobileFilterTriggerBar, { useActiveFilterCount } from "@/components/mobile/MobileFilterTriggerBar";
 import MobileFilterDrawer, { MobileFilterSection } from "@/components/mobile/MobileFilterDrawer";
@@ -23,7 +22,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { createPageUrl } from "@/utils";
 import { buildProjectDetailUrl, SOURCES } from "@/lib/workspaceConfig";
-import { toast } from "sonner";
 import TaskCard from "../components/project/TaskCard";
 import TaskDetailDrawer from "../components/tasks/TaskDetailDrawer";
 import PriorityCalendarView from "../components/priorities/PriorityCalendarView";
@@ -119,7 +117,6 @@ export default function PriorityDashboard() {
   const {
     savedViews,
     activeViewName,
-    activeView,
     saveView,
     deleteView,
     renameView,
@@ -134,10 +131,6 @@ export default function PriorityDashboard() {
     }
   }, [selectView, applyView]);
 
-  const handleSelectedTypesChange = useCallback((newTypes) => {
-    setFilter('selectedTypes', newTypes);
-  }, [setFilter]);
-
   const handleStatusFilterChange = useCallback((value) => {
     setFilter('statusFilter', value);
   }, [setFilter]);
@@ -150,9 +143,6 @@ export default function PriorityDashboard() {
 
   // All tasks sorted by priority (urgent first, then by due date)
   const allSortedTasks = useMemo(() => sortTasksByPriority(allTasksData), [allTasksData]);
-
-  // Priority count for metrics/badges only — NOT used for view filtering
-  const priorityTaskCount = useMemo(() => allTasksData.filter(t => t.is_priority).length, [allTasksData]);
 
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
@@ -388,13 +378,6 @@ export default function PriorityDashboard() {
   const handleToggleComplete = taskDataToggleComplete;
 
   const isMobile = useIsMobile();
-  
-  // Metrics for mobile priority grid
-  const priorityMetrics = useMemo(() => [
-    { key: 'total', label: 'All Tasks', value: activePriorityTasks.length, icon: Flame, color: 'red' },
-    { key: 'priority', label: 'Priority', value: activePriorityCount, icon: Flame, color: 'orange' },
-    { key: 'projects', label: 'Projects', value: Object.keys(groupedTasks).length, icon: FolderKanban, color: 'blue' },
-  ], [activePriorityTasks.length, activePriorityCount, groupedTasks]);
 
   if (tasksLoading) {
     return (

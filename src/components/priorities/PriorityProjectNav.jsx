@@ -58,7 +58,7 @@ const ProjectRow = React.memo(function ProjectRow({
           </svg>
         )}
       </div>
-      <span className="truncate flex-1 min-w-0">{project.name}</span>
+      <span className="truncate flex-1 min-w-0" title={project.name}>{project.name}</span>
       {taskCount > 0 && (
         <span className="text-xs text-gray-500 tabular-nums shrink-0">
           {taskCount}
