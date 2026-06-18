@@ -35,28 +35,29 @@ function buildLabelMap(projects) {
     project: p,
   }));
 
-  // Step 2: detect duplicates and disambiguate
-  const labelCount = {};
+  // Step 2: detect duplicates (case-insensitive) and disambiguate
+  const labelCountCI = {};
   candidates.forEach((c) => {
-    labelCount[c.label] = (labelCount[c.label] || 0) + 1;
+    const key = c.label.toLowerCase();
+    labelCountCI[key] = (labelCountCI[key] || 0) + 1;
   });
 
   candidates.forEach((c) => {
     let label = c.label;
-    if (labelCount[label] > 1) {
-      // Disambiguate with project code or full client name
+    if (labelCountCI[label.toLowerCase()] > 1) {
       label = disambiguate(c.project, label);
     }
     map.set(c.id, label);
   });
 
-  // Step 3: verify uniqueness — if still colliding, append project code
-  const finalCount = {};
+  // Step 3: verify uniqueness (case-insensitive) — if still colliding, append project code or index
+  const finalCountCI = {};
   map.forEach((label, id) => {
-    if (!finalCount[label]) finalCount[label] = [];
-    finalCount[label].push(id);
+    const key = label.toLowerCase();
+    if (!finalCountCI[key]) finalCountCI[key] = [];
+    finalCountCI[key].push(id);
   });
-  Object.values(finalCount).forEach((ids) => {
+  Object.values(finalCountCI).forEach((ids) => {
     if (ids.length > 1) {
       ids.forEach((id, i) => {
         const p = projects.find((pr) => pr.id === id);
@@ -100,12 +101,19 @@ function extractDescriptor(project) {
   if (segments.length >= 2) {
     // Find the best descriptor: prefer a segment that is NOT the client name and NOT a project code
     const client = (project.client_name || "").trim().toLowerCase();
+    // Also build variants to skip: full name, last name, name without prefix (Dr., Mr., etc.)
+    const clientVariants = new Set([client]);
+    const clientParts = client.split(/\s+/);
+    if (clientParts.length > 1) {
+      clientVariants.add(clientParts[clientParts.length - 1]); // last name
+      // Strip honorifics: "Dr. Alexander Salerno" → "Alexander Salerno"
+      const stripped = client.replace(/^(dr|mr|mrs|ms|prof)\.?\s+/i, "");
+      if (stripped !== client) clientVariants.add(stripped);
+    }
     for (const seg of segments) {
-      if (seg.toLowerCase() === client) continue;
+      const segLower = seg.toLowerCase();
+      if (clientVariants.has(segLower)) continue;
       if (/^\d+[_\-]\d+/.test(seg)) continue;
-      // Skip segments that are just the client's last name
-      const clientParts = client.split(/\s+/);
-      if (clientParts.length > 1 && seg.toLowerCase() === clientParts[clientParts.length - 1]) continue;
       return seg;
     }
   }
@@ -404,20 +412,24 @@ export default function PriorityProjectNav({
     [projectsWithTasks, projectTypes]
   );
 
-  // Search filtering
+  // Search filtering — matches full name, client name, compact label, and project code
   const filteredTypeGroups = useMemo(() => {
     if (!search.trim()) return typeGroups;
     const q = search.toLowerCase();
     return typeGroups
       .map((g) => ({
         ...g,
-        projects: g.projects.filter((p) =>
-          (p.name || "").toLowerCase().includes(q) ||
-          (p.client_name || "").toLowerCase().includes(q)
-        ),
+        projects: g.projects.filter((p) => {
+          const label = (labelMap.get(p.id) || "").toLowerCase();
+          const code = (extractCode(p.name) || "").toLowerCase();
+          return (p.name || "").toLowerCase().includes(q) ||
+            (p.client_name || "").toLowerCase().includes(q) ||
+            label.includes(q) ||
+            code.includes(q);
+        }),
       }))
       .filter((g) => g.projects.length > 0);
-  }, [typeGroups, search]);
+  }, [typeGroups, search, labelMap]);
 
   // Selected project IDs as a Set for fast lookups
   const selectedSet = useMemo(
