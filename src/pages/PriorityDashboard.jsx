@@ -144,13 +144,6 @@ export default function PriorityDashboard() {
   // All tasks sorted by priority (urgent first, then by due date)
   const allSortedTasks = useMemo(() => sortTasksByPriority(allTasksData), [allTasksData]);
 
-  // O(1) project lookup map — built once, reused everywhere
-  const projectMap = useMemo(() => {
-    const m = new Map();
-    projects.forEach(p => m.set(p.id, p));
-    return m;
-  }, [projects]);
-
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
     onSuccess: () => {
@@ -163,6 +156,13 @@ export default function PriorityDashboard() {
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list(),
   });
+
+  // O(1) project lookup map — built once, reused everywhere
+  const projectMap = useMemo(() => {
+    const m = new Map();
+    projects.forEach(p => m.set(p.id, p));
+    return m;
+  }, [projects]);
 
   const { data: projectTypes = [] } = useQuery({
     queryKey: ['projectTypes'],
