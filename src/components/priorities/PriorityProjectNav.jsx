@@ -23,20 +23,61 @@ const QUICK_FILTERS = [
   { key: "overdue", label: "Overdue", icon: Hourglass },
 ];
 
-// ── Derive a compact nav label from project name ──
+// ── Derive a concise nav label from project name ──
+// Strategy: extract vehicle/project descriptor after separator, or use client last name.
+// For the same client appearing twice, the descriptor differentiates.
 function compactLabel(project) {
-  const name = project.name || "";
-  // If short enough, use as-is
-  if (name.length <= 22) return name;
-  // Try "ClientLastName · Project" if client_name exists
-  if (project.client_name) {
-    const parts = project.client_name.trim().split(/\s+/);
-    const last = parts[parts.length - 1];
-    if (last && name.toLowerCase() !== last.toLowerCase()) {
-      return last + " · " + name.replace(project.client_name, "").replace(/^[\s\-–—·:]+/, "").trim() || name;
+  const name = (project.name || "").trim();
+  if (!name) return "Untitled";
+
+  // 1. If name has a separator (// or /), extract the descriptor portion
+  const sepMatch = name.match(/\s*(?:\/\/|\/)\s*/);
+  if (sepMatch) {
+    const parts = name.split(sepMatch[0]);
+    // Descriptor is the part after the separator (vehicle, detail)
+    const descriptor = (parts[1] || "").trim();
+    const prefix = (parts[0] || "").trim();
+    if (descriptor) {
+      // If descriptor is short and meaningful, use it
+      if (descriptor.length <= 28) return descriptor;
+      // Otherwise, truncate descriptor
+      return descriptor.slice(0, 25) + "…";
     }
+    // Fallback to prefix if no descriptor
+    if (prefix.length <= 28) return prefix;
   }
-  return name;
+
+  // 2. Strip leading project codes (e.g., "26_9106 ")
+  const codeStripped = name.replace(/^\d+[_\-]\d+\s+/, "").trim();
+
+  // 3. If short enough already, use as-is
+  if (codeStripped.length <= 24) return codeStripped;
+
+  // 4. Try client last name + first distinctive word from rest
+  if (project.client_name) {
+    const clientParts = project.client_name.trim().split(/\s+/);
+    const lastName = clientParts[clientParts.length - 1];
+    const remainder = codeStripped.replace(project.client_name, "").replace(/^[\s\-–—·:\/]+/, "").trim();
+    if (remainder) {
+      const short = remainder.length > 18 ? remainder.slice(0, 16) + "…" : remainder;
+      return lastName + " · " + short;
+    }
+    // Just use client last name
+    return lastName;
+  }
+
+  // 5. Hard truncate
+  return codeStripped.slice(0, 22) + "…";
+}
+
+// ── Build rich tooltip for project row ──
+function buildTooltip(project) {
+  const lines = [project.name];
+  if (project.client_name) lines.push("Client: " + project.client_name);
+  // Extract project code if present (e.g., "26_9106")
+  const codeMatch = (project.name || "").match(/^(\d+[_\-]\d+)/);
+  if (codeMatch) lines.push("Code: " + codeMatch[1]);
+  return lines.join("\n");
 }
 
 // ── Project row in the nav ──
@@ -47,9 +88,11 @@ const ProjectRow = React.memo(function ProjectRow({
   onToggle,
 }) {
   const label = compactLabel(project);
+  const tooltip = buildTooltip(project);
   return (
     <button
       onClick={() => onToggle(project.id)}
+      title={tooltip}
       className={cn(
         "w-full flex items-center gap-1.5 px-1.5 py-[3px] rounded text-left text-[11px] leading-tight transition-colors group",
         isSelected
@@ -71,12 +114,10 @@ const ProjectRow = React.memo(function ProjectRow({
           </svg>
         )}
       </div>
-      <span className="truncate flex-1 min-w-0" title={project.name}>{label}</span>
-      {taskCount > 0 && (
-        <span className="text-[10px] text-gray-500 tabular-nums shrink-0">
-          {taskCount}
-        </span>
-      )}
+      <span className="truncate flex-1 min-w-0">{label}</span>
+      <span className="text-[10px] text-gray-500 tabular-nums shrink-0 w-5 text-right">
+        {taskCount > 0 ? taskCount : ""}
+      </span>
     </button>
   );
 });
@@ -99,12 +140,12 @@ const TypeGroup = React.memo(function TypeGroup({
   const typeTaskCount = projects.reduce((sum, p) => sum + (taskCountByProject[p.id] || 0), 0);
 
   return (
-    <div className="mb-0.5">
+    <div className="mb-px">
       {/* Type header */}
       <div className="flex items-center gap-0.5 group">
         <button
           onClick={onToggleExpand}
-          className="p-0.5 text-gray-500 hover:text-white transition-colors shrink-0"
+          className="p-px text-gray-500 hover:text-white transition-colors shrink-0"
         >
           {isExpanded ? (
             <ChevronDown className="w-3 h-3" />
@@ -114,7 +155,7 @@ const TypeGroup = React.memo(function TypeGroup({
         </button>
         <button
           onClick={() => onToggleType(typeId)}
-          className="flex items-center gap-1.5 flex-1 min-w-0 py-0.5 rounded hover:bg-gray-800/40 transition-colors px-1"
+          className="flex items-center gap-1.5 flex-1 min-w-0 py-px rounded hover:bg-gray-800/40 transition-colors px-1"
         >
           <div
             className={cn(
@@ -148,16 +189,14 @@ const TypeGroup = React.memo(function TypeGroup({
             ({projects.length})
           </span>
         </button>
-        {typeTaskCount > 0 && (
-          <span className="text-[10px] text-gray-600 tabular-nums shrink-0 pr-1">
-            {typeTaskCount}
-          </span>
-        )}
+        <span className="text-[10px] text-gray-600 tabular-nums shrink-0 w-5 text-right pr-0.5">
+          {typeTaskCount > 0 ? typeTaskCount : ""}
+        </span>
       </div>
 
       {/* Project list */}
       {isExpanded && (
-        <div className="ml-3.5 mt-px">
+        <div className="ml-3.5">
           {projects.map((project) => (
             <ProjectRow
               key={project.id}
