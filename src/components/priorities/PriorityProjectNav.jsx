@@ -1,18 +1,14 @@
 import React, { useState, useMemo, useCallback } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ChevronDown,
   ChevronRight,
   Search,
   X,
-  Flame,
   User,
   AlertTriangle,
   Clock,
   Hourglass,
-  FolderKanban,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { groupProjectsByType } from "@/utils/projectTypeGroups";
@@ -187,6 +183,7 @@ export default function PriorityProjectNav({
   onSelectedProjectIdsChange,
   quickFilter,
   onQuickFilterChange,
+  onInteraction, // optional — called after project/type/quick-filter selection (used to close mobile drawer)
 }) {
   const [search, setSearch] = useState("");
   const [expandedTypes, setExpandedTypes] = useState(() => {
@@ -280,8 +277,9 @@ export default function PriorityProjectNav({
         next.add(projectId);
       }
       onSelectedProjectIdsChange(Array.from(next));
+      onInteraction?.();
     },
-    [selectedProjectIds, onSelectedProjectIdsChange]
+    [selectedProjectIds, onSelectedProjectIdsChange, onInteraction]
   );
 
   const handleToggleType = useCallback(
@@ -295,19 +293,18 @@ export default function PriorityProjectNav({
 
       let next;
       if (allSelected) {
-        // Deselect all in this type
         next = selectedProjectIds.filter(
           (id) => !groupProjectIds.includes(id)
         );
       } else {
-        // Select all in this type
         const existing = new Set(selectedProjectIds);
         groupProjectIds.forEach((id) => existing.add(id));
         next = Array.from(existing);
       }
       onSelectedProjectIdsChange(next);
+      onInteraction?.();
     },
-    [typeGroups, selectedProjectIds, onSelectedProjectIdsChange]
+    [typeGroups, selectedProjectIds, onSelectedProjectIdsChange, onInteraction]
   );
 
   const handleToggleExpand = useCallback((typeId) => {
@@ -330,7 +327,7 @@ export default function PriorityProjectNav({
             return (
               <button
                 key={qf.key}
-                onClick={() => onQuickFilterChange(qf.key)}
+                onClick={() => { onQuickFilterChange(qf.key); onInteraction?.(); }}
                 className={cn(
                   "flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors",
                   isActive

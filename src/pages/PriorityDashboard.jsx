@@ -144,6 +144,13 @@ export default function PriorityDashboard() {
   // All tasks sorted by priority (urgent first, then by due date)
   const allSortedTasks = useMemo(() => sortTasksByPriority(allTasksData), [allTasksData]);
 
+  // O(1) project lookup map — built once, reused everywhere
+  const projectMap = useMemo(() => {
+    const m = new Map();
+    projects.forEach(p => m.set(p.id, p));
+    return m;
+  }, [projects]);
+
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
     onSuccess: () => {
@@ -248,12 +255,12 @@ export default function PriorityDashboard() {
     return allSortedTasks.filter(t => {
       if (t.status_id === completedStatus?.id) return false;
       if (assignedTo.length > 0 && !assignedTo.includes(t.assigned_team_member_id)) return false;
-      const project = projects.find(p => p.id === t.project_id);
+      const project = projectMap.get(t.project_id);
       if (selectedTypes.length > 0 && project && !selectedTypes.includes(project.project_type_id)) return false;
       if (statusFilter !== 'all' && project && project.status_id !== statusFilter) return false;
       return true;
     });
-  }, [allSortedTasks, completedStatus, assignedTo, projects, selectedTypes, statusFilter]);
+  }, [allSortedTasks, completedStatus, assignedTo, projectMap, selectedTypes, statusFilter]);
 
   // Find current user's team member for quick filters
   const currentTeamMemberId = useMemo(() => {
@@ -296,6 +303,25 @@ export default function PriorityDashboard() {
   const urgentCount = useMemo(() => activePriorityTasks.filter(isUrgentPriority).length, [activePriorityTasks]);
   const activePriorityCount = useMemo(() => activePriorityTasks.filter(t => t.is_priority).length, [activePriorityTasks]);
 
+  // Lookup maps for O(1) access in grouping
+  const categoryMap = useMemo(() => {
+    const m = new Map();
+    categories.forEach(c => m.set(c.id, c));
+    return m;
+  }, [categories]);
+
+  const statusMap = useMemo(() => {
+    const m = new Map();
+    statuses.forEach(s => m.set(s.id, s));
+    return m;
+  }, [statuses]);
+
+  const teamMemberMap = useMemo(() => {
+    const m = new Map();
+    teamMembers.forEach(tm => m.set(tm.id, tm));
+    return m;
+  }, [teamMembers]);
+
   // Group tasks by primary grouping, then sub-group by secondary grouping
   const groupedTasks = useMemo(() => {
     const primaryGroups = {};
@@ -304,12 +330,12 @@ export default function PriorityDashboard() {
       let primaryKey, primaryLabel, primaryColor;
 
       if (primaryGroupBy === 'project') {
-        const project = projects.find(p => p.id === task.project_id);
+        const project = projectMap.get(task.project_id);
         primaryKey = task.project_id;
         primaryLabel = project?.name || 'No Project';
         primaryColor = '#EF4444';
       } else if (primaryGroupBy === 'category') {
-        const category = categories.find(c => c.id === task.category_id);
+        const category = categoryMap.get(task.category_id);
         primaryKey = task.category_id || 'no-category';
         primaryLabel = category?.name || 'No Category';
         primaryColor = category?.color || '#6B7280';
@@ -335,22 +361,22 @@ export default function PriorityDashboard() {
         let secondaryKey, secondaryLabel, secondaryColor;
 
         if (secondaryGroupBy === 'status') {
-          const status = statuses.find(s => s.id === task.status_id);
+          const status = statusMap.get(task.status_id);
           secondaryKey = task.status_id || 'no-status';
           secondaryLabel = status?.label || 'No Status';
           secondaryColor = status?.color || '#6B7280';
         } else if (secondaryGroupBy === 'assigned') {
-          const member = teamMembers.find(m => m.id === task.assigned_team_member_id);
+          const member = teamMemberMap.get(task.assigned_team_member_id);
           secondaryKey = task.assigned_team_member_id || 'unassigned';
           secondaryLabel = member?.full_name || 'Unassigned';
           secondaryColor = '#6B7280';
         } else if (secondaryGroupBy === 'category') {
-          const category = categories.find(c => c.id === task.category_id);
+          const category = categoryMap.get(task.category_id);
           secondaryKey = task.category_id || 'no-category';
           secondaryLabel = category?.name || 'No Category';
           secondaryColor = category?.color || '#6B7280';
         } else if (secondaryGroupBy === 'project') {
-          const project = projects.find(p => p.id === task.project_id);
+          const project = projectMap.get(task.project_id);
           secondaryKey = task.project_id;
           secondaryLabel = project?.name || 'No Project';
           secondaryColor = '#6B7280';
@@ -371,13 +397,18 @@ export default function PriorityDashboard() {
     });
 
     return primaryGroups;
-  }, [activePriorityTasks, primaryGroupBy, secondaryGroupBy, projects, categories, statuses, teamMembers]);
+  }, [activePriorityTasks, primaryGroupBy, secondaryGroupBy, projectMap, categoryMap, statusMap, teamMemberMap]);
 
   // Use the orchestrated completion handler from useTaskData
   // (includes checklist enforcement + uninstalled parts warning)
   const handleToggleComplete = taskDataToggleComplete;
 
   const isMobile = useIsMobile();
+
+  // Close mobile drawer after interaction
+  const closeMobileNav = useCallback(() => {
+    if (isMobile) setMobileNavOpen(false);
+  }, [isMobile]);
 
   if (tasksLoading) {
     return (
@@ -401,6 +432,7 @@ export default function PriorityDashboard() {
       onSelectedProjectIdsChange={setSelectedProjectIds}
       quickFilter={quickFilter}
       onQuickFilterChange={setQuickFilter}
+      onInteraction={closeMobileNav}
     />
   );
 
@@ -658,7 +690,7 @@ export default function PriorityDashboard() {
             <div className="space-y-6">
               {Object.entries(groupedTasks).map(([primaryKey, primaryGroup]) => {
                 const { tasks, secondaryGroups } = primaryGroup;
-                const project = primaryGroupBy === 'project' ? projects.find(p => p.id === primaryKey) : null;
+                const project = primaryGroupBy === 'project' ? projectMap.get(primaryKey) : null;
 
                 return (
                   <Card 
