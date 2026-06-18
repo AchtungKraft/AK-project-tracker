@@ -23,51 +23,161 @@ const QUICK_FILTERS = [
   { key: "overdue", label: "Overdue", icon: Hourglass },
 ];
 
-// ── Derive a concise nav label from project name ──
-// Strategy: extract vehicle/project descriptor after separator, or use client last name.
-// For the same client appearing twice, the descriptor differentiates.
-function compactLabel(project) {
+// ── Batch-generate unique compact labels for all projects ──
+// Returns Map<projectId, label>. Sees all projects to detect & resolve collisions.
+function buildLabelMap(projects) {
+  const map = new Map();
+
+  // Step 1: generate candidate label for each project
+  const candidates = projects.map((p) => ({
+    id: p.id,
+    label: candidateLabel(p),
+    project: p,
+  }));
+
+  // Step 2: detect duplicates and disambiguate
+  const labelCount = {};
+  candidates.forEach((c) => {
+    labelCount[c.label] = (labelCount[c.label] || 0) + 1;
+  });
+
+  candidates.forEach((c) => {
+    let label = c.label;
+    if (labelCount[label] > 1) {
+      // Disambiguate with project code or full client name
+      label = disambiguate(c.project, label);
+    }
+    map.set(c.id, label);
+  });
+
+  // Step 3: verify uniqueness — if still colliding, append project code
+  const finalCount = {};
+  map.forEach((label, id) => {
+    if (!finalCount[label]) finalCount[label] = [];
+    finalCount[label].push(id);
+  });
+  Object.values(finalCount).forEach((ids) => {
+    if (ids.length > 1) {
+      ids.forEach((id, i) => {
+        const p = projects.find((pr) => pr.id === id);
+        const code = extractCode(p?.name);
+        if (code) {
+          map.set(id, code + " · " + map.get(id));
+        } else {
+          map.set(id, map.get(id) + " (" + (i + 1) + ")");
+        }
+      });
+    }
+  });
+
+  return map;
+}
+
+// Extract project code (e.g., "26_9106" from "26_9106 Paul Odem")
+function extractCode(name) {
+  const m = (name || "").match(/^(\d+[_\-]\d+(?:[_\-]\d+)?)/);
+  return m ? m[1] : null;
+}
+
+// Extract client short name (last name, or short company name)
+function clientShort(project) {
+  const client = (project.client_name || "").trim();
+  if (!client) return null;
+  // Single-word names or company names — use as-is if short
+  const parts = client.split(/\s+/);
+  if (parts.length === 1) return client.length <= 14 ? client : client.slice(0, 12) + "…";
+  // Multi-word: use last name
+  return parts[parts.length - 1];
+}
+
+// Extract descriptor — the vehicle/project detail portion
+function extractDescriptor(project) {
+  const name = (project.name || "").trim();
+
+  // 1. Separator-based: "Client // Vehicle" or "Client / Detail"
+  // Collect ALL segments split by // or /
+  const segments = name.split(/\s*(?:\/\/|\/)\s*/).map((s) => s.trim()).filter(Boolean);
+  if (segments.length >= 2) {
+    // Find the best descriptor: prefer a segment that is NOT the client name and NOT a project code
+    const client = (project.client_name || "").trim().toLowerCase();
+    for (const seg of segments) {
+      if (seg.toLowerCase() === client) continue;
+      if (/^\d+[_\-]\d+/.test(seg)) continue;
+      // Skip segments that are just the client's last name
+      const clientParts = client.split(/\s+/);
+      if (clientParts.length > 1 && seg.toLowerCase() === clientParts[clientParts.length - 1]) continue;
+      return seg;
+    }
+  }
+
+  // 2. Strip project code, then strip client name — remainder is descriptor
+  let stripped = name.replace(/^\d+[_\-]\d+(?:[_\-]\d+)?\s*/, "").trim();
+  stripped = stripped.replace(/^[_\-]+/, "").trim();
+
+  if (project.client_name) {
+    const clientRe = new RegExp(project.client_name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    const afterClient = stripped.replace(clientRe, "").replace(/^[\s\-–—·:\/]+/, "").replace(/[\s\-–—·:\/]+$/, "").trim();
+    if (afterClient && afterClient.length > 1) return afterClient;
+  }
+
+  return null;
+}
+
+// Generate candidate label for a single project
+function candidateLabel(project) {
   const name = (project.name || "").trim();
   if (!name) return "Untitled";
 
-  // 1. If name has a separator (// or /), extract the descriptor portion
-  const sepMatch = name.match(/\s*(?:\/\/|\/)\s*/);
-  if (sepMatch) {
-    const parts = name.split(sepMatch[0]);
-    // Descriptor is the part after the separator (vehicle, detail)
-    const descriptor = (parts[1] || "").trim();
-    const prefix = (parts[0] || "").trim();
+  const client = clientShort(project);
+  const descriptor = extractDescriptor(project);
+  const code = extractCode(name);
+
+  // Best case: Client · Descriptor
+  if (client && descriptor) {
+    const desc = descriptor.length > 18 ? descriptor.slice(0, 16) + "…" : descriptor;
+    return client + " · " + desc;
+  }
+
+  // If we have a code and a client, use Code · Client
+  if (code && client) {
+    return code + " · " + client;
+  }
+
+  // Client-only names (e.g., "Sean Oppen", "Adam Cole")
+  if (client && !descriptor && !code) {
+    // Use full client name if short, otherwise last name
+    const fullClient = (project.client_name || "").trim();
+    if (fullClient.length <= 20) return fullClient;
+    return client;
+  }
+
+  // No client — use name stripped of code
+  const stripped = name.replace(/^\d+[_\-]\d+(?:[_\-]\d+)?\s*/, "").replace(/^[_\-]+/, "").trim();
+  if (stripped.length <= 24) return stripped;
+  return stripped.slice(0, 22) + "…";
+}
+
+// Disambiguate a colliding label with more context
+function disambiguate(project, currentLabel) {
+  const code = extractCode(project.name);
+  const fullClient = (project.client_name || "").trim();
+
+  // Try adding project code
+  if (code && !currentLabel.includes(code)) {
+    return code + " · " + currentLabel;
+  }
+
+  // Try using full client name instead of last name
+  if (fullClient && !currentLabel.includes(fullClient)) {
+    const descriptor = extractDescriptor(project);
     if (descriptor) {
-      // If descriptor is short and meaningful, use it
-      if (descriptor.length <= 28) return descriptor;
-      // Otherwise, truncate descriptor
-      return descriptor.slice(0, 25) + "…";
+      const desc = descriptor.length > 14 ? descriptor.slice(0, 12) + "…" : descriptor;
+      return fullClient.split(/\s+/).slice(0, 2).join(" ") + " · " + desc;
     }
-    // Fallback to prefix if no descriptor
-    if (prefix.length <= 28) return prefix;
+    return fullClient;
   }
 
-  // 2. Strip leading project codes (e.g., "26_9106 ")
-  const codeStripped = name.replace(/^\d+[_\-]\d+\s+/, "").trim();
-
-  // 3. If short enough already, use as-is
-  if (codeStripped.length <= 24) return codeStripped;
-
-  // 4. Try client last name + first distinctive word from rest
-  if (project.client_name) {
-    const clientParts = project.client_name.trim().split(/\s+/);
-    const lastName = clientParts[clientParts.length - 1];
-    const remainder = codeStripped.replace(project.client_name, "").replace(/^[\s\-–—·:\/]+/, "").trim();
-    if (remainder) {
-      const short = remainder.length > 18 ? remainder.slice(0, 16) + "…" : remainder;
-      return lastName + " · " + short;
-    }
-    // Just use client last name
-    return lastName;
-  }
-
-  // 5. Hard truncate
-  return codeStripped.slice(0, 22) + "…";
+  return currentLabel;
 }
 
 // ── Build rich tooltip for project row ──
@@ -83,11 +193,11 @@ function buildTooltip(project) {
 // ── Project row in the nav ──
 const ProjectRow = React.memo(function ProjectRow({
   project,
+  label,
   taskCount,
   isSelected,
   onToggle,
 }) {
-  const label = compactLabel(project);
   const tooltip = buildTooltip(project);
   return (
     <button
@@ -130,6 +240,7 @@ const TypeGroup = React.memo(function TypeGroup({
   projects,
   selectedProjectIds,
   taskCountByProject,
+  labelMap,
   onToggleProject,
   onToggleType,
   isExpanded,
@@ -201,6 +312,7 @@ const TypeGroup = React.memo(function TypeGroup({
             <ProjectRow
               key={project.id}
               project={project}
+              label={labelMap.get(project.id) || project.name}
               taskCount={taskCountByProject[project.id] || 0}
               isSelected={selectedProjectIds.has(project.id)}
               onToggle={onToggleProject}
@@ -279,6 +391,12 @@ export default function PriorityProjectNav({
     const pids = new Set(tasks.map((t) => t.project_id).filter(Boolean));
     return projects.filter((p) => pids.has(p.id));
   }, [projects, tasks]);
+
+  // Build unique compact labels for all visible projects
+  const labelMap = useMemo(
+    () => buildLabelMap(projectsWithTasks),
+    [projectsWithTasks]
+  );
 
   // Group projects by type
   const typeGroups = useMemo(
@@ -437,6 +555,7 @@ export default function PriorityProjectNav({
               projects={group.projects}
               selectedProjectIds={selectedSet}
               taskCountByProject={taskCountByProject}
+              labelMap={labelMap}
               onToggleProject={handleToggleProject}
               onToggleType={handleToggleType}
               isExpanded={expandedTypes[group.typeId] !== false}
