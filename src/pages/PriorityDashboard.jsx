@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Flame, Loader2, FolderKanban, RefreshCw, LayoutGrid, Calendar, X, User, List, ClipboardCheck } from "lucide-react";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Flame, Loader2, FolderKanban, RefreshCw, LayoutGrid, Calendar, X, User, List, ClipboardCheck, PanelLeftOpen } from "lucide-react";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 import MobileMetricPriorityGrid from "@/components/mobile/MobileMetricPriorityGrid";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
@@ -40,6 +41,7 @@ import { useTaskData } from "../components/tasks/useTaskData";
 import { computePartsProgressByTaskId } from "@/utils/taskPartsProgress";
 import { sortTasksByPriority, isUrgentPriority } from "@/utils/taskPrioritySort";
 import { resolvePriorityTab, persistPriorityTab } from "@/lib/workspaceConfig";
+import PriorityProjectNav from "../components/priorities/PriorityProjectNav";
 
 export default function PriorityDashboard() {
   const queryClient = useQueryClient();
@@ -52,6 +54,10 @@ export default function PriorityDashboard() {
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [sortDrawerOpen, setSortDrawerOpen] = useState(false);
   const [tempFilters, setTempFilters] = useState(null);
+  const [selectedProjectIds, setSelectedProjectIds] = useState([]);
+  const [quickFilter, setQuickFilter] = useState("all");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState(null);
   
   // Use centralized task data hook for inline controls
   const {
@@ -72,6 +78,11 @@ export default function PriorityDashboard() {
     confirmTimeCompletion,
     cancelTimeCompletion,
   } = useTaskData({ priorityOnly: true });
+
+  // Fetch current user ID for "Mine" quick filter
+  useEffect(() => {
+    base44.auth.me().then(u => setCurrentUserId(u?.id)).catch(() => {});
+  }, []);
 
   // Wrapped priority toggle that handles confirmation flow
   const wrappedTogglePriority = useCallback(async (task, skipConfirm = false) => {
@@ -180,10 +191,11 @@ export default function PriorityDashboard() {
   const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
   // Calculate active filter count for mobile badge
-  const activeFilterCount = useActiveFilterCount(
+  const baseActiveFilterCount = useActiveFilterCount(
     { selectedTypes, statusFilter, assignedTo },
     { selectedTypes: [], statusFilter: 'all', assignedTo: [] }
   );
+  const activeFilterCount = baseActiveFilterCount + (selectedProjectIds.length > 0 ? 1 : 0) + (quickFilter !== 'all' ? 1 : 0);
 
   // Initialize temp filters when drawer opens
   const handleOpenFilterDrawer = useCallback(() => {
@@ -239,8 +251,11 @@ export default function PriorityDashboard() {
     const label = s.label.toLowerCase();
     return label.includes('complete') || label.includes('done');
   });
-  const activePriorityTasks = useMemo(() => {
-    const filtered = allSortedTasks.filter(t => {
+
+  // Pre-project-filter tasks: used by the sidebar to compute per-project counts
+  // This applies type/status/assignee filters but NOT project selection
+  const preProjectFilterTasks = useMemo(() => {
+    return allSortedTasks.filter(t => {
       if (t.status_id === completedStatus?.id) return false;
       if (assignedTo.length > 0 && !assignedTo.includes(t.assigned_team_member_id)) return false;
       const project = projects.find(p => p.id === t.project_id);
@@ -248,8 +263,38 @@ export default function PriorityDashboard() {
       if (statusFilter !== 'all' && project && project.status_id !== statusFilter) return false;
       return true;
     });
-    return sortTasksByPriority(filtered);
   }, [allSortedTasks, completedStatus, assignedTo, projects, selectedTypes, statusFilter]);
+
+  // Find current user's team member for quick filters
+  const currentTeamMemberId = useMemo(() => {
+    if (!currentUserId) return null;
+    const tm = teamMembers.find(m => m.user_id === currentUserId);
+    return tm?.id || null;
+  }, [currentUserId, teamMembers]);
+
+  // Apply project selection + quick filters on top of pre-project tasks
+  const activePriorityTasks = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const soonDate = new Date(now);
+    soonDate.setDate(soonDate.getDate() + 7);
+
+    const filtered = preProjectFilterTasks.filter(t => {
+      // Project selection filter
+      if (selectedProjectIds.length > 0 && !selectedProjectIds.includes(t.project_id)) return false;
+      // Quick filters
+      if (quickFilter === 'mine' && t.assigned_team_member_id !== currentTeamMemberId) return false;
+      if (quickFilter === 'urgent' && !isUrgentPriority(t)) return false;
+      if (quickFilter === 'overdue' && (!t.due_date || new Date(t.due_date) >= now)) return false;
+      if (quickFilter === 'due_soon') {
+        if (!t.due_date) return false;
+        const due = new Date(t.due_date);
+        if (due < now || due > soonDate) return false;
+      }
+      return true;
+    });
+    return sortTasksByPriority(filtered);
+  }, [preProjectFilterTasks, selectedProjectIds, quickFilter, currentTeamMemberId]);
 
   // Parts progress — must be after activePriorityTasks
   const activeTaskIds = useMemo(() => activePriorityTasks.map(t => t.id), [activePriorityTasks]);
@@ -361,14 +406,55 @@ export default function PriorityDashboard() {
     );
   }
 
+  // Sidebar nav element (reused for desktop + mobile sheet)
+  const projectNavElement = (
+    <PriorityProjectNav
+      projects={projects}
+      projectTypes={projectTypes}
+      tasks={preProjectFilterTasks}
+      currentUserId={currentUserId}
+      teamMembers={teamMembers}
+      selectedProjectIds={selectedProjectIds}
+      onSelectedProjectIdsChange={setSelectedProjectIds}
+      quickFilter={quickFilter}
+      onQuickFilterChange={setQuickFilter}
+    />
+  );
+
   return (
     <>
       <MobileSafeAreaContainer>
-        <div className={`min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black ${isMobile ? 'p-2' : 'p-3 md:p-6'}`}>
-          <div className={`max-w-7xl mx-auto ${isMobile ? 'space-y-3' : 'space-y-6'}`}>
+        <div className={`min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black ${isMobile ? 'p-2' : ''}`}>
+          <div className={isMobile ? 'space-y-3' : 'flex h-screen'}>
+
+          {/* ── Desktop sidebar ── */}
+          {!isMobile && (
+            <div className="w-64 shrink-0 border-r border-gray-800 bg-black/30 overflow-hidden flex flex-col">
+              {projectNavElement}
+            </div>
+          )}
+
+          {/* ── Main content ── */}
+          <div className={`flex-1 min-w-0 overflow-y-auto ${isMobile ? '' : 'p-3 md:p-6'}`}>
+          <div className={isMobile ? 'space-y-3' : 'max-w-7xl mx-auto space-y-6'}>
           {/* Header */}
           <div className={`flex items-center justify-between ${isMobile ? 'gap-2 mb-2' : 'gap-2'}`}>
             <div className={`flex items-center ${isMobile ? 'gap-2' : 'gap-2 md:gap-3'}`}>
+              {/* Mobile nav trigger */}
+              {isMobile && (
+                <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+                  <SheetTrigger asChild>
+                    <Button variant="outline" size="icon" className="border-gray-700 text-white h-9 w-9 shrink-0">
+                      <PanelLeftOpen className="w-4 h-4" />
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="left" className="w-72 p-0 bg-gray-900 border-gray-800">
+                    <div className="h-full flex flex-col pt-10">
+                      {projectNavElement}
+                    </div>
+                  </SheetContent>
+                </Sheet>
+              )}
               <div className={`flex items-center justify-center bg-red-600/20 rounded-lg border-2 border-red-600 ${isMobile ? 'w-9 h-9' : 'w-10 h-10 md:w-12 md:h-12'}`}>
                 <Flame className={isMobile ? 'w-4 h-4 text-red-500' : 'w-5 h-5 md:w-6 md:h-6 text-red-500'} />
               </div>
@@ -420,54 +506,6 @@ export default function PriorityDashboard() {
                 />
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                {/* Project Type Multi-Select */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      className="w-48 justify-between bg-gray-900/50 border-gray-700 text-white hover:bg-gray-800"
-                    >
-                      <span className="truncate">
-                        {selectedTypes.length === 0 
-                          ? 'All Project Types' 
-                          : selectedTypes.length === 1 
-                            ? projectTypes.find(t => t.id === selectedTypes[0])?.name || 'Type'
-                            : `${selectedTypes.length} Types`}
-                      </span>
-                      {selectedTypes.length > 0 && (
-                        <X 
-                          className="w-4 h-4 ml-2 hover:text-red-400" 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSelectedTypesChange([]);
-                          }}
-                        />
-                      )}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-56">
-                    {projectTypes.filter(t => t.active).map(t => (
-                      <DropdownMenuCheckboxItem
-                        key={t.id}
-                        checked={selectedTypes.includes(t.id)}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            handleSelectedTypesChange([...selectedTypes, t.id]);
-                          } else {
-                            handleSelectedTypesChange(selectedTypes.filter(id => id !== t.id));
-                          }
-                        }}
-                      >
-                        <span 
-                          className="w-2 h-2 rounded-full mr-2" 
-                          style={{ backgroundColor: t.color }}
-                        />
-                        {t.name}
-                      </DropdownMenuCheckboxItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
                 {/* Project Status Filter */}
                 <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
                   <SelectTrigger className="w-40 bg-gray-900/50 border-gray-700 text-white">
@@ -530,18 +568,20 @@ export default function PriorityDashboard() {
                 </DropdownMenu>
 
                 {/* Clear Filters */}
-                {(selectedTypes.length > 0 || statusFilter !== 'all' || assignedTo.length > 0) && (
+                {(selectedTypes.length > 0 || statusFilter !== 'all' || assignedTo.length > 0 || selectedProjectIds.length > 0 || quickFilter !== 'all') && (
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => {
                       clearFilters();
                       selectView('All Projects');
+                      setSelectedProjectIds([]);
+                      setQuickFilter('all');
                     }}
                     className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
                   >
                     <X className="w-4 h-4 mr-1" />
-                    Clear
+                    Clear All
                   </Button>
                 )}
               </div>
@@ -813,6 +853,8 @@ export default function PriorityDashboard() {
               />
             </TabsContent>
           </Tabs>
+          </div>
+          </div>
           </div>
         </div>
       </MobileSafeAreaContainer>
