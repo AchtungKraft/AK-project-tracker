@@ -6,27 +6,48 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit2, Trash2, Truck, Globe, Phone, Smartphone, Users, Search, X } from "lucide-react";
+import { Plus, Edit2, Trash2, Truck, Globe, Phone, Smartphone, Users, Search, X, AlertTriangle, Star } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { buildHierarchicalOptions } from "@/components/supply/vendorGroupHierarchy";
 import ServiceVendorDetailModal from "./ServiceVendorDetailModal";
+import VendorStatusBadge from "./vendor/VendorStatusBadge";
+import { VendorCapabilityTagsDisplay } from "./vendor/VendorCapabilityTags";
 
-// Searchable fields for full-text vendor search
+// Searchable text fields
 const SEARCH_FIELDS = [
   "name", "contact_name", "contact_email", "notes",
   "service_capabilities", "preferred_use_cases", "vendor_instructions",
   "pricing_notes", "scheduling_notes", "internal_warnings",
-  "insurance_compliance_notes", "address",
+  "insurance_compliance_notes", "address", "lead_time_notes",
+  "internal_warning_message",
 ];
 
 function vendorMatchesSearch(vendor, query) {
   if (!query) return true;
   const lower = query.toLowerCase();
-  return SEARCH_FIELDS.some(field => {
+
+  // Search text fields
+  if (SEARCH_FIELDS.some(field => {
     const val = vendor[field];
     return val && typeof val === "string" && val.toLowerCase().includes(lower);
-  });
+  })) return true;
+
+  // Search capability tags
+  if (vendor.capability_tags?.some(tag => tag.toLowerCase().includes(lower))) return true;
+
+  // Search vendor status
+  if (vendor.vendor_status && vendor.vendor_status.replace(/_/g, " ").includes(lower)) return true;
+
+  return false;
 }
+
+// Warning level indicator for list view
+const WARNING_INDICATORS = {
+  caution: { icon: "⚠", color: "text-yellow-500" },
+  warning: { icon: "🔶", color: "text-orange-500" },
+  critical: { icon: "🔴", color: "text-red-500" },
+};
 
 export default function ServiceVendorsConfig() {
   const queryClient = useQueryClient();
@@ -48,7 +69,6 @@ export default function ServiceVendorsConfig() {
   });
   const groupsMap = new Map(vendorGroups.map(g => [g.id, g]));
 
-  // Build hierarchy label map for display
   const hierarchicalLabels = useMemo(() => {
     const opts = buildHierarchicalOptions(vendorGroups, "SERVICE");
     const map = new Map();
@@ -81,7 +101,6 @@ export default function ServiceVendorsConfig() {
   const activeVendors = filteredVendors.filter(v => v.is_active !== false);
   const inactiveVendors = filteredVendors.filter(v => v.is_active === false);
 
-  // Group vendors by vendor_group_id for organized display
   const vendorsByGroup = useMemo(() => {
     const map = new Map();
     const ungrouped = [];
@@ -120,7 +139,7 @@ export default function ServiceVendorsConfig() {
             <Input
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search vendors, capabilities, notes..."
+              placeholder="Search vendors, capabilities, tags, warnings, ratings..."
               className="bg-gray-800 border-gray-700 text-white pl-9 pr-8 h-9"
             />
             {searchQuery && (
@@ -149,7 +168,6 @@ export default function ServiceVendorsConfig() {
           </div>
         ) : (
           <>
-            {/* Grouped display */}
             {vendorGroups.map(group => {
               const groupVendors = vendorsByGroup.grouped.get(group.id) || [];
               if (groupVendors.length === 0) return null;
@@ -175,7 +193,6 @@ export default function ServiceVendorsConfig() {
               );
             })}
 
-            {/* Ungrouped vendors (data integrity issue) */}
             {vendorsByGroup.ungrouped.length > 0 && (
               <div>
                 <div className="flex items-center gap-2 mb-2">
@@ -199,7 +216,6 @@ export default function ServiceVendorsConfig() {
           </>
         )}
 
-        {/* Inactive Vendors */}
         {inactiveVendors.length > 0 && (
           <div>
             <Label className="text-gray-400 text-xs mb-3 block">
@@ -222,7 +238,6 @@ export default function ServiceVendorsConfig() {
         )}
       </CardContent>
 
-      {/* Create/Edit Modal */}
       {modalOpen && (
         <ServiceVendorDetailModal
           vendor={editingVendor}
@@ -238,11 +253,25 @@ export default function ServiceVendorsConfig() {
 /** Compact vendor row display */
 function VendorRow({ vendor, group, onEdit, onToggleActive, onDelete, isInactive = false }) {
   const hasDetails = vendor.service_capabilities || vendor.preferred_use_cases || vendor.vendor_instructions || vendor.pricing_notes || vendor.scheduling_notes || vendor.internal_warnings || vendor.insurance_compliance_notes;
+  const warningIndicator = WARNING_INDICATORS[vendor.internal_warning_level];
+  const hasRatings = vendor.quality_rating || vendor.speed_rating || vendor.communication_rating || vendor.value_rating;
+  const avgRating = hasRatings
+    ? (([vendor.quality_rating, vendor.speed_rating, vendor.communication_rating, vendor.value_rating].filter(Boolean).reduce((a, b) => a + b, 0)) / [vendor.quality_rating, vendor.speed_rating, vendor.communication_rating, vendor.value_rating].filter(Boolean).length).toFixed(1)
+    : null;
+
   return (
-    <div className="p-3 bg-gray-900/50 rounded-lg hover:bg-gray-900/70 transition-colors flex items-start gap-3">
+    <div className={cn(
+      "p-3 bg-gray-900/50 rounded-lg hover:bg-gray-900/70 transition-colors flex items-start gap-3",
+      vendor.vendor_status === "do_not_use" && "border border-red-900/40",
+      vendor.vendor_status === "probation" && "border border-orange-900/30",
+    )}>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
+          {warningIndicator && (
+            <span className={cn("text-sm", warningIndicator.color)}>{warningIndicator.icon}</span>
+          )}
           <span className="font-medium text-white">{vendor.name}</span>
+          <VendorStatusBadge status={vendor.vendor_status} />
           {hasDetails && (
             <Badge variant="outline" className="text-[10px] border-blue-600/40 text-blue-400">Details</Badge>
           )}
@@ -251,6 +280,15 @@ function VendorRow({ vendor, group, onEdit, onToggleActive, onDelete, isInactive
           )}
           {isInactive && (
             <Badge variant="outline" className="text-[10px] bg-gray-800 text-gray-500 border-gray-700">Inactive</Badge>
+          )}
+          {avgRating && (
+            <span className="flex items-center gap-0.5 text-[10px] text-amber-400">
+              <Star className="w-3 h-3 fill-amber-400" />
+              {avgRating}
+            </span>
+          )}
+          {vendor.typical_lead_time_days != null && (
+            <span className="text-[10px] text-gray-500">{vendor.typical_lead_time_days}d lead</span>
           )}
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1 text-sm text-gray-400">
@@ -264,6 +302,11 @@ function VendorRow({ vendor, group, onEdit, onToggleActive, onDelete, isInactive
           <a href={vendor.website.startsWith("http") ? vendor.website : `https://${vendor.website}`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:underline mt-0.5 flex items-center gap-1">
             <Globe className="w-3 h-3" />{vendor.website}
           </a>
+        )}
+        {vendor.capability_tags?.length > 0 && (
+          <div className="mt-1.5">
+            <VendorCapabilityTagsDisplay tags={vendor.capability_tags} />
+          </div>
         )}
         {vendor.notes && <p className="text-xs text-gray-500 mt-0.5 italic">{vendor.notes}</p>}
       </div>

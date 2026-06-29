@@ -66,6 +66,69 @@
       "type": "string",
       "description": "Insurance, compliance, or certification details"
     },
+    "vendor_status": {
+      "type": "string",
+      "enum": [
+        "preferred",
+        "approved",
+        "probation",
+        "do_not_use",
+        "inactive"
+      ],
+      "default": "approved",
+      "description": "Operational status of the vendor"
+    },
+    "quality_rating": {
+      "type": "number",
+      "description": "Internal quality rating 1-5"
+    },
+    "speed_rating": {
+      "type": "number",
+      "description": "Internal speed rating 1-5"
+    },
+    "communication_rating": {
+      "type": "number",
+      "description": "Internal communication rating 1-5"
+    },
+    "value_rating": {
+      "type": "number",
+      "description": "Internal value rating 1-5"
+    },
+    "typical_lead_time_days": {
+      "type": "number",
+      "description": "Typical lead time in days"
+    },
+    "rush_capable": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether vendor can handle rush orders"
+    },
+    "lead_time_notes": {
+      "type": "string",
+      "description": "Additional lead time details, rush surcharges, etc."
+    },
+    "internal_warning_level": {
+      "type": "string",
+      "enum": [
+        "none",
+        "caution",
+        "warning",
+        "critical"
+      ],
+      "default": "none",
+      "description": "Severity level of internal warning"
+    },
+    "internal_warning_message": {
+      "type": "string",
+      "description": "Warning message displayed prominently"
+    },
+    "capability_tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Structured capability tags for search and filtering"
+    },
     "vendor_documents": {
       "type": "array",
       "items": {
@@ -93,6 +156,10 @@
               "process_instructions",
               "example_photos",
               "capability_sheet",
+              "certifications",
+              "shipping_instructions",
+              "sample_images",
+              "process_document",
               "other"
             ],
             "description": "Document type classification"
