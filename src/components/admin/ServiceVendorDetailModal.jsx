@@ -5,11 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, FolderKanban, ExternalLink } from "lucide-react";
+import { Loader2, Clock } from "lucide-react";
 import { toast } from "sonner";
-import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -19,6 +17,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { buildHierarchicalOptions } from "@/components/supply/vendorGroupHierarchy";
+import VendorUsageSummary from "./VendorUsageSummary";
+import VendorProjectList from "./VendorProjectList";
 
 const EMPTY_FORM = {
   name: "",
@@ -89,7 +89,7 @@ export default function ServiceVendorDetailModal({ vendor, vendorGroups, onClose
 
   const updateField = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
 
-  // ── Associated Projects (edit mode only) ──
+  // ── Associated Projects data (edit mode only) ──
   const { data: serviceCommitments = [] } = useQuery({
     queryKey: ["serviceCommitments-vendor", vendor?.id],
     queryFn: () => base44.entities.ServiceCommitment.filter({ vendor_id: vendor.id }),
@@ -118,15 +118,20 @@ export default function ServiceVendorDetailModal({ vendor, vendorGroups, onClose
     enabled: projectIds.length > 0,
   });
 
+  // Lookup maps for usage summary + project list
+  const statusMap = useMemo(() => {
+    return new Map(statuses.filter(s => s.scope === "Project").map(s => [s.id, s]));
+  }, [statuses]);
+
+  const projectMap = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects]);
+  const serviceMap = useMemo(() => new Map(services.map(s => [s.id, s])), [services]);
+
   const associatedProjects = useMemo(() => {
     if (projectIds.length === 0) return [];
 
-    const statusMap = new Map(statuses.filter(s => s.scope === "Project").map(s => [s.id, s]));
-    const serviceMap = new Map(services.map(s => [s.id, s]));
-
     return projectIds
       .map(pid => {
-        const project = projects.find(p => p.id === pid);
+        const project = projectMap.get(pid);
         if (!project) return null;
         const status = statusMap.get(project.status_id);
         const commitments = serviceCommitments.filter(sc => sc.project_id === pid);
@@ -135,19 +140,18 @@ export default function ServiceVendorDetailModal({ vendor, vendorGroups, onClose
           const d = sc.completed_date || sc.ordered_date || sc.created_date;
           return d && (!latest || d > latest) ? d : latest;
         }, null);
-        const isTerminal = status?.label?.toLowerCase().match(/complete|done|closed|archived/);
-        return { project, status, serviceNames, commitmentCount: commitments.length, latestDate, isTerminal: !!isTerminal };
+        const isTerminal = !!status?.label?.toLowerCase().match(/complete|done|closed|archived/);
+        return { project, status, serviceNames, commitmentCount: commitments.length, latestDate, isTerminal };
       })
       .filter(Boolean)
       .sort((a, b) => {
-        // Active first, then by latest date descending
         if (a.isTerminal !== b.isTerminal) return a.isTerminal ? 1 : -1;
         if (a.latestDate && b.latestDate) return b.latestDate.localeCompare(a.latestDate);
         if (a.latestDate) return -1;
         if (b.latestDate) return 1;
         return a.project.name.localeCompare(b.project.name);
       });
-  }, [projectIds, projects, statuses, serviceCommitments, services]);
+  }, [projectIds, projectMap, statusMap, serviceCommitments, serviceMap]);
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Name required"); return; }
@@ -155,12 +159,15 @@ export default function ServiceVendorDetailModal({ vendor, vendorGroups, onClose
     setSaving(true);
     try {
       const data = {};
-      // Only include fields that have values (avoid overwriting with undefined)
       Object.entries(form).forEach(([key, val]) => {
         data[key] = typeof val === "string" ? (val.trim() || null) : val;
       });
-      // Ensure name stays trimmed and non-null
       data.name = form.name.trim();
+
+      // Audit metadata
+      const user = await base44.auth.me();
+      data.last_updated_at = new Date().toISOString();
+      data.last_updated_by = user?.full_name || user?.email || "Unknown";
 
       if (isNew) {
         await base44.entities.ServiceVendor.create({ ...data, is_active: true });
@@ -285,53 +292,33 @@ export default function ServiceVendorDetailModal({ vendor, vendorGroups, onClose
             placeholder="Additional notes..."
           />
 
-          {/* ── Section 3: Associated Projects (edit mode only) ── */}
+          {/* ── Audit metadata ── */}
+          {!isNew && (vendor.last_updated_at || vendor.updated_date) && (
+            <div className="flex items-center gap-2 text-[11px] text-gray-600 mt-1">
+              <Clock className="w-3 h-3" />
+              <span>
+                Last updated: {new Date(vendor.last_updated_at || vendor.updated_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                {vendor.last_updated_by && ` by ${vendor.last_updated_by}`}
+              </span>
+            </div>
+          )}
+
+          {/* ── Section 3: Usage Analytics + Associated Projects (edit mode) ── */}
           {!isNew && (
             <>
-              <SectionHeader>Associated Projects</SectionHeader>
-              {associatedProjects.length === 0 ? (
-                <p className="text-sm text-gray-500 italic py-2">No projects currently reference this service vendor.</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {associatedProjects.map(({ project, status, serviceNames, commitmentCount, isTerminal }) => (
-                    <Link
-                      key={project.id}
-                      to={`/projectdetail?id=${project.id}`}
-                      className={cn(
-                        "flex items-start gap-2 p-2 rounded-lg transition-colors group",
-                        isTerminal ? "bg-gray-800/30 hover:bg-gray-800/50" : "bg-gray-800/60 hover:bg-gray-800/80"
-                      )}
-                    >
-                      <FolderKanban className={cn("w-4 h-4 mt-0.5 shrink-0", isTerminal ? "text-gray-600" : "text-red-400/70")} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={cn("text-sm font-medium truncate group-hover:text-red-400 transition-colors", isTerminal ? "text-gray-500" : "text-white")}>
-                            {project.name}
-                          </span>
-                          {status && (
-                            <Badge
-                              variant="outline"
-                              className="text-[10px] px-1.5 py-0"
-                              style={{ borderColor: status.color, color: status.color }}
-                            >
-                              {status.label}
-                            </Badge>
-                          )}
-                        </div>
-                        {project.client_name && (
-                          <p className="text-xs text-gray-500">{project.client_name}</p>
-                        )}
-                        {serviceNames.length > 0 && (
-                          <p className="text-xs text-gray-600 mt-0.5">
-                            {serviceNames.join(", ")} · {commitmentCount} commitment{commitmentCount !== 1 ? "s" : ""}
-                          </p>
-                        )}
-                      </div>
-                      <ExternalLink className="w-3.5 h-3.5 text-gray-600 group-hover:text-gray-400 shrink-0 mt-0.5" />
-                    </Link>
-                  ))}
-                </div>
+              {serviceCommitments.length > 0 && (
+                <>
+                  <SectionHeader>Vendor Usage</SectionHeader>
+                  <VendorUsageSummary
+                    commitments={serviceCommitments}
+                    projectMap={projectMap}
+                    statusMap={statusMap}
+                  />
+                </>
               )}
+
+              <SectionHeader>Associated Projects</SectionHeader>
+              <VendorProjectList associatedProjects={associatedProjects} />
             </>
           )}
         </div>

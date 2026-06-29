@@ -3,17 +3,36 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit2, Trash2, Truck, Globe, Phone, Smartphone, Users } from "lucide-react";
+import { Plus, Edit2, Trash2, Truck, Globe, Phone, Smartphone, Users, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { buildHierarchicalOptions } from "@/components/supply/vendorGroupHierarchy";
 import ServiceVendorDetailModal from "./ServiceVendorDetailModal";
 
+// Searchable fields for full-text vendor search
+const SEARCH_FIELDS = [
+  "name", "contact_name", "contact_email", "notes",
+  "service_capabilities", "preferred_use_cases", "vendor_instructions",
+  "pricing_notes", "scheduling_notes", "internal_warnings",
+  "insurance_compliance_notes", "address",
+];
+
+function vendorMatchesSearch(vendor, query) {
+  if (!query) return true;
+  const lower = query.toLowerCase();
+  return SEARCH_FIELDS.some(field => {
+    const val = vendor[field];
+    return val && typeof val === "string" && val.toLowerCase().includes(lower);
+  });
+}
+
 export default function ServiceVendorsConfig() {
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingVendor, setEditingVendor] = useState(null); // null = create, object = edit
+  const [editingVendor, setEditingVendor] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { data: vendors = [], isLoading } = useQuery({
     queryKey: ["serviceVendors-admin"],
@@ -55,8 +74,12 @@ export default function ServiceVendorsConfig() {
   const openCreate = () => { setEditingVendor(null); setModalOpen(true); };
   const openEdit = (vendor) => { setEditingVendor(vendor); setModalOpen(true); };
 
-  const activeVendors = vendors.filter(v => v.is_active !== false);
-  const inactiveVendors = vendors.filter(v => v.is_active === false);
+  const filteredVendors = useMemo(() => {
+    return vendors.filter(v => vendorMatchesSearch(v, searchQuery));
+  }, [vendors, searchQuery]);
+
+  const activeVendors = filteredVendors.filter(v => v.is_active !== false);
+  const inactiveVendors = filteredVendors.filter(v => v.is_active === false);
 
   // Group vendors by vendor_group_id for organized display
   const vendorsByGroup = useMemo(() => {
@@ -91,11 +114,32 @@ export default function ServiceVendorsConfig() {
             Add Service Vendor
           </Button>
         </div>
+        {vendors.length > 0 && (
+          <div className="relative mt-3">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <Input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search vendors, capabilities, notes..."
+              className="bg-gray-800 border-gray-700 text-white pl-9 pr-8 h-9"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        )}
       </CardHeader>
       <CardContent className="p-4 space-y-6">
         {isLoading ? (
           <div className="text-center py-8 text-gray-500">Loading...</div>
-        ) : activeVendors.length === 0 ? (
+        ) : searchQuery && activeVendors.length === 0 && inactiveVendors.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <Search className="w-6 h-6 mx-auto mb-2 opacity-50" />
+            <p>No vendors match "{searchQuery}"</p>
+          </div>
+        ) : activeVendors.length === 0 && !searchQuery ? (
           <div className="text-center py-12 text-gray-500">
             <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
             <p>No service vendors yet</p>

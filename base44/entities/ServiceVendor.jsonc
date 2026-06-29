@@ -66,6 +66,63 @@
       "type": "string",
       "description": "Insurance, compliance, or certification details"
     },
+    "vendor_documents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique document ID"
+          },
+          "name": {
+            "type": "string",
+            "description": "Document display name"
+          },
+          "url": {
+            "type": "string",
+            "description": "File URL"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "insurance_certificate",
+              "w9",
+              "pricing_sheet",
+              "contract",
+              "process_instructions",
+              "example_photos",
+              "capability_sheet",
+              "other"
+            ],
+            "description": "Document type classification"
+          },
+          "uploaded_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the document was uploaded"
+          },
+          "uploaded_by": {
+            "type": "string",
+            "description": "User who uploaded the document"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Optional notes about the document"
+          }
+        }
+      },
+      "description": "Attached documents (insurance certs, W9, pricing sheets, contracts, etc.)"
+    },
+    "last_updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When vendor details were last updated"
+    },
+    "last_updated_by": {
+      "type": "string",
+      "description": "Full name of user who last updated vendor details"
+    },
     "is_active": {
       "type": "boolean",
       "default": true,
