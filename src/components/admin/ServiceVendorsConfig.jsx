@@ -23,7 +23,7 @@ const SEARCH_FIELDS = [
   "internal_warning_message",
 ];
 
-function vendorMatchesSearch(vendor, query) {
+function vendorMatchesSearch(vendor, query, groupsMap) {
   if (!query) return true;
   const lower = query.toLowerCase();
 
@@ -38,6 +38,12 @@ function vendorMatchesSearch(vendor, query) {
 
   // Search vendor status
   if (vendor.vendor_status && vendor.vendor_status.replace(/_/g, " ").includes(lower)) return true;
+
+  // Search vendor group name
+  if (vendor.vendor_group_id && groupsMap) {
+    const group = groupsMap.get(vendor.vendor_group_id);
+    if (group?.name && group.name.toLowerCase().includes(lower)) return true;
+  }
 
   return false;
 }
@@ -95,8 +101,8 @@ export default function ServiceVendorsConfig() {
   const openEdit = (vendor) => { setEditingVendor(vendor); setModalOpen(true); };
 
   const filteredVendors = useMemo(() => {
-    return vendors.filter(v => vendorMatchesSearch(v, searchQuery));
-  }, [vendors, searchQuery]);
+    return vendors.filter(v => vendorMatchesSearch(v, searchQuery, groupsMap));
+  }, [vendors, searchQuery, groupsMap]);
 
   const activeVendors = filteredVendors.filter(v => v.is_active !== false);
   const inactiveVendors = filteredVendors.filter(v => v.is_active === false);

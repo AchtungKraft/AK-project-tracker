@@ -223,7 +223,7 @@ export default function ServiceVendorDetailModal({ vendor, vendorGroups, onClose
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="bg-gray-900 border-gray-700 max-w-xl max-h-[85vh] flex flex-col">
+      <DialogContent className="bg-gray-900 border-gray-700 max-w-xl max-h-[85vh] flex flex-col z-[100]">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <DialogTitle className="text-white">{isNew ? "Add Service Vendor" : "Edit Service Vendor"}</DialogTitle>
@@ -400,21 +400,29 @@ export default function ServiceVendorDetailModal({ vendor, vendorGroups, onClose
           )}
 
           {/* ── Read-only analytics sections (edit mode) ── */}
-          {!isNew && hasCommitments && (
-            <>
-              <SectionHeader>Vendor Statistics</SectionHeader>
-              <VendorStatsDashboard commitments={serviceCommitments} projectMap={projectMap} statusMap={statusMap} />
-
-              <SectionHeader>Service History</SectionHeader>
-              <VendorServiceHistory commitments={serviceCommitments} serviceMap={serviceMap} />
-
-              <SectionHeader>Recent Activity</SectionHeader>
-              <VendorRecentActivity commitments={serviceCommitments} projectMap={projectMap} serviceMap={serviceMap} />
-            </>
-          )}
-
           {!isNew && (
             <>
+              <SectionHeader>Vendor Statistics</SectionHeader>
+              {hasCommitments ? (
+                <VendorStatsDashboard commitments={serviceCommitments} projectMap={projectMap} statusMap={statusMap} />
+              ) : (
+                <p className="text-sm text-gray-500 italic py-1">No service history available yet.</p>
+              )}
+
+              <SectionHeader>Service History</SectionHeader>
+              {hasCommitments ? (
+                <VendorServiceHistory commitments={serviceCommitments} serviceMap={serviceMap} />
+              ) : (
+                <p className="text-sm text-gray-500 italic py-1">No services recorded yet.</p>
+              )}
+
+              <SectionHeader>Recent Activity</SectionHeader>
+              {hasCommitments ? (
+                <VendorRecentActivity commitments={serviceCommitments} projectMap={projectMap} serviceMap={serviceMap} />
+              ) : (
+                <p className="text-sm text-gray-500 italic py-1">No activity recorded yet.</p>
+              )}
+
               <SectionHeader>Associated Projects</SectionHeader>
               <VendorProjectList associatedProjects={associatedProjects} serviceMap={serviceMap} serviceCommitments={serviceCommitments} />
             </>
