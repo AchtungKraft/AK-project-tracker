@@ -3,33 +3,12 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Loader2, Edit2, Trash2, Check, X as XIcon, Truck, Globe, Phone, Smartphone, Users } from "lucide-react";
+import { Plus, Edit2, Trash2, Truck, Globe, Phone, Smartphone, Users } from "lucide-react";
 import { toast } from "sonner";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { buildHierarchicalOptions } from "@/components/supply/vendorGroupHierarchy";
-
-const EMPTY_FORM = {
-  name: "",
-  vendor_group_id: "",
-  contact_name: "",
-  contact_email: "",
-  contact_phone: "",
-  cell_phone: "",
-  address: "",
-  website: "",
-  notes: "",
-};
+import ServiceVendorDetailModal from "./ServiceVendorDetailModal";
 
 export default function ServiceVendorsConfig() {
   const queryClient = useQueryClient();
@@ -201,7 +180,7 @@ export default function ServiceVendorsConfig() {
 
       {/* Create/Edit Modal */}
       {modalOpen && (
-        <AdminServiceVendorModal
+        <ServiceVendorDetailModal
           vendor={editingVendor}
           vendorGroups={vendorGroups}
           onClose={() => { setModalOpen(false); setEditingVendor(null); }}
@@ -212,138 +191,17 @@ export default function ServiceVendorsConfig() {
   );
 }
 
-/** Modal for creating/editing service vendors */
-function AdminServiceVendorModal({ vendor, vendorGroups, onClose, onSuccess }) {
-  const isNew = !vendor;
-  const [form, setForm] = useState(isNew ? { ...EMPTY_FORM } : {
-    name: vendor.name || "",
-    vendor_group_id: vendor.vendor_group_id || "",
-    contact_name: vendor.contact_name || "",
-    contact_email: vendor.contact_email || "",
-    contact_phone: vendor.contact_phone || "",
-    cell_phone: vendor.cell_phone || "",
-    address: vendor.address || "",
-    website: vendor.website || "",
-    notes: vendor.notes || "",
-  });
-  const [saving, setSaving] = useState(false);
-
-  // Build hierarchical options for group dropdown
-  const hierarchicalOptions = useMemo(
-    () => buildHierarchicalOptions(vendorGroups, "SERVICE"),
-    [vendorGroups]
-  );
-
-  const updateField = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
-
-  const handleSave = async () => {
-    if (!form.name.trim()) { toast.error("Name required"); return; }
-    if (!form.vendor_group_id) { toast.error("Vendor Group required"); return; }
-    setSaving(true);
-    try {
-      const data = {
-        name: form.name.trim(),
-        vendor_group_id: form.vendor_group_id,
-        contact_name: form.contact_name.trim() || null,
-        contact_email: form.contact_email.trim() || null,
-        contact_phone: form.contact_phone.trim() || null,
-        cell_phone: form.cell_phone.trim() || null,
-        address: form.address.trim() || null,
-        website: form.website.trim() || null,
-        notes: form.notes.trim() || null,
-      };
-      if (isNew) {
-        await base44.entities.ServiceVendor.create({ ...data, is_active: true });
-        toast.success(`Vendor "${data.name}" created`);
-      } else {
-        await base44.entities.ServiceVendor.update(vendor.id, data);
-        toast.success(`Vendor "${data.name}" updated`);
-      }
-      onSuccess();
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="bg-gray-900 border-gray-700 max-w-md">
-        <DialogHeader>
-          <DialogTitle className="text-white">{isNew ? "Add Service Vendor" : "Edit Service Vendor"}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3 py-2 max-h-[65vh] overflow-y-auto">
-          <div>
-            <Label className="text-gray-300 text-xs">Vendor Name *</Label>
-            <Input value={form.name} onChange={e => updateField("name", e.target.value)} placeholder="e.g., Chrome Plating Co." className="bg-gray-800 border-gray-600 text-white mt-1" autoFocus />
-          </div>
-          <div>
-            <Label className="text-gray-300 text-xs">Vendor Group *</Label>
-            <Select value={form.vendor_group_id} onValueChange={v => updateField("vendor_group_id", v)}>
-              <SelectTrigger className="bg-gray-800 border-gray-600 text-white mt-1">
-                <SelectValue placeholder="Select group..." />
-              </SelectTrigger>
-              <SelectContent>
-                {hierarchicalOptions.map(opt => (
-                  <SelectItem key={opt.id} value={opt.id}>
-                    {opt.depth > 0 ? `${"  ".repeat(opt.depth)}↳ ${opt.name}` : opt.name}
-                    {opt.depth > 0 ? ` (${opt.label})` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label className="text-gray-300 text-xs">Contact Name</Label>
-              <Input value={form.contact_name} onChange={e => updateField("contact_name", e.target.value)} placeholder="Primary contact" className="bg-gray-800 border-gray-600 text-white mt-1" />
-            </div>
-            <div>
-              <Label className="text-gray-300 text-xs">Contact Email</Label>
-              <Input type="email" value={form.contact_email} onChange={e => updateField("contact_email", e.target.value)} placeholder="email@vendor.com" className="bg-gray-800 border-gray-600 text-white mt-1" />
-            </div>
-            <div>
-              <Label className="text-gray-300 text-xs">Contact Phone</Label>
-              <Input value={form.contact_phone} onChange={e => updateField("contact_phone", e.target.value)} placeholder="(555) 123-4567" className="bg-gray-800 border-gray-600 text-white mt-1" />
-            </div>
-            <div>
-              <Label className="text-gray-300 text-xs">Cell Phone</Label>
-              <Input value={form.cell_phone} onChange={e => updateField("cell_phone", e.target.value)} placeholder="(555) 987-6543" className="bg-gray-800 border-gray-600 text-white mt-1" />
-            </div>
-          </div>
-          <div>
-            <Label className="text-gray-300 text-xs">Address</Label>
-            <Input value={form.address} onChange={e => updateField("address", e.target.value)} placeholder="Vendor address" className="bg-gray-800 border-gray-600 text-white mt-1" />
-          </div>
-          <div>
-            <Label className="text-gray-300 text-xs">Website</Label>
-            <Input value={form.website} onChange={e => updateField("website", e.target.value)} placeholder="https://vendor.com" className="bg-gray-800 border-gray-600 text-white mt-1" />
-          </div>
-          <div>
-            <Label className="text-gray-300 text-xs">Notes</Label>
-            <Textarea value={form.notes} onChange={e => updateField("notes", e.target.value)} placeholder="Additional notes..." className="bg-gray-800 border-gray-600 text-white mt-1" rows={2} />
-          </div>
-        </div>
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose} className="border-gray-600">Cancel</Button>
-          <Button onClick={handleSave} disabled={saving || !form.name.trim() || !form.vendor_group_id}>
-            {saving ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
-            {saving ? "Saving..." : isNew ? "Create Vendor" : "Save Changes"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 /** Compact vendor row display */
 function VendorRow({ vendor, group, onEdit, onToggleActive, onDelete, isInactive = false }) {
+  const hasDetails = vendor.service_capabilities || vendor.preferred_use_cases || vendor.vendor_instructions || vendor.pricing_notes || vendor.scheduling_notes || vendor.internal_warnings || vendor.insurance_compliance_notes;
   return (
     <div className="p-3 bg-gray-900/50 rounded-lg hover:bg-gray-900/70 transition-colors flex items-start gap-3">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-medium text-white">{vendor.name}</span>
+          {hasDetails && (
+            <Badge variant="outline" className="text-[10px] border-blue-600/40 text-blue-400">Details</Badge>
+          )}
           {!group && (
             <Badge variant="outline" className="text-[10px] border-red-600/50 text-red-400">No Group!</Badge>
           )}

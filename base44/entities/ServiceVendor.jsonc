@@ -36,7 +36,35 @@
     },
     "notes": {
       "type": "string",
-      "description": "Additional notes"
+      "description": "General internal notes"
+    },
+    "service_capabilities": {
+      "type": "string",
+      "description": "Description of services the vendor can provide"
+    },
+    "preferred_use_cases": {
+      "type": "string",
+      "description": "When to use this vendor over alternatives"
+    },
+    "vendor_instructions": {
+      "type": "string",
+      "description": "Operational instructions for working with this vendor (ordering, delivery, etc.)"
+    },
+    "pricing_notes": {
+      "type": "string",
+      "description": "Internal notes about pricing, minimums, payment terms"
+    },
+    "scheduling_notes": {
+      "type": "string",
+      "description": "Lead times, availability, scheduling considerations"
+    },
+    "internal_warnings": {
+      "type": "string",
+      "description": "Cautions, known issues, or reliability concerns"
+    },
+    "insurance_compliance_notes": {
+      "type": "string",
+      "description": "Insurance, compliance, or certification details"
     },
     "is_active": {
       "type": "boolean",
