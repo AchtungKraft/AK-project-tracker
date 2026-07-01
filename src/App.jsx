@@ -16,6 +16,9 @@ import BuildKnowledge from './pages/BuildKnowledge';
 import ProcedurePage from './pages/ProcedurePage';
 import ClientPage from './pages/ClientPage';
 import MediaLibrary from './pages/MediaLibrary';
+import ClientFeedbackRequestDetail from './pages/ClientFeedbackRequestDetail';
+import ClientProjectPortal from './pages/ClientProjectPortal';
+import ClientProjects from './pages/ClientProjects';
 // VendorPOBuilder page removed — vendor PO creation is now inline in GlobalNeedToOrder
 
 const { Pages, Layout, mainPage } = pagesConfig;
@@ -69,9 +72,7 @@ const AuthenticatedApp = () => {
         />
       ))}
 
-      <Route path="/projectprintview" element={<ProjectPrintView />} />
-      <Route path="/personprintview" element={<PersonPrintView />} />
-      <Route path="/clientpage" element={<ClientPage />} />
+
       <Route path="/buildknowledge" element={
         <LayoutWrapper currentPageName="BuildKnowledge">
           <BuildKnowledge />
@@ -98,6 +99,21 @@ const AuthenticatedApp = () => {
 };
 
 
+// Public routes that clients access without login (token/slug auth)
+const PublicClientRoutes = () => {
+  return (
+    <Routes>
+      <Route path="/clientfeedbackrequestdetail" element={<ClientFeedbackRequestDetail />} />
+      <Route path="/clientprojectportal" element={<ClientProjectPortal />} />
+      <Route path="/clientprojects" element={<ClientProjects />} />
+      <Route path="/clientpage" element={<ClientPage />} />
+      <Route path="/projectprintview" element={<ProjectPrintView />} />
+      <Route path="/personprintview" element={<PersonPrintView />} />
+      <Route path="*" element={<AuthenticatedApp />} />
+    </Routes>
+  );
+};
+
 function App() {
 
   return (
@@ -105,7 +121,7 @@ function App() {
       <QueryClientProvider client={queryClientInstance}>
         <Router>
           <NavigationTracker />
-          <AuthenticatedApp />
+          <PublicClientRoutes />
         </Router>
         <Toaster />
         <VisualEditAgent />
