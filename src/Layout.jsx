@@ -20,8 +20,10 @@ import {
   ShoppingCart,
   BookOpen,
   Image,
+  LogOut,
 } from "lucide-react";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
+import { useLogout } from "@/hooks/useLogout";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 import MobileCollapsibleHeader from "@/components/mobile/MobileCollapsibleHeader";
 import ActionAuditPanel from "@/components/dev/ActionAuditPanel";
@@ -289,7 +291,7 @@ const MobileBottomNav = ({ currentPath, isAchtungKraft, onMenuOpen }) => {
 };
 
 // Mobile off-canvas menu for secondary navigation
-const MobileOffCanvasMenu = ({ isOpen, onClose, navigationItems, currentPath }) => {
+const MobileOffCanvasMenu = ({ isOpen, onClose, navigationItems, currentPath, onLogout, isLoggingOut }) => {
   if (!isOpen) return null;
 
   return (
@@ -353,6 +355,18 @@ const MobileOffCanvasMenu = ({ isOpen, onClose, navigationItems, currentPath }) 
             );
           })}
         </nav>
+
+        {/* Logout Button */}
+        <div className="p-3 mt-auto border-t border-red-900/30">
+          <button
+            onClick={() => { onLogout(); onClose(); }}
+            disabled={isLoggingOut}
+            className="flex items-center gap-3 w-full px-3 py-3 rounded-lg text-gray-300 hover:bg-red-950/30 hover:text-red-400 transition-colors disabled:opacity-50"
+          >
+            <LogOut className="w-5 h-5" />
+            <span>{isLoggingOut ? 'Logging out…' : 'Logout'}</span>
+          </button>
+        </div>
       </div>
     </>
   );
@@ -368,6 +382,7 @@ export default function Layout({ children, currentPageName }) {
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isMobile = useIsMobile();
+  const { handleLogout, isLoggingOut } = useLogout();
 
   // Hide layout for client portal pages (no auth required)
   const isClientPortalPage = ['ClientProjects', 'ClientProjectPortal', 'ClientFeedbackRequestDetail'].includes(currentPageName);
@@ -563,6 +578,8 @@ export default function Layout({ children, currentPageName }) {
           onClose={() => setMobileMenuOpen(false)}
           navigationItems={navigationItems}
           currentPath={location.pathname}
+          onLogout={handleLogout}
+          isLoggingOut={isLoggingOut}
         />
         {/* Temporary viewport diagnostic — activate with localStorage ak_debug_viewport=true */}
         <ViewportDiagnostic />
@@ -761,6 +778,18 @@ export default function Layout({ children, currentPageName }) {
                 </p>
               </div>
             </div>
+
+            {/* Logout Button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="w-full justify-start gap-2 text-gray-400 hover:text-red-400 hover:bg-red-950/30 h-8"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>{isLoggingOut ? 'Logging out…' : 'Logout'}</span>
+            </Button>
           </SidebarFooter>
           </Sidebar>
 
