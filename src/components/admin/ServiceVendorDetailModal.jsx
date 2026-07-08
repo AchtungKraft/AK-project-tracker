@@ -251,7 +251,7 @@ export default function ServiceVendorDetailModal({ vendor, vendorGroups, onClose
                 <SelectTrigger className="bg-gray-800 border-gray-600 text-white mt-1">
                   <SelectValue placeholder="Select group..." />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="z-[200]">
                   {hierarchicalOptions.map(opt => (
                     <SelectItem key={opt.id} value={opt.id}>
                       {opt.depth > 0 ? `${"  ".repeat(opt.depth)}↳ ${opt.name}` : opt.name}
@@ -267,7 +267,7 @@ export default function ServiceVendorDetailModal({ vendor, vendorGroups, onClose
                 <SelectTrigger className="bg-gray-800 border-gray-600 text-white mt-1">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="z-[200]">
                   <SelectItem value="preferred">⭐ Preferred</SelectItem>
                   <SelectItem value="approved">✓ Approved</SelectItem>
                   <SelectItem value="probation">⚠ Probation</SelectItem>
@@ -358,7 +358,7 @@ export default function ServiceVendorDetailModal({ vendor, vendorGroups, onClose
                 <SelectTrigger className="bg-gray-800 border-gray-600 text-white mt-1">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="z-[200]">
                   <SelectItem value="none">None</SelectItem>
                   <SelectItem value="caution">⚠ Caution</SelectItem>
                   <SelectItem value="warning">🔶 Warning</SelectItem>
