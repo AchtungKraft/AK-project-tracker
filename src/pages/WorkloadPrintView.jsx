@@ -168,9 +168,10 @@ export default function WorkloadPrintView() {
   const printDataRef = useRef(null);
   const hasPrintedRef = useRef(false);
 
-  // Read data from localStorage exactly once via lazy useState initializer
-  // (survives React StrictMode double-invoke and auth re-renders)
-  const [data] = useState(() => {
+  // Read data from localStorage. Use state so we can re-read after auth redirects.
+  // The key stays in localStorage until we successfully render — this survives
+  // auth redirect cycles, StrictMode double-invokes, and late mounts.
+  const [data, setData] = useState(() => {
     try {
       const raw = localStorage.getItem("workload_print_data");
       if (!raw) return null;
@@ -179,6 +180,15 @@ export default function WorkloadPrintView() {
       return null;
     }
   });
+
+  // Fallback: re-check localStorage after mount (covers cases where the
+  // useState initializer ran before auth finished and the component re-mounted)
+  useEffect(() => {
+    if (data) return;
+    const raw = localStorage.getItem("workload_print_data");
+    if (!raw) return;
+    try { setData(JSON.parse(raw)); } catch { /* ignore */ }
+  }, [data]);
 
   const selectedSections = data?.selectedSections || [];
   const sectionGroups = data?.sectionGroups || {};
@@ -209,17 +219,21 @@ export default function WorkloadPrintView() {
     groups.forEach((g) => { totalPrintedTasks += g.tasks.length; });
   });
 
-  // Clean up localStorage after successful read, and trigger print
+  // Clean up localStorage after successful render, and trigger print
   useEffect(() => {
     if (!data) return;
-    localStorage.removeItem("workload_print_data");
-    if (hasPrintedRef.current) return;
+    // Only clean up after a short delay to ensure we've committed to rendering
+    const timer = setTimeout(() => {
+      localStorage.removeItem("workload_print_data");
+    }, 2000);
+    if (hasPrintedRef.current) return () => clearTimeout(timer);
     hasPrintedRef.current = true;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         window.print();
       });
     });
+    return () => clearTimeout(timer);
   }, [data]);
 
   if (!data) {

@@ -21,6 +21,7 @@ import { sortTasksByPriority } from "@/utils/taskPrioritySort";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 import WorkloadProjectGroup from "./WorkloadProjectGroup";
 import WorkloadPrintOptionsModal from "./WorkloadPrintOptionsModal";
+import buildWorkloadPrintHTML from "./buildWorkloadPrintHTML";
 
 const DONE_STATUS_ID = "6913f57422230d8c7ee2ef54";
 
@@ -312,7 +313,7 @@ export default function WeeklyWorkloadView({
   const [createTaskForProjectId, setCreateTaskForProjectId] = useState(null);
   const [printModalOpen, setPrintModalOpen] = useState(false);
 
-  // ── Print handler — serialize data to sessionStorage, open print page ──
+  // ── Print handler — render print view in a new window using document.write ──
   const handlePrint = useCallback(({ sections: selectedSections, fields }) => {
     // Serialize the section groups (only selected ones, filtered for completed)
     const printSectionGroups = {};
@@ -330,7 +331,6 @@ export default function WeeklyWorkloadView({
 
     const weekLabel = `Week of ${format(selectedWeek.start, "MMMM d")}–${format(selectedWeek.end, "d, yyyy")}`;
 
-    // Minimal serializable data
     const printData = {
       selectedSections,
       sectionGroups: printSectionGroups,
@@ -339,11 +339,17 @@ export default function WeeklyWorkloadView({
       teamMembers: teamMembers.map((tm) => ({ id: tm.id, full_name: tm.full_name })),
       statuses: statuses.map((s) => ({ id: s.id, label: s.label, color: s.color, scope: s.scope })),
       blockedTaskIds: Array.from(blockedSet),
-      activeFilters: [], // Could be extended to show filter labels
+      activeFilters: [],
     };
 
-    localStorage.setItem("workload_print_data", JSON.stringify(printData));
-    window.open("/workloadprint", "_blank");
+    // Build the print HTML directly and write to a new window — avoids all
+    // cross-tab localStorage / auth-redirect timing issues
+    const html = buildWorkloadPrintHTML(printData);
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+    }
   }, [sectionGroups, selectedWeek, teamMembers, statuses, blockedSet]);
 
   return (
