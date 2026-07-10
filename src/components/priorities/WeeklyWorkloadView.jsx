@@ -22,6 +22,7 @@ import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 import WorkloadProjectGroup from "./WorkloadProjectGroup";
 import WorkloadPrintOptionsModal from "./WorkloadPrintOptionsModal";
 import buildWorkloadPrintHTML from "./buildWorkloadPrintHTML";
+import { useToast } from "@/components/ui/use-toast";
 
 const DONE_STATUS_ID = "6913f57422230d8c7ee2ef54";
 
@@ -312,22 +313,49 @@ export default function WeeklyWorkloadView({
 
   const [createTaskForProjectId, setCreateTaskForProjectId] = useState(null);
   const [printModalOpen, setPrintModalOpen] = useState(false);
+  const { toast } = useToast();
 
-  // ── Print handler — render print view in a new window using document.write ──
+  // ── Print handler — direct document.write into a new window ──
   const handlePrint = useCallback(({ sections: selectedSections, fields }) => {
-    // Serialize the section groups (only selected ones, filtered for completed)
+    // 1. Open window SYNCHRONOUSLY inside the click event to avoid popup blockers.
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast({
+        title: "Print window blocked",
+        description: "Your browser blocked the print window. Please allow popups for this app and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // 2. Build the print data from the current derived state.
     const printSectionGroups = {};
+    let totalTasks = 0;
     selectedSections.forEach((secKey) => {
       const groups = sectionGroups[secKey] || [];
-      printSectionGroups[secKey] = groups.map((g) => ({
-        projectId: g.projectId,
-        project: g.project,
-        label: g.label,
-        tasks: fields.showCompleted
+      printSectionGroups[secKey] = groups.map((g) => {
+        const filtered = fields.showCompleted
           ? g.tasks
-          : g.tasks.filter((t) => t.status_id !== DONE_STATUS_ID),
-      }));
+          : g.tasks.filter((t) => t.status_id !== DONE_STATUS_ID);
+        totalTasks += filtered.length;
+        return {
+          projectId: g.projectId,
+          project: g.project,
+          label: g.label,
+          tasks: filtered,
+        };
+      });
     });
+
+    // 3. Validate — if no tasks match, close the blank window and inform the user.
+    if (totalTasks === 0) {
+      printWindow.close();
+      toast({
+        title: "Nothing to print",
+        description: "No workload tasks match the selected print options.",
+      });
+      return;
+    }
 
     const weekLabel = `Week of ${format(selectedWeek.start, "MMMM d")}–${format(selectedWeek.end, "d, yyyy")}`;
 
@@ -342,14 +370,11 @@ export default function WeeklyWorkloadView({
       activeFilters: [],
     };
 
-    // Build the print HTML directly and write to a new window — avoids all
-    // cross-tab localStorage / auth-redirect timing issues
+    // 4. Generate HTML and write to the print window.
     const html = buildWorkloadPrintHTML(printData);
-    const printWindow = window.open("", "_blank");
-    if (printWindow) {
-      printWindow.document.write(html);
-      printWindow.document.close();
-    }
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
   }, [sectionGroups, selectedWeek, teamMembers, statuses, blockedSet]);
 
   return (

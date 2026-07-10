@@ -23,6 +23,9 @@ const FIELD_OPTIONS = [
   { key: "showEstimate", label: "Show Estimated Time", defaultOn: true },
   { key: "showActualBlank", label: "Show Actual Time Blank", defaultOn: true },
   { key: "showNotesLine", label: "Show Notes Line", defaultOn: true },
+  { key: "showStatus", label: "Show Status", defaultOn: true },
+  { key: "showPriority", label: "Show Priority Indicator", defaultOn: true },
+  { key: "showBlocked", label: "Show Blocked Indicator", defaultOn: true },
   { key: "showCompleted", label: "Show Completed Tasks", defaultOn: false },
 ];
 
