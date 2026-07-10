@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { formatPrintTimestamp } from "@/components/print/PrintTimestamp";
 
 const DONE_STATUS_ID = "6913f57422230d8c7ee2ef54";
@@ -168,13 +168,17 @@ export default function WorkloadPrintView() {
   const printDataRef = useRef(null);
   const hasPrintedRef = useRef(false);
 
-  // Read data from localStorage (set by the parent before opening this tab)
-  const data = useMemo(() => {
-    const raw = localStorage.getItem("workload_print_data");
-    if (!raw) return null;
-    localStorage.removeItem("workload_print_data"); // Clean up after reading
-    return JSON.parse(raw);
-  }, []);
+  // Read data from localStorage exactly once via lazy useState initializer
+  // (survives React StrictMode double-invoke and auth re-renders)
+  const [data] = useState(() => {
+    try {
+      const raw = localStorage.getItem("workload_print_data");
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  });
 
   const selectedSections = data?.selectedSections || [];
   const sectionGroups = data?.sectionGroups || {};
@@ -205,9 +209,11 @@ export default function WorkloadPrintView() {
     groups.forEach((g) => { totalPrintedTasks += g.tasks.length; });
   });
 
-  // Trigger print after render
+  // Clean up localStorage after successful read, and trigger print
   useEffect(() => {
-    if (!data || hasPrintedRef.current) return;
+    if (!data) return;
+    localStorage.removeItem("workload_print_data");
+    if (hasPrintedRef.current) return;
     hasPrintedRef.current = true;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
