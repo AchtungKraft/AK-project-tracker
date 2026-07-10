@@ -16,6 +16,7 @@ import BuildKnowledge from './pages/BuildKnowledge';
 import ProcedurePage from './pages/ProcedurePage';
 import ClientPage from './pages/ClientPage';
 import MediaLibrary from './pages/MediaLibrary';
+import WorkloadPrintView from './pages/WorkloadPrintView';
 // VendorPOBuilder page removed — vendor PO creation is now inline in GlobalNeedToOrder
 
 const { Pages, Layout, mainPage } = pagesConfig;
@@ -92,6 +93,7 @@ const AuthenticatedApp = () => {
           <MediaLibrary />
         </LayoutWrapper>
       } />
+      <Route path="/workloadprint" element={<WorkloadPrintView />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );

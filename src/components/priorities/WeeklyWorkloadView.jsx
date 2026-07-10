@@ -13,12 +13,14 @@ import {
   Timer,
   FolderKanban,
   HelpCircle,
+  Printer,
 } from "lucide-react";
 import { startOfWeek, endOfWeek, addWeeks, format, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import { sortTasksByPriority } from "@/utils/taskPrioritySort";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 import WorkloadProjectGroup from "./WorkloadProjectGroup";
+import WorkloadPrintOptionsModal from "./WorkloadPrintOptionsModal";
 
 const DONE_STATUS_ID = "6913f57422230d8c7ee2ef54";
 
@@ -308,6 +310,41 @@ export default function WeeklyWorkloadView({
   }, []);
 
   const [createTaskForProjectId, setCreateTaskForProjectId] = useState(null);
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+
+  // ── Print handler — serialize data to sessionStorage, open print page ──
+  const handlePrint = useCallback(({ sections: selectedSections, fields }) => {
+    // Serialize the section groups (only selected ones, filtered for completed)
+    const printSectionGroups = {};
+    selectedSections.forEach((secKey) => {
+      const groups = sectionGroups[secKey] || [];
+      printSectionGroups[secKey] = groups.map((g) => ({
+        projectId: g.projectId,
+        project: g.project,
+        label: g.label,
+        tasks: fields.showCompleted
+          ? g.tasks
+          : g.tasks.filter((t) => t.status_id !== DONE_STATUS_ID),
+      }));
+    });
+
+    const weekLabel = `Week of ${format(selectedWeek.start, "MMMM d")}–${format(selectedWeek.end, "d, yyyy")}`;
+
+    // Minimal serializable data
+    const printData = {
+      selectedSections,
+      sectionGroups: printSectionGroups,
+      fields,
+      weekLabel,
+      teamMembers: teamMembers.map((tm) => ({ id: tm.id, full_name: tm.full_name })),
+      statuses: statuses.map((s) => ({ id: s.id, label: s.label, color: s.color, scope: s.scope })),
+      blockedTaskIds: Array.from(blockedSet),
+      activeFilters: [], // Could be extended to show filter labels
+    };
+
+    sessionStorage.setItem("workload_print_data", JSON.stringify(printData));
+    window.open("/workloadprint", "_blank");
+  }, [sectionGroups, selectedWeek, teamMembers, statuses, blockedSet]);
 
   return (
     <div className="space-y-3">
@@ -333,6 +370,15 @@ export default function WeeklyWorkloadView({
             <span className="text-xs text-gray-400 ml-1">
               {format(selectedWeek.start, "MMM d")} – {format(selectedWeek.end, "MMM d, yyyy")}
             </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPrintModalOpen(true)}
+              className="border-gray-700 text-white hover:bg-gray-800 h-7 px-2 text-xs ml-1"
+            >
+              <Printer className="w-3 h-3 mr-1" />
+              Print
+            </Button>
           </div>
           <div className="flex flex-wrap gap-1">
             <JumpPill label="This Week" count={stats.dueThisWeek} color="border-blue-600/50 text-blue-400 bg-blue-600/10" onClick={() => scrollToSection("dueThisWeek")} />
@@ -425,6 +471,18 @@ export default function WeeklyWorkloadView({
           onClose={() => setCreateTaskForProjectId(null)}
         />
       )}
+
+      <WorkloadPrintOptionsModal
+        open={printModalOpen}
+        onClose={() => setPrintModalOpen(false)}
+        onPrint={handlePrint}
+        sectionCounts={{
+          dueThisWeek: buckets.dueThisWeek.length,
+          overdue: buckets.overdue.length,
+          upcoming: buckets.upcoming.length,
+          unscheduled: buckets.unscheduled.length,
+        }}
+      />
     </div>
   );
 }
