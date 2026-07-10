@@ -168,10 +168,11 @@ export default function WorkloadPrintView() {
   const printDataRef = useRef(null);
   const hasPrintedRef = useRef(false);
 
-  // Read data from sessionStorage (set by the parent before navigation)
+  // Read data from localStorage (set by the parent before opening this tab)
   const data = useMemo(() => {
-    const raw = sessionStorage.getItem("workload_print_data");
+    const raw = localStorage.getItem("workload_print_data");
     if (!raw) return null;
+    localStorage.removeItem("workload_print_data"); // Clean up after reading
     return JSON.parse(raw);
   }, []);
 

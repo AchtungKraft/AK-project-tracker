@@ -342,7 +342,7 @@ export default function WeeklyWorkloadView({
       activeFilters: [], // Could be extended to show filter labels
     };
 
-    sessionStorage.setItem("workload_print_data", JSON.stringify(printData));
+    localStorage.setItem("workload_print_data", JSON.stringify(printData));
     window.open("/workloadprint", "_blank");
   }, [sectionGroups, selectedWeek, teamMembers, statuses, blockedSet]);
 
