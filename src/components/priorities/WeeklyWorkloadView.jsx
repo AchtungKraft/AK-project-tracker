@@ -1,8 +1,6 @@
-import React, { useState, useMemo, useCallback } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useMemo, useRef, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   ChevronLeft,
   ChevronRight,
@@ -11,263 +9,31 @@ import {
   Clock,
   CalendarClock,
   CalendarOff,
-  Flame,
   User,
-  FolderKanban,
   Timer,
-  Ban,
-  Plus,
-  Settings2,
 } from "lucide-react";
-import {
-  startOfWeek,
-  endOfWeek,
-  addWeeks,
-  format,
-  isWithinInterval,
-  isBefore,
-  startOfDay,
-} from "date-fns";
+import { startOfWeek, endOfWeek, addWeeks, format, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import { buildProjectDetailUrl, SOURCES } from "@/lib/workspaceConfig";
+import { sortTasksByPriority } from "@/utils/taskPrioritySort";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 import ManageBucketsModal from "@/components/project/ManageBucketsModal";
+import WorkloadProjectGroup from "./WorkloadProjectGroup";
 
-// ── Priority sort order: Critical→High→Medium→Low→unknown ──
-// Task entity has no "priority" enum field — priority is derived from is_priority flag + due_date urgency.
-// For this workload view, we use is_priority as the "critical/high" indicator
-// and sort by due date within that tier.
-const PRIORITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
+// ── Canonical "Done" status ID — the ONLY excluded status ──
+// Task statuses in this app: To Do, In Progress, Review, QA/Test, Done
+// There are NO "Cancelled" or "Archived" task statuses.
+// We exclude ONLY "Done" by matching the exact canonical ID.
+const DONE_STATUS_ID = "6913f57422230d8c7ee2ef54";
 
-function getWorkloadPriority(task) {
-  // is_priority = high importance; overdue + priority = critical
-  if (task.is_priority) {
-    if (task.due_date) {
-      const now = new Date();
-      now.setHours(0, 0, 0, 0);
-      const due = new Date(task.due_date);
-      if (due < now) return "critical";
-      const diff = (due - now) / (1000 * 60 * 60 * 24);
-      if (diff <= 7) return "critical";
-      return "high";
-    }
-    return "high";
-  }
-  // Non-priority with due date = medium, without = low
-  return task.due_date ? "medium" : "low";
-}
-
-function workloadSort(tasks) {
-  return [...tasks].sort((a, b) => {
-    const pa = PRIORITY_ORDER[getWorkloadPriority(a)] ?? 4;
-    const pb = PRIORITY_ORDER[getWorkloadPriority(b)] ?? 4;
-    if (pa !== pb) return pa - pb;
-    // Same priority: earliest due date first
-    const aDue = a.due_date ? new Date(a.due_date).getTime() : Infinity;
-    const bDue = b.due_date ? new Date(b.due_date).getTime() : Infinity;
-    if (aDue !== bDue) return aDue - bDue;
-    // Tie: created_date ascending
-    const aCr = a.created_date ? new Date(a.created_date).getTime() : Infinity;
-    const bCr = b.created_date ? new Date(b.created_date).getTime() : Infinity;
-    return aCr - bCr;
-  });
-}
-
-// ── Priority badge display ──
-function PriorityBadge({ priority }) {
-  const cfg = {
-    critical: { label: "Critical", cls: "border-red-500 text-red-400 bg-red-500/10" },
-    high: { label: "High", cls: "border-orange-500 text-orange-400 bg-orange-500/10" },
-    medium: { label: "Medium", cls: "border-yellow-500 text-yellow-400 bg-yellow-500/10" },
-    low: { label: "Low", cls: "border-gray-500 text-gray-400 bg-gray-500/10" },
-  };
-  const c = cfg[priority] || cfg.low;
-  return (
-    <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0", c.cls)}>
-      {c.label}
-    </Badge>
-  );
-}
-
-// ── Build compact project label ──
-function compactProjectLabel(project) {
-  if (!project) return "No Project";
-  const name = project.name || "";
-  const client = project.client_name || "";
-  // Extract project code
-  const codeMatch = name.match(/^(\d+[_\-]\d+)/);
-  const code = codeMatch ? codeMatch[1] : null;
-  // Extract descriptor from name after code and client
-  if (code && client) return `${code} · ${client.split(" ").pop()}`;
-  if (client) {
-    // Try to find vehicle/descriptor
-    const parts = name.split(/\s*(?:\/\/|\/)\s*/);
-    if (parts.length >= 2) {
-      const clientLower = client.toLowerCase();
-      const desc = parts.find(p => p.toLowerCase() !== clientLower && !/^\d+[_\-]/.test(p));
-      if (desc) return `${client.split(" ").pop()} · ${desc.length > 16 ? desc.slice(0, 14) + "…" : desc}`;
-    }
-    return client;
-  }
-  return name.length > 24 ? name.slice(0, 22) + "…" : name;
-}
-
-// ── Blocked detection (task has unmet dependencies) ──
-function isBlocked(task, completedStatusId) {
-  if (!task.dependencies || task.dependencies.length === 0) return false;
-  // We can't check dep status without the full task map — mark as blocked if has deps
-  // (A more accurate check would verify dep completion, but we keep it simple)
-  return true;
-}
-
-// ── Task Row ──
-function WorkloadTaskRow({
-  task,
-  project,
-  assignee,
-  status,
-  priority,
-  blocked,
-  onToggleComplete,
-  onTaskClick,
-}) {
-  const dueDate = task.due_date ? new Date(task.due_date) : null;
-  const today = startOfDay(new Date());
-  const isOverdue = dueDate && isBefore(dueDate, today);
-
-  return (
-    <div
-      className={cn(
-        "flex items-center gap-2 px-3 py-2 hover:bg-gray-800/40 transition-colors group border-b border-gray-800/30 last:border-b-0",
-        blocked && "opacity-70"
-      )}
-    >
-      {/* Checkbox */}
-      <Checkbox
-        checked={false}
-        onCheckedChange={() => onToggleComplete(task)}
-        className="border-gray-600 data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600 shrink-0"
-      />
-
-      {/* Priority indicator */}
-      {task.is_priority && <Flame className="w-3.5 h-3.5 text-red-400 shrink-0" />}
-
-      {/* Task name */}
-      <button
-        onClick={() => onTaskClick(task)}
-        className="flex-1 min-w-0 text-left text-sm text-gray-200 hover:text-white truncate font-medium"
-      >
-        {task.name}
-      </button>
-
-      {/* Blocked indicator */}
-      {blocked && (
-        <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-red-700 text-red-500 bg-red-900/20 shrink-0">
-          <Ban className="w-3 h-3 mr-0.5" />
-          Blocked
-        </Badge>
-      )}
-
-      {/* Project label */}
-      <Link
-        to={buildProjectDetailUrl(project?.id, { source: SOURCES.PRIORITIES })}
-        className="text-[11px] text-gray-500 hover:text-gray-300 truncate max-w-[140px] shrink-0 hidden md:block"
-        title={project?.name}
-      >
-        {compactProjectLabel(project)}
-      </Link>
-
-      {/* Priority */}
-      <div className="shrink-0 hidden sm:block">
-        <PriorityBadge priority={priority} />
-      </div>
-
-      {/* Status */}
-      {status && (
-        <Badge
-          variant="outline"
-          className="text-[10px] px-1.5 py-0 shrink-0 hidden sm:inline-flex"
-          style={{ borderColor: status.color, color: status.color }}
-        >
-          {status.label}
-        </Badge>
-      )}
-
-      {/* Assignee */}
-      <span className="text-xs text-gray-500 w-16 truncate shrink-0 hidden lg:block text-right">
-        {assignee?.full_name?.split(" ")[0] || "—"}
-      </span>
-
-      {/* Due date */}
-      <span
-        className={cn(
-          "text-xs w-16 shrink-0 text-right hidden sm:block tabular-nums",
-          isOverdue ? "text-red-400 font-semibold" : "text-gray-500"
-        )}
-      >
-        {dueDate ? format(dueDate, "MMM d") : "—"}
-      </span>
-
-      {/* Estimated time */}
-      {task.estimated_hours ? (
-        <span className="text-[11px] text-gray-500 w-12 shrink-0 text-right hidden lg:block tabular-nums">
-          {task.estimated_hours}h
-        </span>
-      ) : (
-        <span className="w-12 shrink-0 hidden lg:block" />
-      )}
-    </div>
-  );
-}
-
-// ── Section ──
-function WorkloadSection({
-  title,
-  icon: Icon,
-  iconColor,
-  borderColor,
-  headerBg,
-  tasks,
-  projectMap,
-  teamMemberMap,
-  statusMap,
-  completedStatusId,
-  emptyMessage,
-  onToggleComplete,
-  onTaskClick,
-}) {
-  const sorted = useMemo(() => workloadSort(tasks), [tasks]);
-
-  return (
-    <div className={cn("bg-black/40 backdrop-blur-xl border-2 rounded-lg overflow-hidden", borderColor)}>
-      <div className={cn("flex items-center gap-2 px-3 py-2 border-b", headerBg, borderColor)}>
-        <Icon className={cn("w-4 h-4", iconColor)} />
-        <span className={cn("text-sm font-semibold", iconColor)}>{title}</span>
-        <Badge variant="outline" className={cn("ml-auto text-[10px]", borderColor, iconColor)}>
-          {tasks.length}
-        </Badge>
-      </div>
-      <div>
-        {sorted.length === 0 ? (
-          <p className="text-gray-600 text-sm text-center py-4">{emptyMessage}</p>
-        ) : (
-          sorted.map((task) => (
-            <WorkloadTaskRow
-              key={task.id}
-              task={task}
-              project={projectMap.get(task.project_id)}
-              assignee={teamMemberMap.get(task.assigned_team_member_id)}
-              status={statusMap.get(task.status_id)}
-              priority={getWorkloadPriority(task)}
-              blocked={isBlocked(task, completedStatusId)}
-              onToggleComplete={onToggleComplete}
-              onTaskClick={onTaskClick}
-            />
-          ))
-        )}
-      </div>
-    </div>
-  );
+// ── Parse a date-only string WITHOUT timezone shift ──
+// Task.due_date is "YYYY-MM-DD" — parsing with new Date() interprets as UTC midnight,
+// which can shift to the previous day in US timezones. Parse as local instead.
+function parseLocalDate(dateStr) {
+  if (!dateStr || typeof dateStr !== "string") return null;
+  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
 }
 
 // ── Format hours nicely ──
@@ -280,9 +46,148 @@ function formatHours(h) {
   return `${hrs}h ${mins}m`;
 }
 
+// ── Compact project label (reuses pattern from PriorityProjectNav) ──
+function compactProjectLabel(project) {
+  if (!project) return "No Project";
+  const name = project.name || "";
+  const client = project.client_name || "";
+  const codeMatch = name.match(/^(\d+[_\-]\d+)/);
+  const code = codeMatch ? codeMatch[1] : null;
+  if (code && client) return `${code} · ${client.split(" ").pop()}`;
+  if (client) {
+    const parts = name.split(/\s*(?:\/\/|\/)\s*/);
+    if (parts.length >= 2) {
+      const clientLower = client.toLowerCase();
+      const desc = parts.find(
+        (p) => p.toLowerCase() !== clientLower && !/^\d+[_\-]/.test(p)
+      );
+      if (desc)
+        return `${client.split(" ").pop()} · ${desc.length > 16 ? desc.slice(0, 14) + "…" : desc}`;
+    }
+    return client;
+  }
+  return name.length > 24 ? name.slice(0, 22) + "…" : name;
+}
+
+// ── Build project groups from a task list ──
+function buildProjectGroups(tasks, projectMap) {
+  const groups = new Map();
+  tasks.forEach((task) => {
+    const pid = task.project_id || "__no_project__";
+    if (!groups.has(pid)) {
+      groups.set(pid, { project: projectMap.get(pid) || null, tasks: [] });
+    }
+    groups.get(pid).tasks.push(task);
+  });
+  // Sort groups: projects with tasks sorted by project name, "No Project" last
+  const entries = Array.from(groups.entries());
+  entries.sort((a, b) => {
+    if (a[0] === "__no_project__") return 1;
+    if (b[0] === "__no_project__") return -1;
+    const nameA = a[1].project?.name || "";
+    const nameB = b[1].project?.name || "";
+    return nameA.localeCompare(nameB);
+  });
+  return entries.map(([pid, g]) => ({
+    projectId: pid,
+    project: g.project,
+    label: compactProjectLabel(g.project),
+    tasks: sortTasksByPriority(g.tasks),
+  }));
+}
+
+// ── Compute group stats ──
+function groupStats(tasks, blockedSet) {
+  let estHours = 0;
+  let missingEst = 0;
+  let unassigned = 0;
+  let blocked = 0;
+  tasks.forEach((t) => {
+    if (t.estimated_hours && t.estimated_hours > 0) estHours += t.estimated_hours;
+    else missingEst++;
+    if (!t.assigned_team_member_id) unassigned++;
+    if (blockedSet.has(t.id)) blocked++;
+  });
+  return { estHours, missingEst, unassigned, blocked };
+}
+
+// ── Section config ──
+const SECTIONS = [
+  {
+    key: "dueThisWeek",
+    title: "DUE THIS WEEK",
+    icon: CalendarClock,
+    iconColor: "text-blue-400",
+    borderColor: "border-blue-600/50",
+    headerBg: "bg-blue-600/10",
+    emptyMessage: "No tasks are due this week.",
+    defaultExpanded: true,
+  },
+  {
+    key: "overdue",
+    title: "OVERDUE",
+    icon: AlertTriangle,
+    iconColor: "text-red-400",
+    borderColor: "border-red-600/50",
+    headerBg: "bg-red-600/10",
+    emptyMessage: "No overdue tasks.",
+    defaultExpanded: true,
+  },
+  {
+    key: "upcoming",
+    title: "UPCOMING",
+    icon: Clock,
+    iconColor: "text-purple-400",
+    borderColor: "border-purple-600/50",
+    headerBg: "bg-purple-600/10",
+    emptyMessage: "No upcoming tasks.",
+    defaultExpanded: false,
+  },
+  {
+    key: "unscheduled",
+    title: "UNSCHEDULED",
+    icon: CalendarOff,
+    iconColor: "text-amber-400",
+    borderColor: "border-amber-600/50",
+    headerBg: "bg-amber-600/10",
+    emptyMessage: "No active tasks are missing due dates.",
+    defaultExpanded: false,
+  },
+];
+
+// ── Jump pill ──
+function JumpPill({ label, count, color, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors",
+        "hover:brightness-125",
+        color
+      )}
+    >
+      {label}
+      <span className="tabular-nums opacity-80">{count}</span>
+    </button>
+  );
+}
+
+// ── Summary Card ──
+function SummaryCard({ label, value, icon: Icon, color, bg, sub }) {
+  return (
+    <div className={cn("border border-gray-800 rounded-lg p-2 flex flex-col items-center justify-center", bg)}>
+      <Icon className={cn("w-4 h-4 mb-0.5", color)} />
+      <span className={cn("text-sm font-bold tabular-nums", color)}>{value}</span>
+      <span className="text-[10px] text-gray-500">{label}</span>
+      {sub && <span className="text-[9px] text-amber-500 mt-0.5">{sub}</span>}
+    </div>
+  );
+}
+
 // ── Main View ──
 export default function WeeklyWorkloadView({
   tasks,
+  allTasks = [],
   projects,
   teamMembers,
   categories,
@@ -300,19 +205,20 @@ export default function WeeklyWorkloadView({
 
   const selectedWeek = useMemo(() => {
     const base = addWeeks(new Date(), weekOffset);
-    const start = startOfWeek(base, { weekStartsOn: 1 }); // Monday
-    const end = endOfWeek(base, { weekStartsOn: 1 }); // Sunday
+    const start = startOfWeek(base, { weekStartsOn: 1 });
+    const end = endOfWeek(base, { weekStartsOn: 1 });
     return { start, end };
   }, [weekOffset]);
 
   const nextWeek = useMemo(() => {
-    const start = addWeeks(selectedWeek.end, 0);
-    start.setDate(start.getDate() + 1);
-    const end = endOfWeek(start, { weekStartsOn: 1 });
-    return { start, end };
+    const nStart = new Date(selectedWeek.end);
+    nStart.setDate(nStart.getDate() + 1);
+    nStart.setHours(0, 0, 0, 0);
+    const nEnd = endOfWeek(nStart, { weekStartsOn: 1 });
+    return { start: nStart, end: nEnd };
   }, [selectedWeek]);
 
-  // ── Lookup maps ──
+  // ── Lookup maps (memoized, O(1)) ──
   const projectMap = useMemo(() => {
     const m = new Map();
     projects.forEach((p) => m.set(p.id, p));
@@ -331,94 +237,120 @@ export default function WeeklyWorkloadView({
     return m;
   }, [statuses]);
 
-  // ── Find completed/done status ──
-  const completedStatusId = useMemo(() => {
-    const s = statuses.find((s) => {
-      const label = (s.label || "").toLowerCase();
-      return s.scope === "Task" && (label.includes("complete") || label.includes("done"));
-    });
-    return s?.id || null;
-  }, [statuses]);
+  // ── Task-by-ID map for dependency resolution ──
+  // Use allTasks (full dataset from PriorityDashboard) to resolve deps across the full dataset
+  const taskById = useMemo(() => {
+    const m = new Map();
+    (allTasks.length > 0 ? allTasks : tasks).forEach((t) => m.set(t.id, t));
+    return m;
+  }, [allTasks, tasks]);
 
-  // ── Excluded statuses: completed, cancelled, archived ──
-  const excludedStatusIds = useMemo(() => {
-    const ids = new Set();
-    statuses.forEach((s) => {
-      const label = (s.label || "").toLowerCase();
-      if (
-        s.scope === "Task" &&
-        (label.includes("complete") || label.includes("done") || label.includes("cancel") || label.includes("archive"))
-      ) {
-        ids.add(s.id);
-      }
+  // ── Blocked detection: task is blocked only if it has deps AND ≥1 dep is not Done ──
+  const blockedSet = useMemo(() => {
+    const blocked = new Set();
+    tasks.forEach((task) => {
+      if (!task.dependencies || task.dependencies.length === 0) return;
+      const hasIncompleteDep = task.dependencies.some((depId) => {
+        const dep = taskById.get(depId);
+        // If dep doesn't exist (deleted/missing), don't block
+        if (!dep) return false;
+        // Blocked only if dep is NOT Done
+        return dep.status_id !== DONE_STATUS_ID;
+      });
+      if (hasIncompleteDep) blocked.add(task.id);
     });
-    return ids;
-  }, [statuses]);
+    return blocked;
+  }, [tasks, taskById]);
 
-  // ── Active tasks (excluding completed/cancelled/archived) ──
+  // ── Active tasks: exclude ONLY "Done" status ──
   const activeTasks = useMemo(() => {
-    return tasks.filter((t) => !excludedStatusIds.has(t.status_id));
-  }, [tasks, excludedStatusIds]);
+    return tasks.filter((t) => t.status_id !== DONE_STATUS_ID);
+  }, [tasks]);
 
-  // ── Section buckets ──
+  // ── Date classification — mutually exclusive ──
   const today = useMemo(() => startOfDay(new Date()), []);
 
-  const { overdue, dueThisWeek, upcoming, unscheduled } = useMemo(() => {
-    const o = [];
-    const d = [];
-    const u = [];
-    const un = [];
+  const buckets = useMemo(() => {
+    const overdue = [];
+    const dueThisWeek = [];
+    const upcoming = [];
+    const unscheduled = [];
 
     activeTasks.forEach((task) => {
-      if (!task.due_date) {
-        un.push(task);
+      const due = parseLocalDate(task.due_date);
+      if (!due) {
+        unscheduled.push(task);
         return;
       }
-      const due = startOfDay(new Date(task.due_date));
-      if (isBefore(due, today) && isBefore(due, selectedWeek.start)) {
-        o.push(task);
-      } else if (
-        isWithinInterval(due, { start: selectedWeek.start, end: selectedWeek.end })
-      ) {
-        // If selected week is in the past and due is before today, it's overdue
-        if (isBefore(due, today)) {
-          o.push(task);
-        } else {
-          d.push(task);
-        }
-      } else if (
-        isWithinInterval(due, { start: nextWeek.start, end: nextWeek.end })
-      ) {
-        u.push(task);
-      } else if (isBefore(due, selectedWeek.start)) {
-        // Due before selected week start → overdue
-        o.push(task);
+      // Overdue: due < start of today
+      if (due < today) {
+        overdue.push(task);
+        return;
       }
-      // Tasks due after next week are not shown
+      // Due this week: due >= today AND due within selected week
+      if (due >= selectedWeek.start && due <= selectedWeek.end) {
+        dueThisWeek.push(task);
+        return;
+      }
+      // Upcoming: due within next week
+      if (due >= nextWeek.start && due <= nextWeek.end) {
+        upcoming.push(task);
+        return;
+      }
+      // Tasks due after next week or in a future selected week but not yet overdue: skip
     });
 
-    return { overdue: o, dueThisWeek: d, upcoming: u, unscheduled: un };
+    return { overdue, dueThisWeek, upcoming, unscheduled };
   }, [activeTasks, today, selectedWeek, nextWeek]);
+
+  // ── Project groups per section ──
+  const sectionGroups = useMemo(() => ({
+    overdue: buildProjectGroups(buckets.overdue, projectMap),
+    dueThisWeek: buildProjectGroups(buckets.dueThisWeek, projectMap),
+    upcoming: buildProjectGroups(buckets.upcoming, projectMap),
+    unscheduled: buildProjectGroups(buckets.unscheduled, projectMap),
+  }), [buckets, projectMap]);
 
   // ── Summary stats ──
   const stats = useMemo(() => {
-    const allVisible = [...overdue, ...dueThisWeek, ...upcoming, ...unscheduled];
+    const allVisible = [
+      ...buckets.overdue,
+      ...buckets.dueThisWeek,
+      ...buckets.upcoming,
+      ...buckets.unscheduled,
+    ];
     const unassigned = allVisible.filter((t) => !t.assigned_team_member_id).length;
-    const withEstimate = allVisible.filter((t) => t.estimated_hours && t.estimated_hours > 0);
-    const totalEstHours = withEstimate.reduce((sum, t) => sum + (t.estimated_hours || 0), 0);
-    const missingEstimates = allVisible.length - withEstimate.length;
+    // "Estimated This Week" = only Due This Week tasks
+    const weekEst = buckets.dueThisWeek.filter(
+      (t) => t.estimated_hours && t.estimated_hours > 0
+    );
+    const estThisWeek = weekEst.reduce((s, t) => s + t.estimated_hours, 0);
+    const missingEstWeek =
+      buckets.dueThisWeek.length - weekEst.length;
+    // All visible estimate total (secondary)
+    const allEst = allVisible.filter((t) => t.estimated_hours && t.estimated_hours > 0);
+    const totalEstAll = allEst.reduce((s, t) => s + t.estimated_hours, 0);
+    const missingEstAll = allVisible.length - allEst.length;
 
     return {
-      overdue: overdue.length,
-      dueThisWeek: dueThisWeek.length,
-      upcoming: upcoming.length,
-      unscheduled: unscheduled.length,
+      overdue: buckets.overdue.length,
+      dueThisWeek: buckets.dueThisWeek.length,
+      upcoming: buckets.upcoming.length,
+      unscheduled: buckets.unscheduled.length,
       unassigned,
-      totalEstHours,
-      missingEstimates,
+      estThisWeek,
+      missingEstWeek,
+      totalEstAll,
+      missingEstAll,
       total: allVisible.length,
     };
-  }, [overdue, dueThisWeek, upcoming, unscheduled]);
+  }, [buckets]);
+
+  // ── Section refs for jump navigation ──
+  const sectionRefs = useRef({});
+  const scrollToSection = useCallback((key) => {
+    sectionRefs.current[key]?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   // ── Modal state ──
   const [createTaskForProjectId, setCreateTaskForProjectId] = useState(null);
@@ -459,92 +391,137 @@ export default function WeeklyWorkloadView({
           </Button>
         </div>
         <div className="text-sm text-gray-300 font-medium">
-          {format(selectedWeek.start, "MMM d")} – {format(selectedWeek.end, "MMM d, yyyy")}
+          {format(selectedWeek.start, "MMM d")} –{" "}
+          {format(selectedWeek.end, "MMM d, yyyy")}
         </div>
       </div>
 
+      {/* ── Jump Controls ── */}
+      <div className="flex flex-wrap gap-1.5">
+        <JumpPill
+          label="Due This Week"
+          count={stats.dueThisWeek}
+          color="border-blue-600/50 text-blue-400 bg-blue-600/10"
+          onClick={() => scrollToSection("dueThisWeek")}
+        />
+        <JumpPill
+          label="Overdue"
+          count={stats.overdue}
+          color="border-red-600/50 text-red-400 bg-red-600/10"
+          onClick={() => scrollToSection("overdue")}
+        />
+        <JumpPill
+          label="Upcoming"
+          count={stats.upcoming}
+          color="border-purple-600/50 text-purple-400 bg-purple-600/10"
+          onClick={() => scrollToSection("upcoming")}
+        />
+        <JumpPill
+          label="Unscheduled"
+          count={stats.unscheduled}
+          color="border-amber-600/50 text-amber-400 bg-amber-600/10"
+          onClick={() => scrollToSection("unscheduled")}
+        />
+      </div>
+
       {/* ── Summary Header ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
-        <SummaryCard label="Overdue" value={stats.overdue} icon={AlertTriangle} color="text-red-400" bg="bg-red-500/10" />
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
         <SummaryCard label="Due This Week" value={stats.dueThisWeek} icon={CalendarClock} color="text-blue-400" bg="bg-blue-500/10" />
-        <SummaryCard label="Upcoming" value={stats.upcoming} icon={Clock} color="text-purple-400" bg="bg-purple-500/10" />
+        <SummaryCard label="Overdue" value={stats.overdue} icon={AlertTriangle} color="text-red-400" bg="bg-red-500/10" />
         <SummaryCard label="Unscheduled" value={stats.unscheduled} icon={CalendarOff} color="text-amber-400" bg="bg-amber-500/10" />
         <SummaryCard label="Unassigned" value={stats.unassigned} icon={User} color="text-yellow-400" bg="bg-yellow-500/10" />
         <div className="bg-black/40 border border-gray-800 rounded-lg p-2 flex flex-col items-center justify-center">
           <Timer className="w-4 h-4 text-emerald-400 mb-0.5" />
-          <span className="text-sm font-bold text-white tabular-nums">{formatHours(stats.totalEstHours)}</span>
-          <span className="text-[10px] text-gray-500">Est. Time</span>
-          {stats.missingEstimates > 0 && (
-            <span className="text-[9px] text-amber-500 mt-0.5">{stats.missingEstimates} missing</span>
+          <span className="text-sm font-bold text-white tabular-nums">
+            {formatHours(stats.estThisWeek)}
+          </span>
+          <span className="text-[10px] text-gray-500">Est. This Week</span>
+          {stats.missingEstWeek > 0 && (
+            <span className="text-[9px] text-amber-500 mt-0.5">
+              {stats.missingEstWeek} missing
+            </span>
           )}
         </div>
-        <SummaryCard label="Total" value={stats.total} icon={FolderKanban} color="text-gray-300" bg="bg-gray-500/10" />
+        <SummaryCard
+          label="Total"
+          value={stats.total}
+          icon={Clock}
+          color="text-gray-300"
+          bg="bg-gray-500/10"
+        />
+        {stats.totalEstAll > 0 && (
+          <div className="bg-black/40 border border-gray-800 rounded-lg p-2 flex flex-col items-center justify-center">
+            <Timer className="w-4 h-4 text-gray-500 mb-0.5" />
+            <span className="text-xs font-medium text-gray-400 tabular-nums">
+              {formatHours(stats.totalEstAll)}
+            </span>
+            <span className="text-[10px] text-gray-600">All Visible</span>
+          </div>
+        )}
       </div>
 
-      {/* ── Task Sections ── */}
-      <WorkloadSection
-        title="OVERDUE"
-        icon={AlertTriangle}
-        iconColor="text-red-400"
-        borderColor="border-red-600/50"
-        headerBg="bg-red-600/10"
-        tasks={overdue}
-        projectMap={projectMap}
-        teamMemberMap={teamMemberMap}
-        statusMap={statusMap}
-        completedStatusId={completedStatusId}
-        emptyMessage="No overdue tasks."
-        onToggleComplete={onToggleComplete}
-        onTaskClick={onTaskClick}
-      />
+      {/* ── Sections ── */}
+      {SECTIONS.map((sec) => {
+        const groups = sectionGroups[sec.key];
+        const taskCount = buckets[sec.key].length;
+        const SectionIcon = sec.icon;
 
-      <WorkloadSection
-        title="DUE THIS WEEK"
-        icon={CalendarClock}
-        iconColor="text-blue-400"
-        borderColor="border-blue-600/50"
-        headerBg="bg-blue-600/10"
-        tasks={dueThisWeek}
-        projectMap={projectMap}
-        teamMemberMap={teamMemberMap}
-        statusMap={statusMap}
-        completedStatusId={completedStatusId}
-        emptyMessage="No tasks are due this week."
-        onToggleComplete={onToggleComplete}
-        onTaskClick={onTaskClick}
-      />
+        return (
+          <div
+            key={sec.key}
+            ref={(el) => (sectionRefs.current[sec.key] = el)}
+            className={cn(
+              "bg-black/40 backdrop-blur-xl border-2 rounded-lg overflow-hidden",
+              sec.borderColor
+            )}
+          >
+            {/* Sticky section header */}
+            <div
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 border-b sticky top-0 z-10",
+                sec.headerBg,
+                sec.borderColor
+              )}
+            >
+              <SectionIcon className={cn("w-4 h-4", sec.iconColor)} />
+              <span className={cn("text-sm font-semibold", sec.iconColor)}>
+                {sec.title}
+              </span>
+              <Badge
+                variant="outline"
+                className={cn("ml-auto text-[10px]", sec.borderColor, sec.iconColor)}
+              >
+                {taskCount}
+              </Badge>
+            </div>
 
-      <WorkloadSection
-        title="UPCOMING"
-        icon={Clock}
-        iconColor="text-purple-400"
-        borderColor="border-purple-600/50"
-        headerBg="bg-purple-600/10"
-        tasks={upcoming}
-        projectMap={projectMap}
-        teamMemberMap={teamMemberMap}
-        statusMap={statusMap}
-        completedStatusId={completedStatusId}
-        emptyMessage="No upcoming tasks."
-        onToggleComplete={onToggleComplete}
-        onTaskClick={onTaskClick}
-      />
-
-      <WorkloadSection
-        title="UNSCHEDULED"
-        icon={CalendarOff}
-        iconColor="text-amber-400"
-        borderColor="border-amber-600/50"
-        headerBg="bg-amber-600/10"
-        tasks={unscheduled}
-        projectMap={projectMap}
-        teamMemberMap={teamMemberMap}
-        statusMap={statusMap}
-        completedStatusId={completedStatusId}
-        emptyMessage="No active tasks are missing due dates."
-        onToggleComplete={onToggleComplete}
-        onTaskClick={onTaskClick}
-      />
+            {/* Content */}
+            {taskCount === 0 ? (
+              <p className="text-gray-600 text-sm text-center py-4">
+                {sec.emptyMessage}
+              </p>
+            ) : (
+              <div className="divide-y divide-gray-800/30">
+                {groups.map((g) => (
+                  <WorkloadProjectGroup
+                    key={g.projectId}
+                    project={g.project}
+                    label={g.label}
+                    tasks={g.tasks}
+                    teamMemberMap={teamMemberMap}
+                    statusMap={statusMap}
+                    blockedSet={blockedSet}
+                    defaultExpanded={sec.defaultExpanded}
+                    onToggleComplete={onToggleComplete}
+                    onTaskClick={onTaskClick}
+                    onAddTask={setCreateTaskForProjectId}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
 
       {/* Create Task Modal */}
       {createTaskForProjectId && (
@@ -554,25 +531,12 @@ export default function WeeklyWorkloadView({
           onClose={() => setCreateTaskForProjectId(null)}
         />
       )}
-
-      {/* Manage Buckets Modal */}
       {manageBucketsProjectId && (
         <ManageBucketsModal
           projectId={manageBucketsProjectId}
           onClose={() => setManageBucketsProjectId(null)}
         />
       )}
-    </div>
-  );
-}
-
-// ── Summary Card ──
-function SummaryCard({ label, value, icon: Icon, color, bg }) {
-  return (
-    <div className={cn("border border-gray-800 rounded-lg p-2 flex flex-col items-center justify-center", bg)}>
-      <Icon className={cn("w-4 h-4 mb-0.5", color)} />
-      <span className={cn("text-sm font-bold tabular-nums", color)}>{value}</span>
-      <span className="text-[10px] text-gray-500">{label}</span>
     </div>
   );
 }

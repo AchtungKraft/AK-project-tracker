@@ -856,6 +856,7 @@ export default function PriorityDashboard() {
             <TabsContent value="workload-view" className="mt-0">
               <WeeklyWorkloadView
                 tasks={activePriorityTasks}
+                allTasks={allTasksData}
                 projects={projects}
                 teamMembers={teamMembers}
                 categories={categories}
