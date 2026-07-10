@@ -293,7 +293,7 @@ export default function WeeklyWorkloadView({
 
   const [createTaskForProjectId, setCreateTaskForProjectId] = useState(null);
   const [printModalOpen, setPrintModalOpen] = useState(false);
-  const { toast } = useToast();
+  const { toast, dismiss } = useToast();
 
   // ── Bulk selection state ──
   const [selectedTaskIds, setSelectedTaskIds] = useState(new Set());
@@ -332,54 +332,63 @@ export default function WeeklyWorkloadView({
 
   const handleBulkShiftDates = useCallback((days) => {
     if (!updateTaskMutation || selectedTasks.length === 0) return;
+    const count = selectedTasks.length;
     selectedTasks.forEach((task) => {
       const base = parseLocalDate(task.due_date) || new Date();
       const shifted = addDays(base, days);
       const dateStr = format(shifted, "yyyy-MM-dd");
       updateTaskMutation.mutate({ id: task.id, data: { due_date: dateStr } });
     });
-    toast({ title: `Shifted ${selectedTasks.length} task dates by ${days > 0 ? "+" : ""}${days} day${Math.abs(days) !== 1 ? "s" : ""}` });
     clearSelection();
-  }, [selectedTasks, updateTaskMutation, toast, clearSelection]);
+    dismiss();
+    toast({ title: `Shifted ${count} task dates by ${days > 0 ? "+" : ""}${days} day${Math.abs(days) !== 1 ? "s" : ""}` });
+  }, [selectedTasks, updateTaskMutation, toast, dismiss, clearSelection]);
 
   const handleBulkSetDueDate = useCallback((date) => {
     if (!updateTaskMutation || !date) return;
+    const count = selectedTasks.length;
     const dateStr = format(date, "yyyy-MM-dd");
     selectedTasks.forEach((task) => {
       updateTaskMutation.mutate({ id: task.id, data: { due_date: dateStr } });
     });
-    toast({ title: `Set due date for ${selectedTasks.length} tasks` });
     clearSelection();
-  }, [selectedTasks, updateTaskMutation, toast, clearSelection]);
+    dismiss();
+    toast({ title: `Set due date for ${count} tasks` });
+  }, [selectedTasks, updateTaskMutation, toast, dismiss, clearSelection]);
 
   const handleBulkAssign = useCallback((memberId) => {
     if (!updateTaskMutation) return;
+    const count = selectedTasks.length;
     selectedTasks.forEach((task) => {
       updateTaskMutation.mutate({ id: task.id, data: { assigned_team_member_id: memberId } });
     });
-    toast({ title: `Assigned ${selectedTasks.length} tasks` });
     clearSelection();
-  }, [selectedTasks, updateTaskMutation, toast, clearSelection]);
+    dismiss();
+    toast({ title: `Assigned ${count} tasks` });
+  }, [selectedTasks, updateTaskMutation, toast, dismiss, clearSelection]);
 
   const handleBulkStatus = useCallback((statusId) => {
     if (!updateTaskMutation) return;
+    const count = selectedTasks.length;
     selectedTasks.forEach((task) => {
       updateTaskMutation.mutate({ id: task.id, data: { status_id: statusId } });
     });
-    toast({ title: `Updated status for ${selectedTasks.length} tasks` });
     clearSelection();
-  }, [selectedTasks, updateTaskMutation, toast, clearSelection]);
+    dismiss();
+    toast({ title: `Updated status for ${count} tasks` });
+  }, [selectedTasks, updateTaskMutation, toast, dismiss, clearSelection]);
 
   const handleBulkPriority = useCallback(() => {
     if (!updateTaskMutation) return;
-    // Toggle: if all selected are priority, remove; otherwise set all to priority
+    const count = selectedTasks.length;
     const allPriority = selectedTasks.every((t) => t.is_priority);
     selectedTasks.forEach((task) => {
       updateTaskMutation.mutate({ id: task.id, data: { is_priority: !allPriority } });
     });
-    toast({ title: allPriority ? `Removed priority from ${selectedTasks.length} tasks` : `Set priority on ${selectedTasks.length} tasks` });
     clearSelection();
-  }, [selectedTasks, updateTaskMutation, toast, clearSelection]);
+    dismiss();
+    toast({ title: allPriority ? `Removed priority from ${count} tasks` : `Set priority on ${count} tasks` });
+  }, [selectedTasks, updateTaskMutation, toast, dismiss, clearSelection]);
 
   const handleBulkPrint = useCallback(() => {
     if (selectedTasks.length === 0) return;
