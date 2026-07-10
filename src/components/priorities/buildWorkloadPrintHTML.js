@@ -61,6 +61,7 @@ const SECTION_LABELS = {
   overdue: "OVERDUE",
   upcoming: "UPCOMING",
   unscheduled: "UNSCHEDULED",
+  selected: "SELECTED TASKS",
 };
 
 // ── Task row ─────────────────────────────────────────────────────────────────

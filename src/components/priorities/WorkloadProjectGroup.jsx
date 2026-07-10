@@ -18,6 +18,8 @@ import {
   AlertTriangle,
   CalendarClock,
   CheckCircle2,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import { format, startOfDay, isBefore } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -54,6 +56,8 @@ function WorkloadTaskRow({
   onUpdateDueDate,
   onTogglePriority,
   updateTaskMutation,
+  isSelected,
+  onToggleSelection,
 }) {
   const due = parseLocalDate(task.due_date);
   const todayStart = startOfDay(new Date());
@@ -103,6 +107,17 @@ function WorkloadTaskRow({
         blocked && "opacity-50"
       )}
     >
+      {/* Selection checkbox */}
+      {onToggleSelection && (
+        <span onClick={(e) => e.stopPropagation()} className="shrink-0">
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={() => onToggleSelection(task.id)}
+            className="h-3.5 w-3.5 border-gray-600 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+          />
+        </span>
+      )}
+
       {/* Complete checkbox */}
       <span onClick={(e) => e.stopPropagation()} className="shrink-0">
         <Checkbox
@@ -273,6 +288,9 @@ export default function WorkloadProjectGroup({
   onUpdateDueDate,
   onTogglePriority,
   updateTaskMutation,
+  selectedTaskIds,
+  onToggleTaskSelection,
+  onSelectProjectTasks,
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [showAll, setShowAll] = useState(false);
@@ -315,14 +333,40 @@ export default function WorkloadProjectGroup({
         className="flex items-center gap-1.5 px-2 py-1.5 bg-gray-800/20 hover:bg-gray-800/40 cursor-pointer transition-colors"
         onClick={() => setExpanded((e) => !e)}
       >
+        {/* Select project tasks button */}
+        {onSelectProjectTasks && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              const taskIds = tasks.map((t) => t.id);
+              const allSelected = taskIds.every((id) => selectedTaskIds?.has(id));
+              if (allSelected) {
+                // Deselect all in this project (toggle each off)
+                taskIds.forEach((id) => onToggleTaskSelection(id));
+              } else {
+                onSelectProjectTasks(taskIds);
+              }
+            }}
+            className="shrink-0 text-gray-600 hover:text-blue-400 transition-colors"
+            title="Select all tasks in this project"
+          >
+            {tasks.every((t) => selectedTaskIds?.has(t.id))
+              ? <CheckSquare className="w-3.5 h-3.5 text-blue-400" />
+              : <Square className="w-3.5 h-3.5" />
+            }
+          </button>
+        )}
+
         {expanded ? (
           <ChevronDown className="w-3 h-3 text-gray-500 shrink-0" />
         ) : (
           <ChevronRight className="w-3 h-3 text-gray-500 shrink-0" />
         )}
 
-        {/* Project label + count */}
-        <span className="text-xs font-semibold text-gray-200 truncate min-w-0">{label}</span>
+        {/* Full project name — matches Execution view */}
+        <span className="text-sm font-bold text-gray-100 truncate min-w-0">
+          {project?.name || label || "No Project"}
+        </span>
         <Badge className="bg-gray-800 text-gray-400 border-gray-700 text-[9px] px-1 py-0 shrink-0">
           {tasks.length}
         </Badge>
@@ -406,6 +450,8 @@ export default function WorkloadProjectGroup({
               onUpdateDueDate={onUpdateDueDate}
               onTogglePriority={onTogglePriority}
               updateTaskMutation={updateTaskMutation}
+              isSelected={selectedTaskIds?.has(task.id)}
+              onToggleSelection={onToggleTaskSelection}
             />
           ))}
           {!showAll && remaining > 0 && (

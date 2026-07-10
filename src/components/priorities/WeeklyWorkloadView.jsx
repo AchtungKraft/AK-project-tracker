@@ -14,13 +14,15 @@ import {
   FolderKanban,
   HelpCircle,
   Printer,
+  CheckSquare,
 } from "lucide-react";
-import { startOfWeek, endOfWeek, addWeeks, format, startOfDay } from "date-fns";
+import { startOfWeek, endOfWeek, addWeeks, addDays, format, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import { sortTasksByPriority } from "@/utils/taskPrioritySort";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 import WorkloadProjectGroup from "./WorkloadProjectGroup";
 import WorkloadPrintOptionsModal from "./WorkloadPrintOptionsModal";
+import WorkloadBulkActionBar from "./WorkloadBulkActionBar";
 import buildWorkloadPrintHTML from "./buildWorkloadPrintHTML";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -40,28 +42,6 @@ function fmtHours(h) {
   if (mins === 0) return `${hrs}h`;
   if (hrs === 0) return `${mins}m`;
   return `${hrs}h ${mins}m`;
-}
-
-function compactProjectLabel(project) {
-  if (!project) return "No Project";
-  const name = project.name || "";
-  const client = project.client_name || "";
-  const codeMatch = name.match(/^(\d+[_\-]\d+)/);
-  const code = codeMatch ? codeMatch[1] : null;
-  if (code && client) return `${code} · ${client.split(" ").pop()}`;
-  if (client) {
-    const parts = name.split(/\s*(?:\/\/|\/)\s*/);
-    if (parts.length >= 2) {
-      const clientLower = client.toLowerCase();
-      const desc = parts.find(
-        (p) => p.toLowerCase() !== clientLower && !/^\d+[_\-]/.test(p)
-      );
-      if (desc)
-        return `${client.split(" ").pop()} · ${desc.length > 16 ? desc.slice(0, 14) + "…" : desc}`;
-    }
-    return client;
-  }
-  return name.length > 24 ? name.slice(0, 22) + "…" : name;
 }
 
 function buildProjectGroups(tasks, projectMap, allTasksByProject) {
@@ -84,7 +64,7 @@ function buildProjectGroups(tasks, projectMap, allTasksByProject) {
   return entries.map(([pid, g]) => ({
     projectId: pid,
     project: g.project,
-    label: compactProjectLabel(g.project),
+    label: g.project?.name || "No Project",
     tasks: sortTasksByPriority(g.tasks),
     allProjectTasks: allTasksByProject.get(pid) || [],
   }));
@@ -315,6 +295,128 @@ export default function WeeklyWorkloadView({
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const { toast } = useToast();
 
+  // ── Bulk selection state ──
+  const [selectedTaskIds, setSelectedTaskIds] = useState(new Set());
+
+  const toggleTaskSelection = useCallback((taskId) => {
+    setSelectedTaskIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  }, []);
+
+  const selectProjectTasks = useCallback((taskIds) => {
+    setSelectedTaskIds((prev) => {
+      const next = new Set(prev);
+      taskIds.forEach((id) => next.add(id));
+      return next;
+    });
+  }, []);
+
+  const selectAllVisible = useCallback(() => {
+    const allIds = new Set();
+    Object.values(buckets).forEach((arr) => arr.forEach((t) => allIds.add(t.id)));
+    setSelectedTaskIds(allIds);
+  }, [buckets]);
+
+  const clearSelection = useCallback(() => setSelectedTaskIds(new Set()), []);
+
+  // ── Bulk action handlers ──
+  const selectedTasks = useMemo(() => {
+    if (selectedTaskIds.size === 0) return [];
+    const all = [...buckets.overdue, ...buckets.dueThisWeek, ...buckets.upcoming, ...buckets.unscheduled];
+    return all.filter((t) => selectedTaskIds.has(t.id));
+  }, [selectedTaskIds, buckets]);
+
+  const handleBulkShiftDates = useCallback((days) => {
+    if (!updateTaskMutation || selectedTasks.length === 0) return;
+    selectedTasks.forEach((task) => {
+      const base = parseLocalDate(task.due_date) || new Date();
+      const shifted = addDays(base, days);
+      const dateStr = format(shifted, "yyyy-MM-dd");
+      updateTaskMutation.mutate({ id: task.id, data: { due_date: dateStr } });
+    });
+    toast({ title: `Shifted ${selectedTasks.length} task dates by ${days > 0 ? "+" : ""}${days} day${Math.abs(days) !== 1 ? "s" : ""}` });
+    clearSelection();
+  }, [selectedTasks, updateTaskMutation, toast, clearSelection]);
+
+  const handleBulkSetDueDate = useCallback((date) => {
+    if (!updateTaskMutation || !date) return;
+    const dateStr = format(date, "yyyy-MM-dd");
+    selectedTasks.forEach((task) => {
+      updateTaskMutation.mutate({ id: task.id, data: { due_date: dateStr } });
+    });
+    toast({ title: `Set due date for ${selectedTasks.length} tasks` });
+    clearSelection();
+  }, [selectedTasks, updateTaskMutation, toast, clearSelection]);
+
+  const handleBulkAssign = useCallback((memberId) => {
+    if (!updateTaskMutation) return;
+    selectedTasks.forEach((task) => {
+      updateTaskMutation.mutate({ id: task.id, data: { assigned_team_member_id: memberId } });
+    });
+    toast({ title: `Assigned ${selectedTasks.length} tasks` });
+    clearSelection();
+  }, [selectedTasks, updateTaskMutation, toast, clearSelection]);
+
+  const handleBulkStatus = useCallback((statusId) => {
+    if (!updateTaskMutation) return;
+    selectedTasks.forEach((task) => {
+      updateTaskMutation.mutate({ id: task.id, data: { status_id: statusId } });
+    });
+    toast({ title: `Updated status for ${selectedTasks.length} tasks` });
+    clearSelection();
+  }, [selectedTasks, updateTaskMutation, toast, clearSelection]);
+
+  const handleBulkPriority = useCallback(() => {
+    if (!updateTaskMutation) return;
+    // Toggle: if all selected are priority, remove; otherwise set all to priority
+    const allPriority = selectedTasks.every((t) => t.is_priority);
+    selectedTasks.forEach((task) => {
+      updateTaskMutation.mutate({ id: task.id, data: { is_priority: !allPriority } });
+    });
+    toast({ title: allPriority ? `Removed priority from ${selectedTasks.length} tasks` : `Set priority on ${selectedTasks.length} tasks` });
+    clearSelection();
+  }, [selectedTasks, updateTaskMutation, toast, clearSelection]);
+
+  const handleBulkPrint = useCallback(() => {
+    if (selectedTasks.length === 0) return;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast({ title: "Print window blocked", description: "Please allow popups.", variant: "destructive" });
+      return;
+    }
+    // Build print data from selected tasks only, grouped by project
+    const groupedByProject = new Map();
+    selectedTasks.forEach((t) => {
+      const pid = t.project_id || "__no_project__";
+      if (!groupedByProject.has(pid)) groupedByProject.set(pid, []);
+      groupedByProject.get(pid).push(t);
+    });
+    const groups = Array.from(groupedByProject.entries()).map(([pid, tks]) => ({
+      projectId: pid,
+      project: projectMap.get(pid) || null,
+      label: projectMap.get(pid)?.name || "No Project",
+      tasks: tks,
+    }));
+    const printData = {
+      selectedSections: ["selected"],
+      sectionGroups: { selected: groups },
+      fields: { showAssignee: true, showDueDate: true, showEstimate: true, showActualBlank: true, showNotesLine: true, showStatus: true, showPriority: true, showBlocked: true },
+      weekLabel: `Week of ${format(selectedWeek.start, "MMMM d")}–${format(selectedWeek.end, "d, yyyy")}`,
+      teamMembers: teamMembers.map((tm) => ({ id: tm.id, full_name: tm.full_name })),
+      statuses: statuses.map((s) => ({ id: s.id, label: s.label, color: s.color, scope: s.scope })),
+      blockedTaskIds: Array.from(blockedSet),
+      activeFilters: [`${selectedTasks.length} selected tasks`],
+    };
+    const html = buildWorkloadPrintHTML(printData);
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+  }, [selectedTasks, projectMap, selectedWeek, teamMembers, statuses, blockedSet, toast]);
+
   // ── Print handler — direct document.write into a new window ──
   const handlePrint = useCallback(({ sections: selectedSections, fields }) => {
     // 1. Open window SYNCHRONOUSLY inside the click event to avoid popup blockers.
@@ -410,6 +512,18 @@ export default function WeeklyWorkloadView({
               <Printer className="w-3 h-3 mr-1" />
               Print
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={selectedTaskIds.size > 0 ? clearSelection : selectAllVisible}
+              className={cn(
+                "border-gray-700 text-white hover:bg-gray-800 h-7 px-2 text-xs ml-1",
+                selectedTaskIds.size > 0 && "border-red-600/50 bg-red-600/10"
+              )}
+            >
+              <CheckSquare className="w-3 h-3 mr-1" />
+              {selectedTaskIds.size > 0 ? `${selectedTaskIds.size} Selected` : "Select All"}
+            </Button>
           </div>
           <div className="flex flex-wrap gap-1">
             <JumpPill label="This Week" count={stats.dueThisWeek} color="border-blue-600/50 text-blue-400 bg-blue-600/10" onClick={() => scrollToSection("dueThisWeek")} />
@@ -487,6 +601,9 @@ export default function WeeklyWorkloadView({
                     onUpdateDueDate={onUpdateDueDate}
                     onTogglePriority={onTogglePriority}
                     updateTaskMutation={updateTaskMutation}
+                    selectedTaskIds={selectedTaskIds}
+                    onToggleTaskSelection={toggleTaskSelection}
+                    onSelectProjectTasks={selectProjectTasks}
                   />
                 ))}
               </div>
@@ -502,6 +619,20 @@ export default function WeeklyWorkloadView({
           onClose={() => setCreateTaskForProjectId(null)}
         />
       )}
+
+      {/* ── Bulk Action Bar ── */}
+      <WorkloadBulkActionBar
+        selectedCount={selectedTaskIds.size}
+        onClear={clearSelection}
+        onSetDueDate={handleBulkSetDueDate}
+        onShiftDates={handleBulkShiftDates}
+        onAssign={handleBulkAssign}
+        onSetStatus={handleBulkStatus}
+        onTogglePriority={handleBulkPriority}
+        onPrintSelected={handleBulkPrint}
+        teamMembers={teamMembers}
+        statuses={statuses}
+      />
 
       <WorkloadPrintOptionsModal
         open={printModalOpen}
