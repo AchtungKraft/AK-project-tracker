@@ -10,6 +10,7 @@ import {
   FolderOpen, Folder, AlertTriangle, Wrench
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getLocationTypeConfig } from "./locationTypeConfig";
 import PartModal from "../parts/PartModal";
 import AddInventoryModal from "./AddInventoryModal";
 import OrderPartModal from "../parts/OrderPartModal";
@@ -548,10 +549,11 @@ export default function InventoryLocations({ onPartClick }) {
             <div className="w-4" />
           )}
           
-          <MapPin 
-            className="w-4 h-4 shrink-0" 
-            style={{ color: location.color || '#8B5CF6' }}
-          />
+          {(() => {
+            const tc = getLocationTypeConfig(location.location_type);
+            const TIcon = tc.icon;
+            return <TIcon className="w-4 h-4 shrink-0" style={{ color: location.color || tc.color }} />;
+          })()}
 
           <span 
             className={cn(
@@ -559,8 +561,9 @@ export default function InventoryLocations({ onPartClick }) {
               isSelected && "font-semibold"
             )}
             style={{ color: isSelected ? (location.color || '#EF4444') : undefined }}
+            title={[location.location_area, location.short_code && `[${location.short_code}]`].filter(Boolean).join(' ')}
           >
-            {location.location_area}
+            {location.short_code || location.location_area}
           </span>
 
           {partCount > 0 && (
@@ -1093,7 +1096,12 @@ export default function InventoryLocations({ onPartClick }) {
                         className="sticky top-0 z-10 flex items-center gap-2 px-3 py-2 bg-gray-900/95 backdrop-blur-sm rounded-lg border-l-4"
                         style={{ borderLeftColor: group.color }}
                       >
-                        <MapPin className="w-5 h-5" style={{ color: group.color }} />
+                        {(() => {
+                          const loc = locations.find(l => l.id === group.locationId);
+                          const tc = getLocationTypeConfig(loc?.location_type);
+                          const GIcon = tc.icon;
+                          return <GIcon className="w-5 h-5" style={{ color: group.color }} />;
+                        })()}
                         <h3 className="text-base font-bold text-white">{group.locationName}</h3>
                         <span className="text-xs text-gray-400">
                           ({group.subLocations.reduce((sum, sub) => sum + sub.parts.length, 0)} parts)

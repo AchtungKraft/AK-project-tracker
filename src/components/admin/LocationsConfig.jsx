@@ -12,16 +12,20 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import ImageGallery from "../parts/ImageGallery";
+import { getLocationTypeConfig, getLocationTypeOptions } from "../inventory/locationTypeConfig";
 
 export default function LocationsConfig() {
   const queryClient = useQueryClient();
   const [newLocation, setNewLocation] = useState({
     location_area: "",
     parent_id: "",
+    location_type: "",
+    short_code: "",
     storage_type: "",
     bin_description: "",
     qr_code_value: "",
     notes: "",
+    description: "",
     photos: [],
     color: "#8B5CF6",
     sort_order: 0
@@ -45,7 +49,7 @@ export default function LocationsConfig() {
     mutationFn: (data) => base44.entities.Location.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['locations'] });
-      setNewLocation({ location_area: "", parent_id: "", storage_type: "", bin_description: "", qr_code_value: "", notes: "", photos: [], color: "#8B5CF6", sort_order: 0 });
+      setNewLocation({ location_area: "", parent_id: "", location_type: "", short_code: "", storage_type: "", bin_description: "", qr_code_value: "", notes: "", description: "", photos: [], color: "#8B5CF6", sort_order: 0 });
       toast.success('Location created');
     },
   });
@@ -218,17 +222,46 @@ export default function LocationsConfig() {
                         }}
                         className="bg-gray-800 border-gray-700 text-white"
                       />
-                      <Input
-                        value={location.storage_type || ''}
-                        onChange={(e) => {
-                          const updated = locations.map(l => 
-                            l.id === location.id ? { ...l, storage_type: e.target.value } : l
-                          );
-                          queryClient.setQueryData(['locations'], updated);
-                        }}
-                        placeholder="Storage type..."
-                        className="bg-gray-800 border-gray-700 text-white"
-                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-gray-500 text-[10px]">Location Type</Label>
+                          <Select
+                            value={location.location_type || "none"}
+                            onValueChange={(value) => {
+                              const updated = locations.map(l =>
+                                l.id === location.id ? { ...l, location_type: value === "none" ? "" : value } : l
+                              );
+                              queryClient.setQueryData(['locations'], updated);
+                            }}
+                          >
+                            <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">No type</SelectItem>
+                              {getLocationTypeOptions().map(opt => (
+                                <SelectItem key={opt.value} value={opt.value}>
+                                  <span style={{ color: opt.color }}>{opt.label}</span>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-gray-500 text-[10px]">Short Code</Label>
+                          <Input
+                            value={location.short_code || ''}
+                            onChange={(e) => {
+                              const updated = locations.map(l =>
+                                l.id === location.id ? { ...l, short_code: e.target.value } : l
+                              );
+                              queryClient.setQueryData(['locations'], updated);
+                            }}
+                            placeholder="e.g., T2, A3"
+                            className="bg-gray-800 border-gray-700 text-white"
+                          />
+                        </div>
+                      </div>
                       <Input
                         value={location.bin_description || ''}
                         onChange={(e) => {
@@ -343,10 +376,20 @@ export default function LocationsConfig() {
                   ) : (
                     <div>
                       <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded border border-gray-600" style={{ backgroundColor: location.color }} />
+                        {(() => {
+                          const tc = getLocationTypeConfig(location.location_type);
+                          const TIcon = tc.icon;
+                          return <TIcon className="w-4 h-4 shrink-0" style={{ color: location.color || tc.color }} />;
+                        })()}
                         <span className="font-medium text-white" style={{ color: location.color }}>
                           {location.location_area}
                         </span>
+                        {location.location_type && (
+                          <Badge variant="outline" className="text-[10px] border-gray-700 text-gray-500">{getLocationTypeConfig(location.location_type).label}</Badge>
+                        )}
+                        {location.short_code && (
+                          <span className="text-[10px] font-mono text-gray-500">[{location.short_code}]</span>
+                        )}
                         {!location.active && (
                           <Badge variant="outline" className="text-xs bg-gray-800 text-gray-500">Inactive</Badge>
                         )}
@@ -490,11 +533,30 @@ export default function LocationsConfig() {
               </Select>
             </div>
             <div>
-              <Label className="text-gray-400 text-xs">Storage Type</Label>
+              <Label className="text-gray-400 text-xs">Location Type</Label>
+              <Select
+                value={newLocation.location_type || "none"}
+                onValueChange={(value) => setNewLocation({ ...newLocation, location_type: value === "none" ? "" : value })}
+              >
+                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                  <SelectValue placeholder="Select type..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No type</SelectItem>
+                  {getLocationTypeOptions().map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      <span style={{ color: opt.color }}>{opt.label}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-gray-400 text-xs">Short Code</Label>
               <Input
-                value={newLocation.storage_type}
-                onChange={(e) => setNewLocation({ ...newLocation, storage_type: e.target.value })}
-                placeholder="e.g., Shelf, Bin, Pallet"
+                value={newLocation.short_code}
+                onChange={(e) => setNewLocation({ ...newLocation, short_code: e.target.value })}
+                placeholder="e.g., T2, EC-9106"
                 className="bg-gray-800 border-gray-700 text-white"
               />
             </div>
