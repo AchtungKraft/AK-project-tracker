@@ -10,7 +10,8 @@ import {
   FolderOpen, Folder, AlertTriangle, Wrench
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getLocationTypeConfig } from "./locationTypeConfig";
+import { getLocationTypeConfig, buildLocationPathString } from "./locationTypeConfig";
+import LocationDetailPanel from "./LocationDetailPanel";
 import PartModal from "../parts/PartModal";
 import AddInventoryModal from "./AddInventoryModal";
 import OrderPartModal from "../parts/OrderPartModal";
@@ -306,6 +307,26 @@ export default function InventoryLocations({ onPartClick }) {
     );
     return parts.filter(p => partIds.has(p.id));
   }, [selectedLocationId, inventoryItems, parts, locations, partsAllocatedToBuild]);
+
+  // Location search — match against location fields and filter tree
+  const locationSearchResults = useMemo(() => {
+    if (!searchTerm || searchTerm.length < 2) return null;
+    const term = searchTerm.toLowerCase();
+    return locations.filter(loc => {
+      if (!loc.active) return false;
+      const tc = getLocationTypeConfig(loc.location_type);
+      return (
+        loc.location_area?.toLowerCase().includes(term) ||
+        loc.short_code?.toLowerCase().includes(term) ||
+        loc.qr_code_value?.toLowerCase().includes(term) ||
+        loc.bin_description?.toLowerCase().includes(term) ||
+        loc.description?.toLowerCase().includes(term) ||
+        loc.notes?.toLowerCase().includes(term) ||
+        loc.storage_type?.toLowerCase().includes(term) ||
+        tc.label.toLowerCase().includes(term)
+      );
+    }).slice(0, 20);
+  }, [searchTerm, locations]);
 
   // Filter by search
   const filteredParts = useMemo(() => {
@@ -983,6 +1004,35 @@ export default function InventoryLocations({ onPartClick }) {
               </div>
             </div>
 
+            {/* Location Search Results */}
+            {locationSearchResults && locationSearchResults.length > 0 && (
+              <div className="border-b border-red-900/20 p-2">
+                <div className="text-[10px] text-gray-500 uppercase tracking-wide px-2 mb-1">Locations matching "{searchTerm}"</div>
+                <div className="space-y-0.5 max-h-[200px] overflow-y-auto">
+                  {locationSearchResults.map(loc => {
+                    const ltc = getLocationTypeConfig(loc.location_type);
+                    const LIcon = ltc.icon;
+                    return (
+                      <button
+                        key={loc.id}
+                        onClick={() => { handleLocationSelect(loc.id); setSearchTerm(''); }}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-800/50 text-left"
+                      >
+                        <LIcon className="w-3.5 h-3.5 shrink-0" style={{ color: loc.color || ltc.color }} />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs text-white truncate">{loc.location_area}</div>
+                          <div className="text-[10px] text-gray-500 truncate">
+                            {buildLocationPathString(loc.id, locations)}
+                          </div>
+                        </div>
+                        {loc.short_code && <span className="text-[10px] font-mono text-gray-500">[{loc.short_code}]</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Location Tree */}
             <div className="flex-1 overflow-y-auto py-2">
               {/* All Locations */}
@@ -1061,6 +1111,28 @@ export default function InventoryLocations({ onPartClick }) {
 
           {/* Right Pane - Parts Display */}
           <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Location Detail Panel — shown when a specific location is selected */}
+            {selectedLocationId && selectedLocationId !== 'unassigned' && selectedLocationId !== null && (
+              <div className="border-b border-red-900/20 bg-gray-900/20 max-h-[45%] overflow-y-auto">
+                <LocationDetailPanel
+                  locationId={selectedLocationId}
+                  locations={locations}
+                  inventoryItems={inventoryItems}
+                  projects={projects}
+                  commitments={commitments}
+                  onNavigateLocation={handleLocationSelect}
+                  onPrintQR={(loc) => {
+                    const qrValue = loc.qr_code_value || `LOC:${loc.id}`;
+                    const tc = getLocationTypeConfig(loc.location_type);
+                    const breadcrumb = buildLocationPathString(loc.id, locations);
+                    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrValue)}`;
+                    const html = `<!DOCTYPE html><html><head><title>Location Label</title><style>@page{size:4in 2in;margin:0.15in}body{font-family:Arial,sans-serif;margin:0;padding:8px}.label{display:flex;gap:12px;align-items:flex-start}.qr img{width:120px;height:120px}.info{flex:1}.name{font-size:18px;font-weight:bold;margin-bottom:4px}.type{font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.5px}.code{font-size:24px;font-weight:bold;font-family:monospace;margin:6px 0}.path{font-size:10px;color:#999;margin-top:4px;word-break:break-word}.qr-text{font-size:8px;color:#aaa;font-family:monospace;margin-top:4px;word-break:break-all}</style></head><body><div class="label"><div class="qr"><img src="${qrUrl}" alt="QR"/></div><div class="info"><div class="name">${loc.location_area}</div><div class="type">${tc.label}</div>${loc.short_code?`<div class="code">${loc.short_code}</div>`:''}<div class="path">${breadcrumb}</div><div class="qr-text">${qrValue}</div></div></div></body></html>`;
+                    const w = window.open('', '_blank', 'width=500,height=300');
+                    if (w) { w.document.write(html); w.document.close(); w.onload = () => { w.print(); w.onafterprint = () => w.close(); }; }
+                  }}
+                />
+              </div>
+            )}
             {/* Parts Display - Grouped by Location */}
             <div className="flex-1 p-4 overflow-y-auto">
               {filteredParts.length === 0 ? (
