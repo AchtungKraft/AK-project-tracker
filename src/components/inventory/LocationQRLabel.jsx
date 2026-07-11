@@ -1,21 +1,28 @@
 import React, { useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Printer, QrCode } from "lucide-react";
+import { base44 } from "@/api/base44Client";
 import { getLocationTypeConfig, buildLocationPathString } from "./locationTypeConfig";
+import { renderQRSVGString } from "./QRCodeSVG";
 
 /**
- * LocationQRLabel — generates a printable label with a QR code for a location.
- * Uses a simple table-based QR from a public API (no extra npm dependency).
- * The QR encodes the location's qr_code_value or falls back to location ID.
+ * LocationQRLabel — generates a printable label with a locally-generated QR code.
+ * No external APIs. QR value is persisted to the Location record if not already set.
  */
 export default function LocationQRLabel({ location, locations, compact = false }) {
-  const qrValue = location.qr_code_value || `LOC:${location.id}`;
   const tc = getLocationTypeConfig(location.location_type);
   const breadcrumb = buildLocationPathString(location.id, locations);
 
-  const handlePrint = useCallback(() => {
-    // QR image from a public chart API — no npm dependency needed
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrValue)}`;
+  const handlePrint = useCallback(async () => {
+    // Ensure stable QR value is persisted
+    let qrValue = location.qr_code_value;
+    if (!qrValue) {
+      qrValue = `AK_LOCATION:${location.id}`;
+      // Persist to entity — fire and forget, don't block print
+      base44.entities.Location.update(location.id, { qr_code_value: qrValue }).catch(() => {});
+    }
+
+    const qrSvg = renderQRSVGString(qrValue, 140);
 
     const html = `<!DOCTYPE html>
 <html><head><title>Location Label</title>
@@ -23,7 +30,7 @@ export default function LocationQRLabel({ location, locations, compact = false }
   @page { size: 4in 2in; margin: 0.15in; }
   body { font-family: Arial, sans-serif; margin: 0; padding: 8px; }
   .label { display: flex; gap: 12px; align-items: flex-start; }
-  .qr img { width: 120px; height: 120px; }
+  .qr { flex-shrink: 0; }
   .info { flex: 1; }
   .name { font-size: 18px; font-weight: bold; margin-bottom: 4px; }
   .type { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -33,7 +40,7 @@ export default function LocationQRLabel({ location, locations, compact = false }
 </style></head>
 <body>
 <div class="label">
-  <div class="qr"><img src="${qrUrl}" alt="QR" /></div>
+  <div class="qr">${qrSvg}</div>
   <div class="info">
     <div class="name">${location.location_area}</div>
     <div class="type">${tc.label}</div>
@@ -52,7 +59,7 @@ export default function LocationQRLabel({ location, locations, compact = false }
       w.print();
       w.onafterprint = () => w.close();
     };
-  }, [location, qrValue, tc.label, breadcrumb]);
+  }, [location, tc.label, breadcrumb]);
 
   if (compact) {
     return (

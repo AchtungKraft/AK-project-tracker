@@ -32,6 +32,7 @@ const ADMIN_GROUPS = [
       { key: "users", label: "Users" },
       { key: "team-members", label: "Team Members" },
       { key: "locations", label: "Locations" },
+      { key: "storage-templates", label: "Storage Templates" },
     ],
   },
   {

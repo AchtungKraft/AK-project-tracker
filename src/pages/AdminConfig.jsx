@@ -18,11 +18,13 @@ import PricingStrictModeConfig from "../components/supply/PricingStrictModeConfi
 import VendorGroupsConfig from "../components/admin/VendorGroupsConfig";
 import ServiceCatalogConfig from "../components/admin/ServiceCatalogConfig";
 import ServiceVendorsConfig from "../components/admin/ServiceVendorsConfig";
+import ProjectStorageTemplatesConfig from "../components/admin/ProjectStorageTemplatesConfig";
 
 const PANEL_MAP = {
   "users": UsersConfig,
   "team-members": TeamMembersConfig,
   "locations": LocationsConfig,
+  "storage-templates": ProjectStorageTemplatesConfig,
   "project-types": ProjectTypesConfig,
   "task-categories": TaskCategoriesConfig,
   "statuses": StatusListConfig,

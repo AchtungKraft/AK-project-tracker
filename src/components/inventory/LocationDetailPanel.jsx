@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { getLocationTypeConfig } from "./locationTypeConfig";
 import LocationBreadcrumb from "./LocationBreadcrumb";
 import ImageGallery from "../parts/ImageGallery";
+import LocationActivitySummary from "./LocationActivitySummary";
 
 /**
  * LocationDetailPanel — shows detail for a selected location in the right pane.
@@ -16,6 +17,7 @@ export default function LocationDetailPanel({
   locationId,
   locations,
   inventoryItems,
+  parts,
   projects,
   commitments,
   onNavigateLocation,
@@ -202,6 +204,9 @@ export default function LocationDetailPanel({
           </div>
         </div>
       )}
+
+      {/* Recent Activity */}
+      <LocationActivitySummary locationId={locationId} parts={parts || []} />
 
       {/* QR Info */}
       {location.qr_code_value && (

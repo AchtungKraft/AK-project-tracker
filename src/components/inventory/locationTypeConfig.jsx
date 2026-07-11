@@ -108,7 +108,7 @@ export function buildLocationPathString(locationId, locations) {
   return buildLocationPath(locationId, locations).map(p => p.name).join(' > ');
 }
 
-/** Default project storage templates */
+/** Default project storage templates (static fallback — runtime uses ProjectStorageTemplatesConfig) */
 export const PROJECT_STORAGE_TEMPLATES = [
   { key: "main_shelf",        label: "Main Shelf",        type: "project_shelf",   sortOrder: 0 },
   { key: "engine_cart",       label: "Engine Cart",       type: "engine_cart",      sortOrder: 1 },
@@ -121,3 +121,13 @@ export const PROJECT_STORAGE_TEMPLATES = [
   { key: "inspection",        label: "Inspection",        type: "inspection",       sortOrder: 8 },
   { key: "shipping",          label: "Shipping",          type: "shipping",         sortOrder: 9 },
 ];
+
+/** Get all location type keys grouped */
+export function getLocationTypeGroups() {
+  const groups = {};
+  Object.entries(TYPE_CONFIG).forEach(([key, cfg]) => {
+    if (!groups[cfg.group]) groups[cfg.group] = [];
+    groups[cfg.group].push({ value: key, label: cfg.label, color: cfg.color });
+  });
+  return groups;
+}

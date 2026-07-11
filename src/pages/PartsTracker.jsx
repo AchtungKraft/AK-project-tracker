@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ShoppingCart, Truck, MapPin, List, FolderTree, RefreshCw, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,34 @@ export default function PartsTracker() {
   const navigate = useNavigate();
   const [selectedPartId, setSelectedPartId] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // URL-based tab + location deep linking
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlTab = urlParams.get('tab') || 'parts-master';
+  const urlLocationId = urlParams.get('location') || null;
+
+  const [activeTab, setActiveTab] = useState(urlTab);
+
+  // Sync tab to URL
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    const url = new URL(window.location);
+    url.searchParams.set('tab', tab);
+    if (tab !== 'locations') {
+      url.searchParams.delete('location');
+    }
+    window.history.replaceState({}, '', url);
+  };
+
+  // Handle browser back/forward
+  useEffect(() => {
+    const onPopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      setActiveTab(params.get('tab') || 'parts-master');
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   const handlePartClick = (part) => {
     setSelectedPartId(part.id);
@@ -36,16 +64,12 @@ export default function PartsTracker() {
             <Button
               onClick={async () => {
                 setIsRefreshing(true);
-                // Targeted refresh — only parts-related queries, not the entire app
                 await Promise.all([
                   queryClient.invalidateQueries({ queryKey: ['parts'] }),
                   queryClient.invalidateQueries({ queryKey: ['partsInventoryView'] }),
                   queryClient.invalidateQueries({ queryKey: ['inventoryItems'] }),
                   queryClient.invalidateQueries({ queryKey: ['inventoryLocations'] }),
                 ]);
-                if (import.meta.env.DEV) {
-                  console.log('[PartsPerf] RefreshPartsTracker | Requests: 4 | Invalidations: 4 | Refetches: 4');
-                }
                 setIsRefreshing(false);
               }}
               variant="outline"
@@ -58,7 +82,7 @@ export default function PartsTracker() {
             </Button>
           </div>
 
-          <Tabs defaultValue="parts-master" className="w-full">
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
             <div className="overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0">
               <TabsList className="bg-gray-900/50 border border-red-900/30 inline-flex md:flex md:flex-wrap h-auto min-w-max md:min-w-0 md:w-full">
                 <TabsTrigger value="parts-master" className="gap-1.5 flex-shrink-0 text-xs md:text-sm px-3 md:px-4">
@@ -71,7 +95,6 @@ export default function PartsTracker() {
                   <span className="hidden sm:inline">INVENTORY</span>
                   <span className="sm:hidden">INV</span>
                 </TabsTrigger>
-  {/* CANONICAL: Removed fake tab that hijacked click for navigation. Supply is accessed via main nav */}
                 <TabsTrigger value="locations" className="gap-1.5 flex-shrink-0 text-xs md:text-sm px-3 md:px-4">
                   <MapPin className="w-4 h-4" />
                   <span>LOCATIONS</span>
@@ -87,10 +110,11 @@ export default function PartsTracker() {
               <InventoryManagement onPartClick={handlePartClick} />
             </TabsContent>
 
-
-
             <TabsContent value="locations" className="mt-4">
-              <InventoryLocations onPartClick={handlePartClick} />
+              <InventoryLocations
+                onPartClick={handlePartClick}
+                urlLocationId={urlLocationId}
+              />
             </TabsContent>
           </Tabs>
           </div>

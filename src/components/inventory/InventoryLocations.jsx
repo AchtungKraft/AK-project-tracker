@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig, buildLocationPathString } from "./locationTypeConfig";
+import { renderQRSVGString } from "./QRCodeSVG";
 import LocationDetailPanel from "./LocationDetailPanel";
 import PartModal from "../parts/PartModal";
 import AddInventoryModal from "./AddInventoryModal";
@@ -24,15 +25,64 @@ import BuildExportActions from "./BuildExportActions";
 
 const STORAGE_KEY = 'achtung_inventory_locations_state';
 
-export default function InventoryLocations({ onPartClick }) {
-  const [selectedLocationId, setSelectedLocationId] = useState(null);
-  const [expandedLocations, setExpandedLocations] = useState({});
-  const [showEmptyLocations, setShowEmptyLocations] = useState(false);
+export default function InventoryLocations({ onPartClick, urlLocationId }) {
+  // URL-based deep link takes priority, then localStorage fallback
+  const [selectedLocationId, setSelectedLocationIdRaw] = useState(() => {
+    if (urlLocationId) return urlLocationId;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return JSON.parse(saved).selectedLocationId ?? null;
+    } catch (e) {}
+    return null;
+  });
+  const [expandedLocations, setExpandedLocations] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return JSON.parse(saved).expandedLocations || {};
+    } catch (e) {}
+    return {};
+  });
+  const [showEmptyLocations, setShowEmptyLocations] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return JSON.parse(saved).showEmptyLocations || false;
+    } catch (e) {}
+    return false;
+  });
   const [searchTerm, setSearchTerm] = useState('');
-  const [viewMode, setViewMode] = useState('list');
+  const [viewMode, setViewMode] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return JSON.parse(saved).viewMode || 'list';
+    } catch (e) {}
+    return 'list';
+  });
   const [selectedBuildId, setSelectedBuildId] = useState(null);
 
-  
+  // Wrap setSelectedLocationId to also update URL
+  const setSelectedLocationId = useCallback((id) => {
+    setSelectedLocationIdRaw(id);
+    // Update URL search param without full navigation
+    const url = new URL(window.location);
+    if (id && id !== 'unassigned') {
+      url.searchParams.set('location', id);
+    } else if (id === 'unassigned') {
+      url.searchParams.set('location', 'unassigned');
+    } else {
+      url.searchParams.delete('location');
+    }
+    // Ensure locations tab is set
+    url.searchParams.set('tab', 'locations');
+    window.history.replaceState({}, '', url);
+  }, []);
+
+  // Sync from URL when urlLocationId prop changes
+  useEffect(() => {
+    if (urlLocationId !== undefined && urlLocationId !== selectedLocationId) {
+      setSelectedLocationIdRaw(urlLocationId);
+    }
+  }, [urlLocationId]);
+
   // Modals
   const [inventoryModalPart, setInventoryModalPart] = useState(null);
   const [orderModalPart, setOrderModalPart] = useState(null);
@@ -46,22 +96,7 @@ export default function InventoryLocations({ onPartClick }) {
     currentIndex: 0,
   });
 
-  // Load saved state
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const state = JSON.parse(saved);
-        setSelectedLocationId(state.selectedLocationId ?? null);
-        setExpandedLocations(state.expandedLocations || {});
-        setShowEmptyLocations(state.showEmptyLocations || false);
-        setViewMode(state.viewMode || 'list');
-        // Don't restore build filter - always start fresh
-      }
-    } catch (e) {}
-  }, []);
-
-  // Save state
+  // Save preferences to localStorage (not selection — that's URL-driven)
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -309,12 +344,25 @@ export default function InventoryLocations({ onPartClick }) {
   }, [selectedLocationId, inventoryItems, parts, locations, partsAllocatedToBuild]);
 
   // Location search — match against location fields and filter tree
+  // Allow 1-char for exact short_code/QR matches, 2-char for general search
   const locationSearchResults = useMemo(() => {
-    if (!searchTerm || searchTerm.length < 2) return null;
-    const term = searchTerm.toLowerCase();
+    if (!searchTerm) return null;
+    const trimmed = searchTerm.trim();
+    if (!trimmed) return null;
+    const term = trimmed.toLowerCase();
+    // For 1-char searches, only match exact short_code or qr_code_value prefix
+    const isShort = term.length < 2;
     return locations.filter(loc => {
-      if (!loc.active) return false;
+      if (!loc.active && loc.active !== undefined) return false;
+      if (isShort) {
+        return (
+          loc.short_code?.toLowerCase() === term ||
+          loc.qr_code_value?.toLowerCase().startsWith(term)
+        );
+      }
       const tc = getLocationTypeConfig(loc.location_type);
+      // Check project name if project_id exists
+      const proj = loc.project_id ? projects.find(p => p.id === loc.project_id) : null;
       return (
         loc.location_area?.toLowerCase().includes(term) ||
         loc.short_code?.toLowerCase().includes(term) ||
@@ -323,10 +371,11 @@ export default function InventoryLocations({ onPartClick }) {
         loc.description?.toLowerCase().includes(term) ||
         loc.notes?.toLowerCase().includes(term) ||
         loc.storage_type?.toLowerCase().includes(term) ||
-        tc.label.toLowerCase().includes(term)
+        tc.label.toLowerCase().includes(term) ||
+        (proj && (proj.name?.toLowerCase().includes(term) || proj.client_name?.toLowerCase().includes(term)))
       );
     }).slice(0, 20);
-  }, [searchTerm, locations]);
+  }, [searchTerm, locations, projects]);
 
   // Filter by search
   const filteredParts = useMemo(() => {
@@ -1118,15 +1167,20 @@ export default function InventoryLocations({ onPartClick }) {
                   locationId={selectedLocationId}
                   locations={locations}
                   inventoryItems={inventoryItems}
+                  parts={parts}
                   projects={projects}
                   commitments={commitments}
                   onNavigateLocation={handleLocationSelect}
                   onPrintQR={(loc) => {
-                    const qrValue = loc.qr_code_value || `LOC:${loc.id}`;
+                    let qrValue = loc.qr_code_value;
+                    if (!qrValue) {
+                      qrValue = `AK_LOCATION:${loc.id}`;
+                      base44.entities.Location.update(loc.id, { qr_code_value: qrValue }).catch(() => {});
+                    }
                     const tc = getLocationTypeConfig(loc.location_type);
                     const breadcrumb = buildLocationPathString(loc.id, locations);
-                    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrValue)}`;
-                    const html = `<!DOCTYPE html><html><head><title>Location Label</title><style>@page{size:4in 2in;margin:0.15in}body{font-family:Arial,sans-serif;margin:0;padding:8px}.label{display:flex;gap:12px;align-items:flex-start}.qr img{width:120px;height:120px}.info{flex:1}.name{font-size:18px;font-weight:bold;margin-bottom:4px}.type{font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.5px}.code{font-size:24px;font-weight:bold;font-family:monospace;margin:6px 0}.path{font-size:10px;color:#999;margin-top:4px;word-break:break-word}.qr-text{font-size:8px;color:#aaa;font-family:monospace;margin-top:4px;word-break:break-all}</style></head><body><div class="label"><div class="qr"><img src="${qrUrl}" alt="QR"/></div><div class="info"><div class="name">${loc.location_area}</div><div class="type">${tc.label}</div>${loc.short_code?`<div class="code">${loc.short_code}</div>`:''}<div class="path">${breadcrumb}</div><div class="qr-text">${qrValue}</div></div></div></body></html>`;
+                    const qrSvg = renderQRSVGString(qrValue, 140);
+                    const html = `<!DOCTYPE html><html><head><title>Location Label</title><style>@page{size:4in 2in;margin:0.15in}body{font-family:Arial,sans-serif;margin:0;padding:8px}.label{display:flex;gap:12px;align-items:flex-start}.qr{flex-shrink:0}.info{flex:1}.name{font-size:18px;font-weight:bold;margin-bottom:4px}.type{font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.5px}.code{font-size:24px;font-weight:bold;font-family:monospace;margin:6px 0}.path{font-size:10px;color:#999;margin-top:4px;word-break:break-word}.qr-text{font-size:8px;color:#aaa;font-family:monospace;margin-top:4px;word-break:break-all}</style></head><body><div class="label"><div class="qr">${qrSvg}</div><div class="info"><div class="name">${loc.location_area}</div><div class="type">${tc.label}</div>${loc.short_code?`<div class="code">${loc.short_code}</div>`:''}<div class="path">${breadcrumb}</div><div class="qr-text">${qrValue}</div></div></div></body></html>`;
                     const w = window.open('', '_blank', 'width=500,height=300');
                     if (w) { w.document.write(html); w.document.close(); w.onload = () => { w.print(); w.onafterprint = () => w.close(); }; }
                   }}
