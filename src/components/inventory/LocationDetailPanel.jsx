@@ -24,6 +24,8 @@ export default function LocationDetailPanel({
   onSelectContainer,
   onMoveContainer,
   onCreateContainer,
+  selectedContainerId,
+  flashId,
 }) {
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
@@ -150,7 +152,9 @@ export default function LocationDetailPanel({
                 <ContainerCard key={c.id} container={c} itemCount={itemCount} location={location}
                   homeLocation={homeLoc} project={proj} locations={locations}
                   onMove={onMoveContainer} onReturnHome={(ctr) => onMoveContainer?.(ctr)}
-                  onSelect={onSelectContainer} compact />
+                  onSelect={onSelectContainer} compact
+                  isSelected={selectedContainerId === c.id}
+                  isFlashing={flashId === c.id} />
               );
             })}
           </div>

@@ -9,6 +9,7 @@ export default function StoragePartRow({
   part, locationQty, locationReserved, locationId,
   selectedLocationId, getInventoryStats, getInventoryItemId,
   vendors, onPartClick, onOpenGallery, partActions, containerName,
+  isSelected = false, isFlashing = false,
 }) {
   const images = part.photos || [];
   const featuredPhoto = part.featured_photo || images[0];
@@ -26,7 +27,13 @@ export default function StoragePartRow({
   return (
     <div
       onClick={() => onPartClick?.(part)}
-      className="flex flex-col md:flex-row md:items-center gap-3 p-3 bg-gray-900/30 rounded-lg border border-gray-800 hover:border-red-900/50 transition-all cursor-pointer group min-h-[88px]"
+      className={cn(
+        "flex flex-col md:flex-row md:items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer group min-h-[88px]",
+        isSelected
+          ? "bg-red-950/20 border-red-800/50 ring-1 ring-red-900/30"
+          : "bg-gray-900/30 border-gray-800 hover:border-red-900/50",
+        isFlashing && "animate-storage-flash"
+      )}
     >
       <div className="flex items-start gap-3 w-full md:w-auto md:flex-1">
         <div

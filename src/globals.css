@@ -273,3 +273,17 @@ button[disabled]:not([data-tooltip]) {
 .animate-pulse-subtle {
   animation: pulse-subtle 3s ease-in-out infinite;
 }
+
+/* ============================================
+   STORAGE WORKSPACE — SEARCH FLASH
+   ============================================ */
+
+@keyframes storage-flash {
+  0%   { background-color: rgba(239, 68, 68, 0.15); }
+  40%  { background-color: rgba(239, 68, 68, 0.08); }
+  100% { background-color: transparent; }
+}
+
+.animate-storage-flash {
+  animation: storage-flash 1.2s ease-out;
+}

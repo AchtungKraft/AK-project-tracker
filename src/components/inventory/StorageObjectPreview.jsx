@@ -15,6 +15,7 @@ export default function StorageObjectPreview({
   locations, inventoryItems, parts, projects, vendors, containers = [],
   onMoveContainer, onReturnHomeContainer, onAddPartsToContainer, onEmptyContainer,
   onPartClick, onClose, getInventoryStats,
+  currentLocationId,
 }) {
   if (!selectedPart && !selectedContainer) {
     return (
@@ -35,7 +36,8 @@ export default function StorageObjectPreview({
   }
 
   return <PartInspector part={selectedPart} inventoryItems={inventoryItems} locations={locations}
-    vendors={vendors} containers={containers} getInventoryStats={getInventoryStats} onPartClick={onPartClick} onClose={onClose} />;
+    vendors={vendors} containers={containers} getInventoryStats={getInventoryStats} onPartClick={onPartClick} onClose={onClose}
+    currentLocationId={currentLocationId} />;
 }
 
 // ─── CONTAINER INSPECTOR ────────────────────────────────────────────
@@ -149,7 +151,7 @@ function ContainerInspector({ container, locations, inventoryItems, parts, proje
 
 // ─── PART INSPECTOR ─────────────────────────────────────────────────
 
-function PartInspector({ part, inventoryItems, locations, vendors, containers, getInventoryStats, onPartClick, onClose }) {
+function PartInspector({ part, inventoryItems, locations, vendors, containers, getInventoryStats, onPartClick, onClose, currentLocationId }) {
   const photo = part.featured_photo || part.photos?.[0];
   const stats = getInventoryStats(part.id);
   const vendor = vendors.find(v => v.id === part.default_vendor_id);
@@ -178,6 +180,17 @@ function PartInspector({ part, inventoryItems, locations, vendors, containers, g
         <h3 className="text-sm font-bold text-white leading-snug">{part.part_name}</h3>
         {part.vendor_part_number && <div className="text-[10px] font-mono font-bold text-gray-400 mt-0.5">{part.vendor_part_number}</div>}
         {vendor && <div className="text-[10px] text-gray-500 mt-0.5">{vendor.vendor_name}</div>}
+        {/* Current workspace location context */}
+        {currentLocationId && currentLocationId !== 'unassigned' && (() => {
+          const curLoc = locations.find(l => l.id === currentLocationId);
+          if (!curLoc) return null;
+          return (
+            <div className="flex items-center gap-1 mt-1.5 text-[10px] text-gray-500">
+              <MapPin className="w-2.5 h-2.5 shrink-0" />
+              <LocationBreadcrumb locationId={currentLocationId} locations={locations} compact />
+            </div>
+          );
+        })()}
       </div>
 
       {/* Stats */}
@@ -204,9 +217,13 @@ function PartInspector({ part, inventoryItems, locations, vendors, containers, g
           <div>
             <div className="text-[9px] text-gray-500 uppercase tracking-widest font-semibold px-2 py-1">Where</div>
             <div className="space-y-0.5">
-              {partLocations.map((pl, idx) => (
-                <div key={idx} className="flex items-center gap-2 px-2 py-1.5 bg-gray-800/20 rounded text-xs">
-                  <MapPin className="w-3 h-3 text-gray-500 shrink-0" />
+              {partLocations.map((pl, idx) => {
+                const isCurrentLoc = currentLocationId && pl.loc?.id === currentLocationId;
+                return (
+                <div key={idx} className={cn("flex items-center gap-2 px-2 py-1.5 rounded text-xs",
+                  isCurrentLoc ? "bg-red-950/15 border border-red-900/20" : "bg-gray-800/20"
+                )}>
+                  <MapPin className={cn("w-3 h-3 shrink-0", isCurrentLoc ? "text-red-400" : "text-gray-500")} />
                   <div className="flex-1 min-w-0">
                     <div className="text-gray-300 truncate">{pl.loc?.location_area || 'Unassigned'}</div>
                     {pl.ctr && (
@@ -220,7 +237,8 @@ function PartInspector({ part, inventoryItems, locations, vendors, containers, g
                     {pl.reserved > 0 && <div className="text-[9px] text-orange-400">{pl.reserved} rsv</div>}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

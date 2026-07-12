@@ -56,7 +56,7 @@ export default function StorageNavigatePanel({
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden text-[13px]">
       {/* Favorites */}
       {favLocs.length > 0 && (
         <div className="px-2 pt-2 pb-1">

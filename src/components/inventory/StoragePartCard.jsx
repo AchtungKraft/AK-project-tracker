@@ -9,6 +9,7 @@ export default function StoragePartCard({
   part, locationQty, locationReserved, locationId,
   selectedLocationId, getInventoryStats, getInventoryItemId,
   vendors, onPartClick, onOpenGallery, partActions,
+  isSelected = false, isFlashing = false,
 }) {
   const images = part.photos || [];
   const featuredPhoto = part.featured_photo || images[0];
@@ -24,7 +25,11 @@ export default function StoragePartCard({
   const inventoryItemId = locationId ? getInventoryItemId(part.id, locationId) : null;
 
   return (
-    <div onClick={() => onPartClick?.(part)} className="bg-gray-900/50 rounded-lg border border-gray-800 hover:border-red-900/50 transition-all cursor-pointer group">
+    <div onClick={() => onPartClick?.(part)} className={cn(
+      "bg-gray-900/50 rounded-lg border transition-all cursor-pointer group",
+      isSelected ? "border-red-800/50 ring-1 ring-red-900/30" : "border-gray-800 hover:border-red-900/50",
+      isFlashing && "animate-storage-flash"
+    )}>
       {featuredPhoto ? (
         <div className="relative h-32 bg-gray-800 rounded-t-lg flex items-center justify-center overflow-hidden" onClick={(e) => { e.stopPropagation(); onOpenGallery(images, 0); }}>
           <img src={featuredPhoto} alt={part.part_name} className="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform" loading="lazy" />

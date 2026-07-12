@@ -14,6 +14,7 @@ import { useIsMobile } from "@/components/mobile/useIsMobile";
 import StorageHome from "./StorageHome";
 import StorageNavigatePanel from "./StorageNavigatePanel";
 import StorageObjectPreview from "./StorageObjectPreview";
+import StorageWorkspaceHeader from "./StorageWorkspaceHeader";
 import LocationDetailPanel from "./LocationDetailPanel";
 import ImageGallery from "../parts/ImageGallery";
 import AddInventoryModal from "./AddInventoryModal";
@@ -56,13 +57,24 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
 
   const [searchTerm, setSearchTerm] = useState('');
   const { favorites, recents, toggleFavorite, isFavorite, addRecent } = useLocationFavorites();
+  const searchInputRef = React.useRef(null);
+  const [flashId, setFlashId] = useState(null); // briefly highlight a part/container after search
 
-  // Escape key dismisses search on desktop
+  // Keyboard: Escape clears search, Cmd+K focuses search
   useEffect(() => {
-    const handleKey = (e) => { if (e.key === 'Escape' && searchTerm) setSearchTerm(''); };
+    const handleKey = (e) => {
+      if (e.key === 'Escape') {
+        if (searchTerm) setSearchTerm('');
+        else if (previewPart || selectedContainer) { setPreviewPart(null); setSelectedContainer(null); }
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [searchTerm]);
+  }, [searchTerm, previewPart, selectedContainer]);
 
   // Selection state
   const [selectedContainer, setSelectedContainer] = useState(null);
@@ -232,22 +244,33 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   };
 
   // Desktop search result handlers — update workspace panels, don't navigate away
+  const triggerFlash = (id) => { setFlashId(id); setTimeout(() => setFlashId(null), 1200); };
+
   const handleSearchSelectPart = (part) => {
-    // Navigate to the part's location, then preview the part
     const item = inventoryItems.find(i => i.part_id === part.id && (i.quantity_on_hand || 0) > 0);
     if (item?.location_id) {
       setSelectedLocationId(item.location_id);
       addRecent(item.location_id);
+      // Expand tree to this location
+      const newExp = { ...expandedLocations }; let cur = item.location_id;
+      while (cur) { newExp[cur] = true; const loc = locations.find(l => l.id === cur); cur = loc?.parent_id; }
+      setExpandedLocations(newExp);
     }
     if (isMobile) { onPartClick?.(part); }
-    else { setPreviewPart(part); setSelectedContainer(null); }
+    else { setPreviewPart(part); setSelectedContainer(null); triggerFlash(part.id); }
     setSearchTerm('');
   };
 
   const handleSearchSelectContainer = (c) => {
-    if (c.location_id) { setSelectedLocationId(c.location_id); addRecent(c.location_id); }
+    if (c.location_id) {
+      setSelectedLocationId(c.location_id);
+      addRecent(c.location_id);
+      const newExp = { ...expandedLocations }; let cur = c.location_id;
+      while (cur) { newExp[cur] = true; const loc = locations.find(l => l.id === cur); cur = loc?.parent_id; }
+      setExpandedLocations(newExp);
+    }
     if (isMobile) { setSelectedContainer(c); }
-    else { setSelectedContainer(c); setPreviewPart(null); }
+    else { setSelectedContainer(c); setPreviewPart(null); triggerFlash(c.id); }
     setSearchTerm('');
   };
 
@@ -399,12 +422,12 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                       {subLoc.parts.map(part => {
                         const itemForPart = inventoryItems.find(i => i.part_id === part.id && i.location_id === (subLoc.locationId || null) && (i.quantity_on_hand || 0) > 0);
                         const ctr = itemForPart?.container_id ? containers.find(c => c.id === itemForPart.container_id) : null;
-                        return <StoragePartRow key={`${part.id}-${subLoc.locationId}`} part={part} locationQty={part._locationQty} locationReserved={part._locationReserved} locationId={subLoc.locationId || (group.locationId === 'unassigned' ? 'unassigned' : null)} selectedLocationId={selectedLocationId} getInventoryStats={getInventoryStats} getInventoryItemId={getInventoryItemId} vendors={vendors} onPartClick={handlePartClick} onOpenGallery={openGallery} partActions={partActions} containerName={ctr?.name} />;
+                        return <StoragePartRow key={`${part.id}-${subLoc.locationId}`} part={part} locationQty={part._locationQty} locationReserved={part._locationReserved} locationId={subLoc.locationId || (group.locationId === 'unassigned' ? 'unassigned' : null)} selectedLocationId={selectedLocationId} getInventoryStats={getInventoryStats} getInventoryItemId={getInventoryItemId} vendors={vendors} onPartClick={handlePartClick} onOpenGallery={openGallery} partActions={partActions} containerName={ctr?.name} isSelected={previewPart?.id === part.id} isFlashing={flashId === part.id} />;
                       })}
                     </div>
                   ) : (
                     <div className={cn("grid grid-cols-1 lg:grid-cols-2 gap-2", subLoc.locationName && "ml-3")}>
-                      {subLoc.parts.map(part => <StoragePartCard key={`${part.id}-${subLoc.locationId}`} part={part} locationQty={part._locationQty} locationReserved={part._locationReserved} locationId={subLoc.locationId || (group.locationId === 'unassigned' ? 'unassigned' : null)} selectedLocationId={selectedLocationId} getInventoryStats={getInventoryStats} getInventoryItemId={getInventoryItemId} vendors={vendors} onPartClick={handlePartClick} onOpenGallery={openGallery} partActions={partActions} />)}
+                      {subLoc.parts.map(part => <StoragePartCard key={`${part.id}-${subLoc.locationId}`} part={part} locationQty={part._locationQty} locationReserved={part._locationReserved} locationId={subLoc.locationId || (group.locationId === 'unassigned' ? 'unassigned' : null)} selectedLocationId={selectedLocationId} getInventoryStats={getInventoryStats} getInventoryItemId={getInventoryItemId} vendors={vendors} onPartClick={handlePartClick} onOpenGallery={openGallery} partActions={partActions} isSelected={previewPart?.id === part.id} isFlashing={flashId === part.id} />)}
                     </div>
                   )}
                 </div>
@@ -526,9 +549,13 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-              <Input placeholder="Find a part, container, or shelf…" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+              <Input ref={searchInputRef} placeholder="Find a part, container, or shelf…" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 pr-10 bg-gray-900/50 border-gray-700 text-white h-9 text-sm" />
-              {searchTerm && <button onClick={clearSearch} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"><X className="w-4 h-4" /></button>}
+              {searchTerm ? (
+                <button onClick={clearSearch} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"><X className="w-4 h-4" /></button>
+              ) : (
+                <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-gray-600 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 font-mono pointer-events-none">⌘K</kbd>
+              )}
             </div>
             {/* View toggle */}
             <div className="flex items-center gap-0.5 bg-black/40 border border-gray-700 rounded-lg p-0.5 shrink-0">
@@ -563,58 +590,69 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
             />
           </div>
 
-          {/* CENTER — Current Place (~55%) */}
+          {/* CENTER + INSPECTOR share a workspace header */}
           <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-            {selectedLocationId && selectedLocationId !== 'unassigned' ? (
-              <>
-                {/* Location header */}
-                <div className="border-b border-red-900/20 bg-gray-900/20 overflow-y-auto shrink-0" style={{ maxHeight: '40%' }}>
-                  <LocationDetailPanel locationId={selectedLocationId} locations={locations} inventoryItems={inventoryItems}
-                    parts={parts} projects={projects} commitments={commitments} containers={containers}
-                    onNavigateLocation={handleLocationSelect} isFavorite={isFavorite(selectedLocationId)}
-                    onToggleFavorite={toggleFavorite} onSelectContainer={handleSelectContainer}
-                    onMoveContainer={containerHandlers.onMoveContainer} onCreateContainer={containerHandlers.onCreateContainer}
-                    onPrintQR={printLocationQR} />
-                </div>
-                {renderLocationContent()}
-                {filteredParts.length > 0 && (
-                  <div className="border-t border-red-900/20 bg-gray-900/30 p-1.5 px-3 shrink-0">
-                    <div className="text-[10px] text-gray-500">{filteredParts.length} parts</div>
+            {/* Workspace header — persistent location anchor */}
+            <StorageWorkspaceHeader
+              locationId={selectedLocationId}
+              locations={locations}
+              selectedObjectLabel={
+                selectedContainer ? selectedContainer.name
+                : previewPart ? previewPart.part_name
+                : null
+              }
+            />
+
+            <div className="flex-1 flex overflow-hidden">
+              {/* CENTER — Current Place */}
+              <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+                {selectedLocationId && selectedLocationId !== 'unassigned' ? (
+                  <>
+                    <div className="border-b border-red-900/20 bg-gray-900/20 overflow-y-auto shrink-0" style={{ maxHeight: '40%' }}>
+                      <LocationDetailPanel locationId={selectedLocationId} locations={locations} inventoryItems={inventoryItems}
+                        parts={parts} projects={projects} commitments={commitments} containers={containers}
+                        onNavigateLocation={handleLocationSelect} isFavorite={isFavorite(selectedLocationId)}
+                        onToggleFavorite={toggleFavorite} onSelectContainer={handleSelectContainer}
+                        onMoveContainer={containerHandlers.onMoveContainer} onCreateContainer={containerHandlers.onCreateContainer}
+                        onPrintQR={printLocationQR} selectedContainerId={selectedContainer?.id} flashId={flashId} />
+                    </div>
+                    {renderLocationContent()}
+                    {filteredParts.length > 0 && (
+                      <div className="border-t border-red-900/20 bg-gray-900/30 p-1.5 px-3 shrink-0">
+                        <div className="text-[10px] text-gray-500">{filteredParts.length} parts</div>
+                      </div>
+                    )}
+                  </>
+                ) : selectedLocationId === 'unassigned' ? (
+                  <>
+                    {renderLocationContent()}
+                  </>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
+                    <Package className="w-12 h-12 text-gray-700 mb-3" />
+                    <h3 className="text-sm font-medium text-gray-400">Select a location</h3>
+                    <p className="text-xs text-gray-600 mt-1">Choose from favorites, recent, or browse the tree.</p>
                   </div>
                 )}
-              </>
-            ) : selectedLocationId === 'unassigned' ? (
-              <>
-                <div className="px-4 py-3 border-b border-red-900/20">
-                  <h3 className="text-base font-bold text-yellow-400">Unassigned Parts</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">Parts not assigned to any location</p>
-                </div>
-                {renderLocationContent()}
-              </>
-            ) : (
-              /* No location selected — show a helpful empty state */
-              <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
-                <Package className="w-12 h-12 text-gray-700 mb-3" />
-                <h3 className="text-sm font-medium text-gray-400">Select a location</h3>
-                <p className="text-xs text-gray-600 mt-1">Choose from favorites, recent, or browse the tree.</p>
               </div>
-            )}
-          </div>
 
-          {/* RIGHT — Inspector (~25%) */}
-          <div className="w-[260px] xl:w-[300px] shrink-0 bg-black/20 border-l border-gray-800">
-            <StorageObjectPreview
-              selectedPart={previewPart}
-              selectedContainer={selectedContainer}
-              locations={locations} inventoryItems={inventoryItems} parts={parts} projects={projects} vendors={vendors} containers={containers}
-              onMoveContainer={(c) => { setMoveContainerReturnHome(false); setMoveContainerTarget(c); }}
-              onReturnHomeContainer={(c) => { setMoveContainerReturnHome(true); setMoveContainerTarget(c); }}
-              onAddPartsToContainer={(c) => setAddToContainerTarget(c)}
-              onEmptyContainer={(c) => setEmptyContainerTarget(c)}
-              onPartClick={handlePartFullDetails}
-              onClose={() => { setPreviewPart(null); setSelectedContainer(null); }}
-              getInventoryStats={getInventoryStats}
-            />
+              {/* RIGHT — Inspector */}
+              <div className="w-[260px] xl:w-[300px] shrink-0 bg-black/20 border-l border-gray-800">
+                <StorageObjectPreview
+                  selectedPart={previewPart}
+                  selectedContainer={selectedContainer}
+                  locations={locations} inventoryItems={inventoryItems} parts={parts} projects={projects} vendors={vendors} containers={containers}
+                  onMoveContainer={(c) => { setMoveContainerReturnHome(false); setMoveContainerTarget(c); }}
+                  onReturnHomeContainer={(c) => { setMoveContainerReturnHome(true); setMoveContainerTarget(c); }}
+                  onAddPartsToContainer={(c) => setAddToContainerTarget(c)}
+                  onEmptyContainer={(c) => setEmptyContainerTarget(c)}
+                  onPartClick={handlePartFullDetails}
+                  onClose={() => { setPreviewPart(null); setSelectedContainer(null); }}
+                  getInventoryStats={getInventoryStats}
+                  currentLocationId={selectedLocationId}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>

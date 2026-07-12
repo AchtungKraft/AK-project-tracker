@@ -9,6 +9,7 @@ import { printContainerQRLabel } from "./containerQRLabel";
 export default function ContainerCard({
   container, itemCount, location, homeLocation, project, locations = [],
   onMove, onSelect, onReturnHome, compact = false,
+  isSelected = false, isFlashing = false,
 }) {
   const tc = getContainerTypeConfig(container.container_type);
   const TypeIcon = tc.icon;
@@ -26,9 +27,10 @@ export default function ContainerCard({
       onClick={() => onSelect?.(container)}
       className={cn(
         "flex items-center gap-3 rounded-lg border transition-all cursor-pointer group",
-        compact
-          ? "p-2 bg-gray-800/30 border-gray-800 hover:border-indigo-800/50"
-          : "p-3 bg-gray-900/40 border-gray-800 hover:border-indigo-700/50"
+        isSelected
+          ? (compact ? "p-2 bg-indigo-950/25 border-indigo-700/50 ring-1 ring-indigo-800/30" : "p-3 bg-indigo-950/25 border-indigo-700/50 ring-1 ring-indigo-800/30")
+          : (compact ? "p-2 bg-gray-800/30 border-gray-800 hover:border-indigo-800/50" : "p-3 bg-gray-900/40 border-gray-800 hover:border-indigo-700/50"),
+        isFlashing && "animate-storage-flash"
       )}
     >
       {/* Photo or Icon */}
