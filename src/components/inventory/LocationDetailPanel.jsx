@@ -1,18 +1,13 @@
 import React, { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Edit2, MapPin, Package, ChevronRight, Image as ImageIcon, Clock, ArrowDownToLine, Printer, Star, Camera } from "lucide-react";
+import { MapPin, Package, ChevronRight, ChevronDown, Printer, Star, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig } from "./locationTypeConfig";
 import LocationBreadcrumb from "./LocationBreadcrumb";
 import ImageGallery from "../parts/ImageGallery";
 import LocationActivitySummary from "./LocationActivitySummary";
 
-/**
- * LocationDetailPanel — shows detail for a selected location in the right pane.
- * Reads from already-loaded data (locations, inventoryItems, projects).
- * No additional queries.
- */
 export default function LocationDetailPanel({
   locationId,
   locations,
@@ -21,23 +16,21 @@ export default function LocationDetailPanel({
   projects,
   commitments,
   onNavigateLocation,
-  onEditLocation,
   onPrintQR,
   isFavorite,
   onToggleFavorite,
 }) {
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
+  const [showDetails, setShowDetails] = useState(false);
 
   const location = locations.find(l => l.id === locationId);
 
-  // Direct inventory at this location
   const directItems = useMemo(() =>
     location ? inventoryItems.filter(i => i.location_id === locationId && (i.quantity_on_hand || 0) > 0) : [],
     [inventoryItems, locationId, location]
   );
 
-  // Project context from commitments
   const projectIds = useMemo(() => {
     const partIds = new Set(directItems.map(i => i.part_id));
     const pIds = new Set();
@@ -56,7 +49,6 @@ export default function LocationDetailPanel({
   const primaryPhoto = location.photos?.[0];
   const photos = location.photos || [];
 
-  // Direct children
   const children = locations
     .filter(l => l.parent_id === locationId && l.active !== false)
     .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
@@ -64,40 +56,37 @@ export default function LocationDetailPanel({
   const totalUnits = directItems.reduce((s, i) => s + (i.quantity_on_hand || 0), 0);
   const totalReserved = directItems.reduce((s, i) => s + (i.quantity_reserved || 0), 0);
   const assignedProjects = (projects || []).filter(p => projectIds.has(p.id));
+  const hasNotes = location.description || location.notes || location.bin_description;
 
   return (
-    <div className="space-y-4 p-4">
-      {/* Header */}
+    <div className="space-y-3 p-4">
+      {/* Header — always visible */}
       <div className="flex items-start gap-3">
         {primaryPhoto ? (
           <img
             src={primaryPhoto}
             alt={location.location_area}
-            className="w-16 h-16 rounded-lg object-cover border border-gray-700 cursor-pointer shrink-0"
+            className="w-14 h-14 rounded-lg object-cover border border-gray-700 cursor-pointer shrink-0"
             loading="lazy"
             onClick={() => { setGalleryIndex(0); setGalleryOpen(true); }}
             onError={(e) => { e.target.style.display = 'none'; }}
           />
         ) : (
-          <div className="w-16 h-16 rounded-lg bg-gray-800 flex items-center justify-center shrink-0">
-            <TypeIcon className="w-8 h-8" style={{ color: location.color || tc.color }} />
+          <div className="w-14 h-14 rounded-lg bg-gray-800 flex items-center justify-center shrink-0">
+            <TypeIcon className="w-7 h-7" style={{ color: location.color || tc.color }} />
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <h3 className="text-lg font-bold text-white truncate">{location.location_area}</h3>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
-            <Badge variant="outline" className="text-xs" style={{ borderColor: tc.color + '80', color: tc.color }}>
-              <TypeIcon className="w-3 h-3 mr-1" />
+          <h3 className="text-base font-bold text-white truncate">{location.location_area}</h3>
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            <Badge variant="outline" className="text-[10px] py-0" style={{ borderColor: tc.color + '80', color: tc.color }}>
               {tc.label}
             </Badge>
             {location.short_code && (
-              <span className="text-xs font-mono text-gray-400">[{location.short_code}]</span>
-            )}
-            {!location.active && (
-              <Badge variant="outline" className="text-xs border-gray-600 text-gray-500">Inactive</Badge>
+              <span className="text-[10px] font-mono text-gray-400">[{location.short_code}]</span>
             )}
           </div>
-          <div className="mt-1">
+          <div className="mt-0.5">
             <LocationBreadcrumb
               locationId={locationId}
               locations={locations}
@@ -112,124 +101,134 @@ export default function LocationDetailPanel({
               size="icon"
               variant="ghost"
               onClick={() => onToggleFavorite(locationId)}
-              className={cn("h-8 w-8", isFavorite ? "text-yellow-500" : "text-gray-500")}
-              title={isFavorite ? "Remove from favorites" : "Add to favorites"}
+              className={cn("h-7 w-7", isFavorite ? "text-yellow-500" : "text-gray-500")}
             >
-              <Star className={cn("w-4 h-4", isFavorite && "fill-yellow-500")} />
-            </Button>
-          )}
-          {onEditLocation && (
-            <Button size="icon" variant="ghost" onClick={() => onEditLocation(locationId)} className="h-8 w-8 text-blue-400">
-              <Edit2 className="w-4 h-4" />
+              <Star className={cn("w-3.5 h-3.5", isFavorite && "fill-yellow-500")} />
             </Button>
           )}
           {onPrintQR && (
-            <Button size="icon" variant="ghost" onClick={() => onPrintQR(location)} className="h-8 w-8 text-gray-400">
-              <Printer className="w-4 h-4" />
+            <Button size="icon" variant="ghost" onClick={() => onPrintQR(location)} className="h-7 w-7 text-gray-400">
+              <Printer className="w-3.5 h-3.5" />
             </Button>
           )}
         </div>
       </div>
 
-      {/* Description & Notes */}
-      {(location.description || location.notes || location.bin_description) && (
-        <div className="space-y-1 text-sm">
-          {location.description && <p className="text-gray-300">{location.description}</p>}
-          {location.bin_description && <p className="text-gray-400">Bin: {location.bin_description}</p>}
-          {location.notes && <p className="text-gray-500 italic">{location.notes}</p>}
+      {/* Compact stats row */}
+      <div className="flex items-center gap-4 text-xs">
+        <div className="flex items-center gap-1.5">
+          <span className="text-gray-500">Parts</span>
+          <span className="text-white font-semibold">{directItems.length}</span>
         </div>
-      )}
-
-      {/* Photo gallery */}
-      {photos.length > 1 ? (
-        <div className="flex gap-2 flex-wrap">
-          {photos.map((p, idx) => (
-            <img
-              key={idx}
-              src={p}
-              alt={`Photo ${idx + 1}`}
-              className="w-14 h-14 rounded border border-gray-700 object-cover cursor-pointer hover:border-red-500 transition-colors"
-              loading="lazy"
-              onClick={() => { setGalleryIndex(idx); setGalleryOpen(true); }}
-              onError={(e) => { e.target.style.display = 'none'; }}
-            />
-          ))}
+        <div className="flex items-center gap-1.5">
+          <span className="text-gray-500">Units</span>
+          <span className="text-white font-semibold">{totalUnits}</span>
         </div>
-      ) : photos.length === 0 && (
-        <div className="flex items-center gap-2 px-3 py-2 bg-gray-800/30 rounded-lg border border-dashed border-gray-700 text-xs text-gray-500">
-          <Camera className="w-4 h-4" />
-          No photo yet — add one in Admin Config
-        </div>
-      )}
-
-      {/* Summary Stats */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-gray-800/50 rounded-lg p-3 text-center">
-          <div className="text-lg font-bold text-white">{directItems.length}</div>
-          <div className="text-xs text-gray-500">Parts</div>
-        </div>
-        <div className="bg-gray-800/50 rounded-lg p-3 text-center">
-          <div className="text-lg font-bold text-white">{totalUnits}</div>
-          <div className="text-xs text-gray-500">Stored Here</div>
-        </div>
-        <div className="bg-gray-800/50 rounded-lg p-3 text-center">
-          <div className={cn("text-lg font-bold", totalReserved > 0 ? "text-orange-400" : "text-gray-500")}>{totalReserved}</div>
-          <div className="text-xs text-gray-500">Reserved</div>
-        </div>
+        {totalReserved > 0 && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-gray-500">Reserved</span>
+            <span className="text-orange-400 font-semibold">{totalReserved}</span>
+          </div>
+        )}
+        {children.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-gray-500">Sub-locations</span>
+            <span className="text-white font-semibold">{children.length}</span>
+          </div>
+        )}
       </div>
 
-      {/* Child Locations */}
+      {/* Child Locations — always visible if present */}
       {children.length > 0 && (
-        <div>
-          <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Inside ({children.length})</h4>
-          <div className="space-y-1">
-            {children.map(child => {
-              const ctc = getLocationTypeConfig(child.location_type);
-              const CIcon = ctc.icon;
-              const childCount = inventoryItems.filter(i => i.location_id === child.id && (i.quantity_on_hand || 0) > 0).length;
-              return (
-                <button
-                  key={child.id}
-                  onClick={() => onNavigateLocation?.(child.id)}
-                  className="w-full flex items-center gap-2 px-3 py-2 bg-gray-800/30 rounded-lg hover:bg-gray-800/60 transition-colors text-left"
-                >
-                  <CIcon className="w-4 h-4 shrink-0" style={{ color: child.color || ctc.color }} />
-                  <span className="text-sm text-gray-300 flex-1 truncate">{child.location_area}</span>
-                  {child.short_code && <span className="text-[10px] font-mono text-gray-500">[{child.short_code}]</span>}
-                  {childCount > 0 && (
-                    <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-700 text-gray-300">{childCount}</span>
-                  )}
-                  <ChevronRight className="w-3.5 h-3.5 text-gray-600" />
-                </button>
-              );
-            })}
-          </div>
+        <div className="flex flex-wrap gap-1.5">
+          {children.map(child => {
+            const ctc = getLocationTypeConfig(child.location_type);
+            const CIcon = ctc.icon;
+            const childCount = inventoryItems.filter(i => i.location_id === child.id && (i.quantity_on_hand || 0) > 0).length;
+            return (
+              <button
+                key={child.id}
+                onClick={() => onNavigateLocation?.(child.id)}
+                className="flex items-center gap-1.5 px-2 py-1 bg-gray-800/40 rounded-md hover:bg-gray-800/70 transition-colors text-left"
+              >
+                <CIcon className="w-3.5 h-3.5 shrink-0" style={{ color: child.color || ctc.color }} />
+                <span className="text-xs text-gray-300 truncate max-w-[120px]">{child.location_area}</span>
+                {childCount > 0 && (
+                  <span className="text-[10px] px-1 py-0 rounded-full bg-gray-700 text-gray-300">{childCount}</span>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
 
-      {/* Assigned Projects */}
-      {assignedProjects.length > 0 && (
-        <div>
-          <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Projects ({assignedProjects.length})</h4>
-          <div className="space-y-1">
-            {assignedProjects.map(p => (
-              <div key={p.id} className="flex items-center gap-2 px-3 py-1.5 bg-gray-800/30 rounded text-sm">
-                <Package className="w-3.5 h-3.5 text-blue-400" />
-                <span className="text-gray-300 truncate">{p.name}</span>
-                {p.client_name && <span className="text-gray-500 text-xs">({p.client_name})</span>}
+      {/* Expandable details — progressive disclosure */}
+      {(hasNotes || assignedProjects.length > 0 || photos.length > 1 || location.qr_code_value) && (
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-300 transition-colors uppercase tracking-wide"
+        >
+          {showDetails ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          Details
+          {assignedProjects.length > 0 && <span className="text-gray-600 normal-case">· {assignedProjects.length} project{assignedProjects.length !== 1 ? 's' : ''}</span>}
+        </button>
+      )}
+
+      {showDetails && (
+        <div className="space-y-3 pl-1 border-l-2 border-gray-800 ml-1">
+          {/* Notes */}
+          {hasNotes && (
+            <div className="space-y-1 text-xs pl-3">
+              {location.description && <p className="text-gray-300">{location.description}</p>}
+              {location.bin_description && <p className="text-gray-400">Bin: {location.bin_description}</p>}
+              {location.notes && <p className="text-gray-500 italic">{location.notes}</p>}
+            </div>
+          )}
+
+          {/* Photo gallery */}
+          {photos.length > 1 && (
+            <div className="flex gap-1.5 flex-wrap pl-3">
+              {photos.map((p, idx) => (
+                <img
+                  key={idx}
+                  src={p}
+                  alt={`Photo ${idx + 1}`}
+                  className="w-12 h-12 rounded border border-gray-700 object-cover cursor-pointer hover:border-red-500 transition-colors"
+                  loading="lazy"
+                  onClick={() => { setGalleryIndex(idx); setGalleryOpen(true); }}
+                  onError={(e) => { e.target.style.display = 'none'; }}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Assigned Projects */}
+          {assignedProjects.length > 0 && (
+            <div className="pl-3">
+              <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">Projects</div>
+              <div className="space-y-0.5">
+                {assignedProjects.map(p => (
+                  <div key={p.id} className="flex items-center gap-2 text-xs">
+                    <Package className="w-3 h-3 text-blue-400" />
+                    <span className="text-gray-300 truncate">{p.name}</span>
+                    {p.client_name && <span className="text-gray-500">({p.client_name})</span>}
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
+          )}
+
+          {/* Recent Activity */}
+          <div className="pl-3">
+            <LocationActivitySummary locationId={locationId} parts={parts || []} />
           </div>
-        </div>
-      )}
 
-      {/* Recent Activity */}
-      <LocationActivitySummary locationId={locationId} parts={parts || []} />
-
-      {/* QR Info */}
-      {location.qr_code_value && (
-        <div className="text-xs text-gray-500 font-mono bg-gray-800/30 rounded px-3 py-2">
-          QR: {location.qr_code_value}
+          {/* QR Info */}
+          {location.qr_code_value && (
+            <div className="text-[10px] text-gray-500 font-mono bg-gray-800/30 rounded px-3 py-1.5 ml-3">
+              QR: {location.qr_code_value}
+            </div>
+          )}
         </div>
       )}
 
