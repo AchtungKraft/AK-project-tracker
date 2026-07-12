@@ -104,7 +104,7 @@ export default function ContainerCard({
           <Button
             size="icon" variant="ghost"
             onClick={(e) => { e.stopPropagation(); onMove(container); }}
-            className="h-8 w-8 text-gray-500 hover:text-white md:opacity-0 md:group-hover:opacity-100"
+            className="h-8 w-8 text-gray-500 hover:text-white"
             title="Move"
           >
             <ArrowRightLeft className="w-4 h-4" />
@@ -113,7 +113,7 @@ export default function ContainerCard({
         <Button
           size="icon" variant="ghost"
           onClick={handlePrintQR}
-          className="h-8 w-8 text-gray-500 hover:text-white md:opacity-0 md:group-hover:opacity-100"
+          className="h-8 w-8 text-gray-500 hover:text-white"
           title="Print Label"
         >
           <Printer className="w-4 h-4" />
