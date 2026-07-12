@@ -24,7 +24,8 @@ import InventoryLocationEditor from "./InventoryLocationEditor";
 import BuildExportActions from "./BuildExportActions";
 import useLocationFavorites from "./useLocationFavorites";
 import LocationFavoritesBar from "./LocationFavoritesBar";
-import StorageDashboard from "./StorageDashboard";
+import StorageOperationalDashboard from "./StorageOperationalDashboard";
+import StorageWorkflowPanel from "./StorageWorkflowPanel";
 
 const STORAGE_KEY = 'achtung_inventory_locations_state';
 
@@ -62,6 +63,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   });
   const [selectedBuildId, setSelectedBuildId] = useState(null);
   const [showDashboard, setShowDashboard] = useState(true);
+  const [activeWorkflow, setActiveWorkflow] = useState(null);
   const { favorites, recents, toggleFavorite, isFavorite, addRecent } = useLocationFavorites();
 
   // Wrap setSelectedLocationId to also update URL
@@ -531,6 +533,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   const handleLocationSelect = (locationId) => {
     setSelectedLocationId(locationId);
     setShowDashboard(false);
+    setActiveWorkflow(null);
     addRecent(locationId);
     
     // Auto-expand ancestors
@@ -548,24 +551,17 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
     }
   };
 
-  // Handle dashboard zone click
-  const handleDashboardZone = (zoneKey, types) => {
-    if (zoneKey === 'unassigned') {
-      setSelectedLocationId('unassigned');
-      setShowDashboard(false);
-      return;
-    }
-    if (zoneKey === 'empty') {
-      setShowEmptyLocations(true);
-      setSelectedLocationId(null);
-      setShowDashboard(false);
-      return;
-    }
-    // Select first location of matching type
-    const matching = locations.find(l => types.includes(l.location_type) && l.active !== false);
-    if (matching) {
-      handleLocationSelect(matching.id);
-    }
+  // Handle workflow selection from operational dashboard
+  const handleSelectWorkflow = (workflowKey) => {
+    setActiveWorkflow(workflowKey);
+    setSelectedLocationId(null);
+    setShowDashboard(false);
+  };
+
+  // Close workflow and return to dashboard
+  const handleCloseWorkflow = () => {
+    setActiveWorkflow(null);
+    setShowDashboard(true);
   };
 
   // Handle toggle showing empty
@@ -994,8 +990,10 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
             <div>
               <h2 className="text-lg font-bold text-white">Storage</h2>
               <p className="text-xs text-gray-400">
-                {filteredParts.length} parts at {getSelectedLocationName()}
-                {selectedBuild && (
+                {activeWorkflow 
+                  ? 'Operational workflow active'
+                  : `${filteredParts.length} parts at ${getSelectedLocationName()}`}
+                {selectedBuild && !activeWorkflow && (
                   <span className="text-orange-400 ml-1">• Filtered by build</span>
                 )}
               </p>
@@ -1003,13 +1001,20 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
             <div className="flex items-center gap-2">
               <Button
                 size="sm"
-                variant={showDashboard ? 'default' : 'ghost'}
-                onClick={() => setShowDashboard(!showDashboard)}
+                variant={(showDashboard || activeWorkflow) ? 'default' : 'ghost'}
+                onClick={() => {
+                  if (activeWorkflow) {
+                    handleCloseWorkflow();
+                  } else {
+                    setShowDashboard(!showDashboard);
+                    setSelectedLocationId(null);
+                  }
+                }}
                 className={cn(
                   "h-7 px-2",
-                  showDashboard ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'
+                  (showDashboard || activeWorkflow) ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'
                 )}
-                title="Storage Overview"
+                title={activeWorkflow ? "Back to Dashboard" : "Storage Overview"}
               >
                 <BarChart3 className="w-4 h-4" />
               </Button>
@@ -1239,19 +1244,39 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
 
           {/* Right Pane - Parts Display */}
           <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Storage Dashboard — operational overview */}
-            {showDashboard && !selectedLocationId && (
-              <div className="border-b border-red-900/20 bg-gray-900/20 p-4">
-                <StorageDashboard
+            {/* Active Workflow View — takes over the right pane */}
+            {activeWorkflow && (
+              <StorageWorkflowPanel
+                workflowKey={activeWorkflow}
+                locations={locations}
+                inventoryItems={inventoryItems}
+                parts={parts}
+                projects={projects}
+                commitments={commitments}
+                onClose={handleCloseWorkflow}
+                onNavigateLocation={(id) => {
+                  setActiveWorkflow(null);
+                  handleLocationSelect(id);
+                }}
+              />
+            )}
+
+            {/* Storage Dashboard — operational overview (when no workflow or location selected) */}
+            {!activeWorkflow && showDashboard && !selectedLocationId && (
+              <div className="border-b border-red-900/20 bg-gray-900/20 p-4 overflow-y-auto max-h-full">
+                <StorageOperationalDashboard
                   locations={locations}
                   inventoryItems={inventoryItems}
-                  onSelectZone={handleDashboardZone}
+                  commitments={commitments}
+                  projects={projects}
+                  onSelectWorkflow={handleSelectWorkflow}
+                  activeWorkflow={activeWorkflow}
                 />
               </div>
             )}
 
-            {/* Location Detail Panel — shown when a specific location is selected */}
-            {selectedLocationId && selectedLocationId !== 'unassigned' && selectedLocationId !== null && (
+            {/* Location Detail Panel — shown when a specific location is selected (not during workflow) */}
+            {!activeWorkflow && selectedLocationId && selectedLocationId !== 'unassigned' && (
               <div className="border-b border-red-900/20 bg-gray-900/20 max-h-[45%] overflow-y-auto">
                 <LocationDetailPanel
                   locationId={selectedLocationId}
@@ -1279,105 +1304,101 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                 />
               </div>
             )}
-            {/* Parts Display - Grouped by Location */}
-            <div className="flex-1 p-4 overflow-y-auto">
-              {filteredParts.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-center px-4">
-                  <Package className="w-16 h-16 text-gray-600 mb-4" />
-                  <h3 className="text-lg font-medium text-gray-400 mb-2">
-                    {selectedLocationId ? 'No parts stored here' : 'No inventory found'}
-                  </h3>
-                  <p className="text-sm text-gray-600 max-w-sm">
-                    {selectedBuild 
-                      ? `No allocated parts for "${selectedBuild.name}" at this location`
-                      : selectedLocationId 
-                        ? 'This location is empty. Parts will appear here once inventory is received or moved.' 
-                        : 'No inventory items found. Receive a purchase order or add inventory to get started.'}
-                  </p>
-                  {selectedBuild && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectedBuildId(null)}
-                      className="mt-4 border-gray-700 text-gray-300"
-                    >
-                      Clear build filter
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {groupedParts.map(group => (
-                    <div key={group.locationId} className="space-y-3">
-                      {/* Main Location Header */}
-                      <div 
-                        className="sticky top-0 z-10 flex items-center gap-2 px-3 py-2 bg-gray-900/95 backdrop-blur-sm rounded-lg border-l-4"
-                        style={{ borderLeftColor: group.color }}
+            {/* Parts Display - Grouped by Location (hidden during workflow) */}
+            {!activeWorkflow && (
+              <div className="flex-1 p-4 overflow-y-auto">
+                {filteredParts.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center px-4">
+                    <Package className="w-16 h-16 text-gray-600 mb-4" />
+                    <h3 className="text-lg font-medium text-gray-400 mb-2">
+                      {selectedLocationId ? 'No parts stored here' : 'No inventory found'}
+                    </h3>
+                    <p className="text-sm text-gray-600 max-w-sm">
+                      {selectedBuild 
+                        ? `No allocated parts for "${selectedBuild.name}" at this location`
+                        : selectedLocationId 
+                          ? 'This location is empty. Parts will appear here once inventory is received or moved.' 
+                          : 'No inventory items found. Receive a purchase order or add inventory to get started.'}
+                    </p>
+                    {selectedBuild && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedBuildId(null)}
+                        className="mt-4 border-gray-700 text-gray-300"
                       >
-                        {(() => {
-                          const loc = locations.find(l => l.id === group.locationId);
-                          const tc = getLocationTypeConfig(loc?.location_type);
-                          const GIcon = tc.icon;
-                          return <GIcon className="w-5 h-5" style={{ color: group.color }} />;
-                        })()}
-                        <h3 className="text-base font-bold text-white">{group.locationName}</h3>
-                        <span className="text-xs text-gray-400">
-                          ({group.subLocations.reduce((sum, sub) => sum + sub.parts.length, 0)} parts)
-                        </span>
-                      </div>
-
-                      {/* Sub-locations */}
-                      {group.subLocations.map(subLoc => (
-                        <div key={subLoc.locationId || '_direct'} className="ml-4 space-y-2">
-                          {/* Sub-location Header (if has name) */}
-                          {subLoc.locationName && (
-                            <div className="flex items-center gap-2 px-2 py-1.5 bg-gray-800/50 rounded border-l-2"
-                                 style={{ borderLeftColor: subLoc.color }}>
-                              <ChevronRight className="w-4 h-4 text-gray-500" />
-                              <span className="text-sm font-medium text-gray-300">{subLoc.locationName}</span>
-                              <span className="text-xs text-gray-500">({subLoc.parts.length})</span>
-                            </div>
-                          )}
-
-                          {/* Parts in this sub-location */}
-                          {viewMode === 'list' ? (
-                            <div className={cn("space-y-2", subLoc.locationName && "ml-4")}>
-                              {subLoc.parts.map(part => (
-                                <PartRow 
-                                  key={`${part.id}-${subLoc.locationId}`} 
-                                  part={part}
-                                  locationQty={part._locationQty}
-                                  locationReserved={part._locationReserved}
-                                  locationId={subLoc.locationId || (group.locationId === 'unassigned' ? 'unassigned' : null)}
-                                />
-                              ))}
-                            </div>
-                          ) : (
-                            <div className={cn(
-                              "grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3",
-                              subLoc.locationName && "ml-4"
-                            )}>
-                              {subLoc.parts.map(part => (
-                                <PartCard 
-                                  key={`${part.id}-${subLoc.locationId}`} 
-                                  part={part}
-                                  locationQty={part._locationQty}
-                                  locationReserved={part._locationReserved}
-                                  locationId={subLoc.locationId || (group.locationId === 'unassigned' ? 'unassigned' : null)}
-                                />
-                              ))}
-                            </div>
-                          )}
+                        Clear build filter
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {groupedParts.map(group => (
+                      <div key={group.locationId} className="space-y-3">
+                        <div 
+                          className="sticky top-0 z-10 flex items-center gap-2 px-3 py-2 bg-gray-900/95 backdrop-blur-sm rounded-lg border-l-4"
+                          style={{ borderLeftColor: group.color }}
+                        >
+                          {(() => {
+                            const loc = locations.find(l => l.id === group.locationId);
+                            const tc = getLocationTypeConfig(loc?.location_type);
+                            const GIcon = tc.icon;
+                            return <GIcon className="w-5 h-5" style={{ color: group.color }} />;
+                          })()}
+                          <h3 className="text-base font-bold text-white">{group.locationName}</h3>
+                          <span className="text-xs text-gray-400">
+                            ({group.subLocations.reduce((sum, sub) => sum + sub.parts.length, 0)} parts)
+                          </span>
                         </div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                        {group.subLocations.map(subLoc => (
+                          <div key={subLoc.locationId || '_direct'} className="ml-4 space-y-2">
+                            {subLoc.locationName && (
+                              <div className="flex items-center gap-2 px-2 py-1.5 bg-gray-800/50 rounded border-l-2"
+                                   style={{ borderLeftColor: subLoc.color }}>
+                                <ChevronRight className="w-4 h-4 text-gray-500" />
+                                <span className="text-sm font-medium text-gray-300">{subLoc.locationName}</span>
+                                <span className="text-xs text-gray-500">({subLoc.parts.length})</span>
+                              </div>
+                            )}
+                            {viewMode === 'list' ? (
+                              <div className={cn("space-y-2", subLoc.locationName && "ml-4")}>
+                                {subLoc.parts.map(part => (
+                                  <PartRow 
+                                    key={`${part.id}-${subLoc.locationId}`} 
+                                    part={part}
+                                    locationQty={part._locationQty}
+                                    locationReserved={part._locationReserved}
+                                    locationId={subLoc.locationId || (group.locationId === 'unassigned' ? 'unassigned' : null)}
+                                  />
+                                ))}
+                              </div>
+                            ) : (
+                              <div className={cn(
+                                "grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3",
+                                subLoc.locationName && "ml-4"
+                              )}>
+                                {subLoc.parts.map(part => (
+                                  <PartCard 
+                                    key={`${part.id}-${subLoc.locationId}`} 
+                                    part={part}
+                                    locationQty={part._locationQty}
+                                    locationReserved={part._locationReserved}
+                                    locationId={subLoc.locationId || (group.locationId === 'unassigned' ? 'unassigned' : null)}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Parts count footer */}
-            {totalPartsCount > 0 && (
+            {!activeWorkflow && totalPartsCount > 0 && (
               <div className="border-t border-red-900/20 bg-gray-900/30 p-3">
                 <div className="text-xs text-gray-400">
                   {totalPartsCount} part{totalPartsCount !== 1 ? 's' : ''} across {groupedParts.length} location{groupedParts.length !== 1 ? 's' : ''}
