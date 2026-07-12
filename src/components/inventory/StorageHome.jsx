@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Star, Clock, ChevronRight, ChevronDown, MapPin, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig } from "./locationTypeConfig";
@@ -36,9 +36,12 @@ export default function StorageHome({
     .slice(0, 6);
 
   // Recent containers (last 4 containers from recents or most recently created)
-  const recentContainers = containers
-    .sort((a, b) => (b.updated_date || b.created_date || '').localeCompare(a.updated_date || a.created_date || ''))
-    .slice(0, 4);
+  const recentContainers = useMemo(() =>
+    [...containers]
+      .sort((a, b) => (b.updated_date || b.created_date || '').localeCompare(a.updated_date || a.created_date || ''))
+      .slice(0, 4),
+    [containers]
+  );
 
   const rootLocations = locations
     .filter(l => !l.parent_id && l.active)

@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ShoppingCart, Truck, MapPin, List, FolderTree, RefreshCw, Package } from "lucide-react";
+import { MapPin, List, RefreshCw, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
-import { createPageUrl } from "@/utils";
 import PartsMasterList from "../components/parts/PartsMasterList";
 import InventoryLocations from "../components/inventory/InventoryLocations";
 import InventoryManagement from "../components/inventory/InventoryManagement";
@@ -13,7 +11,6 @@ import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer
 
 export default function PartsTracker() {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const [selectedPartId, setSelectedPartId] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 

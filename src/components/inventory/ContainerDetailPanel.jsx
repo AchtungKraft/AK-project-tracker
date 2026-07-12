@@ -50,8 +50,6 @@ export default function ContainerDetailPanel({
       });
       queryClient.invalidateQueries({ queryKey: ['storageContainers'] });
       toast.success('Container verified');
-      container.last_verified_at = new Date().toISOString();
-      container.last_verified_by = user.full_name || user.email;
     } catch (e) {
       toast.error('Failed to verify: ' + e.message);
     } finally {
@@ -62,7 +60,6 @@ export default function ContainerDetailPanel({
   const handleSaveNotes = async () => {
     try {
       await base44.entities.StorageContainer.update(container.id, { notes: notesValue.trim() || null });
-      container.notes = notesValue.trim() || null;
       queryClient.invalidateQueries({ queryKey: ['storageContainers'] });
       setEditingNotes(false);
       toast.success('Notes saved');

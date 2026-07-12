@@ -54,16 +54,19 @@ export default function LocationDetailPanel({
     [containers, locationId]
   );
 
+  const children = useMemo(() =>
+    locations
+      .filter(l => l.parent_id === locationId && l.active !== false)
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+    [locations, locationId]
+  );
+
   if (!location) return null;
 
   const tc = getLocationTypeConfig(location.location_type);
   const TypeIcon = tc.icon;
   const primaryPhoto = location.photos?.[0];
   const photos = location.photos || [];
-
-  const children = locations
-    .filter(l => l.parent_id === locationId && l.active !== false)
-    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
   const totalUnits = directItems.reduce((s, i) => s + (i.quantity_on_hand || 0), 0);
   const assignedProjects = (projects || []).filter(p => projectIds.has(p.id));
