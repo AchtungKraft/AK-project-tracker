@@ -75,6 +75,11 @@ export default function ContainerDetailPanel({
     <div className="flex flex-col h-full">
       {/* Header — what is this + where is it */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-red-900/20 bg-gray-900/40 shrink-0">
+        {onClose && (
+          <Button size="icon" variant="ghost" onClick={onClose} className="h-9 w-9 text-gray-400 hover:text-white md:hidden">
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+        )}
         {container.photo ? (
           <img src={container.photo} alt={container.name} className="w-12 h-12 rounded-lg object-cover border border-gray-700 shrink-0" />
         ) : (
