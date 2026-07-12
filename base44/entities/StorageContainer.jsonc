@@ -25,6 +25,10 @@
       "type": "string",
       "description": "Reference to Location where this container currently sits"
     },
+    "home_location_id": {
+      "type": "string",
+      "description": "Optional reference to Location where this container normally belongs"
+    },
     "project_id": {
       "type": "string",
       "description": "Optional reference to Project this container is associated with"
@@ -49,6 +53,16 @@
     "qr_code_value": {
       "type": "string",
       "description": "QR code value for scanning"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "empty",
+        "archived"
+      ],
+      "default": "active",
+      "description": "Container status"
     },
     "active": {
       "type": "boolean",

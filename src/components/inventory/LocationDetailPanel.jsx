@@ -189,12 +189,14 @@ export default function LocationDetailPanel({
               {containersHere.map(c => {
                 const itemCount = inventoryItems.filter(i => i.container_id === c.id && (i.quantity_on_hand || 0) > 0).length;
                 const proj = c.project_id ? projects.find(p => p.id === c.project_id) : null;
+                const homeLoc = c.home_location_id ? locations.find(l => l.id === c.home_location_id) : null;
                 return (
                   <ContainerCard
                     key={c.id}
                     container={c}
                     itemCount={itemCount}
                     location={location}
+                    homeLocation={homeLoc}
                     project={proj}
                     onMove={onMoveContainer}
                     onSelect={onSelectContainer}

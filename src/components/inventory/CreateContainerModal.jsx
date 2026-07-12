@@ -17,6 +17,7 @@ export default function CreateContainerModal({ onClose, preselectedLocationId, p
   const [name, setName] = useState('');
   const [containerType, setContainerType] = useState('tote');
   const [locationId, setLocationId] = useState(preselectedLocationId || '');
+  const [homeLocationId, setHomeLocationId] = useState('');
   const [projectId, setProjectId] = useState(preselectedProjectId || '');
   const [shortCode, setShortCode] = useState('');
   const [color, setColor] = useState('#6366F1');
@@ -24,15 +25,17 @@ export default function CreateContainerModal({ onClose, preselectedLocationId, p
   const [createdContainer, setCreatedContainer] = useState(null);
 
   const typeOptions = getContainerTypeOptions();
+  const sortedLocations = locations.filter(l => l.active !== false).sort((a, b) => (a.location_area || '').localeCompare(b.location_area || ''));
 
   const createMutation = useMutation({
     mutationFn: async () => {
       const qrValue = `AK_CONTAINER:${Date.now()}`;
       const data = {
         name, container_type: containerType, color,
-        qr_code_value: qrValue,
+        qr_code_value: qrValue, status: 'active',
         ...(locationId && { location_id: locationId }),
-        ...(projectId && { project_id: projectId }),
+        ...(homeLocationId && homeLocationId !== '__none__' && { home_location_id: homeLocationId }),
+        ...(projectId && projectId !== '__none__' && { project_id: projectId }),
         ...(shortCode && { short_code: shortCode }),
         ...(description && { description }),
       };
@@ -101,11 +104,23 @@ export default function CreateContainerModal({ onClose, preselectedLocationId, p
             </div>
           </div>
           <div>
-            <Label className="text-gray-400">Location</Label>
+            <Label className="text-gray-400">Current Location</Label>
             <Select value={locationId} onValueChange={setLocationId}>
               <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1"><SelectValue placeholder="Select location…" /></SelectTrigger>
               <SelectContent>
-                {locations.filter(l => l.active !== false).sort((a, b) => (a.location_area || '').localeCompare(b.location_area || '')).map(l => (
+                {sortedLocations.map(l => (
+                  <SelectItem key={l.id} value={l.id}>{l.location_area}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-gray-400">Home Location <span className="text-gray-600">(optional)</span></Label>
+            <Select value={homeLocationId} onValueChange={setHomeLocationId}>
+              <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1"><SelectValue placeholder="Same as current" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None</SelectItem>
+                {sortedLocations.map(l => (
                   <SelectItem key={l.id} value={l.id}>{l.location_area}</SelectItem>
                 ))}
               </SelectContent>
@@ -113,18 +128,18 @@ export default function CreateContainerModal({ onClose, preselectedLocationId, p
           </div>
           {projects.length > 0 && (
             <div>
-              <Label className="text-gray-400">Project (optional)</Label>
+              <Label className="text-gray-400">Project <span className="text-gray-600">(optional)</span></Label>
               <Select value={projectId} onValueChange={setProjectId}>
                 <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1"><SelectValue placeholder="None" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={null}>None</SelectItem>
+                  <SelectItem value="__none__">None</SelectItem>
                   {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
           )}
           <div>
-            <Label className="text-gray-400">Description</Label>
+            <Label className="text-gray-400">Description <span className="text-gray-600">(optional)</span></Label>
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional notes…" className="bg-gray-800 border-gray-700 text-white mt-1" rows={2} />
           </div>
           <div className="flex justify-end gap-2 pt-2">

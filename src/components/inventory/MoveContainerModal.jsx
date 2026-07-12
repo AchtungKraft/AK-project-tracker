@@ -5,13 +5,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Loader2, ArrowRight } from "lucide-react";
+import { Loader2, ArrowRight, Home } from "lucide-react";
 import { toast } from "sonner";
 import { getContainerTypeConfig } from "./containerTypeConfig";
 
-export default function MoveContainerModal({ container, onClose, locations = [], inventoryItems = [] }) {
+export default function MoveContainerModal({ container, onClose, locations = [], inventoryItems = [], returnHome = false }) {
   const queryClient = useQueryClient();
-  const [destinationId, setDestinationId] = useState('');
+  const homeLocation = container.home_location_id ? locations.find(l => l.id === container.home_location_id) : null;
+  const isAwayFromHome = homeLocation && container.location_id !== container.home_location_id;
+
+  const [destinationId, setDestinationId] = useState(returnHome && isAwayFromHome ? container.home_location_id : '');
 
   const tc = getContainerTypeConfig(container.container_type);
   const TypeIcon = tc.icon;
@@ -32,7 +35,12 @@ export default function MoveContainerModal({ container, onClose, locations = [],
       queryClient.invalidateQueries({ predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'inventoryItems' });
       queryClient.invalidateQueries({ queryKey: ['locations'] });
       const destLoc = locations.find(l => l.id === destinationId);
-      toast.success(`Moved "${container.name}" to ${destLoc?.location_area || 'new location'} (${containedItems.length} items)`);
+      const isReturnHome = destinationId === container.home_location_id;
+      toast.success(
+        isReturnHome
+          ? `Returned "${container.name}" home to ${destLoc?.location_area || 'home'} (${containedItems.length} items)`
+          : `Moved "${container.name}" to ${destLoc?.location_area || 'new location'} (${containedItems.length} items)`
+      );
       onClose();
     },
     onError: (e) => toast.error('Move failed: ' + e.message),
@@ -41,7 +49,9 @@ export default function MoveContainerModal({ container, onClose, locations = [],
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-sm">
-        <DialogHeader><DialogTitle>Move Container</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>{returnHome ? 'Return Container Home' : 'Move Container'}</DialogTitle>
+        </DialogHeader>
         <div className="space-y-4">
           {/* Container info */}
           <div className="flex items-center gap-3 p-3 bg-gray-800/50 rounded-lg">
@@ -57,6 +67,24 @@ export default function MoveContainerModal({ container, onClose, locations = [],
             </div>
           </div>
 
+          {/* Return Home shortcut */}
+          {isAwayFromHome && !returnHome && (
+            <button
+              onClick={() => setDestinationId(container.home_location_id)}
+              className={`w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-colors ${
+                destinationId === container.home_location_id
+                  ? 'border-amber-600 bg-amber-950/30'
+                  : 'border-gray-700 bg-gray-800/30 hover:border-amber-700/50'
+              }`}
+            >
+              <Home className="w-4 h-4 text-amber-400 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm text-white">Return Home</div>
+                <div className="text-xs text-gray-500 truncate">{homeLocation.location_area}</div>
+              </div>
+            </button>
+          )}
+
           <div className="flex items-center justify-center">
             <ArrowRight className="w-5 h-5 text-gray-500" />
           </div>
@@ -68,7 +96,10 @@ export default function MoveContainerModal({ container, onClose, locations = [],
               <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1"><SelectValue placeholder="Select destination…" /></SelectTrigger>
               <SelectContent>
                 {locations.filter(l => l.active !== false && l.id !== container.location_id).sort((a, b) => (a.location_area || '').localeCompare(b.location_area || '')).map(l => (
-                  <SelectItem key={l.id} value={l.id}>{l.location_area}</SelectItem>
+                  <SelectItem key={l.id} value={l.id}>
+                    {l.location_area}
+                    {l.id === container.home_location_id && ' (Home)'}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -84,7 +115,7 @@ export default function MoveContainerModal({ container, onClose, locations = [],
             <Button variant="outline" onClick={onClose}>Cancel</Button>
             <Button onClick={() => moveMutation.mutate()} disabled={!destinationId || moveMutation.isPending}>
               {moveMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
-              Move Container
+              {destinationId === container.home_location_id ? 'Return Home' : 'Move Container'}
             </Button>
           </div>
         </div>

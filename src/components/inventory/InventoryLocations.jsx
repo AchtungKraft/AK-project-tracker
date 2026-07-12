@@ -67,6 +67,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   const [selectedContainer, setSelectedContainer] = useState(null);
   const [createContainerForLocation, setCreateContainerForLocation] = useState(null);
   const [moveContainerTarget, setMoveContainerTarget] = useState(null);
+  const [moveContainerReturnHome, setMoveContainerReturnHome] = useState(false);
   const [addToContainerTarget, setAddToContainerTarget] = useState(null);
 
   // Modals
@@ -249,6 +250,17 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
       c.qr_code_value?.toLowerCase().includes(term)
     ).slice(0, 10);
   }, [searchTerm, containers]);
+
+  // Part search (global — shown in search results panel)
+  const partSearchResults = useMemo(() => {
+    if (!searchTerm || searchTerm.trim().length < 2) return null;
+    const term = searchTerm.trim().toLowerCase();
+    return parts.filter(p =>
+      (p.part_name?.toLowerCase().includes(term) ||
+       p.vendor_part_number?.toLowerCase().includes(term)) &&
+      inventoryItems.some(i => i.part_id === p.id && (i.quantity_on_hand || 0) > 0)
+    ).slice(0, 10);
+  }, [searchTerm, parts, inventoryItems]);
 
   // Part search within selected location
   const filteredParts = useMemo(() => {
@@ -453,8 +465,8 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
               <LocationFavoritesBar favorites={favorites} recents={recents} locations={locations} selectedLocationId={selectedLocationId} onSelect={handleLocationSelect} onToggleFavorite={toggleFavorite} />
             )}
 
-            {/* Search results: locations + containers */}
-            {(locationSearchResults?.length > 0 || containerSearchResults?.length > 0) && (
+            {/* Search results: locations + containers + parts */}
+            {(locationSearchResults?.length > 0 || containerSearchResults?.length > 0 || partSearchResults?.length > 0) && (
               <div className="border-b border-red-900/20 p-2 max-h-[250px] overflow-y-auto">
                 {locationSearchResults?.length > 0 && (
                   <>
@@ -480,17 +492,50 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                 {containerSearchResults?.length > 0 && (
                   <>
                     <div className="text-[10px] text-gray-500 uppercase tracking-wide px-2 mb-1">Containers</div>
-                    <div className="space-y-0.5">
+                    <div className="space-y-0.5 mb-2">
                       {containerSearchResults.map(c => {
                         const loc = locations.find(l => l.id === c.location_id);
+                        const homeLoc = c.home_location_id ? locations.find(l => l.id === c.home_location_id) : null;
+                        const isAway = homeLoc && c.location_id !== c.home_location_id;
                         return (
                           <button key={c.id} onClick={() => { setSelectedContainer(c); setSearchTerm(''); }} className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-800/50 text-left">
                             <span className="text-sm shrink-0">📦</span>
                             <div className="flex-1 min-w-0">
                               <div className="text-xs text-white truncate">{c.name}</div>
-                              <div className="text-[10px] text-gray-500 truncate">{loc?.location_area || 'No location'}</div>
+                              <div className="text-[10px] text-gray-500 truncate">
+                                {loc?.location_area || 'No location'}
+                                {isAway && <span className="text-amber-400 ml-1">(away from home)</span>}
+                              </div>
                             </div>
                             {c.short_code && <span className="text-[10px] font-mono text-gray-500">[{c.short_code}]</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+                {partSearchResults?.length > 0 && (
+                  <>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wide px-2 mb-1">Parts</div>
+                    <div className="space-y-0.5">
+                      {partSearchResults.map(p => {
+                        const items = inventoryItems.filter(i => i.part_id === p.id && (i.quantity_on_hand || 0) > 0);
+                        const firstItem = items[0];
+                        const loc = firstItem?.location_id ? locations.find(l => l.id === firstItem.location_id) : null;
+                        const ctr = firstItem?.container_id ? containers.find(c => c.id === firstItem.container_id) : null;
+                        const totalQty = items.reduce((s, i) => s + (i.quantity_on_hand || 0), 0);
+                        return (
+                          <button key={p.id} onClick={() => { onPartClick?.(p); setSearchTerm(''); }} className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-800/50 text-left">
+                            <Package className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs text-white truncate">{p.part_name}</div>
+                              <div className="text-[10px] text-gray-500 truncate">
+                                {ctr && <span className="text-indigo-400">📦 {ctr.name} · </span>}
+                                {loc ? loc.location_area : 'Unassigned'}
+                                {items.length > 1 && ` (+${items.length - 1} more)`}
+                              </div>
+                            </div>
+                            <span className="text-[10px] text-gray-500 shrink-0">{totalQty} qty</span>
                           </button>
                         );
                       })}
@@ -547,7 +592,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                   isFavorite={isFavorite(selectedLocationId)}
                   onToggleFavorite={toggleFavorite}
                   onSelectContainer={(c) => setSelectedContainer(c)}
-                  onMoveContainer={(c) => setMoveContainerTarget(c)}
+                  onMoveContainer={(c) => { setMoveContainerReturnHome(false); setMoveContainerTarget(c); }}
                   onCreateContainer={(locId) => setCreateContainerForLocation(locId)}
                   onPrintQR={(loc) => {
                     let qrValue = loc.qr_code_value;
@@ -576,7 +621,8 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                 projects={projects}
                 vendors={vendors}
                 onClose={() => setSelectedContainer(null)}
-                onMove={(c) => setMoveContainerTarget(c)}
+                onMove={(c) => { setMoveContainerReturnHome(false); setMoveContainerTarget(c); }}
+                onReturnHome={(c) => { setMoveContainerReturnHome(true); setMoveContainerTarget(c); }}
                 onAddParts={(c) => setAddToContainerTarget(c)}
                 onPartClick={onPartClick}
                 onOpenGallery={openGallery}
@@ -699,9 +745,10 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
       {moveContainerTarget && (
         <MoveContainerModal
           container={moveContainerTarget}
-          onClose={() => setMoveContainerTarget(null)}
+          onClose={() => { setMoveContainerTarget(null); setMoveContainerReturnHome(false); }}
           locations={locations}
           inventoryItems={inventoryItems}
+          returnHome={moveContainerReturnHome}
         />
       )}
       {addToContainerTarget && (

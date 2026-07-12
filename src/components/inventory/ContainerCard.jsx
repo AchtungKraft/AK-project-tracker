@@ -1,15 +1,16 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowRightLeft, Printer, ChevronRight } from "lucide-react";
+import { ArrowRightLeft, Printer, ChevronRight, Home } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getContainerTypeConfig } from "./containerTypeConfig";
 import { renderQRSVGString } from "./QRCodeSVG";
 
-export default function ContainerCard({ container, itemCount, location, project, onMove, onSelect, compact = false }) {
+export default function ContainerCard({ container, itemCount, location, homeLocation, project, onMove, onSelect, compact = false }) {
   const tc = getContainerTypeConfig(container.container_type);
   const TypeIcon = tc.icon;
   const displayColor = container.color || tc.color;
+  const isAwayFromHome = homeLocation && container.location_id !== container.home_location_id;
 
   const handlePrintQR = (e) => {
     e.stopPropagation();
@@ -46,7 +47,13 @@ export default function ContainerCard({ container, itemCount, location, project,
         <div className="flex items-center gap-2 text-[10px] text-gray-500 mt-0.5">
           <span>{tc.label}</span>
           {itemCount > 0 && <span>· {itemCount} part{itemCount !== 1 ? 's' : ''}</span>}
+          {container.status === 'empty' && <span className="text-yellow-500">· Empty</span>}
           {project && <span className="text-blue-400">· {project.name}</span>}
+          {isAwayFromHome && (
+            <span className="text-amber-400 flex items-center gap-0.5">
+              · <Home className="w-2.5 h-2.5" /> away
+            </span>
+          )}
         </div>
       </div>
 
