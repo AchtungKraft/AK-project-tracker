@@ -1,0 +1,62 @@
+{
+  "name": "StorageContainer",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Container name (e.g. Blue Hardware Tote, Engine Crate #3)"
+    },
+    "container_type": {
+      "type": "string",
+      "enum": [
+        "box",
+        "tote",
+        "bin",
+        "tray",
+        "organizer",
+        "crate",
+        "cart",
+        "other"
+      ],
+      "default": "tote",
+      "description": "Physical container type"
+    },
+    "location_id": {
+      "type": "string",
+      "description": "Reference to Location where this container currently sits"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Optional reference to Project this container is associated with"
+    },
+    "short_code": {
+      "type": "string",
+      "description": "Short identifier for labels and quick reference"
+    },
+    "photo": {
+      "type": "string",
+      "description": "Photo URL of this container"
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional description"
+    },
+    "color": {
+      "type": "string",
+      "default": "#6366F1",
+      "description": "Hex color for visual identification"
+    },
+    "qr_code_value": {
+      "type": "string",
+      "description": "QR code value for scanning"
+    },
+    "active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this container is active"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

@@ -8,7 +8,7 @@ import PartActionsDropdown from "../parts/PartActionsDropdown";
 export default function StoragePartRow({
   part, locationQty, locationReserved, locationId,
   selectedLocationId, getInventoryStats, getInventoryItemId,
-  vendors, onPartClick, onOpenGallery, partActions,
+  vendors, onPartClick, onOpenGallery, partActions, containerName,
 }) {
   const images = part.photos || [];
   const featuredPhoto = part.featured_photo || images[0];
@@ -49,6 +49,7 @@ export default function StoragePartRow({
             {isLowStock && !isFullyReserved && <Badge variant="outline" className="border-yellow-500 text-yellow-400 text-xs shrink-0">Low Stock</Badge>}
           </div>
           {part.vendor_part_number && <div className="text-xs text-gray-400 font-mono truncate">{part.vendor_part_number}</div>}
+          {containerName && <div className="text-[10px] text-indigo-400">📦 {containerName}</div>}
           {vendor && <div className="text-xs text-gray-500 truncate">{vendor.vendor_name}</div>}
         </div>
       </div>

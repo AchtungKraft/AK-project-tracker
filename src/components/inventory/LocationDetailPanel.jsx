@@ -1,12 +1,13 @@
 import React, { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Package, ChevronRight, ChevronDown, Printer, Star, Camera } from "lucide-react";
+import { MapPin, Package, ChevronRight, ChevronDown, Printer, Star, Camera, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig } from "./locationTypeConfig";
 import LocationBreadcrumb from "./LocationBreadcrumb";
 import ImageGallery from "../parts/ImageGallery";
 import LocationActivitySummary from "./LocationActivitySummary";
+import ContainerCard from "./ContainerCard";
 
 export default function LocationDetailPanel({
   locationId,
@@ -15,10 +16,14 @@ export default function LocationDetailPanel({
   parts,
   projects,
   commitments,
+  containers = [],
   onNavigateLocation,
   onPrintQR,
   isFavorite,
   onToggleFavorite,
+  onSelectContainer,
+  onMoveContainer,
+  onCreateContainer,
 }) {
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
@@ -41,6 +46,12 @@ export default function LocationDetailPanel({
     });
     return pIds;
   }, [directItems, commitments]);
+
+  // Containers at this location — must be before early return
+  const containersHere = useMemo(() =>
+    containers.filter(c => c.location_id === locationId && c.active !== false),
+    [containers, locationId]
+  );
 
   if (!location) return null;
 
@@ -159,6 +170,40 @@ export default function LocationDetailPanel({
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* Containers at this location */}
+      {(containersHere.length > 0 || onCreateContainer) && (
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] text-gray-500 uppercase tracking-wide">Containers ({containersHere.length})</span>
+            {onCreateContainer && (
+              <Button size="sm" variant="ghost" onClick={() => onCreateContainer(locationId)} className="h-6 px-2 text-[10px] text-gray-400 hover:text-white gap-1">
+                <Plus className="w-3 h-3" /> New
+              </Button>
+            )}
+          </div>
+          {containersHere.length > 0 && (
+            <div className="space-y-1">
+              {containersHere.map(c => {
+                const itemCount = inventoryItems.filter(i => i.container_id === c.id && (i.quantity_on_hand || 0) > 0).length;
+                const proj = c.project_id ? projects.find(p => p.id === c.project_id) : null;
+                return (
+                  <ContainerCard
+                    key={c.id}
+                    container={c}
+                    itemCount={itemCount}
+                    location={location}
+                    project={proj}
+                    onMove={onMoveContainer}
+                    onSelect={onSelectContainer}
+                    compact
+                  />
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 

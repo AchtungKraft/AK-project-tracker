@@ -23,6 +23,10 @@ import useLocationFavorites from "./useLocationFavorites";
 import LocationFavoritesBar from "./LocationFavoritesBar";
 import StoragePartRow from "./StoragePartRow";
 import StoragePartCard from "./StoragePartCard";
+import ContainerDetailPanel from "./ContainerDetailPanel";
+import CreateContainerModal from "./CreateContainerModal";
+import MoveContainerModal from "./MoveContainerModal";
+import AddToContainerModal from "./AddToContainerModal";
 
 const STORAGE_KEY = 'achtung_inventory_locations_state';
 
@@ -58,6 +62,12 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
     return 'list';
   });
   const { favorites, recents, toggleFavorite, isFavorite, addRecent } = useLocationFavorites();
+
+  // Container state
+  const [selectedContainer, setSelectedContainer] = useState(null);
+  const [createContainerForLocation, setCreateContainerForLocation] = useState(null);
+  const [moveContainerTarget, setMoveContainerTarget] = useState(null);
+  const [addToContainerTarget, setAddToContainerTarget] = useState(null);
 
   // Modals
   const [inventoryModalPart, setInventoryModalPart] = useState(null);
@@ -132,6 +142,12 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: () => base44.entities.Project.list(),
+    staleTime: 30000, gcTime: 120000, refetchOnWindowFocus: false,
+  });
+
+  const { data: containers = [] } = useQuery({
+    queryKey: ['storageContainers'],
+    queryFn: () => base44.entities.StorageContainer.filter({ active: true }),
     staleTime: 30000, gcTime: 120000, refetchOnWindowFocus: false,
   });
 
@@ -222,6 +238,17 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
     });
     return scored.sort((a, b) => b.score - a.score).slice(0, 20).map(s => s.loc);
   }, [searchTerm, locations, projects]);
+
+  // Container search
+  const containerSearchResults = useMemo(() => {
+    if (!searchTerm || searchTerm.trim().length < 2) return null;
+    const term = searchTerm.trim().toLowerCase();
+    return containers.filter(c =>
+      c.name?.toLowerCase().includes(term) ||
+      c.short_code?.toLowerCase().includes(term) ||
+      c.qr_code_value?.toLowerCase().includes(term)
+    ).slice(0, 10);
+  }, [searchTerm, containers]);
 
   // Part search within selected location
   const filteredParts = useMemo(() => {
@@ -396,7 +423,9 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
           <div>
             <h2 className="text-lg font-bold text-white">Storage</h2>
             <p className="text-xs text-gray-400">
-              {filteredParts.length} parts at {getSelectedLocationName()}
+              {selectedContainer
+                ? `Viewing container: ${selectedContainer.name}`
+                : `${filteredParts.length} parts at ${getSelectedLocationName()}`}
             </p>
           </div>
           <div className="flex items-center gap-1 bg-black/40 border border-gray-700 rounded-lg p-1">
@@ -424,25 +453,50 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
               <LocationFavoritesBar favorites={favorites} recents={recents} locations={locations} selectedLocationId={selectedLocationId} onSelect={handleLocationSelect} onToggleFavorite={toggleFavorite} />
             )}
 
-            {locationSearchResults && locationSearchResults.length > 0 && (
-              <div className="border-b border-red-900/20 p-2">
-                <div className="text-[10px] text-gray-500 uppercase tracking-wide px-2 mb-1">Locations matching "{searchTerm}"</div>
-                <div className="space-y-0.5 max-h-[200px] overflow-y-auto">
-                  {locationSearchResults.map(loc => {
-                    const ltc = getLocationTypeConfig(loc.location_type);
-                    const LIcon = ltc.icon;
-                    return (
-                      <button key={loc.id} onClick={() => { handleLocationSelect(loc.id); setSearchTerm(''); }} className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-800/50 text-left">
-                        <LIcon className="w-3.5 h-3.5 shrink-0" style={{ color: loc.color || ltc.color }} />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs text-white truncate">{loc.location_area}</div>
-                          <div className="text-[10px] text-gray-500 truncate">{buildLocationPathString(loc.id, locations)}</div>
-                        </div>
-                        {loc.short_code && <span className="text-[10px] font-mono text-gray-500">[{loc.short_code}]</span>}
-                      </button>
-                    );
-                  })}
-                </div>
+            {/* Search results: locations + containers */}
+            {(locationSearchResults?.length > 0 || containerSearchResults?.length > 0) && (
+              <div className="border-b border-red-900/20 p-2 max-h-[250px] overflow-y-auto">
+                {locationSearchResults?.length > 0 && (
+                  <>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wide px-2 mb-1">Locations</div>
+                    <div className="space-y-0.5 mb-2">
+                      {locationSearchResults.map(loc => {
+                        const ltc = getLocationTypeConfig(loc.location_type);
+                        const LIcon = ltc.icon;
+                        return (
+                          <button key={loc.id} onClick={() => { handleLocationSelect(loc.id); setSearchTerm(''); }} className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-800/50 text-left">
+                            <LIcon className="w-3.5 h-3.5 shrink-0" style={{ color: loc.color || ltc.color }} />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs text-white truncate">{loc.location_area}</div>
+                              <div className="text-[10px] text-gray-500 truncate">{buildLocationPathString(loc.id, locations)}</div>
+                            </div>
+                            {loc.short_code && <span className="text-[10px] font-mono text-gray-500">[{loc.short_code}]</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+                {containerSearchResults?.length > 0 && (
+                  <>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wide px-2 mb-1">Containers</div>
+                    <div className="space-y-0.5">
+                      {containerSearchResults.map(c => {
+                        const loc = locations.find(l => l.id === c.location_id);
+                        return (
+                          <button key={c.id} onClick={() => { setSelectedContainer(c); setSearchTerm(''); }} className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-800/50 text-left">
+                            <span className="text-sm shrink-0">📦</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs text-white truncate">{c.name}</div>
+                              <div className="text-[10px] text-gray-500 truncate">{loc?.location_area || 'No location'}</div>
+                            </div>
+                            {c.short_code && <span className="text-[10px] font-mono text-gray-500">[{c.short_code}]</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
@@ -488,9 +542,13 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                   parts={parts}
                   projects={projects}
                   commitments={commitments}
+                  containers={containers}
                   onNavigateLocation={handleLocationSelect}
                   isFavorite={isFavorite(selectedLocationId)}
                   onToggleFavorite={toggleFavorite}
+                  onSelectContainer={(c) => setSelectedContainer(c)}
+                  onMoveContainer={(c) => setMoveContainerTarget(c)}
+                  onCreateContainer={(locId) => setCreateContainerForLocation(locId)}
                   onPrintQR={(loc) => {
                     let qrValue = loc.qr_code_value;
                     if (!qrValue) {
@@ -508,91 +566,118 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
               </div>
             )}
 
-            {/* Parts list */}
-            <div className="flex-1 p-4 overflow-y-auto">
-              {filteredParts.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-center px-4">
-                  <Package className="w-16 h-16 text-gray-600 mb-4" />
-                  <h3 className="text-lg font-medium text-gray-400 mb-2">
-                    {selectedLocationId ? 'No parts stored here' : 'No inventory found'}
-                  </h3>
-                  <p className="text-sm text-gray-600 max-w-sm">
-                    {selectedLocationId
-                      ? 'This location is empty. Parts will appear here once inventory is received or moved.'
-                      : 'No inventory items found. Receive a purchase order or add inventory to get started.'}
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {groupedParts.map(group => (
-                    <div key={group.locationId} className="space-y-3">
-                      <div className="sticky top-0 z-10 flex items-center gap-2 px-3 py-2 bg-gray-900/95 backdrop-blur-sm rounded-lg border-l-4" style={{ borderLeftColor: group.color }}>
-                        {(() => { const loc = locations.find(l => l.id === group.locationId); const tc = getLocationTypeConfig(loc?.location_type); const GIcon = tc.icon; return <GIcon className="w-5 h-5" style={{ color: group.color }} />; })()}
-                        <h3 className="text-base font-bold text-white">{group.locationName}</h3>
-                        <span className="text-xs text-gray-400">({group.subLocations.reduce((sum, sub) => sum + sub.parts.length, 0)} parts)</span>
-                      </div>
-                      {group.subLocations.map(subLoc => (
-                        <div key={subLoc.locationId || '_direct'} className="ml-4 space-y-2">
-                          {subLoc.locationName && (
-                            <div className="flex items-center gap-2 px-2 py-1.5 bg-gray-800/50 rounded border-l-2" style={{ borderLeftColor: subLoc.color }}>
-                              <ChevronRight className="w-4 h-4 text-gray-500" />
-                              <span className="text-sm font-medium text-gray-300">{subLoc.locationName}</span>
-                              <span className="text-xs text-gray-500">({subLoc.parts.length})</span>
+            {/* Container Detail Panel — takes over right pane */}
+            {selectedContainer ? (
+              <ContainerDetailPanel
+                container={selectedContainer}
+                locations={locations}
+                inventoryItems={inventoryItems}
+                parts={parts}
+                projects={projects}
+                vendors={vendors}
+                onClose={() => setSelectedContainer(null)}
+                onMove={(c) => setMoveContainerTarget(c)}
+                onAddParts={(c) => setAddToContainerTarget(c)}
+                onPartClick={onPartClick}
+                onOpenGallery={openGallery}
+                partActions={partActions}
+                getInventoryStats={getInventoryStats}
+                getInventoryItemId={getInventoryItemId}
+              />
+            ) : (
+              <>
+                {/* Parts list */}
+                <div className="flex-1 p-4 overflow-y-auto">
+                  {filteredParts.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-center px-4">
+                      <Package className="w-16 h-16 text-gray-600 mb-4" />
+                      <h3 className="text-lg font-medium text-gray-400 mb-2">
+                        {selectedLocationId ? 'No parts stored here' : 'No inventory found'}
+                      </h3>
+                      <p className="text-sm text-gray-600 max-w-sm">
+                        {selectedLocationId
+                          ? 'This location is empty. Parts will appear here once inventory is received or moved.'
+                          : 'No inventory items found. Receive a purchase order or add inventory to get started.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {groupedParts.map(group => (
+                        <div key={group.locationId} className="space-y-3">
+                          <div className="sticky top-0 z-10 flex items-center gap-2 px-3 py-2 bg-gray-900/95 backdrop-blur-sm rounded-lg border-l-4" style={{ borderLeftColor: group.color }}>
+                            {(() => { const loc = locations.find(l => l.id === group.locationId); const tc = getLocationTypeConfig(loc?.location_type); const GIcon = tc.icon; return <GIcon className="w-5 h-5" style={{ color: group.color }} />; })()}
+                            <h3 className="text-base font-bold text-white">{group.locationName}</h3>
+                            <span className="text-xs text-gray-400">({group.subLocations.reduce((sum, sub) => sum + sub.parts.length, 0)} parts)</span>
+                          </div>
+                          {group.subLocations.map(subLoc => (
+                            <div key={subLoc.locationId || '_direct'} className="ml-4 space-y-2">
+                              {subLoc.locationName && (
+                                <div className="flex items-center gap-2 px-2 py-1.5 bg-gray-800/50 rounded border-l-2" style={{ borderLeftColor: subLoc.color }}>
+                                  <ChevronRight className="w-4 h-4 text-gray-500" />
+                                  <span className="text-sm font-medium text-gray-300">{subLoc.locationName}</span>
+                                  <span className="text-xs text-gray-500">({subLoc.parts.length})</span>
+                                </div>
+                              )}
+                              {viewMode === 'list' ? (
+                                <div className={cn("space-y-2", subLoc.locationName && "ml-4")}>
+                                  {subLoc.parts.map(part => {
+                                    const itemForPart = inventoryItems.find(i => i.part_id === part.id && i.location_id === (subLoc.locationId || null) && (i.quantity_on_hand || 0) > 0);
+                                    const ctr = itemForPart?.container_id ? containers.find(c => c.id === itemForPart.container_id) : null;
+                                    return (
+                                      <StoragePartRow
+                                        key={`${part.id}-${subLoc.locationId}`}
+                                        part={part}
+                                        locationQty={part._locationQty}
+                                        locationReserved={part._locationReserved}
+                                        locationId={subLoc.locationId || (group.locationId === 'unassigned' ? 'unassigned' : null)}
+                                        selectedLocationId={selectedLocationId}
+                                        getInventoryStats={getInventoryStats}
+                                        getInventoryItemId={getInventoryItemId}
+                                        vendors={vendors}
+                                        onPartClick={onPartClick}
+                                        onOpenGallery={openGallery}
+                                        partActions={partActions}
+                                        containerName={ctr?.name}
+                                      />
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className={cn("grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3", subLoc.locationName && "ml-4")}>
+                                  {subLoc.parts.map(part => (
+                                    <StoragePartCard
+                                      key={`${part.id}-${subLoc.locationId}`}
+                                      part={part}
+                                      locationQty={part._locationQty}
+                                      locationReserved={part._locationReserved}
+                                      locationId={subLoc.locationId || (group.locationId === 'unassigned' ? 'unassigned' : null)}
+                                      selectedLocationId={selectedLocationId}
+                                      getInventoryStats={getInventoryStats}
+                                      getInventoryItemId={getInventoryItemId}
+                                      vendors={vendors}
+                                      onPartClick={onPartClick}
+                                      onOpenGallery={openGallery}
+                                      partActions={partActions}
+                                    />
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                          )}
-                          {viewMode === 'list' ? (
-                            <div className={cn("space-y-2", subLoc.locationName && "ml-4")}>
-                              {subLoc.parts.map(part => (
-                                <StoragePartRow
-                                  key={`${part.id}-${subLoc.locationId}`}
-                                  part={part}
-                                  locationQty={part._locationQty}
-                                  locationReserved={part._locationReserved}
-                                  locationId={subLoc.locationId || (group.locationId === 'unassigned' ? 'unassigned' : null)}
-                                  selectedLocationId={selectedLocationId}
-                                  getInventoryStats={getInventoryStats}
-                                  getInventoryItemId={getInventoryItemId}
-                                  vendors={vendors}
-                                  onPartClick={onPartClick}
-                                  onOpenGallery={openGallery}
-                                  partActions={partActions}
-                                />
-                              ))}
-                            </div>
-                          ) : (
-                            <div className={cn("grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3", subLoc.locationName && "ml-4")}>
-                              {subLoc.parts.map(part => (
-                                <StoragePartCard
-                                  key={`${part.id}-${subLoc.locationId}`}
-                                  part={part}
-                                  locationQty={part._locationQty}
-                                  locationReserved={part._locationReserved}
-                                  locationId={subLoc.locationId || (group.locationId === 'unassigned' ? 'unassigned' : null)}
-                                  selectedLocationId={selectedLocationId}
-                                  getInventoryStats={getInventoryStats}
-                                  getInventoryItemId={getInventoryItemId}
-                                  vendors={vendors}
-                                  onPartClick={onPartClick}
-                                  onOpenGallery={openGallery}
-                                  partActions={partActions}
-                                />
-                              ))}
-                            </div>
-                          )}
+                          ))}
                         </div>
                       ))}
                     </div>
-                  ))}
+                  )}
                 </div>
-              )}
-            </div>
 
-            {totalPartsCount > 0 && (
-              <div className="border-t border-red-900/20 bg-gray-900/30 p-3">
-                <div className="text-xs text-gray-400">
-                  {totalPartsCount} part{totalPartsCount !== 1 ? 's' : ''} across {groupedParts.length} location{groupedParts.length !== 1 ? 's' : ''}
-                </div>
-              </div>
+                {totalPartsCount > 0 && (
+                  <div className="border-t border-red-900/20 bg-gray-900/30 p-3">
+                    <div className="text-xs text-gray-400">
+                      {totalPartsCount} part{totalPartsCount !== 1 ? 's' : ''} across {groupedParts.length} location{groupedParts.length !== 1 ? 's' : ''}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -603,6 +688,30 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
       {orderModalPart && <OrderPartModal part={orderModalPart} onClose={() => setOrderModalPart(null)} />}
       {buildModalPart && <AddToBuildModal part={buildModalPart} onClose={() => setBuildModalPart(null)} />}
       {needToBuyModalPart && <AddToNeedToBuyModal part={needToBuyModalPart} onClose={() => setNeedToBuyModalPart(null)} />}
+      {createContainerForLocation && (
+        <CreateContainerModal
+          onClose={() => setCreateContainerForLocation(null)}
+          preselectedLocationId={createContainerForLocation}
+          locations={locations}
+          projects={projects}
+        />
+      )}
+      {moveContainerTarget && (
+        <MoveContainerModal
+          container={moveContainerTarget}
+          onClose={() => setMoveContainerTarget(null)}
+          locations={locations}
+          inventoryItems={inventoryItems}
+        />
+      )}
+      {addToContainerTarget && (
+        <AddToContainerModal
+          container={addToContainerTarget}
+          onClose={() => setAddToContainerTarget(null)}
+          inventoryItems={inventoryItems}
+          parts={parts}
+        />
+      )}
       <ImageGallery isOpen={galleryState.open} images={galleryState.images} currentIndex={galleryState.currentIndex} onClose={closeGallery} onNavigate={navigateGallery} />
     </>
   );

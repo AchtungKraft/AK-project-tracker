@@ -10,6 +10,10 @@
       "type": "string",
       "description": "Reference to Location where this inventory is stored"
     },
+    "container_id": {
+      "type": "string",
+      "description": "Optional reference to StorageContainer this item is inside"
+    },
     "quantity_on_hand": {
       "type": "number",
       "default": 0,
