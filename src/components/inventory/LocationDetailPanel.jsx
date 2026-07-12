@@ -198,7 +198,9 @@ export default function LocationDetailPanel({
                     location={location}
                     homeLocation={homeLoc}
                     project={proj}
+                    locations={locations}
                     onMove={onMoveContainer}
+                    onReturnHome={(ctr) => onMoveContainer?.(ctr)}
                     onSelect={onSelectContainer}
                     compact
                   />

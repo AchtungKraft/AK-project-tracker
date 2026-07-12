@@ -27,6 +27,7 @@ import ContainerDetailPanel from "./ContainerDetailPanel";
 import CreateContainerModal from "./CreateContainerModal";
 import MoveContainerModal from "./MoveContainerModal";
 import AddToContainerModal from "./AddToContainerModal";
+import EmptyContainerModal from "./EmptyContainerModal";
 
 const STORAGE_KEY = 'achtung_inventory_locations_state';
 
@@ -69,6 +70,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   const [moveContainerTarget, setMoveContainerTarget] = useState(null);
   const [moveContainerReturnHome, setMoveContainerReturnHome] = useState(false);
   const [addToContainerTarget, setAddToContainerTarget] = useState(null);
+  const [emptyContainerTarget, setEmptyContainerTarget] = useState(null);
 
   // Modals
   const [inventoryModalPart, setInventoryModalPart] = useState(null);
@@ -240,26 +242,59 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
     return scored.sort((a, b) => b.score - a.score).slice(0, 20).map(s => s.loc);
   }, [searchTerm, locations, projects]);
 
-  // Container search
+  // Container search (prioritized: number > name > location)
   const containerSearchResults = useMemo(() => {
     if (!searchTerm || searchTerm.trim().length < 2) return null;
     const term = searchTerm.trim().toLowerCase();
-    return containers.filter(c =>
-      c.name?.toLowerCase().includes(term) ||
-      c.short_code?.toLowerCase().includes(term) ||
-      c.qr_code_value?.toLowerCase().includes(term)
-    ).slice(0, 10);
-  }, [searchTerm, containers]);
+    const scored = [];
+    containers.forEach(c => {
+      let score = 0;
+      const code = c.short_code?.toLowerCase() || '';
+      const name = c.name?.toLowerCase() || '';
+      const qr = c.qr_code_value?.toLowerCase() || '';
+      // Container number matches rank highest
+      if (code === term) score = 100;
+      else if (code.startsWith(term)) score = 90;
+      else if (code.includes(term)) score = 80;
+      // Then name
+      else if (name === term) score = 70;
+      else if (name.startsWith(term)) score = 60;
+      else if (name.includes(term)) score = 50;
+      // Then QR
+      else if (qr.includes(term)) score = 30;
+      // Then home/current location name
+      else {
+        const loc = c.location_id ? locations.find(l => l.id === c.location_id) : null;
+        const homeLoc = c.home_location_id ? locations.find(l => l.id === c.home_location_id) : null;
+        if (loc?.location_area?.toLowerCase().includes(term)) score = 20;
+        else if (homeLoc?.location_area?.toLowerCase().includes(term)) score = 15;
+      }
+      if (score > 0) scored.push({ container: c, score });
+    });
+    return scored.sort((a, b) => b.score - a.score).slice(0, 10).map(s => s.container);
+  }, [searchTerm, containers, locations]);
 
-  // Part search (global — shown in search results panel)
+  // Part search (global — shown in search results panel, prioritized by match quality)
   const partSearchResults = useMemo(() => {
     if (!searchTerm || searchTerm.trim().length < 2) return null;
     const term = searchTerm.trim().toLowerCase();
-    return parts.filter(p =>
-      (p.part_name?.toLowerCase().includes(term) ||
-       p.vendor_part_number?.toLowerCase().includes(term)) &&
-      inventoryItems.some(i => i.part_id === p.id && (i.quantity_on_hand || 0) > 0)
-    ).slice(0, 10);
+    const scored = [];
+    parts.forEach(p => {
+      if (!inventoryItems.some(i => i.part_id === p.id && (i.quantity_on_hand || 0) > 0)) return;
+      let score = 0;
+      const pn = p.vendor_part_number?.toLowerCase() || '';
+      const name = p.part_name?.toLowerCase() || '';
+      // Part number matches rank highest
+      if (pn === term) score = 100;
+      else if (pn.startsWith(term)) score = 90;
+      else if (pn.includes(term)) score = 80;
+      // Then name matches
+      else if (name === term) score = 70;
+      else if (name.startsWith(term)) score = 60;
+      else if (name.includes(term)) score = 50;
+      if (score > 0) scored.push({ part: p, score });
+    });
+    return scored.sort((a, b) => b.score - a.score).slice(0, 10).map(s => s.part);
   }, [searchTerm, parts, inventoryItems]);
 
   // Part search within selected location
@@ -457,7 +492,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
             <div className="p-3 border-b border-red-900/20">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
-                <Input placeholder="Find location or part…" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 bg-gray-900/50 border-gray-700 text-white text-sm" />
+                <Input placeholder="Search parts, containers, locations…" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 bg-gray-900/50 border-gray-700 text-white text-sm" />
               </div>
             </div>
 
@@ -467,22 +502,32 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
 
             {/* Search results: locations + containers + parts */}
             {(locationSearchResults?.length > 0 || containerSearchResults?.length > 0 || partSearchResults?.length > 0) && (
-              <div className="border-b border-red-900/20 p-2 max-h-[250px] overflow-y-auto">
-                {locationSearchResults?.length > 0 && (
+              <div className="border-b border-red-900/20 p-2 max-h-[300px] overflow-y-auto">
+                {partSearchResults?.length > 0 && (
                   <>
-                    <div className="text-[10px] text-gray-500 uppercase tracking-wide px-2 mb-1">Locations</div>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wide px-2 mb-1">Parts</div>
                     <div className="space-y-0.5 mb-2">
-                      {locationSearchResults.map(loc => {
-                        const ltc = getLocationTypeConfig(loc.location_type);
-                        const LIcon = ltc.icon;
+                      {partSearchResults.map(p => {
+                        const items = inventoryItems.filter(i => i.part_id === p.id && (i.quantity_on_hand || 0) > 0);
+                        const firstItem = items[0];
+                        const loc = firstItem?.location_id ? locations.find(l => l.id === firstItem.location_id) : null;
+                        const ctr = firstItem?.container_id ? containers.find(c => c.id === firstItem.container_id) : null;
+                        const totalQty = items.reduce((s, i) => s + (i.quantity_on_hand || 0), 0);
                         return (
-                          <button key={loc.id} onClick={() => { handleLocationSelect(loc.id); setSearchTerm(''); }} className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-800/50 text-left">
-                            <LIcon className="w-3.5 h-3.5 shrink-0" style={{ color: loc.color || ltc.color }} />
+                          <button key={p.id} onClick={() => { onPartClick?.(p); setSearchTerm(''); }} className="w-full flex items-center gap-2 px-2 py-2 rounded hover:bg-gray-800/50 text-left">
+                            <Package className="w-3.5 h-3.5 text-gray-500 shrink-0" />
                             <div className="flex-1 min-w-0">
-                              <div className="text-xs text-white truncate">{loc.location_area}</div>
-                              <div className="text-[10px] text-gray-500 truncate">{buildLocationPathString(loc.id, locations)}</div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs text-white truncate">{p.part_name}</span>
+                                {p.vendor_part_number && <span className="text-[10px] font-mono text-gray-500">{p.vendor_part_number}</span>}
+                              </div>
+                              <div className="text-[10px] text-gray-500 truncate">
+                                {ctr && <span className="text-indigo-400">📦 {ctr.name} · </span>}
+                                {loc ? loc.location_area : 'Unassigned'}
+                                {items.length > 1 && ` (+${items.length - 1} more)`}
+                              </div>
                             </div>
-                            {loc.short_code && <span className="text-[10px] font-mono text-gray-500">[{loc.short_code}]</span>}
+                            <span className="text-[10px] text-gray-500 shrink-0">{totalQty} qty</span>
                           </button>
                         );
                       })}
@@ -498,44 +543,43 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                         const homeLoc = c.home_location_id ? locations.find(l => l.id === c.home_location_id) : null;
                         const isAway = homeLoc && c.location_id !== c.home_location_id;
                         return (
-                          <button key={c.id} onClick={() => { setSelectedContainer(c); setSearchTerm(''); }} className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-800/50 text-left">
-                            <span className="text-sm shrink-0">📦</span>
+                          <button key={c.id} onClick={() => { setSelectedContainer(c); setSearchTerm(''); }} className="w-full flex items-center gap-2 px-2 py-2 rounded hover:bg-gray-800/50 text-left">
+                            {c.photo ? (
+                              <img src={c.photo} alt={c.name} className="w-7 h-7 rounded object-cover border border-gray-700 shrink-0" loading="lazy" />
+                            ) : (
+                              <span className="text-sm shrink-0">📦</span>
+                            )}
                             <div className="flex-1 min-w-0">
-                              <div className="text-xs text-white truncate">{c.name}</div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs text-white truncate">{c.name}</span>
+                                {c.short_code && <span className="text-[10px] font-mono font-bold text-gray-400">{c.short_code}</span>}
+                              </div>
                               <div className="text-[10px] text-gray-500 truncate">
                                 {loc?.location_area || 'No location'}
-                                {isAway && <span className="text-amber-400 ml-1">(away from home)</span>}
+                                {isAway && <span className="text-amber-400 ml-1">· away</span>}
                               </div>
                             </div>
-                            {c.short_code && <span className="text-[10px] font-mono text-gray-500">[{c.short_code}]</span>}
                           </button>
                         );
                       })}
                     </div>
                   </>
                 )}
-                {partSearchResults?.length > 0 && (
+                {locationSearchResults?.length > 0 && (
                   <>
-                    <div className="text-[10px] text-gray-500 uppercase tracking-wide px-2 mb-1">Parts</div>
-                    <div className="space-y-0.5">
-                      {partSearchResults.map(p => {
-                        const items = inventoryItems.filter(i => i.part_id === p.id && (i.quantity_on_hand || 0) > 0);
-                        const firstItem = items[0];
-                        const loc = firstItem?.location_id ? locations.find(l => l.id === firstItem.location_id) : null;
-                        const ctr = firstItem?.container_id ? containers.find(c => c.id === firstItem.container_id) : null;
-                        const totalQty = items.reduce((s, i) => s + (i.quantity_on_hand || 0), 0);
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wide px-2 mb-1">Locations</div>
+                    <div className="space-y-0.5 mb-2">
+                      {locationSearchResults.map(loc => {
+                        const ltc = getLocationTypeConfig(loc.location_type);
+                        const LIcon = ltc.icon;
                         return (
-                          <button key={p.id} onClick={() => { onPartClick?.(p); setSearchTerm(''); }} className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-800/50 text-left">
-                            <Package className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                          <button key={loc.id} onClick={() => { handleLocationSelect(loc.id); setSearchTerm(''); }} className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-800/50 text-left">
+                            <LIcon className="w-3.5 h-3.5 shrink-0" style={{ color: loc.color || ltc.color }} />
                             <div className="flex-1 min-w-0">
-                              <div className="text-xs text-white truncate">{p.part_name}</div>
-                              <div className="text-[10px] text-gray-500 truncate">
-                                {ctr && <span className="text-indigo-400">📦 {ctr.name} · </span>}
-                                {loc ? loc.location_area : 'Unassigned'}
-                                {items.length > 1 && ` (+${items.length - 1} more)`}
-                              </div>
+                              <div className="text-xs text-white truncate">{loc.location_area}</div>
+                              <div className="text-[10px] text-gray-500 truncate">{buildLocationPathString(loc.id, locations)}</div>
                             </div>
-                            <span className="text-[10px] text-gray-500 shrink-0">{totalQty} qty</span>
+                            {loc.short_code && <span className="text-[10px] font-mono text-gray-500">[{loc.short_code}]</span>}
                           </button>
                         );
                       })}
@@ -602,9 +646,9 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                     }
                     const tc = getLocationTypeConfig(loc.location_type);
                     const breadcrumb = buildLocationPathString(loc.id, locations);
-                    const qrSvg = renderQRSVGString(qrValue, 140);
-                    const html = `<!DOCTYPE html><html><head><title>Location Label</title><style>@page{size:4in 2in;margin:0.15in}body{font-family:Arial,sans-serif;margin:0;padding:8px}.label{display:flex;gap:12px;align-items:flex-start}.qr{flex-shrink:0}.info{flex:1}.name{font-size:18px;font-weight:bold;margin-bottom:4px}.type{font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.5px}.code{font-size:24px;font-weight:bold;font-family:monospace;margin:6px 0}.path{font-size:10px;color:#999;margin-top:4px;word-break:break-word}.qr-text{font-size:8px;color:#aaa;font-family:monospace;margin-top:4px;word-break:break-all}</style></head><body><div class="label"><div class="qr">${qrSvg}</div><div class="info"><div class="name">${loc.location_area}</div><div class="type">${tc.label}</div>${loc.short_code ? `<div class="code">${loc.short_code}</div>` : ''}<div class="path">${breadcrumb}</div><div class="qr-text">${qrValue}</div></div></div></body></html>`;
-                    const w = window.open('', '_blank', 'width=500,height=300');
+                    const qrSvg = renderQRSVGString(qrValue, 200);
+                    const html = `<!DOCTYPE html><html><head><title>Location Label</title><style>@page{size:4in 3in;margin:0.15in}*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;padding:10px}.label{display:flex;gap:16px;align-items:flex-start;height:100%}.qr{flex-shrink:0;padding-top:4px}.info{flex:1;display:flex;flex-direction:column;gap:4px}.name{font-size:22px;font-weight:900;line-height:1.15}.code{font-size:28px;font-weight:900;font-family:'Courier New',monospace;margin:4px 0}.type{font-size:11px;color:#555;text-transform:uppercase;letter-spacing:1px;font-weight:600}.path{font-size:10px;color:#888;margin-top:4px;word-break:break-word}.qr-id{font-size:7px;color:#bbb;font-family:monospace;margin-top:auto;word-break:break-all}</style></head><body><div class="label"><div class="qr">${qrSvg}</div><div class="info"><div class="name">${loc.location_area}</div>${loc.short_code ? `<div class="code">${loc.short_code}</div>` : ''}<div class="type">${tc.label}</div><div class="path">${breadcrumb}</div><div class="qr-id">${qrValue}</div></div></div></body></html>`;
+                    const w = window.open('', '_blank', 'width=500,height=400');
                     if (w) { w.document.write(html); w.document.close(); w.onload = () => { w.print(); w.onafterprint = () => w.close(); }; }
                   }}
                 />
@@ -624,6 +668,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                 onMove={(c) => { setMoveContainerReturnHome(false); setMoveContainerTarget(c); }}
                 onReturnHome={(c) => { setMoveContainerReturnHome(true); setMoveContainerTarget(c); }}
                 onAddParts={(c) => setAddToContainerTarget(c)}
+                onEmptyContainer={(c) => setEmptyContainerTarget(c)}
                 onPartClick={onPartClick}
                 onOpenGallery={openGallery}
                 partActions={partActions}
@@ -755,6 +800,16 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
         <AddToContainerModal
           container={addToContainerTarget}
           onClose={() => setAddToContainerTarget(null)}
+          inventoryItems={inventoryItems}
+          parts={parts}
+        />
+      )}
+      {emptyContainerTarget && (
+        <EmptyContainerModal
+          container={emptyContainerTarget}
+          onClose={() => setEmptyContainerTarget(null)}
+          locations={locations}
+          containers={containers}
           inventoryItems={inventoryItems}
           parts={parts}
         />
