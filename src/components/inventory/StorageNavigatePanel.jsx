@@ -60,7 +60,7 @@ export default function StorageNavigatePanel({
       {/* Favorites */}
       {favLocs.length > 0 && (
         <div className="px-2 pt-2 pb-1">
-          <div className="flex items-center gap-1 text-[9px] text-gray-500 uppercase tracking-wide px-1 mb-1">
+          <div className="flex items-center gap-1 text-[9px] text-gray-500 uppercase tracking-widest font-semibold px-1 mb-1">
             <Star className="w-2.5 h-2.5 text-yellow-500 fill-yellow-500" /> Favorites
           </div>
           <div className="space-y-0.5">
@@ -85,7 +85,7 @@ export default function StorageNavigatePanel({
       {/* Recent */}
       {recentLocs.length > 0 && (
         <div className="px-2 pt-1 pb-1">
-          <div className="flex items-center gap-1 text-[9px] text-gray-500 uppercase tracking-wide px-1 mb-1">
+          <div className="flex items-center gap-1 text-[9px] text-gray-500 uppercase tracking-widest font-semibold px-1 mb-1">
             <Clock className="w-2.5 h-2.5" /> Recent
           </div>
           <div className="space-y-0.5">
@@ -112,7 +112,7 @@ export default function StorageNavigatePanel({
 
       {/* Browse tree */}
       <div className="flex-1 overflow-y-auto px-1 pb-2">
-        <div className="text-[9px] text-gray-500 uppercase tracking-wide px-2 py-1">Browse</div>
+        <div className="text-[9px] text-gray-500 uppercase tracking-widest font-semibold px-2 py-1">Browse</div>
         {(showEmptyLocations || unassignedCount > 0) && (
           <div className={cn("flex items-center gap-1.5 px-2 py-1.5 cursor-pointer hover:bg-gray-800/50 text-sm",
             selectedLocationId === 'unassigned' ? "text-yellow-400 bg-yellow-950/20" : "text-gray-300", unassignedCount === 0 && "opacity-50")}

@@ -57,6 +57,13 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   const [searchTerm, setSearchTerm] = useState('');
   const { favorites, recents, toggleFavorite, isFavorite, addRecent } = useLocationFavorites();
 
+  // Escape key dismisses search on desktop
+  useEffect(() => {
+    const handleKey = (e) => { if (e.key === 'Escape' && searchTerm) setSearchTerm(''); };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [searchTerm]);
+
   // Selection state
   const [selectedContainer, setSelectedContainer] = useState(null);
   const [previewPart, setPreviewPart] = useState(null); // desktop right-panel part preview
@@ -365,6 +372,10 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
         </div>
       ) : (
         <div className="space-y-4">
+          {/* Section label — only when viewing a specific location (not "All") */}
+          {selectedLocationId && selectedLocationId !== 'unassigned' && (
+            <div className="text-[9px] text-gray-500 uppercase tracking-widest font-semibold px-1">Loose Parts</div>
+          )}
           {groupedParts.map(group => (
             <div key={group.locationId} className="space-y-2">
               {(!selectedLocationId || selectedLocationId === 'unassigned') && (
@@ -526,18 +537,21 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
             </div>
           </div>
 
-          {/* Desktop search dropdown overlay */}
+          {/* Desktop search command-palette overlay */}
           {showSearchOverlay && (
-            <div className="absolute left-0 right-0 top-full z-50 bg-gray-900 border border-gray-700 rounded-b-lg shadow-2xl max-h-[60vh] overflow-y-auto">
-              {renderSearchResults()}
-            </div>
+            <>
+              <div className="fixed inset-0 z-40" onClick={clearSearch} />
+              <div className="absolute left-3 right-3 top-full z-50 bg-gray-900 border border-gray-700 rounded-b-lg shadow-2xl max-h-[55vh] overflow-y-auto mt-0.5">
+                {renderSearchResults()}
+              </div>
+            </>
           )}
         </div>
 
         {/* Three-panel workspace */}
         <div className="flex-1 flex overflow-hidden">
-          {/* LEFT — Navigate */}
-          <div className="w-[220px] shrink-0 border-r border-gray-800 bg-black/20">
+          {/* LEFT — Navigate (~18%) */}
+          <div className="w-[200px] xl:w-[220px] shrink-0 border-r border-gray-800 bg-black/20">
             <StorageNavigatePanel
               favorites={favorites} recents={recents} locations={locations}
               locationPartCounts={locationPartCounts} showEmptyLocations={showEmptyLocations}
@@ -549,8 +563,8 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
             />
           </div>
 
-          {/* CENTER — Current Place */}
-          <div className="flex-1 flex flex-col overflow-hidden border-r border-gray-800">
+          {/* CENTER — Current Place (~55%) */}
+          <div className="flex-1 flex flex-col overflow-hidden min-w-0">
             {selectedLocationId && selectedLocationId !== 'unassigned' ? (
               <>
                 {/* Location header */}
@@ -587,12 +601,12 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
             )}
           </div>
 
-          {/* RIGHT — Selected Object preview */}
-          <div className="w-[280px] shrink-0 bg-black/20">
+          {/* RIGHT — Inspector (~25%) */}
+          <div className="w-[260px] xl:w-[300px] shrink-0 bg-black/20 border-l border-gray-800">
             <StorageObjectPreview
               selectedPart={previewPart}
               selectedContainer={selectedContainer}
-              locations={locations} inventoryItems={inventoryItems} parts={parts} projects={projects} vendors={vendors}
+              locations={locations} inventoryItems={inventoryItems} parts={parts} projects={projects} vendors={vendors} containers={containers}
               onMoveContainer={(c) => { setMoveContainerReturnHome(false); setMoveContainerTarget(c); }}
               onReturnHomeContainer={(c) => { setMoveContainerReturnHome(true); setMoveContainerTarget(c); }}
               onAddPartsToContainer={(c) => setAddToContainerTarget(c)}
