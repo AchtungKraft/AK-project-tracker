@@ -32,6 +32,7 @@ export default function LocationsConfig() {
   });
   const [editing, setEditing] = useState(null);
   const [collapsed, setCollapsed] = useState({});
+  const [showAdvancedCreate, setShowAdvancedCreate] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryImages, setGalleryImages] = useState([]);
@@ -501,13 +502,13 @@ export default function LocationsConfig() {
     <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
       <CardHeader className="border-b border-red-900/30 p-4">
         <CardTitle className="text-white text-base">Storage Locations</CardTitle>
-        <p className="text-sm text-gray-400 mt-1">Manage location hierarchy and details</p>
+        <p className="text-sm text-gray-400 mt-1">Create and manage storage locations for your shop</p>
       </CardHeader>
       <CardContent className="p-4 space-y-6">
         <form onSubmit={handleCreate} className="space-y-4 p-4 bg-gray-900/50 rounded-lg">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label className="text-gray-400 text-xs">Location/Area Name *</Label>
+              <Label className="text-gray-400 text-xs">Storage Name *</Label>
               <Input
                 value={newLocation.location_area}
                 onChange={(e) => setNewLocation({ ...newLocation, location_area: e.target.value })}
@@ -533,7 +534,7 @@ export default function LocationsConfig() {
               </Select>
             </div>
             <div>
-              <Label className="text-gray-400 text-xs">Location Type</Label>
+              <Label className="text-gray-400 text-xs">Type</Label>
               <Select
                 value={newLocation.location_type || "none"}
                 onValueChange={(value) => setNewLocation({ ...newLocation, location_type: value === "none" ? "" : value })}
@@ -560,97 +561,95 @@ export default function LocationsConfig() {
                 className="bg-gray-800 border-gray-700 text-white"
               />
             </div>
-            <div>
-              <Label className="text-gray-400 text-xs">Bin/Shelf Description</Label>
-              <Input
-                value={newLocation.bin_description}
-                onChange={(e) => setNewLocation({ ...newLocation, bin_description: e.target.value })}
-                placeholder="e.g., A-3-5, Shelf 12"
-                className="bg-gray-800 border-gray-700 text-white"
-              />
-            </div>
-            <div>
-              <Label className="text-gray-400 text-xs">QR Code Value</Label>
-              <Input
-                value={newLocation.qr_code_value}
-                onChange={(e) => setNewLocation({ ...newLocation, qr_code_value: e.target.value })}
-                placeholder="Scannable QR code value"
-                className="bg-gray-800 border-gray-700 text-white"
-              />
-            </div>
-            <div>
-              <Label className="text-gray-400 text-xs">Color</Label>
-              <input
-                type="color"
-                value={newLocation.color}
-                onChange={(e) => setNewLocation({ ...newLocation, color: e.target.value })}
-                className="w-full h-10 rounded border border-gray-700 bg-gray-800 cursor-pointer"
-              />
-            </div>
-            <div>
-              <Label className="text-gray-400 text-xs">Sort Order</Label>
-              <Input
-                type="number"
-                value={newLocation.sort_order}
-                onChange={(e) => setNewLocation({ ...newLocation, sort_order: parseInt(e.target.value) || 0 })}
-                className="bg-gray-800 border-gray-700 text-white"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <Label className="text-gray-400 text-xs">Notes</Label>
-              <Textarea
-                value={newLocation.notes}
-                onChange={(e) => setNewLocation({ ...newLocation, notes: e.target.value })}
-                placeholder="Additional location notes..."
-                className="bg-gray-800 border-gray-700 text-white"
-                rows={2}
-              />
-            </div>
-            <div className="md:col-span-2">
-              <Label className="text-gray-400 text-xs">Photos</Label>
-              <div className="space-y-2">
-                {newLocation.photos && newLocation.photos.length > 0 && (
-                  <div className="flex gap-2 flex-wrap">
-                    {newLocation.photos.map((photo, idx) => (
-                      <div key={idx} className="relative">
-                        <img
-                          src={photo}
-                          alt={`Photo ${idx + 1}`}
-                          className="w-20 h-20 object-cover rounded border border-gray-700 cursor-pointer"
-                          onClick={() => handleOpenGallery(newLocation.photos, idx)}
-                        />
-                        <button
-                          onClick={() => handleRemovePhoto(photo)}
-                          className="absolute -top-1 -right-1 bg-red-600 rounded-full w-5 h-5 flex items-center justify-center text-white hover:bg-red-700"
-                        >
-                          <XIcon className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <label className="cursor-pointer">
-                  <div className="flex items-center gap-2 px-4 py-2 bg-gray-800 border border-gray-700 rounded hover:bg-gray-750 transition-colors">
-                    <Upload className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm text-gray-400">
-                      {uploading ? 'Uploading...' : 'Upload Photos'}
-                    </span>
-                  </div>
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => handleFileUpload(e, false)}
-                    disabled={uploading}
-                  />
-                </label>
+          </div>
+
+          {/* Advanced fields — hidden by default */}
+          {showAdvancedCreate && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-gray-800">
+              <div>
+                <Label className="text-gray-400 text-xs">Shelf / Bin ID</Label>
+                <Input
+                  value={newLocation.bin_description}
+                  onChange={(e) => setNewLocation({ ...newLocation, bin_description: e.target.value })}
+                  placeholder="e.g., A-3-5, Shelf 12"
+                  className="bg-gray-800 border-gray-700 text-white"
+                />
+              </div>
+              <div>
+                <Label className="text-gray-400 text-xs">Color</Label>
+                <input
+                  type="color"
+                  value={newLocation.color}
+                  onChange={(e) => setNewLocation({ ...newLocation, color: e.target.value })}
+                  className="w-full h-10 rounded border border-gray-700 bg-gray-800 cursor-pointer"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <Label className="text-gray-400 text-xs">Notes</Label>
+                <Textarea
+                  value={newLocation.notes}
+                  onChange={(e) => setNewLocation({ ...newLocation, notes: e.target.value })}
+                  placeholder="Additional notes..."
+                  className="bg-gray-800 border-gray-700 text-white"
+                  rows={2}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <Label className="text-gray-400 text-xs">Photos</Label>
+                <div className="space-y-2">
+                  {newLocation.photos && newLocation.photos.length > 0 && (
+                    <div className="flex gap-2 flex-wrap">
+                      {newLocation.photos.map((photo, idx) => (
+                        <div key={idx} className="relative">
+                          <img
+                            src={photo}
+                            alt={`Photo ${idx + 1}`}
+                            className="w-20 h-20 object-cover rounded border border-gray-700 cursor-pointer"
+                            onClick={() => handleOpenGallery(newLocation.photos, idx)}
+                          />
+                          <button
+                            onClick={() => handleRemovePhoto(photo)}
+                            className="absolute -top-1 -right-1 bg-red-600 rounded-full w-5 h-5 flex items-center justify-center text-white hover:bg-red-700"
+                          >
+                            <XIcon className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <label className="cursor-pointer">
+                    <div className="flex items-center gap-2 px-4 py-2 bg-gray-800 border border-gray-700 rounded hover:bg-gray-750 transition-colors">
+                      <Upload className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm text-gray-400">
+                        {uploading ? 'Uploading...' : 'Upload Photos'}
+                      </span>
+                    </div>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => handleFileUpload(e, false)}
+                      disabled={uploading}
+                    />
+                  </label>
+                </div>
               </div>
             </div>
+          )}
+
+          <div className="flex items-center gap-3">
+            <Button type="submit" disabled={createMutation.isPending} className="bg-red-600 hover:bg-red-700 gap-2">
+              {createMutation.isPending ? <><Loader2 className="w-4 h-4 animate-spin" />Creating...</> : <><Plus className="w-4 h-4" />Add Location</>}
+            </Button>
+            <button
+              type="button"
+              onClick={() => setShowAdvancedCreate(!showAdvancedCreate)}
+              className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+            >
+              {showAdvancedCreate ? 'Hide advanced' : 'Show advanced options'}
+            </button>
           </div>
-          <Button type="submit" disabled={createMutation.isPending} className="bg-red-600 hover:bg-red-700 gap-2">
-            {createMutation.isPending ? <><Loader2 className="w-4 h-4 animate-spin" />Creating...</> : <><Plus className="w-4 h-4" />Add Location</>}
-          </Button>
         </form>
 
         <div>

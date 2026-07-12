@@ -185,8 +185,9 @@ export default function InventoryLocationEditor({
           setIsEditing(true);
         }}
         className={cn(
-          "opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-white",
-          compact ? "h-6 px-2" : "h-7 px-2"
+          "transition-opacity text-gray-400 hover:text-white",
+          "md:opacity-0 md:group-hover:opacity-100",
+          compact ? "h-7 px-2" : "h-8 px-2"
         )}
       >
         <Edit2 className={cn(compact ? "w-3 h-3" : "w-3.5 h-3.5")} />

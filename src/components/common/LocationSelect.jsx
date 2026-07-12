@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -6,10 +6,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, MapPin } from "lucide-react";
+import { Plus, MapPin, Clock, Star } from "lucide-react";
 import { toast } from "sonner";
+import { getLocationTypeConfig } from "@/components/inventory/locationTypeConfig";
 
-export default function LocationSelect({ value, onValueChange, className }) {
+const RECENT_DESTINATIONS_KEY = 'ak_recent_move_destinations';
+
+function getRecentDestinations() {
+  try { return JSON.parse(localStorage.getItem(RECENT_DESTINATIONS_KEY)) || []; }
+  catch { return []; }
+}
+
+function addRecentDestination(id) {
+  if (!id) return;
+  const prev = getRecentDestinations().filter(x => x !== id);
+  localStorage.setItem(RECENT_DESTINATIONS_KEY, JSON.stringify([id, ...prev].slice(0, 5)));
+}
+
+export default function LocationSelect({ value, onValueChange, className, projectId }) {
   const queryClient = useQueryClient();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newLocationName, setNewLocationName] = useState('');
@@ -65,11 +79,25 @@ export default function LocationSelect({ value, onValueChange, className }) {
     }
   };
 
+  const recentIds = useMemo(() => getRecentDestinations(), []);
+  const recentLocs = useMemo(() =>
+    recentIds.map(id => locations.find(l => l.id === id)).filter(Boolean),
+    [recentIds, locations]
+  );
+
+  // Project storage locations first if projectId given
+  const projectLocs = useMemo(() =>
+    projectId ? locations.filter(l => l.project_id === projectId && l.is_project_storage && l.active !== false) : [],
+    [locations, projectId]
+  );
+
   const handleSelectChange = (val) => {
     if (val === '__create_new__') {
       setShowCreateModal(true);
     } else {
-      onValueChange(val === 'none' ? '' : val);
+      const resolved = val === 'none' ? '' : val;
+      if (resolved) addRecentDestination(resolved);
+      onValueChange(resolved);
     }
   };
 
@@ -83,6 +111,50 @@ export default function LocationSelect({ value, onValueChange, className }) {
           <SelectItem value="none">
             <span className="text-gray-400">No location</span>
           </SelectItem>
+
+          {/* Recent destinations */}
+          {recentLocs.length > 0 && (
+            <>
+              <div className="px-2 py-1.5 text-[10px] text-gray-500 uppercase tracking-wide border-b border-gray-700 mb-1">
+                <Clock className="w-3 h-3 inline mr-1" />Recent
+              </div>
+              {recentLocs.map(loc => {
+                const tc = getLocationTypeConfig(loc.location_type);
+                const Icon = tc.icon;
+                return (
+                  <SelectItem key={`recent-${loc.id}`} value={loc.id}>
+                    <span className="flex items-center gap-1.5">
+                      <Icon className="w-3.5 h-3.5 shrink-0" style={{ color: loc.color || tc.color }} />
+                      <span style={{ color: loc.color || tc.color }}>{loc.location_area}</span>
+                    </span>
+                  </SelectItem>
+                );
+              })}
+              <div className="border-t border-gray-700 mt-1 mb-1" />
+            </>
+          )}
+
+          {/* Project storage locations */}
+          {projectLocs.length > 0 && (
+            <>
+              <div className="px-2 py-1.5 text-[10px] text-gray-500 uppercase tracking-wide border-b border-gray-700 mb-1">
+                Project Storage
+              </div>
+              {projectLocs.map(loc => {
+                const tc = getLocationTypeConfig(loc.location_type);
+                const Icon = tc.icon;
+                return (
+                  <SelectItem key={`proj-${loc.id}`} value={loc.id}>
+                    <span className="flex items-center gap-1.5">
+                      <Icon className="w-3.5 h-3.5 shrink-0" style={{ color: loc.color || tc.color }} />
+                      <span style={{ color: loc.color || '#A855F7' }}>{loc.location_area}</span>
+                    </span>
+                  </SelectItem>
+                );
+              })}
+              <div className="border-t border-gray-700 mt-1 mb-1" />
+            </>
+          )}
           
           {parentLocations
             .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
@@ -93,12 +165,13 @@ export default function LocationSelect({ value, onValueChange, className }) {
             return (
               <React.Fragment key={parent.id}>
                 <SelectItem value={parent.id}>
-                  <span style={{ color: parent.color || '#8B5CF6' }}>{parent.bin_description || parent.location_area}</span>
+                  <span style={{ color: parent.color || '#8B5CF6' }}>{parent.location_area}</span>
                 </SelectItem>
                 {children.map(child => (
                   <SelectItem key={child.id} value={child.id}>
                     <span className="pl-4" style={{ color: child.color || '#8B5CF6' }}>
-                      ↳ {child.bin_description || child.location_area}
+                      ↳ {child.location_area}
+                      {child.short_code && <span className="text-gray-500 text-[10px] ml-1">[{child.short_code}]</span>}
                     </span>
                   </SelectItem>
                 ))}

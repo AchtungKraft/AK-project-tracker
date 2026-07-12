@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Edit2, MapPin, Package, ChevronRight, Image as ImageIcon, Clock, ArrowDownToLine, Printer } from "lucide-react";
+import { Edit2, MapPin, Package, ChevronRight, Image as ImageIcon, Clock, ArrowDownToLine, Printer, Star, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig } from "./locationTypeConfig";
 import LocationBreadcrumb from "./LocationBreadcrumb";
@@ -23,6 +23,8 @@ export default function LocationDetailPanel({
   onNavigateLocation,
   onEditLocation,
   onPrintQR,
+  isFavorite,
+  onToggleFavorite,
 }) {
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
@@ -105,6 +107,17 @@ export default function LocationDetailPanel({
           </div>
         </div>
         <div className="flex gap-1 shrink-0">
+          {onToggleFavorite && (
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => onToggleFavorite(locationId)}
+              className={cn("h-8 w-8", isFavorite ? "text-yellow-500" : "text-gray-500")}
+              title={isFavorite ? "Remove from favorites" : "Add to favorites"}
+            >
+              <Star className={cn("w-4 h-4", isFavorite && "fill-yellow-500")} />
+            </Button>
+          )}
           {onEditLocation && (
             <Button size="icon" variant="ghost" onClick={() => onEditLocation(locationId)} className="h-8 w-8 text-blue-400">
               <Edit2 className="w-4 h-4" />
@@ -128,7 +141,7 @@ export default function LocationDetailPanel({
       )}
 
       {/* Photo gallery */}
-      {photos.length > 1 && (
+      {photos.length > 1 ? (
         <div className="flex gap-2 flex-wrap">
           {photos.map((p, idx) => (
             <img
@@ -142,6 +155,11 @@ export default function LocationDetailPanel({
             />
           ))}
         </div>
+      ) : photos.length === 0 && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-gray-800/30 rounded-lg border border-dashed border-gray-700 text-xs text-gray-500">
+          <Camera className="w-4 h-4" />
+          No photo yet — add one in Admin Config
+        </div>
       )}
 
       {/* Summary Stats */}
@@ -152,7 +170,7 @@ export default function LocationDetailPanel({
         </div>
         <div className="bg-gray-800/50 rounded-lg p-3 text-center">
           <div className="text-lg font-bold text-white">{totalUnits}</div>
-          <div className="text-xs text-gray-500">Units</div>
+          <div className="text-xs text-gray-500">Stored Here</div>
         </div>
         <div className="bg-gray-800/50 rounded-lg p-3 text-center">
           <div className={cn("text-lg font-bold", totalReserved > 0 ? "text-orange-400" : "text-gray-500")}>{totalReserved}</div>
@@ -163,7 +181,7 @@ export default function LocationDetailPanel({
       {/* Child Locations */}
       {children.length > 0 && (
         <div>
-          <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Child Locations ({children.length})</h4>
+          <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Inside ({children.length})</h4>
           <div className="space-y-1">
             {children.map(child => {
               const ctc = getLocationTypeConfig(child.location_type);

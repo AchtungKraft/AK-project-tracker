@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Package, Plus, Loader2, MapPin, AlertTriangle } from "lucide-react";
+import { Package, Plus, Loader2, MapPin, AlertTriangle, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { getLocationTypeConfig } from "@/components/inventory/locationTypeConfig";
@@ -13,7 +14,9 @@ import LocationBreadcrumb from "@/components/inventory/LocationBreadcrumb";
 
 export default function ProjectStoragePanel({ projectId, projectName }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [isInitializing, setIsInitializing] = useState(false);
+  const [initResult, setInitResult] = useState(null);
 
   const { data: locations = [] } = useQuery({
     queryKey: ['locations'],
@@ -107,6 +110,7 @@ export default function ProjectStoragePanel({ projectId, projectName }) {
       if (data.error) throw new Error(data.error);
 
       queryClient.invalidateQueries({ queryKey: ['locations'] });
+      setInitResult(data);
       if (data.created_count > 0) {
         toast.success(`Created ${data.created_count} storage location${data.created_count !== 1 ? 's' : ''}${data.existing_count > 0 ? ` (${data.existing_count} already existed)` : ''}`);
       } else {
@@ -166,10 +170,9 @@ export default function ProjectStoragePanel({ projectId, projectName }) {
               const isEmpty = inv.partCount === 0;
 
               return (
-                <a
+                <button
                   key={loc.id}
-                  href={getLocationUrl(loc.id)}
-                  onClick={(e) => { e.preventDefault(); window.location.href = getLocationUrl(loc.id); }}
+                  onClick={() => navigate(getLocationUrl(loc.id))}
                   className={cn(
                     "flex items-center gap-3 px-4 py-3 rounded-lg border transition-colors hover:border-purple-700/50",
                     isEmpty
@@ -188,19 +191,19 @@ export default function ProjectStoragePanel({ projectId, projectName }) {
                     <div className="flex items-center gap-4 text-xs shrink-0">
                       <div className="text-center">
                         <div className="text-white font-medium">{inv.totalUnits}</div>
-                        <div className="text-gray-500">here</div>
+                        <div className="text-gray-500">stored here</div>
                       </div>
                       {inv.totalReserved > 0 && (
                         <div className="text-center">
                           <div className="text-orange-400 font-medium">{inv.totalReserved}</div>
-                          <div className="text-gray-500">rsv</div>
+                          <div className="text-gray-500">reserved</div>
                         </div>
                       )}
                     </div>
                   ) : (
                     <span className="text-xs text-gray-600">Empty</span>
                   )}
-                </a>
+                </button>
               );
             })}
           </div>

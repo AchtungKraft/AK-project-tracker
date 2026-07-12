@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Search, MapPin, ChevronRight, ChevronDown, Package, LayoutGrid, List,
-  FolderOpen, Folder, AlertTriangle, Wrench
+  FolderOpen, Folder, AlertTriangle, Wrench, Star, BarChart3
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig, buildLocationPathString } from "./locationTypeConfig";
@@ -22,6 +22,9 @@ import ImageGallery from "../parts/ImageGallery";
 import PartActionsDropdown from "../parts/PartActionsDropdown";
 import InventoryLocationEditor from "./InventoryLocationEditor";
 import BuildExportActions from "./BuildExportActions";
+import useLocationFavorites from "./useLocationFavorites";
+import LocationFavoritesBar from "./LocationFavoritesBar";
+import StorageDashboard from "./StorageDashboard";
 
 const STORAGE_KEY = 'achtung_inventory_locations_state';
 
@@ -58,6 +61,8 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
     return 'list';
   });
   const [selectedBuildId, setSelectedBuildId] = useState(null);
+  const [showDashboard, setShowDashboard] = useState(true);
+  const { favorites, recents, toggleFavorite, isFavorite, addRecent } = useLocationFavorites();
 
   // Wrap setSelectedLocationId to also update URL
   const setSelectedLocationId = useCallback((id) => {
@@ -343,38 +348,52 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
     return parts.filter(p => partIds.has(p.id));
   }, [selectedLocationId, inventoryItems, parts, locations, partsAllocatedToBuild]);
 
-  // Location search — match against location fields and filter tree
-  // Allow 1-char for exact short_code/QR matches, 2-char for general search
+  // Location search — match and rank results by relevance
   const locationSearchResults = useMemo(() => {
     if (!searchTerm) return null;
     const trimmed = searchTerm.trim();
     if (!trimmed) return null;
     const term = trimmed.toLowerCase();
-    // For 1-char searches, only match exact short_code or qr_code_value prefix
     const isShort = term.length < 2;
-    return locations.filter(loc => {
-      if (!loc.active && loc.active !== undefined) return false;
+
+    const scored = [];
+    locations.forEach(loc => {
+      if (!loc.active && loc.active !== undefined) return;
+      let score = 0;
+
       if (isShort) {
-        return (
-          loc.short_code?.toLowerCase() === term ||
-          loc.qr_code_value?.toLowerCase().startsWith(term)
-        );
+        if (loc.short_code?.toLowerCase() === term) score = 100;
+        else if (loc.qr_code_value?.toLowerCase().startsWith(term)) score = 90;
+        else return;
+      } else {
+        // Priority ranking: exact > starts_with > contains
+        const name = loc.location_area?.toLowerCase() || '';
+        const code = loc.short_code?.toLowerCase() || '';
+        const qr = loc.qr_code_value?.toLowerCase() || '';
+
+        if (code === term || qr === term) score = 100;
+        else if (name === term) score = 95;
+        else if (code.startsWith(term) || qr.startsWith(term)) score = 80;
+        else if (name.startsWith(term)) score = 75;
+        else if (code.includes(term) || name.includes(term)) score = 60;
+        else if (qr.includes(term)) score = 50;
+        else {
+          const tc = getLocationTypeConfig(loc.location_type);
+          const proj = loc.project_id ? projects.find(p => p.id === loc.project_id) : null;
+          if (tc.label.toLowerCase().includes(term)) score = 30;
+          else if (loc.bin_description?.toLowerCase().includes(term)) score = 25;
+          else if (proj && (proj.name?.toLowerCase().includes(term) || proj.client_name?.toLowerCase().includes(term))) score = 20;
+          else if (loc.description?.toLowerCase().includes(term) || loc.notes?.toLowerCase().includes(term)) score = 10;
+        }
       }
-      const tc = getLocationTypeConfig(loc.location_type);
-      // Check project name if project_id exists
-      const proj = loc.project_id ? projects.find(p => p.id === loc.project_id) : null;
-      return (
-        loc.location_area?.toLowerCase().includes(term) ||
-        loc.short_code?.toLowerCase().includes(term) ||
-        loc.qr_code_value?.toLowerCase().includes(term) ||
-        loc.bin_description?.toLowerCase().includes(term) ||
-        loc.description?.toLowerCase().includes(term) ||
-        loc.notes?.toLowerCase().includes(term) ||
-        loc.storage_type?.toLowerCase().includes(term) ||
-        tc.label.toLowerCase().includes(term) ||
-        (proj && (proj.name?.toLowerCase().includes(term) || proj.client_name?.toLowerCase().includes(term)))
-      );
-    }).slice(0, 20);
+
+      if (score > 0) scored.push({ loc, score });
+    });
+
+    return scored
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 20)
+      .map(s => s.loc);
   }, [searchTerm, locations, projects]);
 
   // Filter by search
@@ -511,6 +530,8 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   // Handle location selection
   const handleLocationSelect = (locationId) => {
     setSelectedLocationId(locationId);
+    setShowDashboard(false);
+    addRecent(locationId);
     
     // Auto-expand ancestors
     if (locationId && locationId !== 'unassigned') {
@@ -524,6 +545,26 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
       }
       
       setExpandedLocations(newExpanded);
+    }
+  };
+
+  // Handle dashboard zone click
+  const handleDashboardZone = (zoneKey, types) => {
+    if (zoneKey === 'unassigned') {
+      setSelectedLocationId('unassigned');
+      setShowDashboard(false);
+      return;
+    }
+    if (zoneKey === 'empty') {
+      setShowEmptyLocations(true);
+      setSelectedLocationId(null);
+      setShowDashboard(false);
+      return;
+    }
+    // Select first location of matching type
+    const matching = locations.find(l => types.includes(l.location_type) && l.active !== false);
+    if (matching) {
+      handleLocationSelect(matching.id);
     }
   };
 
@@ -633,8 +674,22 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
             style={{ color: isSelected ? (location.color || '#EF4444') : undefined }}
             title={[location.location_area, location.short_code && `[${location.short_code}]`].filter(Boolean).join(' ')}
           >
-            {location.short_code || location.location_area}
+            {location.location_area}
+            {location.short_code && (
+              <span className="text-gray-500 text-[10px] font-mono ml-1">[{location.short_code}]</span>
+            )}
           </span>
+
+          {/* Favorite star — always visible on touch */}
+          <button
+            onClick={(e) => { e.stopPropagation(); toggleFavorite(location.id); }}
+            className={cn(
+              "shrink-0 p-0.5 transition-colors",
+              isFavorite(location.id) ? "text-yellow-500" : "text-gray-700 hover:text-yellow-600 md:opacity-0 md:group-hover:opacity-100"
+            )}
+          >
+            <Star className={cn("w-3 h-3", isFavorite(location.id) && "fill-yellow-500")} />
+          </button>
 
           {partCount > 0 && (
             <span 
@@ -777,9 +832,9 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
           </div>
         </div>
 
-        {/* Move Location Button (inline) */}
+        {/* Move Location Button — always visible on mobile */}
         {inventoryItemId && (
-          <div className="hidden md:block">
+          <div>
             <InventoryLocationEditor
               inventoryItemId={inventoryItemId}
               currentLocationId={locationId === 'unassigned' ? null : locationId}
@@ -788,8 +843,8 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
           </div>
         )}
 
-        {/* Actions */}
-        <div className="hidden md:block ml-2">
+        {/* Actions — always visible */}
+        <div className="ml-2">
           <PartActionsDropdown
             part={part}
             onAddInventory={setInventoryModalPart}
@@ -889,7 +944,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
             </div>
           </div>
 
-          {/* Move Location (inline editor) */}
+          {/* Move Location — always visible */}
           {inventoryItemId && (
             <div className="mt-2 pt-2 border-t border-gray-800">
               <InventoryLocationEditor
@@ -900,7 +955,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
             </div>
           )}
 
-          {/* Vendor & Actions */}
+          {/* Vendor & Actions — always visible */}
           <div className="flex items-center justify-between text-xs mt-2">
             {vendor ? (
               <span className="text-gray-400 truncate max-w-[100px]">{vendor.vendor_name}</span>
@@ -937,7 +992,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
         <div className="flex flex-col gap-3 p-3 bg-black/40 backdrop-blur-xl border-b border-red-900/30">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-bold text-white">Inventory by Location</h2>
+              <h2 className="text-lg font-bold text-white">Storage</h2>
               <p className="text-xs text-gray-400">
                 {filteredParts.length} parts at {getSelectedLocationName()}
                 {selectedBuild && (
@@ -946,6 +1001,18 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant={showDashboard ? 'default' : 'ghost'}
+                onClick={() => setShowDashboard(!showDashboard)}
+                className={cn(
+                  "h-7 px-2",
+                  showDashboard ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white'
+                )}
+                title="Storage Overview"
+              >
+                <BarChart3 className="w-4 h-4" />
+              </Button>
               <div className="flex items-center gap-1 bg-black/40 border border-gray-700 rounded-lg p-1">
                 <Button
                   size="sm"
@@ -1045,13 +1112,25 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
                 <Input
-                  placeholder="Search locations..."
+                  placeholder="Find storage location..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10 bg-gray-900/50 border-gray-700 text-white text-sm"
                 />
               </div>
             </div>
+
+            {/* Favorites & Recents */}
+            {!searchTerm && (
+              <LocationFavoritesBar
+                favorites={favorites}
+                recents={recents}
+                locations={locations}
+                selectedLocationId={selectedLocationId}
+                onSelect={handleLocationSelect}
+                onToggleFavorite={toggleFavorite}
+              />
+            )}
 
             {/* Location Search Results */}
             {locationSearchResults && locationSearchResults.length > 0 && (
@@ -1160,6 +1239,17 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
 
           {/* Right Pane - Parts Display */}
           <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Storage Dashboard — operational overview */}
+            {showDashboard && !selectedLocationId && (
+              <div className="border-b border-red-900/20 bg-gray-900/20 p-4">
+                <StorageDashboard
+                  locations={locations}
+                  inventoryItems={inventoryItems}
+                  onSelectZone={handleDashboardZone}
+                />
+              </div>
+            )}
+
             {/* Location Detail Panel — shown when a specific location is selected */}
             {selectedLocationId && selectedLocationId !== 'unassigned' && selectedLocationId !== null && (
               <div className="border-b border-red-900/20 bg-gray-900/20 max-h-[45%] overflow-y-auto">
@@ -1171,6 +1261,8 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                   projects={projects}
                   commitments={commitments}
                   onNavigateLocation={handleLocationSelect}
+                  isFavorite={isFavorite(selectedLocationId)}
+                  onToggleFavorite={toggleFavorite}
                   onPrintQR={(loc) => {
                     let qrValue = loc.qr_code_value;
                     if (!qrValue) {
@@ -1190,17 +1282,17 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
             {/* Parts Display - Grouped by Location */}
             <div className="flex-1 p-4 overflow-y-auto">
               {filteredParts.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-center">
+                <div className="flex flex-col items-center justify-center h-full text-center px-4">
                   <Package className="w-16 h-16 text-gray-600 mb-4" />
                   <h3 className="text-lg font-medium text-gray-400 mb-2">
-                    No parts found
+                    {selectedLocationId ? 'No parts stored here' : 'No inventory found'}
                   </h3>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-gray-600 max-w-sm">
                     {selectedBuild 
                       ? `No allocated parts for "${selectedBuild.name}" at this location`
                       : selectedLocationId 
-                        ? 'No parts stored at this location' 
-                        : 'No inventory items found'}
+                        ? 'This location is empty. Parts will appear here once inventory is received or moved.' 
+                        : 'No inventory items found. Receive a purchase order or add inventory to get started.'}
                   </p>
                   {selectedBuild && (
                     <Button

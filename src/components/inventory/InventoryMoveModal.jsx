@@ -146,17 +146,17 @@ export default function InventoryMoveModal({
 
           {/* Current Location */}
           <div className="space-y-2">
-            <Label className="text-gray-300">From Location</Label>
+            <Label className="text-gray-300">From</Label>
             <div className="bg-gray-800 rounded-lg p-3 flex items-center gap-2">
               <MapPin className="w-4 h-4 text-gray-400" />
-              <span className="text-white">{currentLocation?.name || "Unknown"}</span>
+              <span className="text-white">{currentLocation?.location_area || "Unassigned"}</span>
               <span className="text-gray-400 ml-auto">Available: {maxQuantity}</span>
             </div>
           </div>
 
           {/* Destination Location */}
           <div className="space-y-2">
-            <Label className="text-gray-300">To Location *</Label>
+            <Label className="text-gray-300">Move To *</Label>
             <Select
               value={formData.toLocationId}
               onValueChange={(value) => setFormData({ ...formData, toLocationId: value })}
@@ -165,11 +165,18 @@ export default function InventoryMoveModal({
                 <SelectValue placeholder="Select destination..." />
               </SelectTrigger>
               <SelectContent>
-                {availableLocations.map((loc) => (
-                  <SelectItem key={loc.id} value={loc.id}>
-                    {loc.name}
-                  </SelectItem>
-                ))}
+                {availableLocations
+                  .filter(loc => loc.active !== false)
+                  .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+                  .map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id}>
+                      <span className="flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 shrink-0" style={{ color: loc.color || '#8B5CF6' }} />
+                        {loc.location_area}
+                        {loc.short_code && <span className="text-gray-500 text-[10px] ml-1">[{loc.short_code}]</span>}
+                      </span>
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           </div>
