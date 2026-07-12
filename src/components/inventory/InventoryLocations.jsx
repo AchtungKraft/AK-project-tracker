@@ -60,6 +60,10 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   const searchInputRef = React.useRef(null);
   const [flashId, setFlashId] = useState(null); // briefly highlight a part/container after search
 
+  // Selection state
+  const [selectedContainer, setSelectedContainer] = useState(null);
+  const [previewPart, setPreviewPart] = useState(null); // desktop right-panel part preview
+
   // Keyboard: Escape clears search, Cmd+K focuses search
   useEffect(() => {
     const handleKey = (e) => {
@@ -75,10 +79,6 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [searchTerm, previewPart, selectedContainer]);
-
-  // Selection state
-  const [selectedContainer, setSelectedContainer] = useState(null);
-  const [previewPart, setPreviewPart] = useState(null); // desktop right-panel part preview
 
   // Modals
   const [createContainerForLocation, setCreateContainerForLocation] = useState(null);
