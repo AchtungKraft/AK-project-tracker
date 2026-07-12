@@ -21,6 +21,7 @@ export default function CreateContainerModal({ onClose, preselectedLocationId, p
   const [projectId, setProjectId] = useState(preselectedProjectId || '');
   const [containerNumber, setContainerNumber] = useState('');
   const [color, setColor] = useState('#6366F1');
+  const [notes, setNotes] = useState('');
   const [description, setDescription] = useState('');
   const [createdContainer, setCreatedContainer] = useState(null);
 
@@ -56,6 +57,7 @@ export default function CreateContainerModal({ onClose, preselectedLocationId, p
         ...(locationId && { location_id: locationId }),
         ...(homeLocationId && homeLocationId !== '__none__' && { home_location_id: homeLocationId }),
         ...(projectId && projectId !== '__none__' && { project_id: projectId }),
+        ...(notes.trim() && { notes: notes.trim() }),
         ...(description && { description }),
       };
       return base44.entities.StorageContainer.create(data);
@@ -158,8 +160,12 @@ export default function CreateContainerModal({ onClose, preselectedLocationId, p
             </div>
           )}
           <div>
+            <Label className="text-gray-400">Notes <span className="text-gray-600">(optional)</span></Label>
+            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Customer Supplied, Fragile, Do Not Stack…" className="bg-gray-800 border-gray-700 text-white mt-1" />
+          </div>
+          <div>
             <Label className="text-gray-400">Description <span className="text-gray-600">(optional)</span></Label>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional notes…" className="bg-gray-800 border-gray-700 text-white mt-1" rows={2} />
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Longer description…" className="bg-gray-800 border-gray-700 text-white mt-1" rows={2} />
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={onClose}>Cancel</Button>

@@ -1,4 +1,4 @@
-import { Box, Briefcase, Inbox, Grid3X3, LayoutGrid, Package, ShoppingCart, HelpCircle } from "lucide-react";
+import { Box, Briefcase, Inbox, Grid3X3, LayoutGrid, Package, ShoppingCart, Layers, HelpCircle } from "lucide-react";
 
 const CONTAINER_TYPES = {
   box:       { label: 'Box',       icon: Box,         color: '#8B5CF6', prefix: 'BOX' },
@@ -8,6 +8,7 @@ const CONTAINER_TYPES = {
   organizer: { label: 'Organizer', icon: Grid3X3,     color: '#10B981', prefix: 'ORG' },
   crate:     { label: 'Crate',     icon: Package,     color: '#F59E0B', prefix: 'CRT' },
   cart:      { label: 'Cart',      icon: ShoppingCart, color: '#EF4444', prefix: 'CART' },
+  kit:       { label: 'Kit',       icon: Layers,      color: '#D946EF', prefix: 'KIT' },
   other:     { label: 'Other',     icon: HelpCircle,  color: '#6B7280', prefix: 'CTR' },
 };
 

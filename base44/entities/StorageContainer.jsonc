@@ -16,6 +16,7 @@
         "organizer",
         "crate",
         "cart",
+        "kit",
         "other"
       ],
       "default": "tote",
@@ -45,6 +46,10 @@
       "type": "string",
       "description": "Optional description"
     },
+    "notes": {
+      "type": "string",
+      "description": "Short operational notes (e.g. Customer Supplied, Fragile, Do Not Stack)"
+    },
     "color": {
       "type": "string",
       "default": "#6366F1",
@@ -68,6 +73,15 @@
       "type": "boolean",
       "default": true,
       "description": "Whether this container is active"
+    },
+    "last_verified_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the container contents were last physically verified"
+    },
+    "last_verified_by": {
+      "type": "string",
+      "description": "Full name of person who last verified the contents"
     }
   },
   "required": [

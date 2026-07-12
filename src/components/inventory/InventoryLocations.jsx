@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig, buildLocationPathString } from "./locationTypeConfig";
+import { getContainerTypeConfig } from "./containerTypeConfig";
 import { renderQRSVGString } from "./QRCodeSVG";
 import LocationDetailPanel from "./LocationDetailPanel";
 import InventoryLocationEditor from "./InventoryLocationEditor";
@@ -262,12 +263,17 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
       else if (name.includes(term)) score = 50;
       // Then QR
       else if (qr.includes(term)) score = 30;
-      // Then home/current location name
+      // Then type label
+      else if (getContainerTypeConfig(c.container_type).label.toLowerCase().includes(term)) score = 25;
+      // Then home/current location name or project
       else {
         const loc = c.location_id ? locations.find(l => l.id === c.location_id) : null;
         const homeLoc = c.home_location_id ? locations.find(l => l.id === c.home_location_id) : null;
+        const proj = c.project_id ? projects.find(p => p.id === c.project_id) : null;
         if (loc?.location_area?.toLowerCase().includes(term)) score = 20;
         else if (homeLoc?.location_area?.toLowerCase().includes(term)) score = 15;
+        else if (proj?.name?.toLowerCase().includes(term)) score = 12;
+        else if (c.notes?.toLowerCase().includes(term)) score = 10;
       }
       if (score > 0) scored.push({ container: c, score });
     });
@@ -513,17 +519,22 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                         const loc = firstItem?.location_id ? locations.find(l => l.id === firstItem.location_id) : null;
                         const ctr = firstItem?.container_id ? containers.find(c => c.id === firstItem.container_id) : null;
                         const totalQty = items.reduce((s, i) => s + (i.quantity_on_hand || 0), 0);
+                        const breadcrumb = loc ? buildLocationPathString(loc.id, locations) : '';
                         return (
                           <button key={p.id} onClick={() => { onPartClick?.(p); setSearchTerm(''); }} className="w-full flex items-center gap-2 px-2 py-2 rounded hover:bg-gray-800/50 text-left">
-                            <Package className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                            {p.featured_photo || p.photos?.[0] ? (
+                              <img src={p.featured_photo || p.photos[0]} alt="" className="w-8 h-8 rounded object-cover border border-gray-700 shrink-0" loading="lazy" />
+                            ) : (
+                              <Package className="w-4 h-4 text-gray-500 shrink-0" />
+                            )}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5">
+                                {p.vendor_part_number && <span className="text-[10px] font-mono font-bold text-gray-300">{p.vendor_part_number}</span>}
                                 <span className="text-xs text-white truncate">{p.part_name}</span>
-                                {p.vendor_part_number && <span className="text-[10px] font-mono text-gray-500">{p.vendor_part_number}</span>}
                               </div>
                               <div className="text-[10px] text-gray-500 truncate">
                                 {ctr && <span className="text-indigo-400">📦 {ctr.name} · </span>}
-                                {loc ? loc.location_area : 'Unassigned'}
+                                {breadcrumb || loc?.location_area || 'Unassigned'}
                                 {items.length > 1 && ` (+${items.length - 1} more)`}
                               </div>
                             </div>
@@ -542,23 +553,31 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                         const loc = locations.find(l => l.id === c.location_id);
                         const homeLoc = c.home_location_id ? locations.find(l => l.id === c.home_location_id) : null;
                         const isAway = homeLoc && c.location_id !== c.home_location_id;
+                        const ctc = getContainerTypeConfig(c.container_type);
+                        const cItemCount = inventoryItems.filter(i => i.container_id === c.id && (i.quantity_on_hand || 0) > 0).length;
+                        const cProject = c.project_id ? projects.find(p => p.id === c.project_id) : null;
                         return (
                           <button key={c.id} onClick={() => { setSelectedContainer(c); setSearchTerm(''); }} className="w-full flex items-center gap-2 px-2 py-2 rounded hover:bg-gray-800/50 text-left">
                             {c.photo ? (
-                              <img src={c.photo} alt={c.name} className="w-7 h-7 rounded object-cover border border-gray-700 shrink-0" loading="lazy" />
+                              <img src={c.photo} alt={c.name} className="w-8 h-8 rounded object-cover border border-gray-700 shrink-0" loading="lazy" />
                             ) : (
-                              <span className="text-sm shrink-0">📦</span>
+                              <div className="w-8 h-8 rounded flex items-center justify-center shrink-0" style={{ backgroundColor: (c.color || ctc.color) + '15' }}>
+                                <ctc.icon className="w-4 h-4" style={{ color: c.color || ctc.color }} />
+                              </div>
                             )}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5">
                                 <span className="text-xs text-white truncate">{c.name}</span>
                                 {c.short_code && <span className="text-[10px] font-mono font-bold text-gray-400">{c.short_code}</span>}
+                                <span className="text-[9px] px-1 py-0 rounded border" style={{ borderColor: (c.color || ctc.color) + '50', color: c.color || ctc.color }}>{ctc.label}</span>
                               </div>
                               <div className="text-[10px] text-gray-500 truncate">
                                 {loc?.location_area || 'No location'}
                                 {isAway && <span className="text-amber-400 ml-1">· away</span>}
+                                {cProject && <span className="text-blue-400 ml-1">· {cProject.name}</span>}
                               </div>
                             </div>
+                            <span className="text-[10px] text-gray-500 shrink-0">{cItemCount} part{cItemCount !== 1 ? 's' : ''}</span>
                           </button>
                         );
                       })}

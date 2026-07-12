@@ -1,7 +1,7 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowRightLeft, Printer, ChevronRight, Home, Package } from "lucide-react";
+import { ArrowRightLeft, Printer, ChevronRight, Home, StickyNote } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getContainerTypeConfig } from "./containerTypeConfig";
 import { printContainerQRLabel } from "./containerQRLabel";
@@ -64,13 +64,13 @@ export default function ContainerCard({
               {container.short_code}
             </span>
           )}
-          <span className={cn("text-gray-500", compact ? "text-[10px]" : "text-xs")}>
-            · {tc.label}
-          </span>
+          <Badge variant="outline" className="text-[9px] py-0 px-1.5 h-4" style={{ borderColor: displayColor + '50', color: displayColor }}>
+            {tc.label}
+          </Badge>
         </div>
         <div className="flex items-center gap-2 text-[10px] text-gray-500 mt-0.5 flex-wrap">
           {isEmpty ? (
-            <span className="text-gray-600">0 parts · Ready for use</span>
+            <span className="text-gray-600">Empty</span>
           ) : (
             <span>{itemCount} part{itemCount !== 1 ? 's' : ''}</span>
           )}
@@ -78,6 +78,11 @@ export default function ContainerCard({
           {isAwayFromHome && (
             <span className="text-amber-400 flex items-center gap-0.5">
               · <Home className="w-2.5 h-2.5" /> away
+            </span>
+          )}
+          {container.notes && (
+            <span className="text-yellow-500 flex items-center gap-0.5">
+              · <StickyNote className="w-2.5 h-2.5" />
             </span>
           )}
         </div>
@@ -109,7 +114,7 @@ export default function ContainerCard({
           size="icon" variant="ghost"
           onClick={handlePrintQR}
           className="h-8 w-8 text-gray-500 hover:text-white md:opacity-0 md:group-hover:opacity-100"
-          title="Print QR"
+          title="Print Label"
         >
           <Printer className="w-4 h-4" />
         </Button>
