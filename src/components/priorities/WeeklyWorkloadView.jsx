@@ -73,16 +73,6 @@ function buildProjectGroups(tasks, projectMap, allTasksByProject) {
 // ── Section config ──
 const SECTIONS = [
   {
-    key: "dueThisWeek",
-    title: "DUE THIS WEEK",
-    icon: CalendarClock,
-    iconColor: "text-blue-400",
-    borderColor: "border-blue-600/50",
-    headerBg: "bg-blue-600/10",
-    emptyMessage: "No tasks due this week.",
-    defaultExpanded: true,
-  },
-  {
     key: "overdue",
     title: "OVERDUE",
     icon: AlertTriangle,
@@ -90,6 +80,16 @@ const SECTIONS = [
     borderColor: "border-red-600/50",
     headerBg: "bg-red-600/10",
     emptyMessage: "No overdue tasks.",
+    defaultExpanded: true,
+  },
+  {
+    key: "dueThisWeek",
+    title: "DUE THIS WEEK",
+    icon: CalendarClock,
+    iconColor: "text-blue-400",
+    borderColor: "border-blue-600/50",
+    headerBg: "bg-blue-600/10",
+    emptyMessage: "No tasks due this week.",
     defaultExpanded: true,
   },
   {
@@ -535,8 +535,8 @@ export default function WeeklyWorkloadView({
             </Button>
           </div>
           <div className="flex flex-wrap gap-1">
-            <JumpPill label="This Week" count={stats.dueThisWeek} color="border-blue-600/50 text-blue-400 bg-blue-600/10" onClick={() => scrollToSection("dueThisWeek")} />
             <JumpPill label="Overdue" count={stats.overdue} color="border-red-600/50 text-red-400 bg-red-600/10" onClick={() => scrollToSection("overdue")} />
+            <JumpPill label="This Week" count={stats.dueThisWeek} color="border-blue-600/50 text-blue-400 bg-blue-600/10" onClick={() => scrollToSection("dueThisWeek")} />
             <JumpPill label="Upcoming" count={stats.upcoming} color="border-purple-600/50 text-purple-400 bg-purple-600/10" onClick={() => scrollToSection("upcoming")} />
             <JumpPill label="Unscheduled" count={stats.unscheduled} color="border-amber-600/50 text-amber-400 bg-amber-600/10" onClick={() => scrollToSection("unscheduled")} />
           </div>
@@ -545,8 +545,8 @@ export default function WeeklyWorkloadView({
 
       {/* ── Summary Cards ── */}
       <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-1.5">
-        <StatCard label="Due This Week" value={stats.dueThisWeek} icon={CalendarClock} color="text-blue-400" bg="bg-blue-500/10" />
         <StatCard label="Overdue" value={stats.overdue} icon={AlertTriangle} color="text-red-400" bg="bg-red-500/10" />
+        <StatCard label="Due This Week" value={stats.dueThisWeek} icon={CalendarClock} color="text-blue-400" bg="bg-blue-500/10" />
         <StatCard label="Unscheduled" value={stats.unscheduled} icon={CalendarOff} color="text-amber-400" bg="bg-amber-500/10" />
         <StatCard label="Unassigned" value={stats.unassigned} icon={User} color="text-yellow-400" bg="bg-yellow-500/10" />
         <div className={cn("border border-gray-800 rounded-lg px-2 py-1.5 flex flex-col items-center justify-center", "bg-emerald-500/10")}>
