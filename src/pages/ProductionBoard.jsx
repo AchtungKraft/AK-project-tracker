@@ -11,8 +11,9 @@ import { useToast } from "@/components/ui/use-toast";
 import { startOfWeek, endOfWeek, addWeeks, format } from "date-fns";
 
 import ProductionCompactMetrics from "@/components/production/ProductionCompactMetrics";
-import ProjectReviewCard from "@/components/production/ProjectReviewCard";
+import ProjectBriefingCard from "@/components/production/ProjectBriefingCard";
 import { deriveAttentionStatus, getAttentionSortPriority } from "@/components/production/deriveAttentionStatus";
+import { deriveCurrentIssue } from "@/components/production/deriveCurrentIssue";
 import TaskDetailDrawer from "@/components/tasks/TaskDetailDrawer";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 import { useTaskData } from "@/components/tasks/useTaskData";
@@ -191,11 +192,16 @@ export default function ProductionBoard() {
       byProject.get(pid).push(task);
     });
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     return Array.from(byProject.entries())
       .map(([pid, tasks]) => {
         const project = projectMap.get(pid);
         const milestones = milestonesByProject.get(pid) || [];
+        const fb = feedbackByProject.get(pid) || [];
         const attention = deriveAttentionStatus(project, tasks, milestones);
+        const currentIssue = deriveCurrentIssue(project, tasks, fb);
         return {
           projectId: pid,
           project,
@@ -203,27 +209,41 @@ export default function ProductionBoard() {
           phases: phasesByProject.get(pid) || [],
           milestones,
           attention,
-          feedbackRequests: feedbackByProject.get(pid) || [],
+          feedbackRequests: fb,
+          currentIssue,
         };
       })
       .filter(g => g.project)
-      // Sort by attention priority — meeting starts with projects needing decisions
+      // Sort by operational importance — meeting starts with projects needing decisions
       .sort((a, b) => {
+        // Primary: attention priority
         const aPri = getAttentionSortPriority(a.attention.status);
         const bPri = getAttentionSortPriority(b.attention.status);
         if (aPri !== bPri) return aPri - bPri;
-        // Secondary: overdue task count descending
+
+        // Secondary: projects with current issues before those without
+        const aHasIssue = a.currentIssue ? 0 : 1;
+        const bHasIssue = b.currentIssue ? 0 : 1;
+        if (aHasIssue !== bHasIssue) return aHasIssue - bHasIssue;
+
+        // Tertiary: overdue task count descending
         const aOverdue = a.tasks.filter(t => {
           if (!t.due_date) return false;
-          const d = new Date(t.due_date + "T00:00:00");
-          return d < new Date(new Date().setHours(0, 0, 0, 0));
+          return new Date(t.due_date + "T00:00:00") < today;
         }).length;
         const bOverdue = b.tasks.filter(t => {
           if (!t.due_date) return false;
-          const d = new Date(t.due_date + "T00:00:00");
-          return d < new Date(new Date().setHours(0, 0, 0, 0));
+          return new Date(t.due_date + "T00:00:00") < today;
         }).length;
         if (aOverdue !== bOverdue) return bOverdue - aOverdue;
+
+        // Quaternary: delivery proximity (closer = higher)
+        const aTarget = a.project?.target_completion ? new Date(a.project.target_completion) : null;
+        const bTarget = b.project?.target_completion ? new Date(b.project.target_completion) : null;
+        if (aTarget && !bTarget) return -1;
+        if (!aTarget && bTarget) return 1;
+        if (aTarget && bTarget && aTarget.getTime() !== bTarget.getTime()) return aTarget - bTarget;
+
         return (a.project.name || "").localeCompare(b.project.name || "");
       });
   }, [filteredTasks, projectMap, phasesByProject, milestonesByProject, feedbackByProject]);
@@ -250,13 +270,13 @@ export default function ProductionBoard() {
       totalHours += t.estimated_hours || 0;
     });
 
-    const needsAttentionCount = projectGroups.filter(
-      g => g.attention.status === "NEEDS_MANAGEMENT" || g.attention.status === "BLOCKED"
+    const needsDiscussionCount = projectGroups.filter(
+      g => g.currentIssue !== null
     ).length;
 
     return {
       projectCount: projectGroups.length,
-      needsAttentionCount,
+      needsDiscussionCount,
       overdueCount,
       thisWeekCount,
       blockedCount,
@@ -363,7 +383,7 @@ export default function ProductionBoard() {
         {/* ── Project Review Cards — The Meeting Agenda ── */}
         <div className="space-y-2">
           {projectGroups.map(group => (
-            <ProjectReviewCard
+            <ProjectBriefingCard
               key={group.projectId}
               project={group.project}
               tasks={group.tasks}
