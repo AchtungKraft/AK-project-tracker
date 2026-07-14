@@ -16,7 +16,8 @@ function fmtHours(h) {
 
 function parseLocalDate(str) {
   if (!str) return null;
-  return new Date(str + "T00:00:00");
+  const d = new Date(str.length === 10 ? str + "T00:00:00" : str);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 export default function ProductionTaskRow({ task, shared }) {
