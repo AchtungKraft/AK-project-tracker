@@ -1,96 +1,75 @@
-import React, { useMemo } from "react";
-import { AlertTriangle, Package, Truck, UserCheck, User } from "lucide-react";
+import React, { useState, useMemo } from "react";
+import { AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BLOCKER_TYPE_LABELS } from "./workloadConfig";
 
-function Chip({ icon: Icon, label, value, color }) {
-  if (!value) return null;
-  return (
-    <div className={cn("flex items-center gap-1 px-2 py-1 rounded text-[11px] border", color)}>
-      <Icon className="w-3 h-3 shrink-0" />
-      <span>{label}</span>
-      <span className="font-bold tabular-nums">{value}</span>
-    </div>
-  );
-}
-
 export default function ShopBottleneckSummary({ sections, projectMap }) {
+  const [expanded, setExpanded] = useState(false);
+
   const bottlenecks = useMemo(() => {
-    // Collect all blocking reasons across blocked/waiting sections
     const blockerSections = ["BLOCKED", "WAITING_ON_PARTS", "WAITING_ON_VENDOR", "WAITING_ON_CUSTOMER"];
-    const allBlockedTasks = [];
-    const projectsBlocked = new Set();
-    let waitingParts = 0;
-    let waitingVendor = 0;
-    let waitingCustomer = 0;
-    let unassignedReady = 0;
+    const blockerDetails = {};
 
     sections.forEach(sec => {
-      if (blockerSections.includes(sec.key)) {
-        sec.tasks.forEach(t => {
-          allBlockedTasks.push(t);
-          if (t.project_id) projectsBlocked.add(t.project_id);
+      if (!blockerSections.includes(sec.key)) return;
+      sec.tasks.forEach(t => {
+        (t.blocking_reasons || []).forEach(r => {
+          const label = r.label || BLOCKER_TYPE_LABELS[r.type] || r.type;
+          if (!blockerDetails[label]) {
+            blockerDetails[label] = { label, tasks: 0, projects: new Set() };
+          }
+          blockerDetails[label].tasks++;
+          if (t.project_id) blockerDetails[label].projects.add(t.project_id);
         });
-      }
-      if (sec.key === "WAITING_ON_PARTS") waitingParts = sec.count;
-      if (sec.key === "WAITING_ON_VENDOR") waitingVendor = sec.count;
-      if (sec.key === "WAITING_ON_CUSTOMER") waitingCustomer = sec.count;
-      if (sec.key === "READY") {
-        unassignedReady = sec.tasks.filter(t => !t.assigned_team_member_id).length;
-      }
-    });
-
-    // Aggregate dominant blockers by label
-    const blockerCounts = {};
-    allBlockedTasks.forEach(t => {
-      (t.blocking_reasons || []).forEach(r => {
-        const label = r.label || BLOCKER_TYPE_LABELS[r.type] || r.type;
-        blockerCounts[label] = (blockerCounts[label] || 0) + 1;
       });
     });
-    const dominantBlockers = Object.entries(blockerCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 4);
 
-    return {
-      projectsBlocked: projectsBlocked.size,
-      tasksBlocked: allBlockedTasks.length,
-      waitingParts,
-      waitingVendor,
-      waitingCustomer,
-      unassignedReady,
-      dominantBlockers,
-    };
+    return Object.values(blockerDetails)
+      .sort((a, b) => b.tasks - a.tasks)
+      .map(b => ({ ...b, projectCount: b.projects.size }));
   }, [sections]);
 
-  const hasData = bottlenecks.tasksBlocked > 0 || bottlenecks.unassignedReady > 0;
-  if (!hasData) return null;
+  if (bottlenecks.length === 0) return null;
+
+  const totalBlockerTasks = bottlenecks.reduce((s, b) => s + b.tasks, 0);
+  const totalBlockerProjects = new Set(bottlenecks.flatMap(b => [...b.projects])).size;
+  const topBlockers = expanded ? bottlenecks : bottlenecks.slice(0, 3);
 
   return (
-    <div className="bg-red-950/10 border border-red-900/30 rounded-lg px-3 py-2">
-      <div className="flex items-center gap-4 flex-wrap">
-        <div className="flex items-center gap-1 text-xs font-semibold text-red-400">
-          <AlertTriangle className="w-3.5 h-3.5" />
-          Bottlenecks
+    <div className="bg-red-950/10 border border-red-900/30 rounded-lg overflow-hidden">
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-red-900/10 transition-colors"
+      >
+        <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+        <span className="text-xs font-semibold text-red-400">Shop Bottlenecks</span>
+        <span className="text-[10px] text-red-500 tabular-nums">
+          {totalBlockerTasks} tasks · {totalBlockerProjects} projects
+        </span>
+        <div className="ml-auto">
+          {expanded
+            ? <ChevronDown className="w-3.5 h-3.5 text-red-500" />
+            : <ChevronRight className="w-3.5 h-3.5 text-red-500" />
+          }
         </div>
+      </button>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <Chip icon={AlertTriangle} label="Projects" value={bottlenecks.projectsBlocked} color="border-red-800/40 text-red-300" />
-          <Chip icon={Package} label="Parts" value={bottlenecks.waitingParts} color="border-orange-800/40 text-orange-300" />
-          <Chip icon={Truck} label="Vendor" value={bottlenecks.waitingVendor} color="border-purple-800/40 text-purple-300" />
-          <Chip icon={UserCheck} label="Customer" value={bottlenecks.waitingCustomer} color="border-blue-800/40 text-blue-300" />
-          <Chip icon={User} label="Unassigned Ready" value={bottlenecks.unassignedReady} color="border-yellow-800/40 text-yellow-300" />
-        </div>
-
-        {/* Dominant blockers */}
-        {bottlenecks.dominantBlockers.length > 0 && (
-          <div className="flex items-center gap-2 ml-auto flex-wrap">
-            {bottlenecks.dominantBlockers.map(([label, count]) => (
-              <span key={label} className="text-[10px] text-red-300">
-                {label} · <span className="font-bold tabular-nums">{count}</span>
-              </span>
-            ))}
+      {/* Blocker rows */}
+      <div className={cn("px-3 pb-2 space-y-1", !expanded && "pt-0")}>
+        {topBlockers.map(b => (
+          <div key={b.label} className="flex items-center gap-3 text-[11px]">
+            <span className="text-gray-300 truncate flex-1">{b.label}</span>
+            <span className="text-red-400 tabular-nums shrink-0">{b.projectCount} proj</span>
+            <span className="text-gray-500 tabular-nums shrink-0">{b.tasks} tasks</span>
           </div>
+        ))}
+        {!expanded && bottlenecks.length > 3 && (
+          <button
+            onClick={(e) => { e.stopPropagation(); setExpanded(true); }}
+            className="text-[10px] text-red-500 hover:text-red-300 transition-colors"
+          >
+            +{bottlenecks.length - 3} more blockers
+          </button>
         )}
       </div>
     </div>

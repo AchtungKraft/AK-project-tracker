@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { CheckSquare, RefreshCw } from "lucide-react";
+import { CheckSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { format, addDays } from "date-fns";
@@ -14,19 +14,19 @@ import WorkflowHealthIndicator from "./WorkflowHealthIndicator";
 import WorkloadBulkActionBar from "@/components/priorities/WorkloadBulkActionBar";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 
-function SummaryCard({ label, value, color, onClick, active }) {
+function ShopSummaryCard({ label, value, color, onClick, active }) {
   if (!value && value !== 0) return null;
   return (
     <button
       onClick={onClick}
       className={cn(
-        "flex flex-col items-center px-3 py-1.5 rounded-lg border text-center min-w-[70px] transition-colors",
-        active ? "ring-1 ring-white/30" : "",
+        "flex flex-col items-center px-3 py-2 rounded-lg border text-center min-w-[72px] transition-all",
+        active ? "ring-1 ring-white/30 scale-[1.02]" : "hover:brightness-110",
         color
       )}
     >
-      <span className="text-lg font-bold tabular-nums leading-tight">{value}</span>
-      <span className="text-[10px] leading-tight opacity-80">{label}</span>
+      <span className="text-xl font-bold tabular-nums leading-tight">{value}</span>
+      <span className="text-[10px] leading-tight opacity-80 whitespace-nowrap">{label}</span>
     </button>
   );
 }
@@ -218,15 +218,26 @@ export default function WorkloadOperationalView({
     return projects.filter(p => pids.has(p.id)).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   }, [tasks, projects]);
 
-  // Compute breakdown stats
+  // Section-level counts (shop scope)
   const waitingParts = useMemo(() => sections.find(s => s.key === "WAITING_ON_PARTS")?.count || 0, [sections]);
   const waitingVendor = useMemo(() => sections.find(s => s.key === "WAITING_ON_VENDOR")?.count || 0, [sections]);
   const waitingCustomer = useMemo(() => sections.find(s => s.key === "WAITING_ON_CUSTOMER")?.count || 0, [sections]);
   const blockedCount = useMemo(() => sections.find(s => s.key === "BLOCKED")?.count || 0, [sections]);
 
+  // Count unique blocked projects (shop scope)
+  const blockedProjectCount = useMemo(() => {
+    const pids = new Set();
+    sections.forEach(sec => {
+      if (["BLOCKED", "WAITING_ON_PARTS", "WAITING_ON_VENDOR", "WAITING_ON_CUSTOMER"].includes(sec.key)) {
+        sec.tasks.forEach(t => { if (t.project_id) pids.add(t.project_id); });
+      }
+    });
+    return pids.size;
+  }, [sections]);
+
   return (
     <div className="space-y-3">
-      {/* Workflow Health Indicator — compact, expandable */}
+      {/* Workflow Health — compact, expandable */}
       <WorkflowHealthIndicator
         staleProjects={staleProjects}
         staleMissingSet={staleMissingSet}
@@ -235,26 +246,27 @@ export default function WorkloadOperationalView({
         isRecalculating={isRecalculating}
       />
 
-      {/* Production Summary Cards */}
+      {/* Shop Production Summary — each card represents SHOP scope */}
       <div className="flex items-stretch gap-2 flex-wrap">
-        <SummaryCard label="In Progress" value={stats.inProgress} color="border-amber-700/40 bg-amber-900/15 text-amber-400" />
-        <SummaryCard label="Ready" value={stats.ready} color="border-green-700/40 bg-green-900/15 text-green-400" />
-        <SummaryCard label="Blocked" value={blockedCount} color="border-red-700/40 bg-red-900/15 text-red-400" />
-        <SummaryCard label="Parts" value={waitingParts} color="border-orange-700/40 bg-orange-900/15 text-orange-300" />
-        <SummaryCard label="Vendor" value={waitingVendor} color="border-purple-700/40 bg-purple-900/15 text-purple-300" />
-        <SummaryCard label="Customer" value={waitingCustomer} color="border-blue-700/40 bg-blue-900/15 text-blue-300" />
-        <SummaryCard label="Review" value={stats.review} color="border-violet-700/40 bg-violet-900/15 text-violet-300" />
-        <SummaryCard label="Overdue" value={stats.overdue} color="border-red-700/40 bg-red-900/15 text-red-400" />
-        <SummaryCard label="Unassigned" value={stats.unassigned} color="border-yellow-700/40 bg-yellow-900/15 text-yellow-400" />
+        <ShopSummaryCard label="In Progress" value={stats.inProgress} color="border-amber-700/40 bg-amber-900/15 text-amber-400" />
+        <ShopSummaryCard label="Ready" value={stats.ready} color="border-green-700/40 bg-green-900/15 text-green-400" />
+        <ShopSummaryCard label="Blocked" value={blockedCount} color="border-red-700/40 bg-red-900/15 text-red-400" />
+        <ShopSummaryCard label="Parts" value={waitingParts} color="border-orange-700/40 bg-orange-900/15 text-orange-300" />
+        <ShopSummaryCard label="Vendor" value={waitingVendor} color="border-purple-700/40 bg-purple-900/15 text-purple-300" />
+        <ShopSummaryCard label="Customer" value={waitingCustomer} color="border-blue-700/40 bg-blue-900/15 text-blue-300" />
+        <ShopSummaryCard label="Review" value={stats.review} color="border-violet-700/40 bg-violet-900/15 text-violet-300" />
+        <ShopSummaryCard label="Proj Blocked" value={blockedProjectCount} color="border-red-700/40 bg-red-900/10 text-red-300" />
+        <ShopSummaryCard label="Overdue" value={stats.overdue} color="border-red-700/40 bg-red-900/15 text-red-400" />
+        <ShopSummaryCard label="Unassigned" value={stats.unassigned} color="border-yellow-700/40 bg-yellow-900/15 text-yellow-400" />
 
         {stats.totalEstHours > 0 && (
-          <div className="flex flex-col items-center px-3 py-1.5 rounded-lg border border-emerald-700/40 bg-emerald-900/15 text-emerald-400 min-w-[70px]">
-            <span className="text-lg font-bold tabular-nums leading-tight">{Math.round(stats.totalEstHours)}h</span>
+          <div className="flex flex-col items-center px-3 py-2 rounded-lg border border-emerald-700/40 bg-emerald-900/15 text-emerald-400 min-w-[72px]">
+            <span className="text-xl font-bold tabular-nums leading-tight">{Math.round(stats.totalEstHours)}h</span>
             <span className="text-[10px] leading-tight opacity-80">Est Hours</span>
           </div>
         )}
 
-        {/* Select all */}
+        {/* Select all — pushed right */}
         <Button
           variant="outline"
           size="sm"
@@ -266,7 +278,7 @@ export default function WorkloadOperationalView({
         </Button>
       </div>
 
-      {/* Shop Bottleneck Summary */}
+      {/* Shop Bottlenecks — expanded detail */}
       <ShopBottleneckSummary sections={sections} projectMap={projectMap} />
 
       {/* Filters */}
@@ -285,7 +297,7 @@ export default function WorkloadOperationalView({
         stats={stats}
       />
 
-      {/* Sections */}
+      {/* Operational Sections — projects are the primary visual object */}
       {sections.map(section => {
         const sectionShared = section.key === "IN_PROGRESS"
           ? { ...shared, showOperationalState: true }
