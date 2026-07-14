@@ -157,6 +157,8 @@ const getNavigationSections = () => {
       items: [
         { title: "Projects", url: createPageUrl("Dashboard"), icon: FolderKanban },
         { title: "Team Priorities", url: createPageUrl("PriorityDashboard"), icon: Flame },
+        { title: "Production Board", url: "/productionboard", icon: Layers },
+        { title: "Tech Queue", url: "/technicianqueue", icon: ListChecks },
         { title: "Client Portal", url: createPageUrl("ClientPortalHub"), icon: Building2 },
         { title: "Portal Stats", url: createPageUrl("PortalStatsEmbed"), icon: BarChart3 },
         { title: "Build Knowledge", url: "/buildknowledge", icon: BookOpen },

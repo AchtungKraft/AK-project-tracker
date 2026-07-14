@@ -16,6 +16,8 @@ import BuildKnowledge from './pages/BuildKnowledge';
 import ProcedurePage from './pages/ProcedurePage';
 import ClientPage from './pages/ClientPage';
 import MediaLibrary from './pages/MediaLibrary';
+import ProductionBoard from './pages/ProductionBoard';
+import TechnicianQueue from './pages/TechnicianQueue';
 
 // VendorPOBuilder page removed — vendor PO creation is now inline in GlobalNeedToOrder
 
@@ -91,6 +93,16 @@ const AuthenticatedApp = () => {
       <Route path="/medialibrary" element={
         <LayoutWrapper currentPageName="MediaLibrary">
           <MediaLibrary />
+        </LayoutWrapper>
+      } />
+      <Route path="/productionboard" element={
+        <LayoutWrapper currentPageName="ProductionBoard">
+          <ProductionBoard />
+        </LayoutWrapper>
+      } />
+      <Route path="/technicianqueue" element={
+        <LayoutWrapper currentPageName="TechnicianQueue">
+          <TechnicianQueue />
         </LayoutWrapper>
       } />
 

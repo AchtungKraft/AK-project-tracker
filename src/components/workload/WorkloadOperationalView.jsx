@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { format, addDays } from "date-fns";
 import useWorkloadData from "./useWorkloadData";
-import WorkloadSection from "./WorkloadSection";
+import WorkloadTaskFirstSection from "./WorkloadTaskFirstSection";
 import WorkloadFilters from "./WorkloadFilters";
 import ShopBottleneckSummary from "./ShopBottleneckSummary";
 import WorkflowHealthIndicator from "./WorkflowHealthIndicator";
@@ -297,14 +297,14 @@ export default function WorkloadOperationalView({
         stats={stats}
       />
 
-      {/* Operational Sections — projects are the primary visual object */}
+      {/* Operational Sections — task-first: flat task rows under project headers */}
       {sections.map(section => {
         const sectionShared = section.key === "IN_PROGRESS"
           ? { ...shared, showOperationalState: true }
           : shared;
 
         return (
-          <WorkloadSection
+          <WorkloadTaskFirstSection
             key={section.key}
             section={section}
             shared={sectionShared}
