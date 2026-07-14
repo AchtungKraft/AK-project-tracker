@@ -20,13 +20,13 @@ import {
   CheckCircle2,
   CheckSquare,
   Square,
+  Clock,
 } from "lucide-react";
 import { format, startOfDay, isBefore } from "date-fns";
 import { cn } from "@/lib/utils";
 import { buildProjectDetailUrl, SOURCES } from "@/lib/workspaceConfig";
-import { OPERATIONAL_STATE_CONFIG } from "@/components/workflow/useProjectWorkflow";
 
-const INITIAL_VISIBLE = 8;
+const INITIAL_VISIBLE = 12;
 
 function parseLocalDate(dateStr) {
   if (!dateStr || typeof dateStr !== "string") return null;
@@ -50,6 +50,7 @@ function WorkloadTaskRow({
   assignee,
   status,
   blocked,
+  blockingLabel,
   teamMembers,
   statuses,
   onToggleComplete,
@@ -153,23 +154,31 @@ function WorkloadTaskRow({
         {task.name}
       </button>
 
+      {/* Blocking reason — specific explanation, not just "Blocked" */}
       {blocked && (
-        <Badge variant="outline" className="text-[9px] px-1 py-0 border-red-700 text-red-500 bg-red-900/20 shrink-0 gap-0.5">
-          <Ban className="w-2.5 h-2.5" />
-          Blocked
-        </Badge>
+        <span className="text-[9px] text-red-400 shrink-0 flex items-center gap-0.5 max-w-[180px] truncate" title={blockingLabel}>
+          <Clock className="w-2.5 h-2.5 shrink-0" />
+          <span className="truncate">{blockingLabel}</span>
+        </span>
       )}
 
-      {/* Operational state — secondary workflow context */}
-      {(() => {
+      {/* Workflow decoration — subtle badge for waiting states */}
+      {!blocked && (() => {
         const opState = task.operational_state;
-        if (!opState || opState === "COMPLETED" || opState === "NOT_STARTED" || opState === "READY") return null;
-        const cfg = OPERATIONAL_STATE_CONFIG[opState];
-        if (!cfg) return null;
+        if (!opState || opState === "COMPLETED" || opState === "NOT_STARTED" || opState === "READY" || opState === "IN_PROGRESS") return null;
+        const WAITING_LABELS = {
+          WAITING_ON_PARTS: "Waiting on Parts",
+          WAITING_ON_VENDOR: "Waiting on Vendor",
+          WAITING_ON_CUSTOMER: "Waiting on Customer",
+          REVIEW_REQUIRED: "Review Required",
+          BLOCKED: "Blocked",
+        };
+        const label = WAITING_LABELS[opState];
+        if (!label) return null;
         return (
-          <Badge className={cn("text-[9px] px-1 py-0 h-4 border-0 shrink-0 hidden sm:inline-flex", cfg.bgClass, cfg.textClass)}>
-            {cfg.label}
-          </Badge>
+          <span className="text-[9px] text-amber-400/80 shrink-0 hidden sm:inline truncate">
+            {label}
+          </span>
         );
       })()}
 
@@ -293,6 +302,8 @@ export default function WorkloadProjectGroup({
   teamMemberMap,
   statusMap,
   blockedSet,
+  blockingLabels,
+  buckets,
   defaultExpanded,
   teamMembers,
   statuses,
@@ -447,27 +458,127 @@ export default function WorkloadProjectGroup({
         )}
       </div>
 
-      {/* Task rows */}
+      {/* Task rows — grouped by phase */}
       {expanded && (
         <div>
-          {visibleTasks.map((task) => (
-            <WorkloadTaskRow
-              key={task.id}
-              task={task}
-              assignee={teamMemberMap.get(task.assigned_team_member_id)}
-              status={statusMap.get(task.status_id)}
-              blocked={blockedSet.has(task.id)}
-              teamMembers={teamMembers}
-              statuses={statuses}
-              onToggleComplete={onToggleComplete}
-              onTaskClick={onTaskClick}
-              onUpdateDueDate={onUpdateDueDate}
-              onTogglePriority={onTogglePriority}
-              updateTaskMutation={updateTaskMutation}
-              isSelected={selectedTaskIds?.has(task.id)}
-              onToggleSelection={onToggleTaskSelection}
-            />
-          ))}
+          {(() => {
+            // Group tasks by phase (bucket), with phases ordered by bucket.order
+            const projectBuckets = buckets || [];
+            const bucketMap = new Map();
+            projectBuckets.forEach(b => bucketMap.set(b.id, b));
+            const sortedBuckets = [...projectBuckets].sort((a, b) => (a.order || 0) - (b.order || 0));
+            
+            const byPhase = new Map();
+            const unphased = [];
+            const allVisibleTasks = showAll ? tasks : tasks.slice(0, INITIAL_VISIBLE);
+            
+            allVisibleTasks.forEach(t => {
+              if (t.kanban_bucket_id && bucketMap.has(t.kanban_bucket_id)) {
+                if (!byPhase.has(t.kanban_bucket_id)) byPhase.set(t.kanban_bucket_id, []);
+                byPhase.get(t.kanban_bucket_id).push(t);
+              } else {
+                unphased.push(t);
+              }
+            });
+
+            const hasPhases = sortedBuckets.some(b => byPhase.has(b.id));
+            
+            // If no phases, render flat (original behavior)
+            if (!hasPhases) {
+              return (
+                <>
+                  {allVisibleTasks.map(task => (
+                    <WorkloadTaskRow
+                      key={task.id}
+                      task={task}
+                      assignee={teamMemberMap.get(task.assigned_team_member_id)}
+                      status={statusMap.get(task.status_id)}
+                      blocked={blockedSet.has(task.id)}
+                      blockingLabel={blockingLabels?.[task.id] || "Blocked"}
+                      teamMembers={teamMembers}
+                      statuses={statuses}
+                      onToggleComplete={onToggleComplete}
+                      onTaskClick={onTaskClick}
+                      onUpdateDueDate={onUpdateDueDate}
+                      onTogglePriority={onTogglePriority}
+                      updateTaskMutation={updateTaskMutation}
+                      isSelected={selectedTaskIds?.has(task.id)}
+                      onToggleSelection={onToggleTaskSelection}
+                    />
+                  ))}
+                </>
+              );
+            }
+
+            // Render phase-grouped tasks
+            return (
+              <>
+                {sortedBuckets.map(bucket => {
+                  const phaseTasks = byPhase.get(bucket.id);
+                  if (!phaseTasks || phaseTasks.length === 0) return null;
+                  return (
+                    <div key={bucket.id}>
+                      <div className="flex items-center gap-1.5 px-3 py-[3px] bg-gray-800/10 border-t border-gray-800/30">
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: bucket.color || '#6B7280' }} />
+                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{bucket.name}</span>
+                        <span className="text-[9px] text-gray-600 ml-auto">{phaseTasks.length}</span>
+                      </div>
+                      {phaseTasks.map(task => (
+                        <WorkloadTaskRow
+                          key={task.id}
+                          task={task}
+                          assignee={teamMemberMap.get(task.assigned_team_member_id)}
+                          status={statusMap.get(task.status_id)}
+                          blocked={blockedSet.has(task.id)}
+                          blockingLabel={blockingLabels?.[task.id] || "Blocked"}
+                          teamMembers={teamMembers}
+                          statuses={statuses}
+                          onToggleComplete={onToggleComplete}
+                          onTaskClick={onTaskClick}
+                          onUpdateDueDate={onUpdateDueDate}
+                          onTogglePriority={onTogglePriority}
+                          updateTaskMutation={updateTaskMutation}
+                          isSelected={selectedTaskIds?.has(task.id)}
+                          onToggleSelection={onToggleTaskSelection}
+                        />
+                      ))}
+                    </div>
+                  );
+                })}
+                {/* Unphased tasks */}
+                {unphased.length > 0 && (
+                  <>
+                    {sortedBuckets.some(b => byPhase.has(b.id)) && (
+                      <div className="flex items-center gap-1.5 px-3 py-[3px] bg-gray-800/10 border-t border-gray-800/30">
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-gray-600" />
+                        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Unassigned Phase</span>
+                        <span className="text-[9px] text-gray-600 ml-auto">{unphased.length}</span>
+                      </div>
+                    )}
+                    {unphased.map(task => (
+                      <WorkloadTaskRow
+                        key={task.id}
+                        task={task}
+                        assignee={teamMemberMap.get(task.assigned_team_member_id)}
+                        status={statusMap.get(task.status_id)}
+                        blocked={blockedSet.has(task.id)}
+                        blockingLabel={blockingLabels?.[task.id] || "Blocked"}
+                        teamMembers={teamMembers}
+                        statuses={statuses}
+                        onToggleComplete={onToggleComplete}
+                        onTaskClick={onTaskClick}
+                        onUpdateDueDate={onUpdateDueDate}
+                        onTogglePriority={onTogglePriority}
+                        updateTaskMutation={updateTaskMutation}
+                        isSelected={selectedTaskIds?.has(task.id)}
+                        onToggleSelection={onToggleTaskSelection}
+                      />
+                    ))}
+                  </>
+                )}
+              </>
+            );
+          })()}
           {!showAll && remaining > 0 && (
             <button
               onClick={() => setShowAll(true)}

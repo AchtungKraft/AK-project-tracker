@@ -475,10 +475,10 @@ export default function PriorityDashboard() {
                 <Flame className={isMobile ? 'w-4 h-4 text-red-500' : 'w-5 h-5 md:w-6 md:h-6 text-red-500'} />
               </div>
               <div>
-                <h1 className={`font-bold text-white ${isMobile ? 'text-lg' : 'text-xl md:text-3xl'}`}>PRIORITIES</h1>
+                <h1 className={`font-bold text-white ${isMobile ? 'text-lg' : 'text-xl md:text-3xl'}`}>WORKLOAD</h1>
                 <p className={`text-gray-400 ${isMobile ? 'text-xs' : 'text-xs md:text-sm'}`}>
-                  <span className="md:hidden">{activePriorityTasks.length} tasks • {activePriorityCount} priority{urgentCount > 0 ? ` • ${urgentCount} urgent` : ''}</span>
-                  <span className="hidden md:inline">{activePriorityTasks.length} tasks • {activePriorityCount} priority{urgentCount > 0 ? ` • ${urgentCount} urgent (≤14 days)` : ''}</span>
+                   <span className="md:hidden">{activePriorityTasks.length} tasks • {activePriorityCount} priority{urgentCount > 0 ? ` • ${urgentCount} urgent` : ''}</span>
+                   <span className="hidden md:inline">{activePriorityTasks.length} tasks • {activePriorityCount} priority{urgentCount > 0 ? ` • ${urgentCount} urgent (≤14 days)` : ''}</span>
                 </p>
               </div>
             </div>

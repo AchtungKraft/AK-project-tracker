@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useRef, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useQuery } from "@tanstack/react-query";
+import { base44 } from "@/api/base44Client";
 import {
   ChevronLeft,
   ChevronRight,
@@ -223,6 +225,55 @@ export default function WeeklyWorkloadView({
     });
     return blocked;
   }, [tasks, taskById]);
+
+  // Specific blocking labels — "Waiting on Install Carpet" instead of just "Blocked"
+  const blockingLabels = useMemo(() => {
+    const labels = {};
+    tasks.forEach((task) => {
+      if (!blockedSet.has(task.id)) return;
+      // Check task.blocking_reasons from the workflow engine first
+      if (task.blocking_reasons?.length > 0) {
+        const reason = task.blocking_reasons[0];
+        if (reason.label) { labels[task.id] = `Waiting on ${reason.label}`; return; }
+        if (reason.type === "DEPENDENCY" && reason.relatedTaskId) {
+          const dep = taskById.get(reason.relatedTaskId);
+          labels[task.id] = dep ? `Waiting on ${dep.name}` : "Waiting on dependency";
+          return;
+        }
+      }
+      // Fallback: derive from dependencies array
+      if (task.dependencies?.length > 0) {
+        const incompleteDeps = task.dependencies
+          .map(depId => taskById.get(depId))
+          .filter(dep => dep && dep.status_id !== DONE_STATUS_ID);
+        if (incompleteDeps.length === 1) {
+          labels[task.id] = `Waiting on ${incompleteDeps[0].name}`;
+        } else if (incompleteDeps.length > 1) {
+          labels[task.id] = `Waiting on ${incompleteDeps[0].name} +${incompleteDeps.length - 1}`;
+        } else {
+          labels[task.id] = "Blocked";
+        }
+        return;
+      }
+      labels[task.id] = "Blocked";
+    });
+    return labels;
+  }, [tasks, blockedSet, taskById]);
+
+  // Fetch all phase buckets for phase grouping
+  const { data: allBuckets = [] } = useQuery({
+    queryKey: ["workloadBuckets"],
+    queryFn: () => base44.entities.ProjectKanbanBucket.list(),
+  });
+
+  const bucketsByProjectId = useMemo(() => {
+    const m = {};
+    allBuckets.forEach((b) => {
+      if (!m[b.project_id]) m[b.project_id] = [];
+      m[b.project_id].push(b);
+    });
+    return m;
+  }, [allBuckets]);
 
   const activeTasks = useMemo(() => tasks.filter((t) => t.status_id !== DONE_STATUS_ID), [tasks]);
 
@@ -601,6 +652,8 @@ export default function WeeklyWorkloadView({
                     teamMemberMap={teamMemberMap}
                     statusMap={statusMap}
                     blockedSet={blockedSet}
+                    blockingLabels={blockingLabels}
+                    buckets={bucketsByProjectId[g.projectId] || []}
                     defaultExpanded={sec.defaultExpanded}
                     teamMembers={teamMembers}
                     statuses={statuses}

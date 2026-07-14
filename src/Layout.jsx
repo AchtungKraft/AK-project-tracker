@@ -156,9 +156,7 @@ const getNavigationSections = () => {
       colorKey: "projects",
       items: [
         { title: "Projects", url: createPageUrl("Dashboard"), icon: FolderKanban },
-        { title: "Team Priorities", url: createPageUrl("PriorityDashboard"), icon: Flame },
-        { title: "Production Board", url: "/productionboard", icon: Layers },
-        { title: "Tech Queue", url: "/technicianqueue", icon: ListChecks },
+        { title: "Workload", url: createPageUrl("PriorityDashboard"), icon: Flame },
         { title: "Client Portal", url: createPageUrl("ClientPortalHub"), icon: Building2 },
         { title: "Portal Stats", url: createPageUrl("PortalStatsEmbed"), icon: BarChart3 },
         { title: "Build Knowledge", url: "/buildknowledge", icon: BookOpen },
@@ -204,6 +202,8 @@ const getNavigationSections = () => {
         { title: "Data Normalization", url: createPageUrl("SupplyNormalization"), icon: Settings },
         { title: "Data Alignment", url: createPageUrl("DataAlignmentDashboard"), icon: Settings },
         { title: "Media Index", url: "/medialibrary", icon: Image },
+        { title: "Production Board", url: "/productionboard", icon: Layers },
+        { title: "Tech Queue", url: "/technicianqueue", icon: ListChecks },
       ],
     },
   ];
@@ -239,7 +239,7 @@ const getNavigationItems = (isAchtungKraft) => {
 const MobileBottomNav = ({ currentPath, isAchtungKraft, onMenuOpen }) => {
   const mobileItems = isAchtungKraft ? [
     { title: "Home", url: createPageUrl("Dashboard"), icon: LayoutDashboard },
-    { title: "Priorities", url: createPageUrl("PriorityDashboard"), icon: Flame },
+    { title: "Workload", url: createPageUrl("PriorityDashboard"), icon: Flame },
     { title: "Clients", url: createPageUrl("ClientPortalHub"), icon: Building2 },
     { title: "Parts", url: createPageUrl("PartsTracker"), icon: Package },
     { title: "More", icon: Menu, isMenu: true },

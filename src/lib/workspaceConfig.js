@@ -16,7 +16,7 @@ export const DEFAULT_OVERVIEW_VIEW = 'execution';
 
 // ── Valid PriorityDashboard tabs ──
 export const VALID_PRIORITY_TABS = ['card-view', 'calendar-view', 'list-view', 'execution-view', 'shop-view', 'workload-view'];
-export const DEFAULT_PRIORITY_TAB = 'shop-view';
+export const DEFAULT_PRIORITY_TAB = 'workload-view';
 
 // ── Source identifiers for contextual navigation ──
 export const SOURCES = {
