@@ -297,12 +297,18 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const [depFormData, setDepFormData] = useState(null);
 
-  // Fetch all project tasks for dependency editor
+  // Fetch all project tasks + buckets for dependency editor
   const { data: allProjectTasks = [] } = useQuery({
     queryKey: ['projectTasks', task?.project_id],
     queryFn: () => base44.entities.Task.filter({ project_id: task?.project_id }),
     enabled: !!task?.project_id,
     staleTime: 30000,
+  });
+  const { data: projectBuckets = [] } = useQuery({
+    queryKey: ['projectBuckets', task?.project_id],
+    queryFn: () => base44.entities.ProjectKanbanBucket.filter({ project_id: task?.project_id }),
+    enabled: !!task?.project_id,
+    staleTime: 60000,
   });
 
   const project = projects.find(p => p.id === task?.project_id);
@@ -604,6 +610,8 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
               projectId={task?.project_id}
               dependencies={depFormData !== null ? depFormData : (task?.dependencies || [])}
               allTasks={allProjectTasks}
+              buckets={projectBuckets}
+              teamMembers={teamMembers}
               onChange={(newDeps) => {
                 setDepFormData(newDeps);
                 updateMutation.mutate({ dependencies: newDeps });

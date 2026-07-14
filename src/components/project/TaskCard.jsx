@@ -8,6 +8,7 @@ import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { Button } from "@/components/ui/button";
 import PriorityRemoveConfirm from "@/components/tasks/PriorityRemoveConfirm";
 import { getChecklistProgressColor } from "@/components/tasks/checklistHelpers";
+import DependencySummaryBadge from "@/components/workflow/DependencySummaryBadge";
 
 // Helper to get full category path
 const getCategoryPath = (categoryId, categories) => {
@@ -24,7 +25,7 @@ const getCategoryPath = (categoryId, categories) => {
   return category.name;
 };
 
-export default function TaskCard({ task, teamMembers = [], categories = [], statuses = [], onToggleComplete, onClick, onUpdateDueDate, onUpdateStartDate, onTogglePriority, commentCount = 0, checklistProgress, partsProgress, compact = false, showInlineControls = true, titleRef, onTitleMouseEnter, onTitleMouseLeave }) {
+export default function TaskCard({ task, teamMembers = [], categories = [], statuses = [], allTasks = [], onToggleComplete, onClick, onUpdateDueDate, onUpdateStartDate, onTogglePriority, commentCount = 0, checklistProgress, partsProgress, compact = false, showInlineControls = true, titleRef, onTitleMouseEnter, onTitleMouseLeave }) {
   const isMobile = useIsMobile();
   const isCompact = compact || isMobile;
   const assignedMember = teamMembers.find(m => m.id === task.assigned_team_member_id);
@@ -254,6 +255,10 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
                 {partsProgress.installed}/{partsProgress.total}
               </span>
             )}
+            {/* Dependency summary (compact mode) */}
+            {isCompact && task.operational_state && (
+              <DependencySummaryBadge task={task} allTasks={allTasks} />
+            )}
             {/* Checklist progress indicator (compact mode) */}
             {isCompact && checklistProgress && checklistProgress.total > 0 && (
               <span className={cn(
@@ -272,6 +277,12 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
             )}
           </div>
           
+          {/* Dependency summary (non-compact mode) */}
+          {!isCompact && task.operational_state && (
+            <div className="mt-0.5">
+              <DependencySummaryBadge task={task} allTasks={allTasks} />
+            </div>
+          )}
           {categoryPath && !isCompact && (
             <div className="flex items-center gap-1 text-xs mb-0.5">
               <span style={{ color: categoryColor || '#9CA3AF' }}>

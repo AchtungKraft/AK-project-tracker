@@ -65,24 +65,49 @@ function detectCycles(taskMap) {
 }
 
 // ── Dependency Validation ──
-function validateDependencies(tasks, taskMap, projectId) {
+function validateDependencies(tasks, taskMap, projectId, statusMap) {
   const invalidDeps = [];
   for (const t of tasks) {
     if (!t.dependencies?.length) continue;
     const seen = new Set();
+    const cleanDeps = [];
+    let needsCleanup = false;
     for (const depId of t.dependencies) {
+      // Self-reference
+      if (depId === t.id) {
+        invalidDeps.push({ taskId: t.id, taskName: t.name, depId, reason: 'SELF_REFERENCE' });
+        needsCleanup = true;
+        continue;
+      }
+      // Duplicate
       if (seen.has(depId)) {
         invalidDeps.push({ taskId: t.id, taskName: t.name, depId, reason: 'DUPLICATE' });
+        needsCleanup = true;
+        continue;
       }
       seen.add(depId);
+      // Missing task (orphan/deleted)
       if (!taskMap.has(depId)) {
         invalidDeps.push({ taskId: t.id, taskName: t.name, depId, reason: 'MISSING_TASK' });
-      } else {
-        const dep = taskMap.get(depId);
-        if (dep.project_id !== projectId) {
-          invalidDeps.push({ taskId: t.id, taskName: t.name, depId, depProject: dep.project_id, reason: 'CROSS_PROJECT' });
-        }
+        needsCleanup = true;
+        continue;
       }
+      const dep = taskMap.get(depId);
+      // Cross-project
+      if (dep.project_id !== projectId) {
+        invalidDeps.push({ taskId: t.id, taskName: t.name, depId, depProject: dep.project_id, reason: 'CROSS_PROJECT' });
+        needsCleanup = true;
+        continue;
+      }
+      // Cancelled predecessor warning (kept but flagged)
+      if (statusMap.cancelledIds.has(dep.status_id)) {
+        invalidDeps.push({ taskId: t.id, taskName: t.name, depId, depName: dep.name, reason: 'CANCELLED_PREDECESSOR' });
+      }
+      cleanDeps.push(depId);
+    }
+    // Mark task for cleanup if invalid deps found
+    if (needsCleanup) {
+      t._cleanedDeps = cleanDeps;
     }
   }
   return invalidDeps;
@@ -332,6 +357,7 @@ Deno.serve(async (req) => {
     }
 
     // Mode: resolve — full recalculation
+    const resolveStart = Date.now();
     const [tasks, buckets, statusList, tpLinks, scs, fbReqs, commits, parts] = await Promise.all([
       base44.asServiceRole.entities.Task.filter({ project_id }),
       base44.asServiceRole.entities.ProjectKanbanBucket.filter({ project_id }),
@@ -355,7 +381,7 @@ Deno.serve(async (req) => {
     const phaseOrder = [...buckets].sort((a, b) => (a.order || 0) - (b.order || 0));
 
     // Dependency validation
-    const invalidDeps = validateDependencies(tasks, taskMap, project_id);
+    const invalidDeps = validateDependencies(tasks, taskMap, project_id, statusMap);
 
     // Cycle detection
     const cycles = detectCycles(taskMap);
@@ -460,11 +486,30 @@ Deno.serve(async (req) => {
     const stateDistribution = {};
     for (const tr of taskResults) stateDistribution[tr.operationalState] = (stateDistribution[tr.operationalState] || 0) + 1;
 
+    // Clean up invalid dependencies (self-refs, orphans, cross-project)
+    if (!dry_run) {
+      const depCleanups = [];
+      for (const t of tasks) {
+        if (t._cleanedDeps !== undefined) {
+          depCleanups.push(base44.asServiceRole.entities.Task.update(t.id, { dependencies: t._cleanedDeps }));
+        }
+      }
+      if (depCleanups.length > 0) await Promise.all(depCleanups);
+    }
+
+    const resolveTime = Date.now() - resolveStart;
+
     return Response.json({
       summary: {
         projectId: project_id, totalTasks: tasks.length, totalPhases: buckets.length,
         tasksChanged, tasksUnchanged, stateDistribution, warnings,
-        resolvedAt: now,
+        resolvedAt: now, resolveTimeMs: resolveTime,
+        entityReads: 8, // tasks, buckets, statuses, tpLinks, scs, fbReqs, commits, parts
+        entityWrites: tasksChanged + phaseRollups.filter((pr, i) => {
+          const b = bucketMap.get(pr.bucketId);
+          return b && b.phase_status !== pr.phaseStatus;
+        }).length,
+        depsCleaned: tasks.filter(t => t._cleanedDeps !== undefined).length,
       },
       tasks: taskResults,
       phases: phaseRollups,

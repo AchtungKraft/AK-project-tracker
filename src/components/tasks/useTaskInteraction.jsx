@@ -119,6 +119,8 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
     TASK_CACHE_KEYS.forEach(key => {
       queryClient.invalidateQueries({ queryKey: key });
     });
+    // Invalidate workflow caches so UI picks up automation-resolved state
+    queryClient.invalidateQueries({ queryKey: ['projectWorkflow'] });
   }, [queryClient]);
 
   const optimisticUpdateAllCaches = useCallback((taskId, updates, mutationTimestamp) => {
