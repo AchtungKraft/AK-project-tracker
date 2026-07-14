@@ -1,26 +1,33 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  AlertTriangle, Play, CircleCheck, Ban, Clock, CheckSquare, RefreshCw,
-} from "lucide-react";
+import { CheckSquare, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { format, addDays } from "date-fns";
 import useWorkloadData from "./useWorkloadData";
 import WorkloadSection from "./WorkloadSection";
 import WorkloadFilters from "./WorkloadFilters";
+import ShopBottleneckSummary from "./ShopBottleneckSummary";
+import WorkflowHealthIndicator from "./WorkflowHealthIndicator";
 import WorkloadBulkActionBar from "@/components/priorities/WorkloadBulkActionBar";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 
-function StatPill({ label, value, color, textColor }) {
-  if (!value) return null;
+function SummaryCard({ label, value, color, onClick, active }) {
+  if (!value && value !== 0) return null;
   return (
-    <div className={cn("flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border tabular-nums", color)}>
-      {label} <span className={textColor}>{value}</span>
-    </div>
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex flex-col items-center px-3 py-1.5 rounded-lg border text-center min-w-[70px] transition-colors",
+        active ? "ring-1 ring-white/30" : "",
+        color
+      )}
+    >
+      <span className="text-lg font-bold tabular-nums leading-tight">{value}</span>
+      <span className="text-[10px] leading-tight opacity-80">{label}</span>
+    </button>
   );
 }
 
@@ -47,7 +54,7 @@ export default function WorkloadOperationalView({
   updateTaskMutation,
 }) {
   const queryClient = useQueryClient();
-  const { toast, dismiss } = useToast();
+  const { toast } = useToast();
 
   // Filters state
   const [searchValue, setSearchValue] = useState("");
@@ -57,16 +64,14 @@ export default function WorkloadOperationalView({
   const [createTaskForProjectId, setCreateTaskForProjectId] = useState(null);
   const [isRecalculating, setIsRecalculating] = useState(false);
 
-  // Load phases for all projects (batched, single query)
+  // Load phases (single query)
   const { data: allPhases = [] } = useQuery({
     queryKey: ["allPhases"],
     queryFn: () => base44.entities.ProjectKanbanBucket.list(),
     staleTime: 60000,
   });
 
-  // Search filtering — applied before workload data
-  // Searches: task title, project name, phase name, technician, blocker label,
-  // part name (via blocking_reasons), vendor name (via blocking_reasons), approval title (via blocking_reasons)
+  // Search filtering
   const searchFilteredTasks = useMemo(() => {
     if (!searchValue.trim()) return tasks;
     const q = searchValue.toLowerCase();
@@ -78,21 +83,11 @@ export default function WorkloadOperationalView({
     allPhases.forEach(p => phaseNameMap.set(p.id, (p.name || "").toLowerCase()));
 
     return tasks.filter(t => {
-      // Task title
       if ((t.name || "").toLowerCase().includes(q)) return true;
-      // Project name
       if (projectNameMap.get(t.project_id)?.includes(q)) return true;
-      // Phase name
       if (phaseNameMap.get(t.kanban_bucket_id)?.includes(q)) return true;
-      // Technician name
       if (teamMap.get(t.assigned_team_member_id)?.includes(q)) return true;
-      // Blocking reasons — covers blocker label, part names, vendor names, approval titles
-      if (t.blocking_reasons?.some(r => {
-        if ((r.label || "").toLowerCase().includes(q)) return true;
-        if ((r.type || "").toLowerCase().includes(q)) return true;
-        return false;
-      })) return true;
-      // Description
+      if (t.blocking_reasons?.some(r => (r.label || "").toLowerCase().includes(q) || (r.type || "").toLowerCase().includes(q))) return true;
       if ((t.description || "").toLowerCase().includes(q)) return true;
       return false;
     });
@@ -109,10 +104,6 @@ export default function WorkloadOperationalView({
     completedWindow,
     filters,
   });
-
-  // Stale breakdown for display
-  const staleMissing = useMemo(() => staleProjects.filter(id => staleMissingSet.has(id)).length, [staleProjects, staleMissingSet]);
-  const staleOutdated = staleProjects.length - staleMissing;
 
   // Bulk selection
   const [selectedTaskIds, setSelectedTaskIds] = useState(new Set());
@@ -195,29 +186,28 @@ export default function WorkloadOperationalView({
   const handleRecalculate = useCallback(async () => {
     if (staleProjects.length === 0) return;
     setIsRecalculating(true);
+    let recalculated = 0;
+    let errors = 0;
     for (const pid of staleProjects) {
-      await base44.functions.invoke("resolveProjectWorkflow", { project_id: pid, mode: "resolve" });
+      try {
+        await base44.functions.invoke("resolveProjectWorkflow", { project_id: pid, mode: "resolve" });
+        recalculated++;
+      } catch { errors++; }
     }
     await queryClient.invalidateQueries({ queryKey: ["allTasks"] });
     setIsRecalculating(false);
-    toast({ title: `Recalculated ${staleProjects.length} project(s)` });
+    toast({
+      title: `Recalculated ${recalculated} project${recalculated !== 1 ? "s" : ""}`,
+      description: errors > 0 ? `${errors} failed` : "All task records preserved. Only derived fields updated.",
+    });
   }, [staleProjects, queryClient, toast]);
 
-  // Shared props for child components
+  // Shared props
   const shared = {
-    teamMemberMap,
-    statusMap,
-    phaseMap,
-    successorCounts,
-    teamMembers,
-    statuses,
-    onToggleComplete,
-    onTaskClick,
-    onUpdateDueDate,
-    onTogglePriority,
-    updateTaskMutation,
-    selectedTaskIds,
-    onToggleTaskSelection: toggleTaskSelection,
+    teamMemberMap, statusMap, phaseMap, successorCounts,
+    teamMembers, statuses,
+    onToggleComplete, onTaskClick, onUpdateDueDate, onTogglePriority, updateTaskMutation,
+    selectedTaskIds, onToggleTaskSelection: toggleTaskSelection,
     onAddTask: setCreateTaskForProjectId,
     showOperationalState: false,
   };
@@ -228,52 +218,56 @@ export default function WorkloadOperationalView({
     return projects.filter(p => pids.has(p.id)).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   }, [tasks, projects]);
 
+  // Compute breakdown stats
+  const waitingParts = useMemo(() => sections.find(s => s.key === "WAITING_ON_PARTS")?.count || 0, [sections]);
+  const waitingVendor = useMemo(() => sections.find(s => s.key === "WAITING_ON_VENDOR")?.count || 0, [sections]);
+  const waitingCustomer = useMemo(() => sections.find(s => s.key === "WAITING_ON_CUSTOMER")?.count || 0, [sections]);
+  const blockedCount = useMemo(() => sections.find(s => s.key === "BLOCKED")?.count || 0, [sections]);
+
   return (
     <div className="space-y-3">
-      {/* Stale data warning */}
-      {staleProjects.length > 0 && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-600/30 bg-amber-600/5">
-          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-          <span className="text-xs text-amber-300">
-            {staleMissing > 0 && `${staleMissing} project${staleMissing !== 1 ? "s" : ""}: Workflow data unavailable. `}
-            {staleOutdated > 0 && `${staleOutdated} project${staleOutdated !== 1 ? "s" : ""}: Workflow data may be stale.`}
-          </span>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleRecalculate}
-            disabled={isRecalculating}
-            className="border-amber-600/50 text-amber-300 hover:bg-amber-600/20 h-6 text-xs gap-1 ml-auto"
-          >
-            <RefreshCw className={cn("w-3 h-3", isRecalculating && "animate-spin")} />
-            Recalculate
-          </Button>
-        </div>
-      )}
+      {/* Workflow Health Indicator — compact, expandable */}
+      <WorkflowHealthIndicator
+        staleProjects={staleProjects}
+        staleMissingSet={staleMissingSet}
+        projectMap={projectMap}
+        onRecalculate={handleRecalculate}
+        isRecalculating={isRecalculating}
+      />
 
-      {/* Summary stats */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <StatPill label="Active" value={stats.totalActive} color="border-gray-700 bg-gray-800/50" textColor="text-white" />
-        <StatPill label="In Progress" value={stats.inProgress} color="border-amber-600/30 bg-amber-600/10" textColor="text-amber-400" />
-        <StatPill label="Ready" value={stats.ready} color="border-green-600/30 bg-green-600/10" textColor="text-green-400" />
-        <StatPill label="Blocked/Waiting" value={stats.blocked} color="border-red-600/30 bg-red-600/10" textColor="text-red-400" />
-        <StatPill label="Overdue" value={stats.overdue} color="border-red-600/30 bg-red-600/10" textColor="text-red-400" />
-        <StatPill label="Unassigned" value={stats.unassigned} color="border-yellow-600/30 bg-yellow-600/10" textColor="text-yellow-400" />
+      {/* Production Summary Cards */}
+      <div className="flex items-stretch gap-2 flex-wrap">
+        <SummaryCard label="In Progress" value={stats.inProgress} color="border-amber-700/40 bg-amber-900/15 text-amber-400" />
+        <SummaryCard label="Ready" value={stats.ready} color="border-green-700/40 bg-green-900/15 text-green-400" />
+        <SummaryCard label="Blocked" value={blockedCount} color="border-red-700/40 bg-red-900/15 text-red-400" />
+        <SummaryCard label="Parts" value={waitingParts} color="border-orange-700/40 bg-orange-900/15 text-orange-300" />
+        <SummaryCard label="Vendor" value={waitingVendor} color="border-purple-700/40 bg-purple-900/15 text-purple-300" />
+        <SummaryCard label="Customer" value={waitingCustomer} color="border-blue-700/40 bg-blue-900/15 text-blue-300" />
+        <SummaryCard label="Review" value={stats.review} color="border-violet-700/40 bg-violet-900/15 text-violet-300" />
+        <SummaryCard label="Overdue" value={stats.overdue} color="border-red-700/40 bg-red-900/15 text-red-400" />
+        <SummaryCard label="Unassigned" value={stats.unassigned} color="border-yellow-700/40 bg-yellow-900/15 text-yellow-400" />
+
         {stats.totalEstHours > 0 && (
-          <StatPill label="Est." value={`${Math.round(stats.totalEstHours)}h`} color="border-emerald-600/30 bg-emerald-600/10" textColor="text-emerald-400" />
+          <div className="flex flex-col items-center px-3 py-1.5 rounded-lg border border-emerald-700/40 bg-emerald-900/15 text-emerald-400 min-w-[70px]">
+            <span className="text-lg font-bold tabular-nums leading-tight">{Math.round(stats.totalEstHours)}h</span>
+            <span className="text-[10px] leading-tight opacity-80">Est Hours</span>
+          </div>
         )}
 
-        {/* Select all toggle */}
+        {/* Select all */}
         <Button
           variant="outline"
           size="sm"
           onClick={selectedTaskIds.size > 0 ? clearSelection : selectAllVisible}
-          className={cn("border-gray-700 text-white hover:bg-gray-800 h-7 px-2 text-xs ml-auto", selectedTaskIds.size > 0 && "border-blue-600/50 bg-blue-600/10")}
+          className={cn("border-gray-700 text-white hover:bg-gray-800 h-auto px-3 text-xs ml-auto self-center", selectedTaskIds.size > 0 && "border-blue-600/50 bg-blue-600/10")}
         >
           <CheckSquare className="w-3 h-3 mr-1" />
           {selectedTaskIds.size > 0 ? `${selectedTaskIds.size} Selected` : "Select All"}
         </Button>
       </div>
+
+      {/* Shop Bottleneck Summary */}
+      <ShopBottleneckSummary sections={sections} projectMap={projectMap} />
 
       {/* Filters */}
       <WorkloadFilters
@@ -293,10 +287,6 @@ export default function WorkloadOperationalView({
 
       {/* Sections */}
       {sections.map(section => {
-        // Don't render empty sections when collapsed by default (except if they have tasks)
-        if (section.count === 0 && !section.defaultExpanded) return null;
-
-        // For IN_PROGRESS section, show operational state on tasks that have conflicts
         const sectionShared = section.key === "IN_PROGRESS"
           ? { ...shared, showOperationalState: true }
           : shared;
