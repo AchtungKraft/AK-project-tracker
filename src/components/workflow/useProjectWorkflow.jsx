@@ -59,6 +59,9 @@ export const OPERATIONAL_STATE_CONFIG = {
   CANCELLED: { label: "Cancelled", color: "#6B7280", bgClass: "bg-gray-600/20", textClass: "text-gray-500" },
 };
 
+// ── Centralized Phase State Constants (single source of truth) ──
+// Must match resolver PS values exactly:
+// not_configured, not_started, ready, active, waiting, blocked, completed, skipped
 export const PHASE_STATE_CONFIG = {
   not_configured: { label: "Not Configured", color: "#6B7280", bgClass: "bg-gray-600/20", textClass: "text-gray-400" },
   not_started: { label: "Not Started", color: "#6B7280", bgClass: "bg-gray-600/20", textClass: "text-gray-400" },
@@ -68,6 +71,19 @@ export const PHASE_STATE_CONFIG = {
   blocked: { label: "Blocked", color: "#EF4444", bgClass: "bg-red-600/20", textClass: "text-red-400" },
   completed: { label: "Completed", color: "#10B981", bgClass: "bg-emerald-600/20", textClass: "text-emerald-400" },
   skipped: { label: "Skipped", color: "#6B7280", bgClass: "bg-gray-600/20", textClass: "text-gray-500" },
+};
+
+// ── Centralized Milestone State Constants (single source of truth) ──
+// Must match resolver MS values exactly:
+// not_started, in_progress, waiting, completed, reopened, skipped, configuration_error
+export const MILESTONE_STATE_CONFIG = {
+  not_started: { label: "Not Started", color: "#6B7280", bgClass: "bg-gray-600/20", textClass: "text-gray-400" },
+  in_progress: { label: "In Progress", color: "#F59E0B", bgClass: "bg-amber-600/20", textClass: "text-amber-400" },
+  waiting: { label: "Waiting", color: "#F97316", bgClass: "bg-orange-600/20", textClass: "text-orange-400" },
+  completed: { label: "Completed", color: "#10B981", bgClass: "bg-emerald-600/20", textClass: "text-emerald-400" },
+  reopened: { label: "Reopened", color: "#EF4444", bgClass: "bg-red-600/20", textClass: "text-red-400" },
+  skipped: { label: "Skipped", color: "#6B7280", bgClass: "bg-gray-600/20", textClass: "text-gray-500" },
+  configuration_error: { label: "Config Error", color: "#EF4444", bgClass: "bg-red-600/20", textClass: "text-red-400" },
 };
 
 export function getStateConfig(state) {

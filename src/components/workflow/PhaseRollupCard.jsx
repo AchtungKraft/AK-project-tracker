@@ -50,8 +50,8 @@ export default function PhaseRollupCard({ phase, isExpanded, onToggle }) {
             <span className="text-[10px] text-gray-500">
               {phase.completedTaskCount}/{phase.requiredTaskCount} tasks · {MODE_LABELS[phase.progressionMode] || 'Dependency Driven'}
             </span>
-            {phase.currentBlocker && (
-              <span className="text-[10px] text-orange-400 truncate max-w-[200px]">· {phase.currentBlocker}</span>
+            {(phase.currentBlockerText || phase.currentBlocker?.label || (typeof phase.currentBlocker === 'string' && phase.currentBlocker)) && (
+              <span className="text-[10px] text-orange-400 truncate max-w-[200px]">· {phase.currentBlockerText || phase.currentBlocker?.label || phase.currentBlocker}</span>
             )}
           </div>
         </div>

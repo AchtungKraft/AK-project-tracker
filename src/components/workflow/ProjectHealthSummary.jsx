@@ -1,6 +1,5 @@
 import React from "react";
-import { cn } from "@/lib/utils";
-import { AlertTriangle, ArrowRight } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2 } from "lucide-react";
 
 function fmtH(h) {
   if (!h) return "0h";
@@ -14,17 +13,30 @@ function fmtH(h) {
 export default function ProjectHealthSummary({ projectHealth }) {
   if (!projectHealth) return null;
 
-  const { currentPhase, nextPhase, currentBlocker, currentMilestone, nextMilestone, health } = projectHealth;
+  const { currentPhase, activePhases, nextPhase, currentBlocker, currentBlockerText, blockers, currentMilestone, nextMilestone, health, workflowComplete, requiredMilestonesCompleted, requiredMilestonesTotal } = projectHealth;
+
+  // Derive display blocker text (handles both structured and string formats)
+  const blockerLabel = currentBlockerText || (typeof currentBlocker === 'string' ? currentBlocker : currentBlocker?.label) || null;
 
   return (
     <div className="border border-gray-800 rounded-lg bg-black/30 p-3 space-y-2">
-      <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Project Health</h4>
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Project Health</h4>
+        {workflowComplete && (
+          <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-medium">
+            <CheckCircle2 className="w-3 h-3" /> Workflow Complete
+          </span>
+        )}
+      </div>
 
       {/* Phase progression */}
       {currentPhase && (
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-2 text-sm flex-wrap">
           <span className="text-gray-500 text-xs">Phase:</span>
           <span className="text-white font-semibold">{currentPhase.name}</span>
+          {activePhases?.length > 1 && (
+            <span className="text-[10px] text-amber-400">+{activePhases.length - 1} parallel</span>
+          )}
           {nextPhase && (
             <>
               <ArrowRight className="w-3 h-3 text-gray-600" />
@@ -34,9 +46,13 @@ export default function ProjectHealthSummary({ projectHealth }) {
         </div>
       )}
 
+      {!currentPhase && !workflowComplete && (
+        <p className="text-xs text-gray-500 italic">No active phases</p>
+      )}
+
       {/* Milestone progression */}
       {(currentMilestone || nextMilestone) && (
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-2 text-sm flex-wrap">
           <span className="text-gray-500 text-xs">Milestone:</span>
           {currentMilestone && <span className="text-emerald-400 text-xs">✓ {currentMilestone.name}</span>}
           {nextMilestone && (
@@ -45,14 +61,24 @@ export default function ProjectHealthSummary({ projectHealth }) {
               <span className="text-amber-400 text-xs">→ {nextMilestone.name}</span>
             </>
           )}
+          {requiredMilestonesTotal > 0 && (
+            <span className="text-[10px] text-gray-500">({requiredMilestonesCompleted}/{requiredMilestonesTotal})</span>
+          )}
         </div>
       )}
 
-      {/* Current blocker */}
-      {currentBlocker && (
+      {/* Blockers */}
+      {blockerLabel && (
         <div className="flex items-start gap-1.5 bg-red-950/20 border border-red-900/30 rounded px-2 py-1.5">
           <AlertTriangle className="w-3 h-3 text-red-400 mt-0.5 shrink-0" />
-          <span className="text-xs text-red-300">{currentBlocker}</span>
+          <div className="space-y-0.5">
+            <span className="text-xs text-red-300">{blockerLabel}</span>
+            {blockers?.length > 1 && (
+              <div className="text-[10px] text-red-400/70">
+                +{blockers.length - 1} more blocker{blockers.length > 2 ? 's' : ''}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

@@ -40,20 +40,39 @@
       },
       "description": "Array of ProjectMilestone IDs that must be complete first"
     },
+    "is_required": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this milestone must complete for the project to be workflow-complete"
+    },
     "status": {
       "type": "string",
       "enum": [
-        "pending",
+        "not_started",
+        "in_progress",
+        "waiting",
         "completed",
-        "skipped"
+        "reopened",
+        "skipped",
+        "configuration_error"
       ],
-      "default": "pending",
-      "description": "Milestone status \u2014 calculated automatically by the resolver"
+      "default": "not_started",
+      "description": "Calculated milestone lifecycle state from resolveProjectWorkflow"
     },
     "completed_at": {
       "type": "string",
       "format": "date-time",
       "description": "When the milestone auto-completed"
+    },
+    "reopened_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the milestone was automatically reopened due to prerequisite regression"
+    },
+    "calculated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When milestone status was last calculated"
     },
     "completion_source": {
       "type": "string",

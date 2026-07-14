@@ -24,20 +24,40 @@
     },
     "reason": {
       "type": "string",
-      "description": "Automatic reason for the transition"
+      "description": "Reason for the transition"
     },
     "triggered_by": {
       "type": "string",
       "enum": [
         "automatic",
-        "manual"
+        "manual",
+        "migration"
       ],
       "default": "automatic",
-      "description": "Whether transition was automatic or user-initiated"
+      "description": "Whether transition was automatic, user-initiated, or a migration normalization"
+    },
+    "trigger_entity_type": {
+      "type": "string",
+      "enum": [
+        "task",
+        "milestone",
+        "phase",
+        "resolver"
+      ],
+      "description": "Type of entity that triggered the transition"
+    },
+    "trigger_entity_id": {
+      "type": "string",
+      "description": "ID of the entity that triggered the transition"
     },
     "user_name": {
       "type": "string",
       "description": "User who triggered the transition (if manual)"
+    },
+    "resolver_version": {
+      "type": "number",
+      "default": 2,
+      "description": "Version of the resolver that created this log"
     }
   },
   "required": [

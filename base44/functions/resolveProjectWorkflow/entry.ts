@@ -1,5 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.38';
 
+const RESOLVER_VERSION = 2;
+
 // ── Status Mapping ──
 const KNOWN_IDS = {
   DONE: '6913f57422230d8c7ee2ef54',
@@ -28,7 +30,7 @@ function buildStatusMapping(statusList) {
   return { map, warnings, allTaskStatuses: taskStatuses };
 }
 
-// ── Operational State Constants ──
+// ── Task Operational State Constants ──
 const S = {
   NOT_STARTED: 'NOT_STARTED', READY: 'READY', IN_PROGRESS: 'IN_PROGRESS',
   WAITING_ON_PARTS: 'WAITING_ON_PARTS', WAITING_ON_VENDOR: 'WAITING_ON_VENDOR',
@@ -36,12 +38,41 @@ const S = {
   REVIEW_REQUIRED: 'REVIEW_REQUIRED', COMPLETED: 'COMPLETED', CANCELLED: 'CANCELLED',
 };
 
-// ── Phase Status Constants ──
+// ── Phase Status Constants (centralized — single source of truth) ──
 const PS = {
-  NOT_CONFIGURED: 'not_configured', NOT_STARTED: 'not_started', READY: 'ready',
-  ACTIVE: 'active', WAITING: 'waiting', BLOCKED: 'blocked',
-  COMPLETED: 'completed', SKIPPED: 'skipped',
+  NOT_CONFIGURED: 'not_configured',
+  NOT_STARTED: 'not_started',
+  READY: 'ready',
+  ACTIVE: 'active',
+  WAITING: 'waiting',
+  BLOCKED: 'blocked',
+  COMPLETED: 'completed',
+  SKIPPED: 'skipped',
 };
+const ALL_PHASE_STATES = Object.values(PS);
+
+// ── Milestone Status Constants (centralized — single source of truth) ──
+const MS = {
+  NOT_STARTED: 'not_started',
+  IN_PROGRESS: 'in_progress',
+  WAITING: 'waiting',
+  COMPLETED: 'completed',
+  REOPENED: 'reopened',
+  SKIPPED: 'skipped',
+  CONFIGURATION_ERROR: 'configuration_error',
+};
+
+// ── Blocker Type Precedence (highest priority first) ──
+const BLOCKER_PRECEDENCE = [
+  'DATA_CONFIGURATION', 'CUSTOMER_APPROVAL', 'VENDOR',
+  'PART', 'PURCHASE_ORDER', 'PHASE', 'DEPENDENCY',
+  'MANUAL_HOLD',
+];
+
+function blockerPriority(type) {
+  const idx = BLOCKER_PRECEDENCE.indexOf(type);
+  return idx >= 0 ? idx : BLOCKER_PRECEDENCE.length;
+}
 
 // ── Cycle Detection ──
 function detectCycles(taskMap) {
@@ -59,6 +90,29 @@ function detectCycles(taskMap) {
     inStack.delete(id);
   }
   for (const id of taskMap.keys()) dfs(id, []);
+  return cycles;
+}
+
+// ── Milestone Cycle Detection ──
+function detectMilestoneCycles(milestones) {
+  const milestoneMap = new Map();
+  milestones.forEach(m => milestoneMap.set(m.id, m));
+  const visited = new Set();
+  const inStack = new Set();
+  const cycles = [];
+  function dfs(id, path) {
+    if (inStack.has(id)) { cycles.push([...path, id]); return; }
+    if (visited.has(id)) return;
+    visited.add(id); inStack.add(id);
+    const m = milestoneMap.get(id);
+    if (m?.depends_on_milestones) {
+      for (const depId of m.depends_on_milestones) {
+        if (milestoneMap.has(depId)) dfs(depId, [...path, id]);
+      }
+    }
+    inStack.delete(id);
+  }
+  for (const id of milestoneMap.keys()) dfs(id, []);
   return cycles;
 }
 
@@ -173,7 +227,7 @@ function resolveOne(task, taskMap, bucketMap, phaseOrder, partAvail, scMap, appr
   return { state: S.READY, reasons, isActionable: true };
 }
 
-// ── Phase Metrics (pure task counting — no operational state) ──
+// ── Phase Metrics ──
 function phaseMetrics(bucket, tasks, statusMap) {
   const pt = tasks.filter(t => t.kanban_bucket_id === bucket.id);
   const req = pt.filter(t => t.is_phase_required !== false);
@@ -181,8 +235,9 @@ function phaseMetrics(bucket, tasks, statusMap) {
   const nonCancelled = pt.filter(t => !statusMap.cancelledIds.has(t.status_id));
   const done = pt.filter(t => statusMap.doneIds.has(t.status_id));
   const ready = pt.filter(t => t._rs?.state === S.READY);
-  const ip = pt.filter(t => t._rs?.state === S.IN_PROGRESS);
-  const blocked = pt.filter(t => [S.BLOCKED, S.WAITING_ON_PARTS, S.WAITING_ON_VENDOR, S.WAITING_ON_CUSTOMER].includes(t._rs?.state));
+  const ip = pt.filter(t => t._rs?.state === S.IN_PROGRESS || t._rs?.state === S.REVIEW_REQUIRED);
+  const waiting = pt.filter(t => [S.WAITING_ON_PARTS, S.WAITING_ON_VENDOR, S.WAITING_ON_CUSTOMER].includes(t._rs?.state));
+  const blocked = pt.filter(t => t._rs?.state === S.BLOCKED);
   const wp = pt.filter(t => t._rs?.state === S.WAITING_ON_PARTS);
   const wv = pt.filter(t => t._rs?.state === S.WAITING_ON_VENDOR);
   const wc = pt.filter(t => t._rs?.state === S.WAITING_ON_CUSTOMER);
@@ -197,144 +252,201 @@ function phaseMetrics(bucket, tasks, statusMap) {
   return {
     totalTaskCount: pt.length, requiredTaskCount: req.length, completedTaskCount: done.length,
     cancelledTaskCount: cancelled.length,
-    readyTaskCount: ready.length, inProgressTaskCount: ip.length, blockedTaskCount: blocked.length,
+    readyTaskCount: ready.length, inProgressTaskCount: ip.length,
+    blockedTaskCount: blocked.length + waiting.length,
     waitingOnPartsCount: wp.length, waitingOnVendorCount: wv.length, waitingOnCustomerCount: wc.length,
     estimatedHours: est, actualHours: act, remainingHours: Math.max(rem, 0), completionPercent: pct,
     isComplete, tasks: pt,
   };
 }
 
-// ── Phase State Engine ──
-function resolvePhaseState(bucket, metrics, phaseOrder, statusMap) {
-  // No tasks = not configured
-  if (metrics.totalTaskCount === 0) return { status: PS.NOT_CONFIGURED, waitingReason: null, currentBlocker: null };
+// ── Aggregate Blocker Selection ──
+// Returns structured {currentBlocker, blockers[]} with precedence-based dominant selection
+function aggregateBlockers(tasks) {
+  const blockerMap = new Map(); // type → { type, labels[], taskCount }
+  for (const t of tasks) {
+    if (!t._rs?.reasons?.length) continue;
+    for (const r of t._rs.reasons) {
+      if (!blockerMap.has(r.type)) {
+        blockerMap.set(r.type, { type: r.type, labels: new Set(), taskCount: 0 });
+      }
+      const entry = blockerMap.get(r.type);
+      entry.labels.add(r.label);
+      entry.taskCount++;
+    }
+  }
 
-  // Skipped: optional phase with no required tasks or all cancelled
-  if (bucket.is_required === false && metrics.requiredTaskCount === 0) return { status: PS.SKIPPED, waitingReason: null, currentBlocker: null };
+  const blockers = [...blockerMap.values()]
+    .sort((a, b) => blockerPriority(a.type) - blockerPriority(b.type))
+    .map(b => ({
+      type: b.type,
+      label: [...b.labels][0],
+      taskCount: b.taskCount,
+    }));
+
+  const dominant = blockers[0] || null;
+  return {
+    currentBlocker: dominant ? { type: dominant.type, label: dominant.label } : null,
+    currentBlockerText: dominant?.label || null,
+    blockers,
+  };
+}
+
+// ── Phase State Engine ──
+// Precedence: SKIPPED > COMPLETED > ACTIVE > READY > WAITING > BLOCKED > NOT_STARTED > NOT_CONFIGURED
+function resolvePhaseState(bucket, metrics, phaseOrder) {
+  // No tasks = not configured
+  if (metrics.totalTaskCount === 0) return { status: PS.NOT_CONFIGURED, waitingReason: null, currentBlocker: null, blockers: [] };
+
+  // Skipped: optional phase with no required non-cancelled tasks
+  const reqNonCancelled = metrics.tasks.filter(t => t.is_phase_required !== false && t._rs?.state !== S.CANCELLED);
+  if (bucket.is_required === false && reqNonCancelled.length === 0) {
+    return { status: PS.SKIPPED, waitingReason: null, currentBlocker: null, blockers: [] };
+  }
 
   // Completed: all required non-cancelled tasks done
-  if (metrics.isComplete) return { status: PS.COMPLETED, waitingReason: null, currentBlocker: null };
+  if (metrics.isComplete) return { status: PS.COMPLETED, waitingReason: null, currentBlocker: null, blockers: [] };
 
-  // Active: at least one task in progress or review
+  // Aggregate blockers from non-completed/non-cancelled tasks
+  const actionableTasks = metrics.tasks.filter(t => t._rs && t._rs.state !== S.COMPLETED && t._rs.state !== S.CANCELLED);
+  const { currentBlocker, currentBlockerText, blockers } = aggregateBlockers(actionableTasks);
+
   const hasIP = metrics.inProgressTaskCount > 0;
 
-  // Determine waiting reasons and blockers from task states
-  let waitingReason = null;
-  let currentBlocker = null;
-  const waitReasons = [];
-
-  // Check for waiting states
-  if (metrics.waitingOnPartsCount > 0) {
-    // Find the first specific part blocker
-    const partTask = metrics.tasks.find(t => t._rs?.state === S.WAITING_ON_PARTS);
-    const partReason = partTask?._rs?.reasons?.find(r => r.type === 'PART');
-    waitReasons.push('Waiting on Parts' + (partReason ? ': ' + partReason.label : ''));
-  }
-  if (metrics.waitingOnVendorCount > 0) {
-    const vendorTask = metrics.tasks.find(t => t._rs?.state === S.WAITING_ON_VENDOR);
-    const vendorReason = vendorTask?._rs?.reasons?.find(r => r.type === 'VENDOR');
-    waitReasons.push('Waiting on Vendor' + (vendorReason ? ': ' + vendorReason.label : ''));
-  }
-  if (metrics.waitingOnCustomerCount > 0) {
-    const custTask = metrics.tasks.find(t => t._rs?.state === S.WAITING_ON_CUSTOMER);
-    const custReason = custTask?._rs?.reasons?.find(r => r.type === 'CUSTOMER_APPROVAL');
-    waitReasons.push('Waiting on Customer' + (custReason ? ': ' + custReason.label : ''));
+  // ACTIVE: at least one task in progress/review — STAYS active even with blockers
+  // But expose the blockers so the UI can show "Active — Waiting on Bearings"
+  if (hasIP) {
+    return {
+      status: PS.ACTIVE,
+      waitingReason: currentBlockerText,
+      currentBlocker,
+      blockers,
+    };
   }
 
-  // Check blocked tasks for dependency/phase reasons
-  const blockedTasks = metrics.tasks.filter(t => t._rs?.state === S.BLOCKED);
-  for (const bt of blockedTasks) {
-    for (const r of (bt._rs?.reasons || [])) {
-      if (r.type === 'PHASE') waitReasons.push('Waiting on Previous Phase: ' + r.label);
-      if (r.type === 'DEPENDENCY') waitReasons.push('Waiting on Dependencies: ' + r.label);
-      if (r.type === 'MANUAL_HOLD') waitReasons.push(r.label);
-    }
+  // READY: no tasks in progress but at least one task is ready
+  if (metrics.readyTaskCount > 0) {
+    return {
+      status: PS.READY,
+      waitingReason: blockers.length > 0 ? currentBlockerText : null,
+      currentBlocker: blockers.length > 0 ? currentBlocker : null,
+      blockers,
+    };
+  }
+
+  // Determine waiting vs blocked from blocker types
+  const waitingTypes = new Set(['PART', 'PURCHASE_ORDER', 'VENDOR', 'CUSTOMER_APPROVAL', 'PHASE']);
+  const isWaiting = blockers.some(b => waitingTypes.has(b.type));
+
+  if (isWaiting) {
+    return { status: PS.WAITING, waitingReason: currentBlockerText, currentBlocker, blockers };
+  }
+
+  if (blockers.length > 0) {
+    return { status: PS.BLOCKED, waitingReason: currentBlockerText, currentBlocker, blockers };
   }
 
   // Check manual activation
   const mode = bucket.progression_mode || 'dependency_driven';
   if (mode === 'manual' && bucket.is_active === false) {
-    waitReasons.push('Waiting on Manual Activation');
+    const manualBlocker = { type: 'PHASE', label: 'Waiting on Manual Activation' };
+    return { status: PS.WAITING, waitingReason: manualBlocker.label, currentBlocker: manualBlocker, blockers: [{ ...manualBlocker, taskCount: metrics.totalTaskCount }] };
   }
 
-  // Dominant waiting reason
-  waitingReason = waitReasons[0] || null;
-  currentBlocker = waitReasons[0] || null;
-
-  // All tasks blocked, none in progress, none ready = BLOCKED
-  if (!hasIP && metrics.readyTaskCount === 0 && metrics.blockedTaskCount > 0) {
-    return { status: PS.BLOCKED, waitingReason, currentBlocker };
-  }
-
-  // Has in-progress work but also has waiting issues
-  if (hasIP && waitReasons.length > 0) {
-    return { status: PS.WAITING, waitingReason, currentBlocker };
-  }
-
-  // Has in-progress work with no blockers
-  if (hasIP) {
-    return { status: PS.ACTIVE, waitingReason: null, currentBlocker: null };
-  }
-
-  // Has ready work but nothing in progress yet
-  if (metrics.readyTaskCount > 0) {
-    return { status: PS.READY, waitingReason: null, currentBlocker: null };
-  }
-
-  // Has waiting issues but no work happening
-  if (waitReasons.length > 0) {
-    return { status: PS.WAITING, waitingReason, currentBlocker };
-  }
-
-  // Phase readiness check for sequential mode
+  // Sequential mode check
   if (mode === 'sequential') {
     for (const prev of phaseOrder) {
       if (prev.project_id !== bucket.project_id) continue;
       if ((prev.order || 0) >= (bucket.order || 0)) continue;
       if (prev.is_required === false) continue;
       if (prev._status !== 'completed') {
-        return { status: PS.NOT_STARTED, waitingReason: 'Waiting on Previous Phase', currentBlocker: 'Phase "' + prev.name + '" not complete' };
+        const seqBlocker = { type: 'PHASE', label: 'Phase "' + prev.name + '" not complete' };
+        return { status: PS.NOT_STARTED, waitingReason: seqBlocker.label, currentBlocker: seqBlocker, blockers: [{ ...seqBlocker, taskCount: metrics.totalTaskCount }] };
       }
     }
   }
 
-  return { status: PS.NOT_STARTED, waitingReason: null, currentBlocker: null };
+  return { status: PS.NOT_STARTED, waitingReason: null, currentBlocker: null, blockers: [] };
 }
 
 // ── Milestone Resolution ──
-function resolveMilestones(milestones, phaseMap, taskMap, statusMap) {
+function resolveMilestones(milestones, phaseMap, taskMap, statusMap, projectId) {
   const milestoneMap = new Map();
   milestones.forEach(m => milestoneMap.set(m.id, m));
   const sorted = [...milestones].sort((a, b) => (a.order || 0) - (b.order || 0));
+
+  // Detect cycles
+  const milestoneCycles = detectMilestoneCycles(milestones);
+  const cycleIds = new Set();
+  for (const cycle of milestoneCycles) { for (const id of cycle) cycleIds.add(id); }
+
   const results = [];
+  const warnings = [];
+
+  if (milestoneCycles.length > 0) {
+    warnings.push({
+      type: 'MILESTONE_CYCLE',
+      message: milestoneCycles.length + ' circular milestone dependency chain(s) detected',
+      details: milestoneCycles.map(c => c.map(id => milestoneMap.get(id)?.name || id).join(' → ')),
+    });
+  }
 
   for (const ms of sorted) {
+    // Explicitly skipped
+    if (ms.status === 'skipped') {
+      results.push({
+        milestoneId: ms.id, name: ms.name, order: ms.order || 0,
+        status: MS.SKIPPED, blockingReason: null, color: ms.color, icon: ms.icon,
+        completedAt: null, reopenedAt: null,
+      });
+      continue;
+    }
+
+    // Cycle detection
+    if (cycleIds.has(ms.id)) {
+      results.push({
+        milestoneId: ms.id, name: ms.name, order: ms.order || 0,
+        status: MS.CONFIGURATION_ERROR, blockingReason: 'Circular milestone dependency detected',
+        color: ms.color, icon: ms.icon, completedAt: null, reopenedAt: null,
+      });
+      continue;
+    }
+
     let allMet = true;
     let blockingReason = null;
+    let hasAnyDeps = false;
+    let someProgress = false;
+    let isWaiting = false;
+    const configErrors = [];
 
     // Check phase dependencies
     if (ms.depends_on_phases?.length) {
       for (const phaseId of ms.depends_on_phases) {
+        hasAnyDeps = true;
         const phase = phaseMap.get(phaseId);
-        if (!phase) { allMet = false; blockingReason = 'Missing phase dependency'; continue; }
-        const isPhaseComplete = phase._phaseState?.status === PS.COMPLETED;
-        if (!isPhaseComplete) {
-          allMet = false;
-          blockingReason = blockingReason || ('Waiting on phase: ' + phase.name);
-        }
+        if (!phase) { configErrors.push('Missing phase: ' + phaseId); allMet = false; continue; }
+        if (phase.project_id !== projectId) { configErrors.push('Cross-project phase: ' + phaseId); allMet = false; continue; }
+        if (phase._phaseState?.status === PS.COMPLETED) { someProgress = true; }
+        else { allMet = false; blockingReason = blockingReason || ('Waiting on phase: ' + phase.name); }
       }
     }
 
     // Check task dependencies
     if (ms.depends_on_tasks?.length) {
       for (const taskId of ms.depends_on_tasks) {
+        hasAnyDeps = true;
         const task = taskMap.get(taskId);
-        if (!task) { allMet = false; blockingReason = blockingReason || 'Missing task dependency'; continue; }
-        // Only required tasks block — optional tasks (is_phase_required === false) never block milestones
-        if (task.is_phase_required === false) continue;
-        if (!statusMap.doneIds.has(task.status_id)) {
+        if (!task) { configErrors.push('Missing task: ' + taskId); allMet = false; continue; }
+        if (task.project_id !== projectId) { configErrors.push('Cross-project task: ' + taskId); allMet = false; continue; }
+        if (statusMap.doneIds.has(task.status_id)) { someProgress = true; }
+        else {
           allMet = false;
           blockingReason = blockingReason || ('Waiting on task: ' + task.name);
+          // Check if the blocking task is itself waiting
+          const taskState = task._rs?.state;
+          if (taskState && [S.WAITING_ON_PARTS, S.WAITING_ON_VENDOR, S.WAITING_ON_CUSTOMER].includes(taskState)) {
+            isWaiting = true;
+          }
         }
       }
     }
@@ -342,59 +454,104 @@ function resolveMilestones(milestones, phaseMap, taskMap, statusMap) {
     // Check milestone dependencies
     if (ms.depends_on_milestones?.length) {
       for (const msDepId of ms.depends_on_milestones) {
-        const depMs = results.find(r => r.milestoneId === msDepId);
-        if (!depMs || depMs.status !== 'completed') {
+        hasAnyDeps = true;
+        if (!milestoneMap.has(msDepId)) { configErrors.push('Missing milestone: ' + msDepId); allMet = false; continue; }
+        const depResult = results.find(r => r.milestoneId === msDepId);
+        if (depResult?.status === MS.COMPLETED) { someProgress = true; }
+        else {
           allMet = false;
-          const depName = milestoneMap.get(msDepId)?.name || msDepId;
-          blockingReason = blockingReason || ('Waiting on milestone: ' + depName);
+          blockingReason = blockingReason || ('Waiting on milestone: ' + (milestoneMap.get(msDepId)?.name || msDepId));
         }
       }
     }
 
-    // No dependencies at all = pending (manual or not configured)
-    const hasDeps = (ms.depends_on_phases?.length || 0) + (ms.depends_on_tasks?.length || 0) + (ms.depends_on_milestones?.length || 0);
-    const status = ms.status === 'skipped' ? 'skipped'
-      : (hasDeps > 0 && allMet) ? 'completed'
-      : ms.status === 'completed' ? 'completed' // preserve manual completion
-      : 'pending';
+    // Configuration errors
+    if (configErrors.length > 0) {
+      warnings.push({ type: 'MILESTONE_CONFIG', message: 'Milestone "' + ms.name + '": ' + configErrors.join('; ') });
+    }
+
+    // Determine status
+    let status;
+    let reopenedAt = null;
+
+    if (configErrors.length > 0 && !hasAnyDeps) {
+      status = MS.CONFIGURATION_ERROR;
+    } else if (!hasAnyDeps) {
+      // No deps = stays at current status (manual only) or not_started
+      status = ms.status === 'completed' ? MS.COMPLETED : MS.NOT_STARTED;
+    } else if (allMet) {
+      status = MS.COMPLETED;
+      // Check for reopening: was completed before but now re-completed is fine
+    } else {
+      // Was previously completed but prerequisites no longer met → REOPENED
+      if (ms.status === 'completed' || ms.status === 'reopened') {
+        status = MS.REOPENED;
+        reopenedAt = new Date().toISOString();
+      } else if (isWaiting) {
+        status = MS.WAITING;
+      } else if (someProgress) {
+        status = MS.IN_PROGRESS;
+      } else {
+        status = MS.NOT_STARTED;
+      }
+    }
 
     results.push({
       milestoneId: ms.id, name: ms.name, order: ms.order || 0,
-      status, blockingReason: status === 'pending' ? blockingReason : null,
+      status, blockingReason: status !== MS.COMPLETED && status !== MS.SKIPPED ? blockingReason : null,
       color: ms.color, icon: ms.icon,
-      completedAt: status === 'completed' ? (ms.completed_at || new Date().toISOString()) : null,
+      completedAt: status === MS.COMPLETED ? (ms.completed_at || new Date().toISOString()) : null,
+      reopenedAt: status === MS.REOPENED ? reopenedAt : (ms.reopened_at || null),
     });
   }
-  return results;
+
+  return { results, warnings };
 }
 
 // ── Project Health & Current/Next Phase ──
-function deriveProjectHealth(phaseRollups, milestoneResults, tasks, statusMap) {
+function deriveProjectHealth(phaseRollups, milestoneResults, tasks, statusMap, projectId) {
   const orderedPhases = [...phaseRollups].sort((a, b) => (a.order || 0) - (b.order || 0));
 
-  // Current phase = first non-completed, non-skipped, non-not_configured required phase
+  // Active phases = all phases with status ACTIVE
+  const activePhases = orderedPhases
+    .filter(p => p.phaseStatus === PS.ACTIVE)
+    .map(p => ({ id: p.bucketId, name: p.bucketName }));
+
+  // Current phase: first active, else first ready, else first waiting/blocked, else last completed
   let currentPhase = null;
   let nextPhase = null;
-  for (const p of orderedPhases) {
-    if (p.phaseStatus === PS.NOT_CONFIGURED || p.phaseStatus === PS.SKIPPED) continue;
-    if (!currentPhase && p.phaseStatus !== PS.COMPLETED) {
-      currentPhase = p;
-    } else if (currentPhase && !nextPhase && p.phaseStatus !== PS.COMPLETED) {
-      nextPhase = p;
+  const incomplete = orderedPhases.filter(p =>
+    p.phaseStatus !== PS.NOT_CONFIGURED && p.phaseStatus !== PS.SKIPPED && p.phaseStatus !== PS.COMPLETED
+  );
+
+  if (activePhases.length > 0) {
+    currentPhase = activePhases[0];
+    // Next = first non-complete phase after current
+    const currentIdx = orderedPhases.findIndex(p => p.bucketId === currentPhase.id);
+    for (let i = currentIdx + 1; i < orderedPhases.length; i++) {
+      const p = orderedPhases[i];
+      if (p.phaseStatus !== PS.COMPLETED && p.phaseStatus !== PS.SKIPPED && p.phaseStatus !== PS.NOT_CONFIGURED) {
+        nextPhase = { id: p.bucketId, name: p.bucketName };
+        break;
+      }
     }
+  } else if (incomplete.length > 0) {
+    currentPhase = { id: incomplete[0].bucketId, name: incomplete[0].bucketName };
+    if (incomplete.length > 1) nextPhase = { id: incomplete[1].bucketId, name: incomplete[1].bucketName };
+  } else {
+    // All complete — use last completed phase
+    const completed = orderedPhases.filter(p => p.phaseStatus === PS.COMPLETED);
+    if (completed.length > 0) currentPhase = { id: completed[completed.length - 1].bucketId, name: completed[completed.length - 1].bucketName };
   }
 
-  // Current blocker = current phase's blocker, or first blocker found in any phase
-  let currentBlocker = currentPhase?.currentBlocker || null;
-  if (!currentBlocker) {
-    for (const p of orderedPhases) {
-      if (p.currentBlocker) { currentBlocker = p.currentBlocker; break; }
-    }
-  }
+  // Aggregate all blockers across phases
+  const allActiveTasksWithReasons = tasks.filter(t => t._rs && t._rs.state !== S.COMPLETED && t._rs.state !== S.CANCELLED);
+  const { currentBlocker, currentBlockerText, blockers } = aggregateBlockers(allActiveTasksWithReasons);
 
   // Milestones
-  const completedMilestones = milestoneResults.filter(m => m.status === 'completed');
-  const pendingMilestones = milestoneResults.filter(m => m.status === 'pending');
+  const requiredMilestones = milestoneResults.filter(m => m.status !== MS.SKIPPED);
+  const completedMilestones = requiredMilestones.filter(m => m.status === MS.COMPLETED);
+  const pendingMilestones = requiredMilestones.filter(m => m.status !== MS.COMPLETED);
   const currentMilestone = completedMilestones.length > 0 ? completedMilestones[completedMilestones.length - 1] : null;
   const nextMilestone = pendingMilestones.length > 0 ? pendingMilestones[0] : null;
 
@@ -402,22 +559,38 @@ function deriveProjectHealth(phaseRollups, milestoneResults, tasks, statusMap) {
   const nonCancelled = tasks.filter(t => !statusMap.cancelledIds.has(t.status_id));
   const health = {
     tasks_ready: tasks.filter(t => t._rs?.state === S.READY).length,
-    tasks_blocked: tasks.filter(t => [S.BLOCKED, S.WAITING_ON_PARTS, S.WAITING_ON_VENDOR, S.WAITING_ON_CUSTOMER].includes(t._rs?.state)).length,
+    tasks_blocked: tasks.filter(t => t._rs?.state === S.BLOCKED).length,
     tasks_waiting: tasks.filter(t => [S.WAITING_ON_PARTS, S.WAITING_ON_VENDOR, S.WAITING_ON_CUSTOMER].includes(t._rs?.state)).length,
-    tasks_in_progress: tasks.filter(t => t._rs?.state === S.IN_PROGRESS).length,
+    tasks_in_progress: tasks.filter(t => t._rs?.state === S.IN_PROGRESS || t._rs?.state === S.REVIEW_REQUIRED).length,
     tasks_completed: tasks.filter(t => t._rs?.state === S.COMPLETED).length,
     hours_estimated: nonCancelled.reduce((s, t) => s + (t.estimated_hours || 0), 0),
     hours_actual: nonCancelled.reduce((s, t) => s + (t.actual_hours || 0), 0),
     hours_remaining: nonCancelled.filter(t => !statusMap.doneIds.has(t.status_id)).reduce((s, t) => s + Math.max((t.estimated_hours || 0) - (t.actual_hours || 0), 0), 0),
   };
 
+  // Workflow completion check
+  const allRequiredPhasesComplete = orderedPhases
+    .filter(p => p.isRequired !== false && p.phaseStatus !== PS.NOT_CONFIGURED)
+    .every(p => p.phaseStatus === PS.COMPLETED || p.phaseStatus === PS.SKIPPED);
+  const allRequiredMilestonesComplete = requiredMilestones.length === 0 ||
+    requiredMilestones.every(m => m.status === MS.COMPLETED || m.status === MS.SKIPPED);
+  const workflowComplete = allRequiredPhasesComplete && allRequiredMilestonesComplete && health.tasks_ready === 0 && health.tasks_in_progress === 0 && health.tasks_blocked === 0 && health.tasks_waiting === 0;
+
   return {
-    currentPhase: currentPhase ? { id: currentPhase.bucketId, name: currentPhase.bucketName } : null,
-    nextPhase: nextPhase ? { id: nextPhase.bucketId, name: nextPhase.bucketName } : null,
+    projectId,
+    currentPhase,
+    activePhases,
+    nextPhase,
     currentBlocker,
+    currentBlockerText,
+    blockers,
     currentMilestone: currentMilestone ? { id: currentMilestone.milestoneId, name: currentMilestone.name } : null,
     nextMilestone: nextMilestone ? { id: nextMilestone.milestoneId, name: nextMilestone.name, blockingReason: nextMilestone.blockingReason } : null,
     health,
+    requiredMilestonesCompleted: completedMilestones.length,
+    requiredMilestonesTotal: requiredMilestones.length,
+    workflowComplete,
+    calculatedAt: new Date().toISOString(),
   };
 }
 
@@ -435,10 +608,11 @@ Deno.serve(async (req) => {
 
     // ── MODE: READ — return persisted state ──
     if (mode === 'read') {
-      const [tasks, buckets, milestones] = await Promise.all([
+      const [tasks, buckets, milestones, project] = await Promise.all([
         base44.asServiceRole.entities.Task.filter({ project_id }),
         base44.asServiceRole.entities.ProjectKanbanBucket.filter({ project_id }),
         base44.asServiceRole.entities.ProjectMilestone.filter({ project_id }),
+        base44.asServiceRole.entities.Project.get(project_id),
       ]);
 
       const phaseOrder = [...buckets].sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -469,11 +643,13 @@ Deno.serve(async (req) => {
           isRequired: b.is_required !== false, isActive: b.is_active !== false,
           phaseStatus: b.phase_status || PS.NOT_STARTED,
           waitingReason: b.waiting_reason || null,
-          currentBlocker: b.current_blocker || null,
+          currentBlocker: b.current_blocker ? (typeof b.current_blocker === 'string' ? { type: 'UNKNOWN', label: b.current_blocker } : b.current_blocker) : null,
+          currentBlockerText: b.current_blocker ? (typeof b.current_blocker === 'string' ? b.current_blocker : b.current_blocker?.label) : null,
+          blockers: [],
           totalTaskCount: pt.length, requiredTaskCount: req.length,
           completedTaskCount: pt.filter(t => t.operational_state === S.COMPLETED).length,
           readyTaskCount: pt.filter(t => t.operational_state === S.READY).length,
-          inProgressTaskCount: pt.filter(t => t.operational_state === S.IN_PROGRESS).length,
+          inProgressTaskCount: pt.filter(t => t.operational_state === S.IN_PROGRESS || t.operational_state === S.REVIEW_REQUIRED).length,
           blockedTaskCount: pt.filter(t => [S.BLOCKED, S.WAITING_ON_PARTS, S.WAITING_ON_VENDOR, S.WAITING_ON_CUSTOMER].includes(t.operational_state)).length,
           waitingOnPartsCount: pt.filter(t => t.operational_state === S.WAITING_ON_PARTS).length,
           waitingOnVendorCount: pt.filter(t => t.operational_state === S.WAITING_ON_VENDOR).length,
@@ -487,23 +663,30 @@ Deno.serve(async (req) => {
 
       const milestoneResults = milestones.sort((a, b) => (a.order || 0) - (b.order || 0)).map(m => ({
         milestoneId: m.id, name: m.name, order: m.order || 0,
-        status: m.status || 'pending', blockingReason: m.blocking_reason || null,
+        status: m.status || MS.NOT_STARTED, blockingReason: m.blocking_reason || null,
         color: m.color, icon: m.icon, completedAt: m.completed_at || null,
+        reopenedAt: m.reopened_at || null,
       }));
 
-      // Derive project health from persisted data
-      const project = await base44.asServiceRole.entities.Project.get(project_id);
       const hasState = tasks.some(t => t.operational_state);
       return Response.json({
-        summary: { projectId: project_id, totalTasks: tasks.length, totalPhases: buckets.length, stateDistribution, warnings: [], resolvedAt: project?.workflow_resolved_at || null },
+        summary: { projectId: project_id, totalTasks: tasks.length, totalPhases: buckets.length, totalMilestones: milestones.length, stateDistribution, warnings: [], resolvedAt: project?.workflow_resolved_at || null },
         tasks: taskResults, phases: phaseSummaries, milestones: milestoneResults,
         projectHealth: {
+          projectId: project_id,
           currentPhase: project?.current_phase_id ? { id: project.current_phase_id, name: project.current_phase_name } : null,
+          activePhases: [],
           nextPhase: project?.next_phase_id ? { id: project.next_phase_id, name: project.next_phase_name } : null,
-          currentBlocker: project?.current_blocker || null,
+          currentBlocker: project?.current_blocker ? { type: 'UNKNOWN', label: project.current_blocker } : null,
+          currentBlockerText: project?.current_blocker || null,
+          blockers: [],
           currentMilestone: project?.current_milestone_id ? { id: project.current_milestone_id, name: project.current_milestone_name } : null,
           nextMilestone: project?.next_milestone_id ? { id: project.next_milestone_id, name: project.next_milestone_name } : null,
           health: project?.workflow_health || null,
+          requiredMilestonesCompleted: milestoneResults.filter(m => m.status === MS.COMPLETED).length,
+          requiredMilestonesTotal: milestoneResults.filter(m => m.status !== MS.SKIPPED).length,
+          workflowComplete: false,
+          calculatedAt: project?.workflow_resolved_at || null,
         },
         warnings: !hasState ? [{ type: 'STALE_DATA', message: 'Workflow has not been calculated yet. Click Recalculate.' }] : [],
         needsRecalculation: !hasState,
@@ -587,7 +770,7 @@ Deno.serve(async (req) => {
     // ── Phase State Engine ──
     const phaseRollups = phaseOrder.map(b => {
       const metrics = phaseMetrics(b, tasks, statusMap);
-      const phaseState = resolvePhaseState(b, metrics, phaseOrder, statusMap);
+      const phaseState = resolvePhaseState(b, metrics, phaseOrder);
       b._phaseState = phaseState;
       return {
         bucketId: b.id, bucketName: b.name, order: b.order, color: b.color,
@@ -596,6 +779,8 @@ Deno.serve(async (req) => {
         phaseStatus: phaseState.status,
         waitingReason: phaseState.waitingReason,
         currentBlocker: phaseState.currentBlocker,
+        currentBlockerText: phaseState.currentBlocker?.label || null,
+        blockers: phaseState.blockers,
         totalTaskCount: metrics.totalTaskCount, requiredTaskCount: metrics.requiredTaskCount,
         completedTaskCount: metrics.completedTaskCount, cancelledTaskCount: metrics.cancelledTaskCount,
         readyTaskCount: metrics.readyTaskCount, inProgressTaskCount: metrics.inProgressTaskCount,
@@ -608,19 +793,22 @@ Deno.serve(async (req) => {
     });
 
     // ── Milestone Resolution ──
-    const milestoneResults = resolveMilestones(milestones, bucketMap, taskMap, statusMap);
+    const { results: milestoneResults, warnings: msWarnings } = resolveMilestones(milestones, bucketMap, taskMap, statusMap, project_id);
+    warnings.push(...msWarnings);
 
     // ── Project Health ──
-    const projectHealthData = deriveProjectHealth(phaseRollups, milestoneResults, tasks, statusMap);
+    const projectHealthData = deriveProjectHealth(phaseRollups, milestoneResults, tasks, statusMap, project_id);
 
     // ── Persist ──
     let tasksChanged = 0;
     let tasksUnchanged = 0;
+    let phasesChanged = 0;
+    let milestonesChanged = 0;
     const phaseTransitions = [];
     if (!dry_run) {
       const updates = [];
 
-      // Task updates
+      // Task updates — only write changed records
       for (const tr of taskResults) {
         const t = taskMap.get(tr.taskId);
         const oldState = t.operational_state || null;
@@ -634,7 +822,7 @@ Deno.serve(async (req) => {
         } else { tasksUnchanged++; }
       }
 
-      // Phase updates
+      // Phase updates — only write changed records
       for (const pr of phaseRollups) {
         const b = bucketMap.get(pr.bucketId);
         if (!b) continue;
@@ -648,22 +836,31 @@ Deno.serve(async (req) => {
           changed = true;
           phaseTransitions.push({ phaseId: pr.bucketId, phaseName: pr.bucketName, from: oldStatus, to: pr.phaseStatus });
         }
-        if ((b.waiting_reason || null) !== pr.waitingReason) { phaseUpdate.waiting_reason = pr.waitingReason || ''; changed = true; }
-        if ((b.current_blocker || null) !== pr.currentBlocker) { phaseUpdate.current_blocker = pr.currentBlocker || ''; changed = true; }
-        if (changed) updates.push(base44.asServiceRole.entities.ProjectKanbanBucket.update(pr.bucketId, phaseUpdate));
+        const oldWaiting = b.waiting_reason || null;
+        const newWaiting = pr.waitingReason || null;
+        if (oldWaiting !== newWaiting) { phaseUpdate.waiting_reason = newWaiting || ''; changed = true; }
+        // Store blocker as text for entity persistence (structured form only in API response)
+        const oldBlocker = b.current_blocker || null;
+        const newBlockerText = pr.currentBlocker?.label || null;
+        if (oldBlocker !== newBlockerText) { phaseUpdate.current_blocker = newBlockerText || ''; changed = true; }
+        if (changed) { phasesChanged++; updates.push(base44.asServiceRole.entities.ProjectKanbanBucket.update(pr.bucketId, phaseUpdate)); }
       }
 
-      // Milestone updates
+      // Milestone updates — only write changed records
       for (const mr of milestoneResults) {
         const ms = milestones.find(m => m.id === mr.milestoneId);
         if (!ms) continue;
         const msUpdate = {};
         let changed = false;
-        if (ms.status !== mr.status) {
+        const oldStatus = ms.status || MS.NOT_STARTED;
+        if (oldStatus !== mr.status) {
           msUpdate.status = mr.status;
-          if (mr.status === 'completed' && !ms.completed_at) { msUpdate.completed_at = now; msUpdate.completion_source = 'automatic'; }
+          if (mr.status === MS.COMPLETED && !ms.completed_at) { msUpdate.completed_at = now; msUpdate.completion_source = 'automatic'; }
+          if (mr.status === MS.REOPENED) { msUpdate.reopened_at = now; msUpdate.completed_at = ''; }
           changed = true;
+          milestonesChanged++;
         }
+        msUpdate.calculated_at = now;
         if ((ms.blocking_reason || null) !== (mr.blockingReason || null)) { msUpdate.blocking_reason = mr.blockingReason || ''; changed = true; }
         if (changed) updates.push(base44.asServiceRole.entities.ProjectMilestone.update(mr.milestoneId, msUpdate));
       }
@@ -675,7 +872,7 @@ Deno.serve(async (req) => {
         current_phase_name: ph.currentPhase?.name || '',
         next_phase_id: ph.nextPhase?.id || '',
         next_phase_name: ph.nextPhase?.name || '',
-        current_blocker: ph.currentBlocker || '',
+        current_blocker: ph.currentBlockerText || '',
         current_milestone_id: ph.currentMilestone?.id || '',
         current_milestone_name: ph.currentMilestone?.name || '',
         next_milestone_id: ph.nextMilestone?.id || '',
@@ -685,12 +882,13 @@ Deno.serve(async (req) => {
       };
       updates.push(base44.asServiceRole.entities.Project.update(project_id, projectUpdate));
 
-      // Phase transition logs
+      // Phase transition logs — only genuine state changes
       for (const pt of phaseTransitions) {
         updates.push(base44.asServiceRole.entities.PhaseTransitionLog.create({
           project_id, phase_id: pt.phaseId, phase_name: pt.phaseName,
           from_status: pt.from, to_status: pt.to,
           reason: 'Automatic resolution', triggered_by: 'automatic',
+          trigger_entity_type: 'resolver', resolver_version: RESOLVER_VERSION,
         }));
       }
 
@@ -712,17 +910,18 @@ Deno.serve(async (req) => {
       summary: {
         projectId: project_id, totalTasks: tasks.length, totalPhases: buckets.length,
         totalMilestones: milestones.length,
-        tasksChanged, tasksUnchanged, stateDistribution, warnings,
+        tasksChanged, tasksUnchanged, phasesChanged, milestonesChanged,
+        stateDistribution, warnings,
         resolvedAt: now, resolveTimeMs: resolveTime,
-        entityReads: 9, entityWrites: tasksChanged + phaseTransitions.length,
+        entityReads: 9, entityWrites: tasksChanged + phasesChanged + milestonesChanged + phaseTransitions.length + 1,
         depsCleaned: tasks.filter(t => t._cleanedDeps !== undefined).length,
         phaseTransitions: phaseTransitions.length,
       },
       tasks: taskResults, phases: phaseRollups, milestones: milestoneResults,
       projectHealth: projectHealthData,
       warnings, errors: [],
-      cycles: cycles.map(c => c.map(id => taskMap.get(id)?.name || id)),
-      invalidDependencies: invalidDeps, phaseTransitions,
+      transitionsCreated: phaseTransitions,
+      calculatedAt: now,
     });
   } catch (error) {
     console.error('resolveProjectWorkflow error:', error.message);
