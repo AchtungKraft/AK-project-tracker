@@ -51,6 +51,11 @@ Deno.serve(async (req) => {
     const result = await base44.asServiceRole.functions.invoke('resolveProjectWorkflow', {
       project_id: projectId,
       mode: 'resolve',
+      trigger_context: {
+        entity_type: 'task',
+        entity_id: event.entity_id || '',
+        event_type: event.type || 'update',
+      },
     });
 
     return Response.json({

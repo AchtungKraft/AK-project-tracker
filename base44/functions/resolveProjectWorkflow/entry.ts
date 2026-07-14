@@ -456,11 +456,13 @@ function resolveMilestones(milestones, phaseMap, taskMap, statusMap, projectId) 
       for (const msDepId of ms.depends_on_milestones) {
         hasAnyDeps = true;
         if (!milestoneMap.has(msDepId)) { configErrors.push('Missing milestone: ' + msDepId); allMet = false; continue; }
+        const depMs = milestoneMap.get(msDepId);
+        if (depMs.project_id !== projectId) { configErrors.push('Cross-project milestone: ' + msDepId); allMet = false; continue; }
         const depResult = results.find(r => r.milestoneId === msDepId);
         if (depResult?.status === MS.COMPLETED) { someProgress = true; }
         else {
           allMet = false;
-          blockingReason = blockingReason || ('Waiting on milestone: ' + (milestoneMap.get(msDepId)?.name || msDepId));
+          blockingReason = blockingReason || ('Waiting on milestone: ' + (depMs.name || msDepId));
         }
       }
     }
@@ -474,7 +476,7 @@ function resolveMilestones(milestones, phaseMap, taskMap, statusMap, projectId) 
     let status;
     let reopenedAt = null;
 
-    if (configErrors.length > 0 && !hasAnyDeps) {
+    if (configErrors.length > 0) {
       status = MS.CONFIGURATION_ERROR;
     } else if (!hasAnyDeps) {
       // No deps = stays at current status (manual only) or not_started
@@ -604,6 +606,7 @@ Deno.serve(async (req) => {
     const project_id = body.project_id;
     const dry_run = body.dry_run || false;
     const mode = body.mode || 'resolve';
+    const triggerContext = body.trigger_context || null; // { entity_type, entity_id, event_type }
     if (!project_id) return Response.json({ error: 'project_id required' }, { status: 400 });
 
     // ── MODE: READ — return persisted state ──
@@ -804,6 +807,7 @@ Deno.serve(async (req) => {
     let tasksUnchanged = 0;
     let phasesChanged = 0;
     let milestonesChanged = 0;
+    let projectChanged = false;
     const phaseTransitions = [];
     if (!dry_run) {
       const updates = [];
@@ -860,35 +864,53 @@ Deno.serve(async (req) => {
           changed = true;
           milestonesChanged++;
         }
-        msUpdate.calculated_at = now;
         if ((ms.blocking_reason || null) !== (mr.blockingReason || null)) { msUpdate.blocking_reason = mr.blockingReason || ''; changed = true; }
-        if (changed) updates.push(base44.asServiceRole.entities.ProjectMilestone.update(mr.milestoneId, msUpdate));
+        if (changed) {
+          msUpdate.calculated_at = now;
+          updates.push(base44.asServiceRole.entities.ProjectMilestone.update(mr.milestoneId, msUpdate));
+        }
       }
 
-      // Project health update
+      // Project health update — only write if values actually changed
       const ph = projectHealthData;
-      const projectUpdate = {
-        current_phase_id: ph.currentPhase?.id || '',
-        current_phase_name: ph.currentPhase?.name || '',
-        next_phase_id: ph.nextPhase?.id || '',
-        next_phase_name: ph.nextPhase?.name || '',
-        current_blocker: ph.currentBlockerText || '',
-        current_milestone_id: ph.currentMilestone?.id || '',
-        current_milestone_name: ph.currentMilestone?.name || '',
-        next_milestone_id: ph.nextMilestone?.id || '',
-        next_milestone_name: ph.nextMilestone?.name || '',
-        workflow_health: ph.health,
-        workflow_resolved_at: now,
-      };
-      updates.push(base44.asServiceRole.entities.Project.update(project_id, projectUpdate));
+      const project = await base44.asServiceRole.entities.Project.get(project_id);
+      const projectUpdate = {};
+      const projectFields = [
+        ['current_phase_id', ph.currentPhase?.id || ''],
+        ['current_phase_name', ph.currentPhase?.name || ''],
+        ['next_phase_id', ph.nextPhase?.id || ''],
+        ['next_phase_name', ph.nextPhase?.name || ''],
+        ['current_blocker', ph.currentBlockerText || ''],
+        ['current_milestone_id', ph.currentMilestone?.id || ''],
+        ['current_milestone_name', ph.currentMilestone?.name || ''],
+        ['next_milestone_id', ph.nextMilestone?.id || ''],
+        ['next_milestone_name', ph.nextMilestone?.name || ''],
+      ];
+      for (const [key, newVal] of projectFields) {
+        if ((project[key] || '') !== newVal) { projectUpdate[key] = newVal; projectChanged = true; }
+      }
+      // Compare workflow_health object
+      const oldHealth = project.workflow_health || {};
+      const healthKeys = ['tasks_ready', 'tasks_blocked', 'tasks_waiting', 'tasks_in_progress', 'tasks_completed', 'hours_remaining', 'hours_estimated', 'hours_actual'];
+      for (const hk of healthKeys) {
+        if ((oldHealth[hk] || 0) !== (ph.health[hk] || 0)) { projectChanged = true; break; }
+      }
+      if (projectChanged) {
+        projectUpdate.workflow_health = ph.health;
+        projectUpdate.workflow_resolved_at = now;
+        updates.push(base44.asServiceRole.entities.Project.update(project_id, projectUpdate));
+      }
 
       // Phase transition logs — only genuine state changes
       for (const pt of phaseTransitions) {
         updates.push(base44.asServiceRole.entities.PhaseTransitionLog.create({
           project_id, phase_id: pt.phaseId, phase_name: pt.phaseName,
           from_status: pt.from, to_status: pt.to,
-          reason: 'Automatic resolution', triggered_by: 'automatic',
-          trigger_entity_type: 'resolver', resolver_version: RESOLVER_VERSION,
+          reason: triggerContext ? ('Triggered by ' + triggerContext.entity_type + ' ' + triggerContext.event_type) : 'Automatic resolution',
+          triggered_by: 'automatic',
+          trigger_entity_type: triggerContext?.entity_type || 'resolver',
+          trigger_entity_id: triggerContext?.entity_id || '',
+          resolver_version: RESOLVER_VERSION,
         }));
       }
 
@@ -913,7 +935,7 @@ Deno.serve(async (req) => {
         tasksChanged, tasksUnchanged, phasesChanged, milestonesChanged,
         stateDistribution, warnings,
         resolvedAt: now, resolveTimeMs: resolveTime,
-        entityReads: 9, entityWrites: tasksChanged + phasesChanged + milestonesChanged + phaseTransitions.length + 1,
+        entityReads: 10, entityWrites: tasksChanged + phasesChanged + milestonesChanged + phaseTransitions.length + (projectChanged ? 1 : 0),
         depsCleaned: tasks.filter(t => t._cleanedDeps !== undefined).length,
         phaseTransitions: phaseTransitions.length,
       },
