@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Flame, Loader2, FolderKanban, RefreshCw, LayoutGrid, Calendar, X, User, List, ClipboardCheck, PanelLeftOpen, CalendarClock } from "lucide-react";
+import { Flame, Loader2, FolderKanban, RefreshCw, LayoutGrid, Calendar, X, User, List, ClipboardCheck, PanelLeftOpen, CalendarClock, Layers } from "lucide-react";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import MobileFilterTriggerBar, { useActiveFilterCount } from "@/components/mobile/MobileFilterTriggerBar";
@@ -33,6 +33,7 @@ import TaskCompletionModal from "../components/tasks/TaskCompletionModal";
 import PriorityListView from "../components/priorities/PriorityListView";
 import PriorityExecutionView from "../components/priorities/PriorityExecutionView";
 import WeeklyWorkloadView from "../components/priorities/WeeklyWorkloadView";
+import WorkloadOperationalView from "../components/workload/WorkloadOperationalView";
 import { useSavedProjectViews } from "@/components/common/useSavedProjectViews";
 import SavedViewsSelector from "@/components/common/SavedViewsSelector";
 import { useFilterState, PRIORITY_DEFAULTS } from "@/components/common/useFilterState";
@@ -650,6 +651,13 @@ export default function PriorityDashboard() {
                   <CalendarClock className="w-4 h-4" />
                   <span className="hidden sm:inline">Workload</span>
                 </TabsTrigger>
+                <TabsTrigger 
+                  value="ops-workload" 
+                  className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
+                >
+                  <Layers className="w-4 h-4" />
+                  <span className="hidden sm:inline">Ops</span>
+                </TabsTrigger>
               </TabsList>
 
               {/* Grouping dropdowns - only show on card view */}
@@ -855,6 +863,25 @@ export default function PriorityDashboard() {
             {/* Weekly Workload View Tab Content */}
             <TabsContent value="workload-view" className="mt-0">
               <WeeklyWorkloadView
+                tasks={activePriorityTasks}
+                allTasks={allTasksData}
+                projects={projects}
+                teamMembers={teamMembers}
+                categories={categories}
+                statuses={statuses}
+                commentCountByTaskId={commentCountByTaskId}
+                partsProgressByTaskId={partsProgressByTaskId}
+                onToggleComplete={handleToggleComplete}
+                onTaskClick={setSelectedTask}
+                onUpdateDueDate={handleUpdateDueDate}
+                onTogglePriority={wrappedTogglePriority}
+                updateTaskMutation={updateTaskMutation}
+              />
+            </TabsContent>
+
+            {/* Operational Workload View Tab Content */}
+            <TabsContent value="ops-workload" className="mt-0">
+              <WorkloadOperationalView
                 tasks={activePriorityTasks}
                 allTasks={allTasksData}
                 projects={projects}
