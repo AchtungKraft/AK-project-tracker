@@ -1,22 +1,32 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 
-export function useProjectWorkflow(projectId, { enabled = true, dryRun = false } = {}) {
+/**
+ * useProjectWorkflow — reads persisted workflow state.
+ * Does NOT trigger recalculation on mount.
+ * Use recalculate() for explicit repair/refresh.
+ */
+export function useProjectWorkflow(projectId, { enabled = true } = {}) {
   const queryClient = useQueryClient();
 
+  // READ mode — returns persisted operational_state from task records
   const query = useQuery({
     queryKey: ["projectWorkflow", projectId],
-    queryFn: () => base44.functions.invoke("resolveProjectWorkflow", { project_id: projectId, dry_run: dryRun }),
+    queryFn: () => base44.functions.invoke("resolveProjectWorkflow", { project_id: projectId, mode: "read" }),
     enabled: !!projectId && enabled,
     staleTime: 30000,
+    gcTime: 120000,
+    refetchOnWindowFocus: false,
     select: (res) => res.data,
   });
 
-  const recalculate = useMutation({
-    mutationFn: () => base44.functions.invoke("resolveProjectWorkflow", { project_id: projectId, dry_run: false }),
+  // RESOLVE mode — explicit recalculation (repair tool)
+  const recalcMutation = useMutation({
+    mutationFn: () => base44.functions.invoke("resolveProjectWorkflow", { project_id: projectId, mode: "resolve" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projectWorkflow", projectId] });
       queryClient.invalidateQueries({ queryKey: ["projectTasks", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["projectBuckets", projectId] });
     },
   });
 
@@ -26,10 +36,12 @@ export function useProjectWorkflow(projectId, { enabled = true, dryRun = false }
     phases: query.data?.phases || [],
     warnings: query.data?.warnings || [],
     summary: query.data?.summary || null,
+    needsRecalculation: query.data?.needsRecalculation || false,
     isLoading: query.isLoading,
     error: query.error,
-    recalculate: recalculate.mutate,
-    isRecalculating: recalculate.isPending,
+    recalculate: recalcMutation.mutate,
+    isRecalculating: recalcMutation.isPending,
+    recalcError: recalcMutation.error,
   };
 }
 

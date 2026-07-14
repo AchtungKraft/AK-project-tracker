@@ -53,7 +53,7 @@ export default function TaskDependencyEditor({ taskId, projectId, dependencies =
                 <ArrowRight className="w-3 h-3 text-gray-500 shrink-0" />
                 <span className="text-sm text-white flex-1 truncate">{t.name}</span>
                 <Badge variant="outline" className="text-[9px] border-gray-700 text-gray-400">
-                  {t.status_id === '6913f57422230d8c7ee2ef54' ? '✓ Done' : 'Pending'}
+                  {t.operational_state === 'COMPLETED' || t.completed_date ? '✓ Done' : 'Pending'}
                 </Badge>
                 <button onClick={() => onChange(dependencies.filter(id => id !== t.id))} className="text-gray-500 hover:text-red-400 p-0.5">
                   <X className="w-3 h-3" />

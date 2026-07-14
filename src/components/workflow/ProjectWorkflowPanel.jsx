@@ -20,7 +20,7 @@ function StatPill({ icon: Icon, label, value, color }) {
 }
 
 export default function ProjectWorkflowPanel({ projectId }) {
-  const { phases, summary, warnings, isLoading, recalculate, isRecalculating } = useProjectWorkflow(projectId);
+  const { phases, summary, warnings, isLoading, recalculate, isRecalculating, needsRecalculation, recalcError } = useProjectWorkflow(projectId);
   const [expandedPhases, setExpandedPhases] = useState(new Set());
 
   const togglePhase = (id) => {
@@ -41,6 +41,8 @@ export default function ProjectWorkflowPanel({ projectId }) {
     );
   }
 
+  const needsCalc = needsRecalculation || (!summary?.resolvedAt && phases.length === 0 && !isLoading);
+
   return (
     <TooltipProvider>
       <div className="space-y-3">
@@ -55,9 +57,25 @@ export default function ProjectWorkflowPanel({ projectId }) {
             className="h-7 text-xs border-gray-700 text-gray-400 gap-1"
           >
             <RefreshCw className={cn("w-3 h-3", isRecalculating && "animate-spin")} />
-            Recalculate
+            {needsCalc ? "Calculate" : "Recalculate"}
           </Button>
         </div>
+
+        {/* Needs calculation banner */}
+        {needsCalc && (
+          <div className="bg-amber-950/30 border border-amber-800/40 rounded-lg p-2 flex items-start gap-2">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
+            <span className="text-xs text-amber-300">Workflow has not been calculated for this project. Click Calculate to initialize.</span>
+          </div>
+        )}
+
+        {/* Recalculation error */}
+        {recalcError && (
+          <div className="bg-red-950/30 border border-red-800/40 rounded-lg p-2 flex items-start gap-2">
+            <AlertTriangle className="w-3.5 h-3.5 text-red-400 mt-0.5 shrink-0" />
+            <span className="text-xs text-red-300">Recalculation failed: {recalcError.message || 'Unknown error'}</span>
+          </div>
+        )}
 
         {/* Warnings */}
         {warnings.length > 0 && (

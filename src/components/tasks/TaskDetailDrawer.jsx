@@ -229,13 +229,17 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
 
   const updateMutation = useMutation({
     mutationFn: (data) => base44.entities.Task.update(task.id, data),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       // Use centralized cache keys
       TASK_CACHE_KEYS.forEach(key => {
         queryClient.invalidateQueries({ queryKey: key });
       });
       queryClient.invalidateQueries({ queryKey: ['myTasks'] });
       queryClient.invalidateQueries({ queryKey: ['allTasks'] });
+      // Invalidate workflow cache when dependencies or status change
+      if (variables.dependencies !== undefined || variables.status_id !== undefined) {
+        queryClient.invalidateQueries({ queryKey: ['projectWorkflow', task?.project_id] });
+      }
       setEditing(false);
       toast.success('Task updated successfully');
     },
@@ -372,14 +376,20 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           {!editing && (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
               {task?.operational_state && (
-                <OperationalStateBadge
-                  state={task.operational_state}
-                  blockingReasons={task.blocking_reasons || []}
-                  isOverride={!!task.manual_override}
-                />
+                <span className="flex items-center gap-1">
+                  <span className="text-[9px] text-gray-600 uppercase tracking-wide">Ops:</span>
+                  <OperationalStateBadge
+                    state={task.operational_state}
+                    blockingReasons={task.blocking_reasons || []}
+                    isOverride={!!task.manual_override}
+                  />
+                </span>
               )}
               {status && (
-                <Badge style={{ backgroundColor: status.color }} className="text-white text-[10px] px-1.5 py-0 h-4 leading-none">{status.label}</Badge>
+                <span className="flex items-center gap-1">
+                  <span className="text-[9px] text-gray-600 uppercase tracking-wide">Status:</span>
+                  <Badge style={{ backgroundColor: status.color }} className="text-white text-[10px] px-1.5 py-0 h-4 leading-none">{status.label}</Badge>
+                </span>
               )}
               {assignedMember && (
                 <span className="text-xs text-gray-500">{assignedMember.full_name}</span>
