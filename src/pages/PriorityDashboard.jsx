@@ -32,7 +32,7 @@ import UninstalledPartsWarning from "../components/tasks/UninstalledPartsWarning
 import TaskCompletionModal from "../components/tasks/TaskCompletionModal";
 import PriorityListView from "../components/priorities/PriorityListView";
 import PriorityExecutionView from "../components/priorities/PriorityExecutionView";
-import WorkloadOperationalView from "../components/workload/WorkloadOperationalView";
+import WeeklyWorkloadView from "../components/priorities/WeeklyWorkloadView";
 import { useSavedProjectViews } from "@/components/common/useSavedProjectViews";
 import SavedViewsSelector from "@/components/common/SavedViewsSelector";
 import { useFilterState, PRIORITY_DEFAULTS } from "@/components/common/useFilterState";
@@ -852,9 +852,9 @@ export default function PriorityDashboard() {
               />
             </TabsContent>
 
-            {/* Operational Workload View Tab Content */}
+            {/* Weekly Workload View Tab Content */}
             <TabsContent value="workload-view" className="mt-0">
-              <WorkloadOperationalView
+              <WeeklyWorkloadView
                 tasks={activePriorityTasks}
                 allTasks={allTasksData}
                 projects={projects}

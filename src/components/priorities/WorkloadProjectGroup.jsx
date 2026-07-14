@@ -24,6 +24,7 @@ import {
 import { format, startOfDay, isBefore } from "date-fns";
 import { cn } from "@/lib/utils";
 import { buildProjectDetailUrl, SOURCES } from "@/lib/workspaceConfig";
+import { OPERATIONAL_STATE_CONFIG } from "@/components/workflow/useProjectWorkflow";
 
 const INITIAL_VISIBLE = 8;
 
@@ -158,6 +159,19 @@ function WorkloadTaskRow({
           Blocked
         </Badge>
       )}
+
+      {/* Operational state — secondary workflow context */}
+      {(() => {
+        const opState = task.operational_state;
+        if (!opState || opState === "COMPLETED" || opState === "NOT_STARTED" || opState === "READY") return null;
+        const cfg = OPERATIONAL_STATE_CONFIG[opState];
+        if (!cfg) return null;
+        return (
+          <Badge className={cn("text-[9px] px-1 py-0 h-4 border-0 shrink-0 hidden sm:inline-flex", cfg.bgClass, cfg.textClass)}>
+            {cfg.label}
+          </Badge>
+        );
+      })()}
 
       {/* Inline controls — visible on hover */}
       <div className="flex items-center gap-0 shrink-0 opacity-0 group-hover/row:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
