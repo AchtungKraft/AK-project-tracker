@@ -35,6 +35,7 @@ import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { cn } from "@/lib/utils";
 import { computePartsProgressByTaskId } from "@/utils/taskPartsProgress";
 import { resolveProjectOverviewView, persistProjectOverviewView } from "@/lib/workspaceConfig";
+import ProjectWorkflowPanel from "@/components/workflow/ProjectWorkflowPanel";
 
 export default function ProjectOverview({ project, projectId, sharedData = {} }) {
   const queryClient = useQueryClient();
@@ -394,6 +395,13 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
             </CollapsibleContent>
           </Card>
         </Collapsible>
+
+        {/* Workflow Status Panel */}
+        <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
+          <CardContent className="p-4">
+            <ProjectWorkflowPanel projectId={projectId} />
+          </CardContent>
+        </Card>
 
         {/* View Switcher - persist to localStorage per project */}
         <div className={cn("flex items-center justify-between", isMobile && "px-1")}>

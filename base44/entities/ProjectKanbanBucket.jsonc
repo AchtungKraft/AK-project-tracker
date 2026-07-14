@@ -4,7 +4,7 @@
   "properties": {
     "name": {
       "type": "string",
-      "description": "Bucket name (e.g., Week 1, High Priority)"
+      "description": "Phase name (e.g., Disassembly, Engineering, Fabrication)"
     },
     "project_id": {
       "type": "string",
@@ -13,16 +13,47 @@
     "order": {
       "type": "number",
       "default": 0,
-      "description": "Display order on the Kanban board"
+      "description": "Phase order \u2014 determines sequential progression"
     },
     "color": {
       "type": "string",
       "default": "#3B82F6",
-      "description": "Hex color for bucket header"
+      "description": "Hex color for phase header"
     },
     "description": {
       "type": "string",
-      "description": "Optional description for the bucket"
+      "description": "Optional description for the phase"
+    },
+    "progression_mode": {
+      "type": "string",
+      "enum": [
+        "sequential",
+        "dependency_driven",
+        "manual"
+      ],
+      "default": "dependency_driven",
+      "description": "How tasks become Ready. sequential = previous phase must complete. dependency_driven = follows task dependencies. manual = must be activated."
+    },
+    "is_required": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this phase must complete for the project to finish"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this phase is currently active (for manual progression)"
+    },
+    "phase_status": {
+      "type": "string",
+      "enum": [
+        "not_configured",
+        "not_started",
+        "in_progress",
+        "completed"
+      ],
+      "default": "not_started",
+      "description": "Calculated phase status from resolveProjectWorkflow"
     }
   },
   "required": [

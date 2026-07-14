@@ -26,6 +26,9 @@ import { TASK_CACHE_KEYS } from "./useTaskInteraction";
 import { useTaskInteractionContext } from "./TaskInteractionProvider";
 import TaskCompletionModal from "./TaskCompletionModal";
 import TimeEstimateInput, { formatHours } from "./TimeEstimateInput";
+import OperationalStateBadge from "@/components/workflow/OperationalStateBadge";
+import TaskDependencyEditor from "@/components/workflow/TaskDependencyEditor";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -288,6 +291,15 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
   }, [userTeamMember, formData]);
 
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+  const [depFormData, setDepFormData] = useState(null);
+
+  // Fetch all project tasks for dependency editor
+  const { data: allProjectTasks = [] } = useQuery({
+    queryKey: ['projectTasks', task?.project_id],
+    queryFn: () => base44.entities.Task.filter({ project_id: task?.project_id }),
+    enabled: !!task?.project_id,
+    staleTime: 30000,
+  });
 
   const project = projects.find(p => p.id === task?.project_id);
   const category = categories.find(c => c.id === task?.category_id);
@@ -331,6 +343,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
   });
 
   return (
+    <TooltipProvider>
     <>
     <Sheet 
       open={true} 
@@ -358,6 +371,13 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           {/* Muted metadata row — top line */}
           {!editing && (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
+              {task?.operational_state && (
+                <OperationalStateBadge
+                  state={task.operational_state}
+                  blockingReasons={task.blocking_reasons || []}
+                  isOverride={!!task.manual_override}
+                />
+              )}
               {status && (
                 <Badge style={{ backgroundColor: status.color }} className="text-white text-[10px] px-1.5 py-0 h-4 leading-none">{status.label}</Badge>
               )}
@@ -398,6 +418,15 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                   {v > 0 ? '+' : ''}{formatHours(Math.abs(v))} {v > 0 ? 'over' : 'under'}
                 </span>;
               })()}
+            </div>
+          )}
+
+          {/* Blocking reasons — show specific reasons if blocked */}
+          {!editing && task?.blocking_reasons?.length > 0 && (
+            <div className="mt-2 bg-red-950/20 border border-red-800/30 rounded-md px-3 py-2 space-y-1">
+              {task.blocking_reasons.map((r, i) => (
+                <p key={i} className="text-xs text-red-300">• {r.label}</p>
+              ))}
             </div>
           )}
 
@@ -557,6 +586,24 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
 
           <hr className="border-gray-700/50 mb-4" />
 
+          {/* ── DEPENDENCIES ── */}
+          <section className="mb-3">
+            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">Dependencies</h3>
+            <TaskDependencyEditor
+              taskId={task?.id}
+              projectId={task?.project_id}
+              dependencies={depFormData !== null ? depFormData : (task?.dependencies || [])}
+              allTasks={allProjectTasks}
+              onChange={(newDeps) => {
+                setDepFormData(newDeps);
+                updateMutation.mutate({ dependencies: newDeps });
+                setDepFormData(null);
+              }}
+            />
+          </section>
+
+          <hr className="border-gray-700/50 mb-4" />
+
           {/* ── PARTS ── */}
           <section className="mb-3">
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">Parts</h3>
@@ -674,5 +721,6 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
       </AlertDialogContent>
     </AlertDialog>
     </>
+    </TooltipProvider>
   );
 }

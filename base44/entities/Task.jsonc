@@ -24,11 +24,11 @@
     },
     "status_id": {
       "type": "string",
-      "description": "Reference to StatusList"
+      "description": "Reference to StatusList \u2014 manual execution status set by user"
     },
     "kanban_bucket_id": {
       "type": "string",
-      "description": "Reference to ProjectKanbanBucket for manual Kanban organization"
+      "description": "Reference to ProjectKanbanBucket (phase assignment)"
     },
     "is_priority": {
       "type": "boolean",
@@ -77,11 +77,112 @@
       "items": {
         "type": "string"
       },
-      "description": "Array of Task IDs this task depends on"
+      "description": "Array of predecessor Task IDs (finish-to-start). This task cannot start until all listed predecessors are complete."
     },
     "external_hours_ref": {
       "type": "string",
       "description": "Placeholder for imported QuickBooks line"
+    },
+    "operational_state": {
+      "type": "string",
+      "enum": [
+        "NOT_STARTED",
+        "READY",
+        "IN_PROGRESS",
+        "WAITING_ON_PARTS",
+        "WAITING_ON_VENDOR",
+        "WAITING_ON_CUSTOMER",
+        "BLOCKED",
+        "REVIEW_REQUIRED",
+        "COMPLETED",
+        "CANCELLED"
+      ],
+      "description": "Calculated operational state from resolveProjectWorkflow. Do not set manually."
+    },
+    "blocking_reasons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "DEPENDENCY",
+              "PART",
+              "PURCHASE_ORDER",
+              "VENDOR",
+              "CUSTOMER_APPROVAL",
+              "INTERNAL_REVIEW",
+              "PHASE",
+              "ASSIGNMENT",
+              "MANUAL_HOLD",
+              "DATA_CONFIGURATION"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "relatedTaskId": {
+            "type": "string"
+          },
+          "relatedEntityId": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Specific blocking reasons from the resolver"
+    },
+    "manual_override": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "HOLD",
+            "FORCE_READY",
+            "FORCE_BLOCKED"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "set_by": {
+          "type": "string"
+        },
+        "set_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "description": "Manual override of calculated state"
+    },
+    "requires_customer_approval": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this task requires customer approval before work can proceed"
+    },
+    "customer_approval_request_id": {
+      "type": "string",
+      "description": "Reference to ClientFeedbackRequest for required approval"
+    },
+    "requires_vendor_work": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this task depends on external vendor work"
+    },
+    "vendor_service_commitment_id": {
+      "type": "string",
+      "description": "Reference to ServiceCommitment for vendor work dependency"
+    },
+    "state_resolved_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the operational state was last calculated"
+    },
+    "is_phase_required": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this task must be completed for its phase to be considered complete"
     }
   },
   "required": [
