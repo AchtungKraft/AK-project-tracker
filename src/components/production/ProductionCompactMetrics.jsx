@@ -1,31 +1,62 @@
 import React from "react";
-import { Factory, Clock, AlertTriangle, CalendarDays, Package, MessageCircle } from "lucide-react";
+import {
+  MessageCircle, AlertTriangle, Package, Users, Truck, CalendarDays, Pause,
+} from "lucide-react";
 
 /**
- * Compact metrics bar — meeting-agenda framing.
- * Numbers inline, projects are the focus, not metrics.
+ * Meeting agenda header — frames what needs discussion today.
+ * Not a dashboard. An agenda.
  */
 export default function ProductionCompactMetrics({
-  projectCount,
-  needsDiscussionCount,
+  discussionCount,
+  waitingPartsCount,
+  customerDecisionCount,
+  vendorFollowUpCount,
+  deliveriesThisWeekCount,
+  idleProjectCount,
   overdueCount,
-  thisWeekCount,
-  blockedCount,
-  totalHoursRemaining,
 }) {
   return (
-    <div className="flex items-center gap-3 flex-wrap text-[11px] px-1 py-1.5">
-      <span className="flex items-center gap-1.5 text-gray-300">
-        <Factory className="w-3.5 h-3.5 text-gray-500" />
-        <span className="font-semibold tabular-nums">{projectCount}</span>
-        <span className="text-gray-500">active projects</span>
-      </span>
+    <div className="flex items-center gap-3 flex-wrap text-[11px] px-1 py-2 border-b border-gray-800/30">
+      <span className="text-[10px] text-gray-600 uppercase tracking-wider font-medium mr-1">Today's Agenda</span>
 
-      {needsDiscussionCount > 0 && (
+      {discussionCount > 0 && (
         <span className="flex items-center gap-1 text-red-400">
           <MessageCircle className="w-3 h-3" />
-          <span className="font-semibold tabular-nums">{needsDiscussionCount}</span>
+          <span className="font-semibold tabular-nums">{discussionCount}</span>
           <span className="text-red-400/70">need discussion</span>
+        </span>
+      )}
+
+      {waitingPartsCount > 0 && (
+        <span className="flex items-center gap-1 text-amber-400">
+          <Package className="w-3 h-3" />
+          <span className="font-semibold tabular-nums">{waitingPartsCount}</span>
+          <span className="text-amber-400/70">waiting on parts</span>
+        </span>
+      )}
+
+      {customerDecisionCount > 0 && (
+        <span className="flex items-center gap-1 text-blue-400">
+          <Users className="w-3 h-3" />
+          <span className="font-semibold tabular-nums">{customerDecisionCount}</span>
+          <span className="text-blue-400/70">customer decisions</span>
+        </span>
+      )}
+
+      {vendorFollowUpCount > 0 && (
+        <span className="flex items-center gap-1 text-purple-400">
+          <Truck className="w-3 h-3" />
+          <span className="font-semibold tabular-nums">{vendorFollowUpCount}</span>
+          <span className="text-purple-400/70">vendor follow-ups</span>
+        </span>
+      )}
+
+      {deliveriesThisWeekCount > 0 && (
+        <span className="flex items-center gap-1 text-cyan-400">
+          <CalendarDays className="w-3 h-3" />
+          <span className="font-semibold tabular-nums">{deliveriesThisWeekCount}</span>
+          <span className="text-cyan-400/70">deliver this week</span>
         </span>
       )}
 
@@ -37,25 +68,11 @@ export default function ProductionCompactMetrics({
         </span>
       )}
 
-      <span className="flex items-center gap-1 text-blue-400">
-        <CalendarDays className="w-3 h-3" />
-        <span className="font-semibold tabular-nums">{thisWeekCount}</span>
-        <span className="text-blue-400/70">due this week</span>
-      </span>
-
-      {blockedCount > 0 && (
-        <span className="flex items-center gap-1 text-orange-400">
-          <Package className="w-3 h-3" />
-          <span className="font-semibold tabular-nums">{blockedCount}</span>
-          <span className="text-orange-400/70">blocked</span>
-        </span>
-      )}
-
-      {totalHoursRemaining > 0 && (
+      {idleProjectCount > 0 && (
         <span className="flex items-center gap-1 text-gray-500">
-          <Clock className="w-3 h-3" />
-          <span className="font-medium tabular-nums">{Math.round(totalHoursRemaining)}h</span>
-          <span>remaining</span>
+          <Pause className="w-3 h-3" />
+          <span className="font-semibold tabular-nums">{idleProjectCount}</span>
+          <span className="text-gray-500/70">idle</span>
         </span>
       )}
     </div>

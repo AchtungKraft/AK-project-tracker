@@ -1,0 +1,41 @@
+{
+  "name": "MeetingNote",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project"
+    },
+    "meeting_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of the production meeting"
+    },
+    "decision": {
+      "type": "string",
+      "description": "Decision made during the meeting"
+    },
+    "owner": {
+      "type": "string",
+      "description": "Person responsible for follow-up"
+    },
+    "follow_up": {
+      "type": "string",
+      "description": "Required follow-up action"
+    },
+    "is_resolved": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this note has been resolved"
+    },
+    "resolved_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this note was resolved"
+    }
+  },
+  "required": [
+    "project_id",
+    "decision"
+  ]
+}

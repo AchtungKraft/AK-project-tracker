@@ -1,49 +1,58 @@
 /**
  * Derive the single dominant operational issue for a project.
- * Returns a plain string describing the most important problem.
+ * Returns a plain string describing the SPECIFIC operational problem.
+ *
+ * V4: Never returns generic messages like "No Current Issues" or "1 Overdue Task".
+ * Instead surfaces the actual operational blocker or data quality issue.
  *
  * Priority order:
  * 1. Project-level blocker (from resolver)
- * 2. Most urgent task-level blocking reason
- * 3. Overdue tasks
- * 4. Waiting states (parts, vendor, customer)
+ * 2. Customer approval with specific title
+ * 3. Specific parts/vendor blocking reasons
+ * 4. Overdue tasks (named)
  * 5. Delivery proximity
- * 6. No current issues
+ * 6. Data quality issues (missing phase, dates, estimates, assignees)
+ * 7. null = no issues
  */
 
 export function deriveCurrentIssue(project, tasks, feedbackRequests) {
-  const wh = project?.workflow_health || {};
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // 1. Project-level blocker — highest priority
+  // 1. Project-level blocker — highest priority, already specific
   if (project?.current_blocker) {
     return project.current_blocker;
   }
 
-  // Count task states
-  let overdueTasks = 0;
+  // Collect task data
+  let overdueTasks = [];
   let waitingParts = 0;
   let waitingVendor = 0;
   let waitingCustomer = 0;
   let blockedTasks = 0;
   let reviewRequired = 0;
+  let missingDueDates = 0;
+  let missingEstimates = 0;
+  let missingAssignees = 0;
 
-  // Collect specific blocking reasons
   const partReasons = [];
   const vendorReasons = [];
 
   tasks.forEach(t => {
     if (t.due_date) {
-      const due = new Date(t.due_date + "T00:00:00");
-      if (due < today) overdueTasks++;
+      const due = new Date(t.due_date.length === 10 ? t.due_date + "T00:00:00" : t.due_date);
+      if (!isNaN(due.getTime()) && due < today) overdueTasks.push(t);
+    } else {
+      missingDueDates++;
     }
+    if (!t.estimated_hours) missingEstimates++;
+    if (!t.assigned_team_member_id) missingAssignees++;
+
     const os = t.operational_state;
     if (os === "WAITING_ON_PARTS") {
       waitingParts++;
       (t.blocking_reasons || []).forEach(r => {
-        if (r.type === "PART" && r.label) partReasons.push(r.label);
-        if (r.type === "PURCHASE_ORDER" && r.label) partReasons.push(r.label);
+        if ((r.type === "PART" || r.type === "PURCHASE_ORDER") && r.label) partReasons.push(r.label);
       });
     }
     if (os === "WAITING_ON_VENDOR") {
@@ -57,76 +66,91 @@ export function deriveCurrentIssue(project, tasks, feedbackRequests) {
     if (os === "REVIEW_REQUIRED") reviewRequired++;
   });
 
-  // 2. Pending customer approvals (from feedback requests)
-  const pendingApprovals = (feedbackRequests || []).filter(
-    fr => fr.status === "posted"
-  );
+  // 2. Pending customer approvals — use specific title
+  const pendingApprovals = (feedbackRequests || []).filter(fr => fr.status === "posted");
   if (pendingApprovals.length > 0 && waitingCustomer > 0) {
     const first = pendingApprovals[0];
-    const typeLabel = first.request_type?.replace(/_/g, " ");
     if (pendingApprovals.length === 1) {
-      return `Customer Approval Needed — ${first.title}`;
+      return `Customer — ${first.title}`;
     }
-    return `${pendingApprovals.length} Customer Approvals Needed`;
+    return `Customer — ${pendingApprovals.map(p => p.title).slice(0, 2).join(", ")}`;
   }
 
-  // 3. Waiting on specific parts
+  // 3. Waiting on specific parts — use the actual part names
   if (waitingParts > 0) {
-    const uniqueReasons = [...new Set(partReasons)];
-    if (uniqueReasons.length === 1) {
-      return `Waiting on ${uniqueReasons[0]}`;
+    const unique = [...new Set(partReasons)];
+    if (unique.length >= 1) {
+      return `Waiting on ${unique.slice(0, 2).join(", ")}${unique.length > 2 ? ` +${unique.length - 2}` : ""}`;
     }
-    if (uniqueReasons.length > 1) {
-      return `Parts Needed — ${uniqueReasons.slice(0, 2).join(", ")}${uniqueReasons.length > 2 ? ` +${uniqueReasons.length - 2} more` : ""}`;
-    }
-    return `${waitingParts} Task${waitingParts > 1 ? "s" : ""} Waiting on Parts`;
+    return "Missing Parts Order";
   }
 
-  // 4. Waiting on vendor
+  // 4. Waiting on vendor — use specific reasons
   if (waitingVendor > 0) {
-    const uniqueReasons = [...new Set(vendorReasons)];
-    if (uniqueReasons.length === 1) {
-      return `Waiting on ${uniqueReasons[0]}`;
+    const unique = [...new Set(vendorReasons)];
+    if (unique.length >= 1) {
+      return `Waiting on ${unique.slice(0, 2).join(", ")}`;
     }
-    return `${waitingVendor} Task${waitingVendor > 1 ? "s" : ""} Waiting on Vendor`;
+    return "Vendor ETA Required";
   }
 
-  // 5. Overdue tasks
-  if (overdueTasks > 0) {
-    return `${overdueTasks} Overdue Task${overdueTasks > 1 ? "s" : ""}`;
-  }
-
-  // 6. Review required
-  if (reviewRequired > 0) {
-    return `${reviewRequired} Task${reviewRequired > 1 ? "s" : ""} Need Review`;
-  }
-
-  // 7. Blocked tasks
-  if (blockedTasks > 0) {
-    return `${blockedTasks} Blocked Task${blockedTasks > 1 ? "s" : ""}`;
-  }
-
-  // 8. Waiting on customer (no specific feedback request)
+  // 5. Customer waiting without specific feedback request
   if (waitingCustomer > 0) {
-    return `Waiting on Customer Decision`;
+    return "Waiting on Customer Decision";
+  }
+
+  // 6. Overdue tasks — name the most important one
+  if (overdueTasks.length > 0) {
+    const sorted = overdueTasks.sort((a, b) => {
+      if (a.is_priority && !b.is_priority) return -1;
+      if (!a.is_priority && b.is_priority) return 1;
+      return (a.due_date || "").localeCompare(b.due_date || "");
+    });
+    const first = sorted[0];
+    if (overdueTasks.length === 1) {
+      return `Overdue — ${first.name}`;
+    }
+    return `Overdue — ${first.name} +${overdueTasks.length - 1} more`;
+  }
+
+  // 7. Review required
+  if (reviewRequired > 0) {
+    return "Engineering Review Required";
+  }
+
+  // 8. Blocked tasks
+  if (blockedTasks > 0) {
+    const blockedTask = tasks.find(t => t.operational_state === "BLOCKED");
+    const reason = blockedTask?.blocking_reasons?.[0]?.label;
+    return reason ? `Blocked — ${reason}` : "Shop Coordination Required";
   }
 
   // 9. Delivery proximity
   if (project?.target_completion) {
     const target = new Date(project.target_completion + "T00:00:00");
-    const daysLeft = Math.ceil((target - today) / (1000 * 60 * 60 * 24));
-    if (daysLeft <= 0) {
-      return `Delivery ${Math.abs(daysLeft)} Days Past Due`;
-    }
-    if (daysLeft <= 7) {
-      return `Delivery in ${daysLeft} Day${daysLeft > 1 ? "s" : ""}`;
-    }
-    if (daysLeft <= 14) {
-      return `Delivery in ${daysLeft} Days`;
+    if (!isNaN(target.getTime())) {
+      const daysLeft = Math.ceil((target - today) / (1000 * 60 * 60 * 24));
+      if (daysLeft <= 0) return `Vehicle Delivers ${Math.abs(daysLeft)} Days Past Due`;
+      if (daysLeft <= 3) return `Vehicle Delivers in ${daysLeft} Day${daysLeft > 1 ? "s" : ""}`;
+      if (daysLeft <= 7) return `Delivery This Week`;
     }
   }
 
-  // 10. No issues
+  // 10. Data quality issues — surface as actionable
+  if (!project?.current_phase_name && tasks.length > 0) {
+    return "No Active Phase";
+  }
+  if (tasks.length > 0 && missingDueDates > tasks.length * 0.5) {
+    return `${missingDueDates} Tasks Missing Due Dates`;
+  }
+  if (tasks.length > 0 && missingEstimates > tasks.length * 0.5) {
+    return `${missingEstimates} Tasks Missing Estimates`;
+  }
+  if (tasks.length > 0 && missingAssignees > tasks.length * 0.5) {
+    return `${missingAssignees} Tasks Unassigned`;
+  }
+
+  // No issues
   return null;
 }
 
@@ -137,10 +161,12 @@ export function getIssueColor(issue) {
   if (!issue) return { text: "text-emerald-400", bg: "bg-emerald-900/10" };
   const lower = issue.toLowerCase();
   if (lower.includes("overdue") || lower.includes("past due")) return { text: "text-red-400", bg: "bg-red-900/10" };
-  if (lower.includes("blocked")) return { text: "text-red-400", bg: "bg-red-900/10" };
-  if (lower.includes("waiting on") || lower.includes("parts needed")) return { text: "text-amber-400", bg: "bg-amber-900/10" };
+  if (lower.includes("blocked") || lower.includes("shop coordination")) return { text: "text-red-400", bg: "bg-red-900/10" };
+  if (lower.includes("waiting on") || lower.includes("parts") || lower.includes("missing parts")) return { text: "text-amber-400", bg: "bg-amber-900/10" };
   if (lower.includes("customer")) return { text: "text-blue-400", bg: "bg-blue-900/10" };
-  if (lower.includes("review")) return { text: "text-violet-400", bg: "bg-violet-900/10" };
-  if (lower.includes("delivery")) return { text: "text-cyan-400", bg: "bg-cyan-900/10" };
+  if (lower.includes("vendor") || lower.includes("eta")) return { text: "text-purple-400", bg: "bg-purple-900/10" };
+  if (lower.includes("review") || lower.includes("engineering")) return { text: "text-violet-400", bg: "bg-violet-900/10" };
+  if (lower.includes("deliver")) return { text: "text-cyan-400", bg: "bg-cyan-900/10" };
+  if (lower.includes("missing") || lower.includes("unassigned") || lower.includes("no active phase")) return { text: "text-yellow-400", bg: "bg-yellow-900/10" };
   return { text: "text-amber-400", bg: "bg-amber-900/10" };
 }

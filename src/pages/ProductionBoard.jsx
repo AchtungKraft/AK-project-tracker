@@ -12,8 +12,11 @@ import { startOfWeek, endOfWeek, addWeeks, format } from "date-fns";
 
 import ProductionCompactMetrics from "@/components/production/ProductionCompactMetrics";
 import ProjectBriefingCard from "@/components/production/ProjectBriefingCard";
+import MeetingSectionHeader from "@/components/production/MeetingSectionHeader";
 import { deriveAttentionStatus, getAttentionSortPriority } from "@/components/production/deriveAttentionStatus";
 import { deriveCurrentIssue } from "@/components/production/deriveCurrentIssue";
+import { classifyMeetingSection, getDiscussionSortPriority } from "@/components/production/deriveMeetingSection";
+import { deriveMomentum } from "@/components/production/ProjectMomentum";
 import TaskDetailDrawer from "@/components/tasks/TaskDetailDrawer";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 import { useTaskData } from "@/components/tasks/useTaskData";
@@ -83,6 +86,11 @@ export default function ProductionBoard() {
     queryFn: () => base44.entities.ClientFeedbackRequest.list(),
     staleTime: 60000,
   });
+  const { data: meetingNotes = [] } = useQuery({
+    queryKey: ["meetingNotes"],
+    queryFn: () => base44.entities.MeetingNote.list("-created_date", 500),
+    staleTime: 30000,
+  });
 
   const updateTaskMutation = useMemo(() => ({
     mutate: ({ id, data }) => {
@@ -92,7 +100,7 @@ export default function ProductionBoard() {
     },
   }), [queryClient]);
 
-  // ── Derived data ──
+  // ── Derived maps ──
   const completedStatusId = useMemo(() => {
     const s = statuses.find(s => s.scope === "Task" && s.active && /complete|done/i.test(s.label));
     return s?.id;
@@ -144,6 +152,15 @@ export default function ProductionBoard() {
     return m;
   }, [feedbackRequests]);
 
+  const notesByProject = useMemo(() => {
+    const m = new Map();
+    meetingNotes.forEach(n => {
+      if (!m.has(n.project_id)) m.set(n.project_id, []);
+      m.get(n.project_id).push(n);
+    });
+    return m;
+  }, [meetingNotes]);
+
   const checklistByTask = useMemo(() => {
     const m = new Map();
     checklistItems.forEach(ci => {
@@ -155,12 +172,23 @@ export default function ProductionBoard() {
     return m;
   }, [checklistItems]);
 
+  // All tasks by project (including completed — for momentum)
+  const allTasksByProject = useMemo(() => {
+    const m = new Map();
+    allTasks.forEach(t => {
+      if (!t.project_id) return;
+      if (!m.has(t.project_id)) m.set(t.project_id, []);
+      m.get(t.project_id).push(t);
+    });
+    return m;
+  }, [allTasks]);
+
   // ── Week boundaries ──
   const now = new Date();
   const weekStart = startOfWeek(addWeeks(now, weekOffset), { weekStartsOn: 1 });
   const weekEnd = endOfWeek(addWeeks(now, weekOffset), { weekStartsOn: 1 });
 
-  // ── Active (non-completed) tasks with checklist data injected ──
+  // ── Active tasks with checklist data ──
   const activeTasks = useMemo(() => {
     return allTasks
       .filter(t => t.operational_state !== "COMPLETED" && t.status_id !== completedStatusId)
@@ -182,7 +210,7 @@ export default function ProductionBoard() {
     });
   }, [activeTasks, searchValue, projectMap]);
 
-  // ── Build project groups with attention status ──
+  // ── Build project groups ──
   const projectGroups = useMemo(() => {
     const byProject = new Map();
     filteredTasks.forEach(task => {
@@ -192,16 +220,27 @@ export default function ProductionBoard() {
       byProject.get(pid).push(task);
     });
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Also include projects with no active tasks but with meeting notes
+    projects.forEach(p => {
+      if (!byProject.has(p.id) && !searchValue.trim()) {
+        // Only include if they have open meeting notes
+        const notes = notesByProject.get(p.id) || [];
+        if (notes.some(n => !n.is_resolved)) {
+          byProject.set(p.id, []);
+        }
+      }
+    });
 
     return Array.from(byProject.entries())
       .map(([pid, tasks]) => {
         const project = projectMap.get(pid);
+        if (!project) return null;
         const milestones = milestonesByProject.get(pid) || [];
         const fb = feedbackByProject.get(pid) || [];
         const attention = deriveAttentionStatus(project, tasks, milestones);
         const currentIssue = deriveCurrentIssue(project, tasks, fb);
+        const allProjTasks = allTasksByProject.get(pid) || [];
+        const momentum = deriveMomentum(project, allProjTasks);
         return {
           projectId: pid,
           project,
@@ -211,80 +250,104 @@ export default function ProductionBoard() {
           attention,
           feedbackRequests: fb,
           currentIssue,
+          meetingNotes: notesByProject.get(pid) || [],
+          momentum,
+          allProjectTasks: allProjTasks,
         };
       })
-      .filter(g => g.project)
-      // Sort by operational importance — meeting starts with projects needing decisions
-      .sort((a, b) => {
-        // Primary: attention priority
-        const aPri = getAttentionSortPriority(a.attention.status);
-        const bPri = getAttentionSortPriority(b.attention.status);
-        if (aPri !== bPri) return aPri - bPri;
+      .filter(Boolean);
+  }, [filteredTasks, projectMap, phasesByProject, milestonesByProject, feedbackByProject, notesByProject, allTasksByProject, projects, searchValue]);
 
-        // Secondary: projects with current issues before those without
-        const aHasIssue = a.currentIssue ? 0 : 1;
-        const bHasIssue = b.currentIssue ? 0 : 1;
-        if (aHasIssue !== bHasIssue) return aHasIssue - bHasIssue;
+  // ── Classify into meeting sections ──
+  const sections = useMemo(() => {
+    const discussion = [];
+    const active = [];
+    const lowPriority = [];
 
-        // Tertiary: overdue task count descending
-        const aOverdue = a.tasks.filter(t => {
-          if (!t.due_date) return false;
-          return new Date(t.due_date + "T00:00:00") < today;
-        }).length;
-        const bOverdue = b.tasks.filter(t => {
-          if (!t.due_date) return false;
-          return new Date(t.due_date + "T00:00:00") < today;
-        }).length;
-        if (aOverdue !== bOverdue) return bOverdue - aOverdue;
+    projectGroups.forEach(g => {
+      const section = classifyMeetingSection(g);
+      if (section === "DISCUSSION") discussion.push(g);
+      else if (section === "ACTIVE") active.push(g);
+      else lowPriority.push(g);
+    });
 
-        // Quaternary: delivery proximity (closer = higher)
-        const aTarget = a.project?.target_completion ? new Date(a.project.target_completion) : null;
-        const bTarget = b.project?.target_completion ? new Date(b.project.target_completion) : null;
-        if (aTarget && !bTarget) return -1;
-        if (!aTarget && bTarget) return 1;
-        if (aTarget && bTarget && aTarget.getTime() !== bTarget.getTime()) return aTarget - bTarget;
+    // Sort DISCUSSION by urgency
+    discussion.sort((a, b) => {
+      const aPri = getDiscussionSortPriority(a);
+      const bPri = getDiscussionSortPriority(b);
+      if (aPri !== bPri) return aPri - bPri;
+      // Secondary: idle projects first (no activity = more urgent to discuss)
+      const aDays = a.momentum?.daysSinceActivity ?? 999;
+      const bDays = b.momentum?.daysSinceActivity ?? 999;
+      if (aDays !== bDays) return bDays - aDays;
+      return (a.project.name || "").localeCompare(b.project.name || "");
+    });
 
-        return (a.project.name || "").localeCompare(b.project.name || "");
-      });
-  }, [filteredTasks, projectMap, phasesByProject, milestonesByProject, feedbackByProject]);
+    // Sort ACTIVE by progress
+    active.sort((a, b) => {
+      const aWh = a.project?.workflow_health || {};
+      const bWh = b.project?.workflow_health || {};
+      const aTotal = (aWh.tasks_completed || 0) + (aWh.tasks_ready || 0) + (aWh.tasks_in_progress || 0) + (aWh.tasks_blocked || 0) + (aWh.tasks_waiting || 0);
+      const bTotal = (bWh.tasks_completed || 0) + (bWh.tasks_ready || 0) + (bWh.tasks_in_progress || 0) + (bWh.tasks_blocked || 0) + (bWh.tasks_waiting || 0);
+      const aPct = aTotal > 0 ? (aWh.tasks_completed || 0) / aTotal : 0;
+      const bPct = bTotal > 0 ? (bWh.tasks_completed || 0) / bTotal : 0;
+      return aPct - bPct; // least complete first
+    });
 
-  // ── Shop-wide metrics ──
-  const metrics = useMemo(() => {
+    // Sort LOW_PRIORITY alphabetically
+    lowPriority.sort((a, b) => (a.project.name || "").localeCompare(b.project.name || ""));
+
+    return { discussion, active, lowPriority };
+  }, [projectGroups]);
+
+  // ── Agenda metrics ──
+  const agendaMetrics = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const weekEndDate = endOfWeek(now, { weekStartsOn: 1 });
     let overdueCount = 0;
-    let thisWeekCount = 0;
-    let blockedCount = 0;
-    let totalHours = 0;
+    let waitingPartsProjects = new Set();
+    let customerDecisionProjects = new Set();
+    let vendorFollowUpProjects = new Set();
+    let deliveriesThisWeek = new Set();
+    let idleProjects = 0;
 
     activeTasks.forEach(t => {
       if (t.due_date) {
-        const due = new Date(t.due_date + "T00:00:00");
-        if (due < today) overdueCount++;
-        else if (due <= weekEnd) thisWeekCount++;
+        const dueStr = t.due_date.length === 10 ? t.due_date + "T00:00:00" : t.due_date;
+        const due = new Date(dueStr);
+        if (!isNaN(due.getTime()) && due < today) overdueCount++;
       }
       const os = t.operational_state;
-      if (["WAITING_ON_PARTS", "WAITING_ON_VENDOR", "WAITING_ON_CUSTOMER", "BLOCKED", "REVIEW_REQUIRED"].includes(os)) {
-        blockedCount++;
-      }
-      totalHours += t.estimated_hours || 0;
+      if (os === "WAITING_ON_PARTS" && t.project_id) waitingPartsProjects.add(t.project_id);
+      if (os === "WAITING_ON_CUSTOMER" && t.project_id) customerDecisionProjects.add(t.project_id);
+      if (os === "WAITING_ON_VENDOR" && t.project_id) vendorFollowUpProjects.add(t.project_id);
     });
 
-    const needsDiscussionCount = projectGroups.filter(
-      g => g.currentIssue !== null
-    ).length;
+    projects.forEach(p => {
+      if (p.target_completion) {
+        const target = new Date(p.target_completion + "T00:00:00");
+        if (!isNaN(target.getTime())) {
+          const daysLeft = Math.ceil((target - today) / (1000 * 60 * 60 * 24));
+          if (daysLeft >= 0 && daysLeft <= 7) deliveriesThisWeek.add(p.id);
+        }
+      }
+    });
+
+    idleProjects = sections.lowPriority.filter(g => (g.momentum?.daysSinceActivity ?? 0) > 7).length;
 
     return {
-      projectCount: projectGroups.length,
-      needsDiscussionCount,
+      discussionCount: sections.discussion.length,
+      waitingPartsCount: waitingPartsProjects.size,
+      customerDecisionCount: customerDecisionProjects.size,
+      vendorFollowUpCount: vendorFollowUpProjects.size,
+      deliveriesThisWeekCount: deliveriesThisWeek.size,
+      idleProjectCount: idleProjects,
       overdueCount,
-      thisWeekCount,
-      blockedCount,
-      totalHoursRemaining: totalHours,
     };
-  }, [activeTasks, projectGroups, weekEnd]);
+  }, [activeTasks, projects, sections]);
 
-  // ── Shared context for task rows ──
+  // ── Shared context ──
   const shared = useMemo(() => ({
     teamMemberMap,
     statusMap,
@@ -307,13 +370,42 @@ export default function ProductionBoard() {
     );
   }
 
-  // Today's date for header
   const todayStr = format(new Date(), "EEEE, MMMM d");
+  const totalProjects = sections.discussion.length + sections.active.length + sections.lowPriority.length;
+
+  const renderSection = (sectionKey, groups) => {
+    if (groups.length === 0) return null;
+    return (
+      <div key={sectionKey}>
+        <MeetingSectionHeader section={sectionKey} count={groups.length} />
+        <div className="space-y-2 mt-2">
+          {groups.map(group => (
+            <ProjectBriefingCard
+              key={group.projectId}
+              project={group.project}
+              tasks={group.tasks}
+              phases={group.phases}
+              milestones={group.milestones}
+              weekStart={weekStart}
+              weekEnd={weekEnd}
+              shared={shared}
+              attention={group.attention}
+              feedbackRequests={group.feedbackRequests}
+              currentIssue={group.currentIssue}
+              meetingNotes={group.meetingNotes}
+              momentum={group.momentum}
+              allProjectTasks={group.allProjectTasks}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <>
       <div className="p-3 md:p-6 max-w-7xl mx-auto space-y-3">
-        {/* ── Header — Meeting agenda framing ── */}
+        {/* ── Header ── */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center bg-purple-600/20 rounded-lg border-2 border-purple-600 w-10 h-10">
@@ -321,26 +413,19 @@ export default function ProductionBoard() {
             </div>
             <div>
               <h1 className="text-xl md:text-2xl font-bold text-white">PRODUCTION REVIEW</h1>
-              <p className="text-xs text-gray-500">{todayStr}</p>
+              <p className="text-xs text-gray-500">{todayStr} · {totalProjects} projects</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {/* Week navigation — compact */}
             <div className="flex items-center gap-1 mr-2">
-              <Button variant="outline" size="sm" className="border-gray-700 text-gray-400 h-6 text-[10px] px-2" onClick={() => setWeekOffset(o => o - 1)}>
-                ←
-              </Button>
+              <Button variant="outline" size="sm" className="border-gray-700 text-gray-400 h-6 text-[10px] px-2" onClick={() => setWeekOffset(o => o - 1)}>←</Button>
               <Button
                 variant={weekOffset === 0 ? "default" : "outline"}
                 size="sm"
                 className={cn("h-6 text-[10px] px-2", weekOffset === 0 ? "bg-red-600 text-white hover:bg-red-700" : "border-gray-700 text-gray-400")}
                 onClick={() => setWeekOffset(0)}
-              >
-                This Week
-              </Button>
-              <Button variant="outline" size="sm" className="border-gray-700 text-gray-400 h-6 text-[10px] px-2" onClick={() => setWeekOffset(o => o + 1)}>
-                →
-              </Button>
+              >This Week</Button>
+              <Button variant="outline" size="sm" className="border-gray-700 text-gray-400 h-6 text-[10px] px-2" onClick={() => setWeekOffset(o => o + 1)}>→</Button>
               <span className="text-[10px] text-gray-600 ml-1 hidden sm:inline">
                 {format(weekStart, "MMM d")}–{format(weekEnd, "MMM d")}
               </span>
@@ -361,8 +446,8 @@ export default function ProductionBoard() {
           </div>
         </div>
 
-        {/* ── Compact Metrics Bar ── */}
-        <ProductionCompactMetrics {...metrics} />
+        {/* ── Meeting Agenda Metrics ── */}
+        <ProductionCompactMetrics {...agendaMetrics} />
 
         {/* ── Search ── */}
         <div className="relative max-w-sm">
@@ -380,25 +465,14 @@ export default function ProductionBoard() {
           )}
         </div>
 
-        {/* ── Project Review Cards — The Meeting Agenda ── */}
+        {/* ── Meeting Flow: Discussion → Active → Low Priority ── */}
         <div className="space-y-2">
-          {projectGroups.map(group => (
-            <ProjectBriefingCard
-              key={group.projectId}
-              project={group.project}
-              tasks={group.tasks}
-              phases={group.phases}
-              milestones={group.milestones}
-              weekStart={weekStart}
-              weekEnd={weekEnd}
-              shared={shared}
-              attention={group.attention}
-              feedbackRequests={group.feedbackRequests}
-            />
-          ))}
+          {renderSection("DISCUSSION", sections.discussion)}
+          {renderSection("ACTIVE", sections.active)}
+          {renderSection("LOW_PRIORITY", sections.lowPriority)}
         </div>
 
-        {projectGroups.length === 0 && (
+        {totalProjects === 0 && (
           <div className="text-center py-12 text-gray-500 text-sm">
             No active projects match the current filters.
           </div>
