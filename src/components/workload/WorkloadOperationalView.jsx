@@ -51,7 +51,7 @@ export default function WorkloadOperationalView({
 
   // Filters state
   const [searchValue, setSearchValue] = useState("");
-  const [dateFilter, setDateFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("7d");
   const [completedWindow, setCompletedWindow] = useState("7d");
   const [filters, setFilters] = useState({});
   const [createTaskForProjectId, setCreateTaskForProjectId] = useState(null);
@@ -65,6 +65,8 @@ export default function WorkloadOperationalView({
   });
 
   // Search filtering — applied before workload data
+  // Searches: task title, project name, phase name, technician, blocker label,
+  // part name (via blocking_reasons), vendor name (via blocking_reasons), approval title (via blocking_reasons)
   const searchFilteredTasks = useMemo(() => {
     if (!searchValue.trim()) return tasks;
     const q = searchValue.toLowerCase();
@@ -72,18 +74,31 @@ export default function WorkloadOperationalView({
     projects.forEach(p => projectNameMap.set(p.id, (p.name || "").toLowerCase()));
     const teamMap = new Map();
     teamMembers.forEach(tm => teamMap.set(tm.id, (tm.full_name || "").toLowerCase()));
+    const phaseNameMap = new Map();
+    allPhases.forEach(p => phaseNameMap.set(p.id, (p.name || "").toLowerCase()));
 
     return tasks.filter(t => {
+      // Task title
       if ((t.name || "").toLowerCase().includes(q)) return true;
+      // Project name
       if (projectNameMap.get(t.project_id)?.includes(q)) return true;
+      // Phase name
+      if (phaseNameMap.get(t.kanban_bucket_id)?.includes(q)) return true;
+      // Technician name
       if (teamMap.get(t.assigned_team_member_id)?.includes(q)) return true;
-      // Search blocking reasons
-      if (t.blocking_reasons?.some(r => (r.label || "").toLowerCase().includes(q))) return true;
+      // Blocking reasons — covers blocker label, part names, vendor names, approval titles
+      if (t.blocking_reasons?.some(r => {
+        if ((r.label || "").toLowerCase().includes(q)) return true;
+        if ((r.type || "").toLowerCase().includes(q)) return true;
+        return false;
+      })) return true;
+      // Description
+      if ((t.description || "").toLowerCase().includes(q)) return true;
       return false;
     });
-  }, [tasks, searchValue, projects, teamMembers]);
+  }, [tasks, searchValue, projects, teamMembers, allPhases]);
 
-  const { sections, stats, staleProjects, projectMap, phaseMap, teamMemberMap, statusMap, successorCounts } = useWorkloadData({
+  const { sections, stats, staleProjects, staleMissingSet, projectMap, phaseMap, teamMemberMap, statusMap, successorCounts } = useWorkloadData({
     tasks: searchFilteredTasks,
     allTasks,
     projects,
@@ -94,6 +109,10 @@ export default function WorkloadOperationalView({
     completedWindow,
     filters,
   });
+
+  // Stale breakdown for display
+  const staleMissing = useMemo(() => staleProjects.filter(id => staleMissingSet.has(id)).length, [staleProjects, staleMissingSet]);
+  const staleOutdated = staleProjects.length - staleMissing;
 
   // Bulk selection
   const [selectedTaskIds, setSelectedTaskIds] = useState(new Set());
@@ -216,7 +235,8 @@ export default function WorkloadOperationalView({
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-600/30 bg-amber-600/5">
           <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
           <span className="text-xs text-amber-300">
-            {staleProjects.length} project{staleProjects.length !== 1 ? "s" : ""} missing workflow data.
+            {staleMissing > 0 && `${staleMissing} project${staleMissing !== 1 ? "s" : ""}: Workflow data unavailable. `}
+            {staleOutdated > 0 && `${staleOutdated} project${staleOutdated !== 1 ? "s" : ""}: Workflow data may be stale.`}
           </span>
           <Button
             size="sm"

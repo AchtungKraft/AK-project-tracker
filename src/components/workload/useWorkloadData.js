@@ -3,7 +3,7 @@
  * Reads persisted operational_state from tasks. Does NOT call the resolver.
  */
 import { useMemo } from "react";
-import { startOfDay, startOfWeek, endOfWeek, subHours } from "date-fns";
+import { startOfDay, startOfWeek, endOfWeek, addDays, subHours } from "date-fns";
 import { sortTasksByPriority } from "@/utils/taskPrioritySort";
 import { WORKLOAD_SECTIONS, COMPLETED_WINDOWS } from "./workloadConfig";
 
@@ -110,11 +110,12 @@ export default function useWorkloadData({
   }, [completedWindow]);
 
   // Classify tasks into sections
-  const { sections, stats, staleProjects } = useMemo(() => {
+  const { sections, stats, staleProjects, staleMissingSet } = useMemo(() => {
     const sectionMap = {};
     WORKLOAD_SECTIONS.forEach(sec => { sectionMap[sec.key] = []; });
 
     const staleProjectIds = new Set();
+    const staleMissingIds = new Set();
     let totalActive = 0;
     let overdueCount = 0;
     let unassignedCount = 0;
@@ -133,12 +134,21 @@ export default function useWorkloadData({
       
       // Date filter
       if (dateFilter !== "all") {
-        const ctx = getDateContext(t);
-        if (dateFilter === "overdue" && ctx !== "overdue") return false;
-        if (dateFilter === "today" && ctx !== "today") return false;
-        if (dateFilter === "this_week" && ctx !== "this_week" && ctx !== "today") return false;
-        if (dateFilter === "upcoming" && ctx !== "upcoming") return false;
-        if (dateFilter === "unscheduled" && ctx !== "unscheduled") return false;
+        if (dateFilter === "7d") {
+          // Show overdue + next 7 calendar days
+          const due = parseLocalDate(t.due_date);
+          if (!due) return true; // include unscheduled in 7d view
+          const today = startOfDay(new Date());
+          const cutoff = addDays(today, 7);
+          if (due > cutoff) return false; // beyond 7 days
+        } else {
+          const ctx = getDateContext(t);
+          if (dateFilter === "overdue" && ctx !== "overdue") return false;
+          if (dateFilter === "today" && ctx !== "today") return false;
+          if (dateFilter === "this_week" && ctx !== "this_week" && ctx !== "today") return false;
+          if (dateFilter === "upcoming" && ctx !== "upcoming") return false;
+          if (dateFilter === "unscheduled" && ctx !== "unscheduled") return false;
+        }
       }
 
       return true;
@@ -164,9 +174,22 @@ export default function useWorkloadData({
       const dateCtx = getDateContext(task);
       if (dateCtx === "overdue") overdueCount++;
 
-      // Check for stale workflow data
-      if (!opState) {
+      // Check for stale workflow data:
+      // 1. operational_state is missing
+      // 2. state_resolved_at is absent
+      // 3. project workflow_resolved_at is older than task updated_date
+      if (!opState || !task.state_resolved_at) {
         staleProjectIds.add(task.project_id);
+        staleMissingIds.add(task.project_id);
+      } else {
+        const proj = projectMap.get(task.project_id);
+        if (proj && proj.workflow_resolved_at && task.updated_date) {
+          const resolved = new Date(proj.workflow_resolved_at);
+          const updated = new Date(task.updated_date);
+          if (updated > resolved) {
+            staleProjectIds.add(task.project_id);
+          }
+        }
       }
 
       // Route to section by operational state
@@ -253,13 +276,15 @@ export default function useWorkloadData({
         completed: sectionMap.COMPLETED.length,
       },
       staleProjects: Array.from(staleProjectIds),
+      staleMissingSet: staleMissingIds,
     };
-  }, [tasks, dateFilter, completedWindow, completedCutoff, completedStatusId, filters, projectMap, phasesByProject, successorCounts]);
+  }, [tasks, dateFilter, completedWindow, completedCutoff, completedStatusId, filters, projectMap, phasesByProject, successorCounts, phaseMap]);
 
   return {
     sections,
     stats,
     staleProjects,
+    staleMissingSet,
     projectMap,
     phaseMap,
     teamMemberMap,

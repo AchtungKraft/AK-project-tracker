@@ -100,6 +100,7 @@ export const WORKLOAD_SECTIONS = [
 // Date filter options
 export const DATE_FILTERS = [
   { key: "all", label: "All Dates" },
+  { key: "7d", label: "Next 7 Days" },
   { key: "overdue", label: "Overdue" },
   { key: "today", label: "Due Today" },
   { key: "this_week", label: "Due This Week" },
