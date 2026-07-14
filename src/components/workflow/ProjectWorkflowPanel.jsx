@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import { useProjectWorkflow } from "./useProjectWorkflow";
 import PhaseRollupCard from "./PhaseRollupCard";
-import OperationalStateBadge from "./OperationalStateBadge";
+import MilestoneTimeline from "./MilestoneTimeline";
+import ProjectHealthSummary from "./ProjectHealthSummary";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { RefreshCw, AlertTriangle, CheckCircle2, Clock, Ban, Package, Truck, User, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -20,7 +20,7 @@ function StatPill({ icon: Icon, label, value, color }) {
 }
 
 export default function ProjectWorkflowPanel({ projectId }) {
-  const { phases, summary, warnings, isLoading, recalculate, isRecalculating, needsRecalculation, recalcError } = useProjectWorkflow(projectId);
+  const { phases, milestones, projectHealth, summary, warnings, isLoading, recalculate, isRecalculating, needsRecalculation, recalcError } = useProjectWorkflow(projectId);
   const [expandedPhases, setExpandedPhases] = useState(new Set());
 
   const togglePhase = (id) => {
@@ -115,6 +115,16 @@ export default function ProjectWorkflowPanel({ projectId }) {
 
         {phases.length === 0 && (
           <p className="text-xs text-gray-600 text-center py-4">No phases configured for this project.</p>
+        )}
+
+        {/* Project Health Summary */}
+        {projectHealth && projectHealth.health && (
+          <ProjectHealthSummary projectHealth={projectHealth} />
+        )}
+
+        {/* Milestones */}
+        {milestones.length > 0 && (
+          <MilestoneTimeline milestones={milestones} />
         )}
       </div>
     </TooltipProvider>

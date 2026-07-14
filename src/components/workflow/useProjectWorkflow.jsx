@@ -9,7 +9,6 @@ import { base44 } from "@/api/base44Client";
 export function useProjectWorkflow(projectId, { enabled = true } = {}) {
   const queryClient = useQueryClient();
 
-  // READ mode — returns persisted operational_state from task records
   const query = useQuery({
     queryKey: ["projectWorkflow", projectId],
     queryFn: () => base44.functions.invoke("resolveProjectWorkflow", { project_id: projectId, mode: "read" }),
@@ -20,13 +19,13 @@ export function useProjectWorkflow(projectId, { enabled = true } = {}) {
     select: (res) => res.data,
   });
 
-  // RESOLVE mode — explicit recalculation (repair tool)
   const recalcMutation = useMutation({
     mutationFn: () => base44.functions.invoke("resolveProjectWorkflow", { project_id: projectId, mode: "resolve" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projectWorkflow", projectId] });
       queryClient.invalidateQueries({ queryKey: ["projectTasks", projectId] });
       queryClient.invalidateQueries({ queryKey: ["projectBuckets", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["projectMilestones", projectId] });
     },
   });
 
@@ -34,6 +33,8 @@ export function useProjectWorkflow(projectId, { enabled = true } = {}) {
     workflow: query.data,
     tasks: query.data?.tasks || [],
     phases: query.data?.phases || [],
+    milestones: query.data?.milestones || [],
+    projectHealth: query.data?.projectHealth || null,
     warnings: query.data?.warnings || [],
     summary: query.data?.summary || null,
     needsRecalculation: query.data?.needsRecalculation || false,
@@ -58,6 +59,21 @@ export const OPERATIONAL_STATE_CONFIG = {
   CANCELLED: { label: "Cancelled", color: "#6B7280", bgClass: "bg-gray-600/20", textClass: "text-gray-500" },
 };
 
+export const PHASE_STATE_CONFIG = {
+  not_configured: { label: "Not Configured", color: "#6B7280", bgClass: "bg-gray-600/20", textClass: "text-gray-400" },
+  not_started: { label: "Not Started", color: "#6B7280", bgClass: "bg-gray-600/20", textClass: "text-gray-400" },
+  ready: { label: "Ready", color: "#22C55E", bgClass: "bg-green-600/20", textClass: "text-green-400" },
+  active: { label: "Active", color: "#F59E0B", bgClass: "bg-amber-600/20", textClass: "text-amber-400" },
+  waiting: { label: "Waiting", color: "#F97316", bgClass: "bg-orange-600/20", textClass: "text-orange-400" },
+  blocked: { label: "Blocked", color: "#EF4444", bgClass: "bg-red-600/20", textClass: "text-red-400" },
+  completed: { label: "Completed", color: "#10B981", bgClass: "bg-emerald-600/20", textClass: "text-emerald-400" },
+  skipped: { label: "Skipped", color: "#6B7280", bgClass: "bg-gray-600/20", textClass: "text-gray-500" },
+};
+
 export function getStateConfig(state) {
   return OPERATIONAL_STATE_CONFIG[state] || OPERATIONAL_STATE_CONFIG.NOT_STARTED;
+}
+
+export function getPhaseStateConfig(state) {
+  return PHASE_STATE_CONFIG[state] || PHASE_STATE_CONFIG.not_started;
 }

@@ -1,0 +1,84 @@
+{
+  "name": "ProjectMilestone",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Milestone name (e.g., Engine Complete, Ready for Paint)"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project"
+    },
+    "order": {
+      "type": "number",
+      "default": 0,
+      "description": "Display order \u2014 also determines next-milestone calculation"
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional description"
+    },
+    "depends_on_phases": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Array of ProjectKanbanBucket IDs that must be complete for this milestone to auto-complete"
+    },
+    "depends_on_tasks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Array of Task IDs that must be complete for this milestone to auto-complete"
+    },
+    "depends_on_milestones": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Array of ProjectMilestone IDs that must be complete first"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "completed",
+        "skipped"
+      ],
+      "default": "pending",
+      "description": "Milestone status \u2014 calculated automatically by the resolver"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the milestone auto-completed"
+    },
+    "completion_source": {
+      "type": "string",
+      "enum": [
+        "automatic",
+        "manual"
+      ],
+      "description": "Whether completion was automatic or manual override"
+    },
+    "blocking_reason": {
+      "type": "string",
+      "description": "Current blocker preventing milestone completion"
+    },
+    "icon": {
+      "type": "string",
+      "description": "Optional icon name for display"
+    },
+    "color": {
+      "type": "string",
+      "default": "#F59E0B",
+      "description": "Hex color for display"
+    }
+  },
+  "required": [
+    "name",
+    "project_id"
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "name": "PhaseTransitionLog",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project"
+    },
+    "phase_id": {
+      "type": "string",
+      "description": "Reference to ProjectKanbanBucket"
+    },
+    "phase_name": {
+      "type": "string",
+      "description": "Denormalized phase name at time of transition"
+    },
+    "from_status": {
+      "type": "string",
+      "description": "Previous phase status"
+    },
+    "to_status": {
+      "type": "string",
+      "description": "New phase status"
+    },
+    "reason": {
+      "type": "string",
+      "description": "Automatic reason for the transition"
+    },
+    "triggered_by": {
+      "type": "string",
+      "enum": [
+        "automatic",
+        "manual"
+      ],
+      "default": "automatic",
+      "description": "Whether transition was automatic or user-initiated"
+    },
+    "user_name": {
+      "type": "string",
+      "description": "User who triggered the transition (if manual)"
+    }
+  },
+  "required": [
+    "project_id",
+    "phase_id",
+    "from_status",
+    "to_status"
+  ]
+}

@@ -103,6 +103,77 @@
         "WARRANTY"
       ],
       "description": "Type of system project for special handling"
+    },
+    "current_phase_id": {
+      "type": "string",
+      "description": "Reference to current active ProjectKanbanBucket \u2014 set by resolver"
+    },
+    "current_phase_name": {
+      "type": "string",
+      "description": "Denormalized name of current phase for display"
+    },
+    "next_phase_id": {
+      "type": "string",
+      "description": "Reference to next ProjectKanbanBucket \u2014 set by resolver"
+    },
+    "next_phase_name": {
+      "type": "string",
+      "description": "Denormalized name of next phase for display"
+    },
+    "current_blocker": {
+      "type": "string",
+      "description": "Primary project-level blocker description"
+    },
+    "current_milestone_id": {
+      "type": "string",
+      "description": "Reference to last completed ProjectMilestone"
+    },
+    "current_milestone_name": {
+      "type": "string",
+      "description": "Denormalized name of last completed milestone"
+    },
+    "next_milestone_id": {
+      "type": "string",
+      "description": "Reference to next pending ProjectMilestone"
+    },
+    "next_milestone_name": {
+      "type": "string",
+      "description": "Denormalized name of next pending milestone"
+    },
+    "workflow_health": {
+      "type": "object",
+      "properties": {
+        "tasks_ready": {
+          "type": "number"
+        },
+        "tasks_blocked": {
+          "type": "number"
+        },
+        "tasks_waiting": {
+          "type": "number"
+        },
+        "tasks_in_progress": {
+          "type": "number"
+        },
+        "tasks_completed": {
+          "type": "number"
+        },
+        "hours_remaining": {
+          "type": "number"
+        },
+        "hours_estimated": {
+          "type": "number"
+        },
+        "hours_actual": {
+          "type": "number"
+        }
+      },
+      "description": "Denormalized workflow health snapshot \u2014 set by resolver"
+    },
+    "workflow_resolved_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the workflow was last resolved"
     }
   },
   "required": [

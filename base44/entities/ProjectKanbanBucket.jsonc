@@ -49,11 +49,33 @@
       "enum": [
         "not_configured",
         "not_started",
-        "in_progress",
-        "completed"
+        "ready",
+        "active",
+        "waiting",
+        "blocked",
+        "completed",
+        "skipped"
       ],
       "default": "not_started",
-      "description": "Calculated phase status from resolveProjectWorkflow"
+      "description": "Calculated operational state from resolveProjectWorkflow"
+    },
+    "waiting_reason": {
+      "type": "string",
+      "description": "Dominant waiting reason when phase is in waiting state"
+    },
+    "current_blocker": {
+      "type": "string",
+      "description": "Primary blocker preventing phase progress"
+    },
+    "phase_entered_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the phase entered its current status"
+    },
+    "phase_completed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the phase was completed"
     }
   },
   "required": [

@@ -1,7 +1,8 @@
 import React from "react";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, Clock, AlertTriangle, Package, Truck, User, Ban, ChevronDown, ChevronRight } from "lucide-react";
+import { CheckCircle2, Clock, AlertTriangle, Package, Truck, User, Ban, ChevronDown, ChevronRight, Pause, SkipForward, CircleDot } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { getPhaseStateConfig } from "./useProjectWorkflow";
 
 function fmtH(h) {
   if (!h) return "0h";
@@ -25,12 +26,15 @@ function Stat({ icon: Icon, label, value, color }) {
 }
 
 export default function PhaseRollupCard({ phase, isExpanded, onToggle }) {
-  const isComplete = phase.phaseStatus === 'completed';
+  const stateConfig = getPhaseStateConfig(phase.phaseStatus);
 
   return (
     <div className={cn(
       "border rounded-lg overflow-hidden",
-      isComplete ? "border-emerald-800/40 bg-emerald-950/10" : "border-gray-800 bg-black/30"
+      phase.phaseStatus === 'completed' ? "border-emerald-800/40 bg-emerald-950/10" :
+      phase.phaseStatus === 'blocked' ? "border-red-800/40 bg-red-950/10" :
+      phase.phaseStatus === 'waiting' ? "border-orange-800/40 bg-orange-950/10" :
+      "border-gray-800 bg-black/30"
     )}>
       <button onClick={onToggle} className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-800/30">
         {isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-gray-500 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-500 shrink-0" />}
@@ -38,16 +42,18 @@ export default function PhaseRollupCard({ phase, isExpanded, onToggle }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-white truncate">{phase.bucketName}</span>
-            <span className={cn("text-[10px] font-medium",
-              isComplete ? "text-emerald-400" :
-              phase.phaseStatus === 'in_progress' ? "text-amber-400" : "text-gray-500"
-            )}>
-              {isComplete ? "Complete" : phase.phaseStatus === 'in_progress' ? "In Progress" : phase.phaseStatus === 'not_configured' ? "No Tasks" : "Not Started"}
+            <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded", stateConfig.bgClass, stateConfig.textClass)}>
+              {stateConfig.label}
             </span>
           </div>
-          <span className="text-[10px] text-gray-500">
-            {phase.completedTaskCount}/{phase.requiredTaskCount} tasks · {MODE_LABELS[phase.progressionMode] || 'Dependency Driven'}
-          </span>
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-gray-500">
+              {phase.completedTaskCount}/{phase.requiredTaskCount} tasks · {MODE_LABELS[phase.progressionMode] || 'Dependency Driven'}
+            </span>
+            {phase.currentBlocker && (
+              <span className="text-[10px] text-orange-400 truncate max-w-[200px]">· {phase.currentBlocker}</span>
+            )}
+          </div>
         </div>
         <span className="text-lg font-bold text-white tabular-nums shrink-0">{phase.completionPercent}%</span>
       </button>
