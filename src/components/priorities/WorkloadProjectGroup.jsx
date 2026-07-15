@@ -19,8 +19,6 @@ import {
   Unlock,
   ListChecks,
   Layers,
-  CheckSquare,
-  Square,
 } from "lucide-react";
 import { format, startOfDay, isBefore } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -56,6 +54,12 @@ function loadCollapseState() {
 function saveCollapseState(state) {
   try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(state)); } catch { /* ignore */ }
 }
+
+// ── Fixed gutter width constants ──
+// Bulk-select slot: 18px (checkbox 14px + gap). Completion slot: 18px.
+const GUTTER_SELECT_W = "w-[18px]"; // reserved slot for bulk-select checkbox
+const GUTTER_TASK_INDENT = "pl-8 md:pl-10"; // task rows: phase indent + task indent
+const GUTTER_PHASE_INDENT = "pl-4 md:pl-5"; // phase headers: one level in from project
 
 // ── Compact task row ──
 function WorkloadTaskRow({
@@ -119,20 +123,21 @@ function WorkloadTaskRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 px-3 py-[5px] hover:bg-gray-800/40 transition-colors group/row border-b border-gray-800/20 last:border-b-0",
+        "flex items-center gap-1.5 pr-3 py-[5px] hover:bg-gray-800/40 transition-colors group/row border-b border-gray-800/20 last:border-b-0",
+        GUTTER_TASK_INDENT,
         blocked && "opacity-60"
       )}
     >
-      {/* Selection checkbox — edit mode only */}
-      {editMode && onToggleSelection && (
-        <span onClick={(e) => e.stopPropagation()} className="shrink-0">
+      {/* Fixed-width gutter slot for bulk selection */}
+      <span className={cn("shrink-0 flex items-center justify-center", GUTTER_SELECT_W)} onClick={(e) => e.stopPropagation()}>
+        {editMode && onToggleSelection ? (
           <Checkbox
             checked={isSelected}
             onCheckedChange={() => onToggleSelection(task.id)}
             className="h-3.5 w-3.5 border-gray-600 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
           />
-        </span>
-      )}
+        ) : null}
+      </span>
 
       {/* Complete checkbox */}
       <span onClick={(e) => e.stopPropagation()} className="shrink-0">
@@ -359,19 +364,48 @@ function PhaseSelector({ task, bucketMap, updateTaskMutation }) {
   );
 }
 
-// ── Phase header — simplified: "EXTERIOR (5)" ──
-function PhaseHeader({ bucket, openCount, expanded, onToggle }) {
+// ── Phase header — visually distinct from task rows ──
+function PhaseHeader({ bucket, openCount, expanded, onToggle, editMode, phaseTasks, selectedTaskIds, onToggleTaskSelection, onSelectProjectTasks }) {
+  // Selection state for this phase (edit mode)
+  const phaseTaskIds = (phaseTasks || []).map(t => t.id);
+  const selectedCount = phaseTaskIds.filter(id => selectedTaskIds?.has(id)).length;
+  const allSelected = phaseTaskIds.length > 0 && selectedCount === phaseTaskIds.length;
+  const someSelected = selectedCount > 0 && !allSelected;
+
+  const handlePhaseSelect = (e) => {
+    e.stopPropagation();
+    if (allSelected) {
+      phaseTaskIds.forEach(id => onToggleTaskSelection(id));
+    } else {
+      onSelectProjectTasks(phaseTaskIds);
+    }
+  };
+
   return (
     <div
-      className="flex items-center gap-1.5 px-4 py-[3px] border-t border-gray-800/30 cursor-pointer hover:bg-gray-800/20 transition-colors"
+      className={cn(
+        "flex items-center gap-1.5 py-[4px] pr-3 cursor-pointer hover:bg-gray-700/30 transition-colors border-t border-gray-700/40 bg-gray-800/30",
+        GUTTER_PHASE_INDENT
+      )}
       onClick={onToggle}
     >
-      {expanded ? <ChevronDown className="w-2.5 h-2.5 text-gray-500" /> : <ChevronRight className="w-2.5 h-2.5 text-gray-500" />}
-      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: bucket?.color || '#6B7280' }} />
-      <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-        {bucket?.name || "Unassigned Phase"}
-        <span className="text-gray-600 font-normal ml-1">({openCount})</span>
+      {/* Fixed-width gutter slot for bulk selection — same width as task row */}
+      <span className={cn("shrink-0 flex items-center justify-center", GUTTER_SELECT_W)} onClick={(e) => e.stopPropagation()}>
+        {editMode && onToggleTaskSelection && phaseTaskIds.length > 0 ? (
+          <Checkbox
+            checked={allSelected ? true : someSelected ? "indeterminate" : false}
+            onCheckedChange={handlePhaseSelect}
+            className="h-3.5 w-3.5 border-gray-500 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 data-[state=indeterminate]:bg-blue-600 data-[state=indeterminate]:border-blue-600"
+          />
+        ) : null}
       </span>
+
+      {expanded ? <ChevronDown className="w-2.5 h-2.5 text-gray-500" /> : <ChevronRight className="w-2.5 h-2.5 text-gray-500" />}
+      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: bucket?.color || '#6B7280' }} />
+      <span className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">
+        {bucket?.name || "Unassigned Phase"}
+      </span>
+      <span className="text-[10px] text-gray-500 font-normal">({openCount})</span>
     </div>
   );
 }
@@ -539,25 +573,25 @@ export default function WorkloadProjectGroup({
         className="flex items-center gap-2 px-3 py-2.5 bg-gray-800/50 hover:bg-gray-800/60 cursor-pointer transition-colors mt-1 first:mt-0 border-t-2 border-gray-600/50 group"
         onClick={handleToggleProject}
       >
-        {/* Select project tasks — edit mode only */}
-        {editMode && onSelectProjectTasks && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              const taskIds = tasks.map(t => t.id);
-              const allSelected = taskIds.every(id => selectedTaskIds?.has(id));
-              if (allSelected) taskIds.forEach(id => onToggleTaskSelection(id));
-              else onSelectProjectTasks(taskIds);
-            }}
-            className="shrink-0 text-gray-600 hover:text-blue-400 transition-colors"
-            title="Select all tasks in this project"
-          >
-            {tasks.every(t => selectedTaskIds?.has(t.id))
-              ? <CheckSquare className="w-3.5 h-3.5 text-blue-400" />
-              : <Square className="w-3.5 h-3.5" />
-            }
-          </button>
-        )}
+        {/* Fixed-width gutter slot for bulk selection — same width as task gutter */}
+        <span className={cn("shrink-0 flex items-center justify-center", GUTTER_SELECT_W)} onClick={(e) => e.stopPropagation()}>
+          {editMode && onSelectProjectTasks ? (() => {
+            const taskIds = tasks.map(t => t.id);
+            const selCount = taskIds.filter(id => selectedTaskIds?.has(id)).length;
+            const allSel = taskIds.length > 0 && selCount === taskIds.length;
+            const someSel = selCount > 0 && !allSel;
+            return (
+              <Checkbox
+                checked={allSel ? true : someSel ? "indeterminate" : false}
+                onCheckedChange={() => {
+                  if (allSel) taskIds.forEach(id => onToggleTaskSelection(id));
+                  else onSelectProjectTasks(taskIds);
+                }}
+                className="h-3.5 w-3.5 border-gray-500 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 data-[state=indeterminate]:bg-blue-600 data-[state=indeterminate]:border-blue-600"
+              />
+            );
+          })() : null}
+        </span>
 
         {expanded
           ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
@@ -681,6 +715,11 @@ export default function WorkloadProjectGroup({
                         openCount={openCount}
                         expanded={!isPhaseCollapsed}
                         onToggle={() => togglePhase(bucket.id)}
+                        editMode={editMode}
+                        phaseTasks={phaseTasks}
+                        selectedTaskIds={selectedTaskIds}
+                        onToggleTaskSelection={onToggleTaskSelection}
+                        onSelectProjectTasks={onSelectProjectTasks}
                       />
                       {!isPhaseCollapsed && phaseTasks.map(renderTaskRow)}
                     </div>
@@ -693,6 +732,11 @@ export default function WorkloadProjectGroup({
                       openCount={unphased.filter(t => t.status_id !== DONE_STATUS_ID).length}
                       expanded={!collapsedPhases.has("__unphased__")}
                       onToggle={() => togglePhase("__unphased__")}
+                      editMode={editMode}
+                      phaseTasks={unphased}
+                      selectedTaskIds={selectedTaskIds}
+                      onToggleTaskSelection={onToggleTaskSelection}
+                      onSelectProjectTasks={onSelectProjectTasks}
                     />
                     {!collapsedPhases.has("__unphased__") && unphased.map(renderTaskRow)}
                   </div>
