@@ -135,7 +135,7 @@ function toast({ duration, ...props }) {
   });
 
   // Auto-dismiss after duration (default 4 seconds)
-  const autoDismissMs = duration ?? 4000;
+  const autoDismissMs = duration ?? 2000;
   if (autoDismissMs > 0) {
     setTimeout(dismiss, autoDismissMs);
   }
