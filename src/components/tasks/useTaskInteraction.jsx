@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/use-toast';
 import { normalizeTask, normalizeTasks } from './normalizeTask';
 import { 
   incrementTaskVersion, 
@@ -222,7 +222,7 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
           }
         });
       }
-      toast.error('Failed to update task');
+      toast({ title: 'Failed to update task', variant: 'destructive' });
     },
     onSuccess: (result, variables) => {
       // Increment version on successful mutation
@@ -243,11 +243,11 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
     mutationFn: (taskId) => base44.entities.Task.delete(taskId),
     onSuccess: () => {
       invalidateAllTaskCaches();
-      toast.success('Task deleted');
+      toast({ title: 'Task deleted' });
       closeTaskDrawer();
     },
     onError: () => {
-      toast.error('Failed to delete task');
+      toast({ title: 'Failed to delete task', variant: 'destructive' });
     },
   });
 
@@ -281,9 +281,9 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
     
     if (task.is_priority) {
       console.log('PRIORITY REMOVED CONFIRMED', task.name);
-      toast.success('Priority removed');
+      toast({ title: 'Priority removed' });
     } else {
-      toast.success('Marked as priority');
+      toast({ title: 'Marked as priority' });
     }
 
     return { success: true };
@@ -297,7 +297,7 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
     
     await updateTask(task.id, { is_priority: false });
     console.log('PRIORITY REMOVED CONFIRMED', task.name);
-    toast.success('Priority removed');
+    toast({ title: 'Priority removed' });
   }, [pendingPriorityRemoval, updateTask]);
 
   const cancelPriorityRemoval = useCallback(() => {
@@ -322,7 +322,7 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
           updates.actual_hours = actualHours;
         }
         await updateTask(task.id, updates);
-        toast.success('Task completed');
+        toast({ title: 'Task completed' });
       } finally {
         setIsCompletingTask(false);
       }
@@ -373,7 +373,7 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
     // Guard against double-completion
     if (isCompletingTask) return;
     if (!completedStatus) {
-      toast.error('No completed status found');
+      toast({ title: 'No completed status found', variant: 'destructive' });
       return;
     }
     // Already complete? Ignore — use toggleComplete for reopen
@@ -401,7 +401,7 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
           status_id: firstStatus.id,
           completed_date: null,
         });
-        toast.success('Task reopened');
+        toast({ title: 'Task reopened' });
       }
     } else {
       // Delegate to canonical completion flow
@@ -461,12 +461,12 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
 
   const updateDueDate = useCallback(async (task, date) => {
     await updateTask(task.id, { due_date: date });
-    toast.success(date ? 'Due date updated' : 'Due date cleared');
+    toast({ title: date ? 'Due date updated' : 'Due date cleared' });
   }, [updateTask]);
 
   const updateStartDate = useCallback(async (task, date) => {
     await updateTask(task.id, { start_date: date });
-    toast.success(date ? 'Start date updated' : 'Start date cleared');
+    toast({ title: date ? 'Start date updated' : 'Start date cleared' });
   }, [updateTask]);
 
   // ═══════════════════════════════════════════════════════════════

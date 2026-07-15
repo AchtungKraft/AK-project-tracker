@@ -14,7 +14,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { format } from "date-fns";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/use-toast";
 import ImageModal from "../ui/ImageModal";
 import ProjectKanban from "./ProjectKanban";
 import CompletedTasksSection from "./CompletedTasksSection";
@@ -178,7 +178,7 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
       queryClient.invalidateQueries({ queryKey: ['project'] });
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       setEditing(false);
-      toast.success('Project updated successfully');
+      toast({ title: 'Project updated successfully' });
     }
   });
 
@@ -198,7 +198,7 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
         images: [...(project.images || []), ...imageUrls]
       });
     } catch (error) {
-      toast.error('Failed to upload images');
+      toast({ title: 'Failed to upload images', variant: 'destructive' });
     } finally {
       setUploadingImages(false);
     }
