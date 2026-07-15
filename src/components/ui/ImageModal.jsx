@@ -1,15 +1,23 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { X, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, ImageOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function ImageModal({ isOpen, onClose, imageUrl, images = [], currentIndex = 0, onNavigate }) {
   const [touchStart, setTouchStart] = useState(null);
   const [touchEnd, setTouchEnd] = useState(null);
+  const [imgLoading, setImgLoading] = useState(true);
+  const [imgError, setImgError] = useState(false);
 
   const hasMultipleImages = images && images.length > 1;
   const activeIndex = hasMultipleImages ? currentIndex : 0;
   const displayUrl = hasMultipleImages ? images[activeIndex] : imageUrl;
+
+  // Reset load state when image changes
+  useEffect(() => {
+    setImgLoading(true);
+    setImgError(false);
+  }, [displayUrl]);
 
   const handlePrev = useCallback((e) => {
     e?.stopPropagation();
@@ -106,16 +114,32 @@ export default function ImageModal({ isOpen, onClose, imageUrl, images = [], cur
         )}
 
         <div 
-          className="flex items-center justify-center w-full h-full p-4"
+          className="flex items-center justify-center w-full h-full p-4 min-h-[40vh]"
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}
         >
-          <img
-            src={displayUrl}
-            alt="Expanded view"
-            className="max-w-full max-h-[85vh] object-contain"
-          />
+          {imgError ? (
+            <div className="flex flex-col items-center gap-2 text-gray-400">
+              <ImageOff className="w-10 h-10" />
+              <p className="text-sm">Image could not be loaded</p>
+            </div>
+          ) : (
+            <>
+              {imgLoading && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-6 h-6 border-2 border-gray-600 border-t-white rounded-full animate-spin" />
+                </div>
+              )}
+              <img
+                src={displayUrl}
+                alt={`Image ${activeIndex + 1}${hasMultipleImages ? ` of ${images.length}` : ''}`}
+                className={`max-w-full max-h-[85vh] object-contain transition-opacity ${imgLoading ? 'opacity-0' : 'opacity-100'}`}
+                onLoad={() => setImgLoading(false)}
+                onError={() => { setImgLoading(false); setImgError(true); }}
+              />
+            </>
+          )}
         </div>
 
         {/* Image Counter */}
