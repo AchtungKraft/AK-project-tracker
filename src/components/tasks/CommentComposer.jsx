@@ -4,7 +4,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Send, Paperclip, X, Link2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { base44 } from "@/api/base44Client";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/use-toast";
 import { getMobileTextareaClass } from "@/components/mobile/MobileFormStyles";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import CommentLinkInput from "./CommentLinkInput";
@@ -119,12 +119,12 @@ export default function CommentComposer({ taskId, onPosted, userName }) {
       // Step 3: Clean up
       clearDraft();
       setIsOpen(false);
-      toast.success("Comment posted");
+      toast({ title: "Comment posted" });
       if (onPosted) onPosted();
     } catch (err) {
       // Keep draft intact on failure
       setUploading(false);
-      toast.error("Failed to post comment");
+      toast({ title: "Failed to post comment", variant: "destructive" });
     } finally {
       setPosting(false);
     }

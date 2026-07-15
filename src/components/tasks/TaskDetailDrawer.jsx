@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { CalendarIcon, Loader2, UserPlus, ExternalLink, CheckCircle2, Clock } from "lucide-react";
 import { format } from "date-fns";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -249,10 +249,10 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
         queryClient.invalidateQueries({ queryKey: ['workloadBuckets'] });
       }
       setEditing(false);
-      toast.success('Task updated successfully');
+      toast({ title: 'Task updated successfully' });
     },
     onError: () => {
-      toast.error('Failed to update task');
+      toast({ title: 'Failed to update task', variant: 'destructive' });
     },
   });
 
@@ -267,11 +267,11 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
       queryClient.invalidateQueries({ queryKey: ['allTasks'] });
       queryClient.invalidateQueries({ queryKey: ['projectTasks', projectId] });
       setShowDeleteConfirm(false);
-      toast.success('Task deleted successfully');
+      toast({ title: 'Task deleted successfully' });
       onClose();
     },
     onError: () => {
-      toast.error('Failed to delete task');
+      toast({ title: 'Failed to delete task', variant: 'destructive' });
     },
   });
 
@@ -301,7 +301,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
     if (userTeamMember) {
       setFormData({ ...formData, assigned_team_member_id: userTeamMember.id });
     } else {
-      toast.error('Could not find your team member profile');
+      toast({ title: 'Could not find your team member profile', variant: 'destructive' });
     }
   }, [userTeamMember, formData]);
 
@@ -339,7 +339,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
     onError: (err, newDeps, context) => {
       // Rollback: revert to what was there before
       setLiveDeps(null);
-      toast.error('Failed to save dependency');
+      toast({ title: 'Failed to save dependency', variant: 'destructive' });
     },
   });
 
@@ -392,7 +392,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
       TASK_CACHE_KEYS.forEach(key => queryClient.invalidateQueries({ queryKey: key }));
       queryClient.invalidateQueries({ queryKey: ['myTasks'] });
       queryClient.invalidateQueries({ queryKey: ['allTasks'] });
-      toast.success('Task completed');
+      toast({ title: 'Task completed' });
       setShowCompleteConfirm(false);
       onClose();
     },
