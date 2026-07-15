@@ -269,19 +269,19 @@ function InlineChecklistItems({ items, onToggle, showCompleted = false }) {
           <div key={item.id} className="flex items-center gap-1.5 py-px pl-3 relative">
             <div className="absolute left-0 top-1/2 w-2 h-px bg-gray-700/40" />
             <button onClick={e => { e.stopPropagation(); if (onToggle) onToggle(item); }} className="shrink-0 w-2.5 h-2.5 rounded-[3px] border border-gray-600/80 hover:border-gray-400 flex items-center justify-center transition-colors" />
-            <span className="text-[11.5px] leading-tight truncate text-gray-400">{item.title}</span>
+            <span className="text-[12px] leading-tight truncate text-white">{item.title}</span>
           </div>
         ))}
         {showCompleted && completedItems.length > 0 && (
           <div className="mt-1">
-            <div className="text-[10px] text-gray-500 font-medium uppercase tracking-wider pl-3 pb-0.5">Completed ({completedItems.length})</div>
+            <div className="text-[11px] text-gray-400 font-medium uppercase tracking-wider pl-3 pb-0.5">Completed ({completedItems.length})</div>
             {completedItems.map(item => (
               <div key={item.id} className="flex items-center gap-1.5 py-px pl-3 relative">
                 <div className="absolute left-0 top-1/2 w-2 h-px bg-gray-700/40" />
                 <button onClick={e => { e.stopPropagation(); if (onToggle) onToggle(item); }} className="shrink-0 w-2.5 h-2.5 rounded-[3px] bg-green-800/40 border border-green-700/50 text-green-500 flex items-center justify-center transition-colors hover:border-green-500" title="Uncheck to reopen">
                   <Check className="w-2 h-2" />
                 </button>
-                <span className="text-[11px] leading-tight truncate text-gray-500/70 line-through">{item.title}</span>
+                <span className="text-[12px] leading-tight truncate text-gray-400 line-through">{item.title}</span>
               </div>
             ))}
           </div>
