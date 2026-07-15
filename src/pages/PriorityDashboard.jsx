@@ -42,6 +42,7 @@ import { computePartsProgressByTaskId } from "@/utils/taskPartsProgress";
 import { sortTasksByPriority, isUrgentPriority } from "@/utils/taskPrioritySort";
 import { resolvePriorityTab, persistPriorityTab } from "@/lib/workspaceConfig";
 import PriorityProjectNav from "../components/priorities/PriorityProjectNav";
+import WeeklyHoursSummary from "../components/priorities/WeeklyHoursSummary";
 
 export default function PriorityDashboard() {
   const queryClient = useQueryClient();
@@ -185,6 +186,19 @@ export default function PriorityDashboard() {
     queryKey: ['statuses'],
     queryFn: () => base44.entities.StatusList.list(),
   });
+
+  // Fetch all phase buckets for weekly summary phase grouping
+  const { data: allBuckets = [] } = useQuery({
+    queryKey: ['allPhases'],
+    queryFn: () => base44.entities.ProjectKanbanBucket.list(),
+    staleTime: 60000,
+  });
+
+  const phaseLookup = useMemo(() => {
+    const m = new Map();
+    allBuckets.forEach(b => m.set(b.id, b));
+    return m;
+  }, [allBuckets]);
 
   // Get project statuses for filter (must be after statuses query)
   const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
@@ -636,6 +650,17 @@ export default function PriorityDashboard() {
               </div>
             </div>
           </MobileFilterTriggerBar>
+
+          {/* Weekly Hours Summary */}
+          <WeeklyHoursSummary
+            tasks={activePriorityTasks}
+            teamMemberMap={teamMemberMap}
+            phaseLookup={phaseLookup}
+            onFilterAssignee={(memberId) => {
+              if (memberId) handleAssignedToChange([memberId]);
+              else handleAssignedToChange([]);
+            }}
+          />
 
           {/* Tabs */}
           <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">

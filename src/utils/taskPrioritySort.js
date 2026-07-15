@@ -30,35 +30,38 @@ export function isFuturePriority(task) {
 }
 
 /**
- * Canonical sort for ALL task lists across the app.
- * 
+ * Canonical sort for ALL open task lists across the app.
+ *
  * Order:
- * 1. Urgent priority tasks (due ≤ 14 days) — by due_date ASC
- * 2. All other tasks — by due_date ASC
- * 3. Within same urgency tier and due_date: priority flag wins
- * 4. Tie-breaker: priority_set_at ASC
- * 5. Tasks with no due_date sort last
+ * 1. Priority tasks first (is_priority DESC)
+ * 2. Due Date ASC within each priority tier (nulls last)
+ * 3. Deterministic tie-breaker: task name ASC, then created_date ASC
+ *
+ * This means:
+ *   Priority · Due Jul 10 (overdue)
+ *   Priority · Due Jul 17
+ *   Priority · No Due Date
+ *   Non-Priority · Due Jul 11 (overdue)
+ *   Non-Priority · Due Jul 18
+ *   Non-Priority · No Due Date
  */
 export function sortTasksByPriority(tasks) {
   return [...tasks].sort((a, b) => {
-    const aUrgent = isUrgentPriority(a);
-    const bUrgent = isUrgentPriority(b);
+    // 1. Priority first
+    if (a.is_priority !== b.is_priority) return a.is_priority ? -1 : 1;
 
-    // 1. Urgent priority first
-    if (aUrgent !== bUrgent) return aUrgent ? -1 : 1;
-
-    // 2. Due date ascending (no date = last)
+    // 2. Due date ascending, nulls last within same priority tier
     const aDue = a.due_date ? new Date(a.due_date).getTime() : Infinity;
     const bDue = b.due_date ? new Date(b.due_date).getTime() : Infinity;
     if (aDue !== bDue) return aDue - bDue;
 
-    // 3. Priority flag tiebreaker
-    if (a.is_priority !== b.is_priority) return a.is_priority ? -1 : 1;
+    // 3. Deterministic tie-breaker: name then created_date
+    const nameCompare = (a.name || "").localeCompare(b.name || "");
+    if (nameCompare !== 0) return nameCompare;
 
-    // 4. priority_set_at tiebreaker
-    const aSet = a.priority_set_at ? new Date(a.priority_set_at).getTime() : Infinity;
-    const bSet = b.priority_set_at ? new Date(b.priority_set_at).getTime() : Infinity;
-    return aSet - bSet;
+    const aCreated = a.created_date ? new Date(a.created_date).getTime() : Infinity;
+    const bCreated = b.created_date ? new Date(b.created_date).getTime() : Infinity;
+    return aCreated - bCreated;
   });
 }
 

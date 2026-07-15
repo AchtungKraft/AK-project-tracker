@@ -2,7 +2,7 @@ import React, { useMemo, useState, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { sortChecklistItems } from "@/components/tasks/checklistHelpers";
-import { toast } from "sonner";
+import { useToast } from "@/components/ui/use-toast";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { buildProjectDetailUrl, SOURCES } from "@/lib/workspaceConfig";
@@ -39,6 +39,7 @@ export default function PriorityExecutionView({
   updateTaskMutation,
 }) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   // ── Checklist data ──
   const taskIds = useMemo(() => tasks.map(t => t.id), [tasks]);
@@ -86,7 +87,7 @@ export default function PriorityExecutionView({
 
   const handleToggleChecklistItem = useCallback((item) => {
     toggleChecklistMutation.mutate(item);
-    toast.success(item.is_complete ? 'Unchecked' : 'Checked');
+    toast({ title: item.is_complete ? 'Unchecked' : 'Checked' });
   }, [toggleChecklistMutation]);
 
   const handleUpdateChecklistTitle = useCallback((id, title) => {
