@@ -4,7 +4,7 @@ import { Layers, Plus, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { useToast } from "@/components/ui/use-toast";
 
 /**
  * Shared phase selector popover used in:
@@ -33,6 +33,7 @@ export default function PhaseSelectorPopover({
   const [newPhaseName, setNewPhaseName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const sorted = useMemo(() => {
     const arr = buckets instanceof Map ? Array.from(buckets.values()) : (buckets || []);
@@ -72,7 +73,7 @@ export default function PhaseSelectorPopover({
     // Check duplicate (case-insensitive)
     const isDup = sorted.some(b => b.name.toLowerCase() === name.toLowerCase());
     if (isDup) {
-      toast.error(`Phase "${name}" already exists in this project`);
+      toast({ title: `Phase "${name}" already exists`, variant: "destructive" });
       return;
     }
 
@@ -91,9 +92,9 @@ export default function PhaseSelectorPopover({
       setNewPhaseName("");
       setCreating(false);
       setOpen(false);
-      toast.success(`Created phase "${name}"`);
+      toast({ title: `Created phase "${name}"` });
     } catch {
-      toast.error("Failed to create phase");
+      toast({ title: "Failed to create phase", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
