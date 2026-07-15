@@ -25,6 +25,7 @@ import WorkloadProjectGroup from "./WorkloadProjectGroup";
 import WorkloadPrintOptionsModal from "./WorkloadPrintOptionsModal";
 import WorkloadBulkActionBar from "./WorkloadBulkActionBar";
 import buildWorkloadPrintHTML from "./buildWorkloadPrintHTML";
+import WeeklyHoursSummary from "./WeeklyHoursSummary";
 import { useToast } from "@/components/ui/use-toast";
 
 const DONE_STATUS_ID = "6913f57422230d8c7ee2ef54";
@@ -267,6 +268,13 @@ export default function WeeklyWorkloadView({
       if (!m[b.project_id]) m[b.project_id] = [];
       m[b.project_id].push(b);
     });
+    return m;
+  }, [allBuckets]);
+
+  // Phase lookup for hours summary
+  const phaseLookup = useMemo(() => {
+    const m = new Map();
+    allBuckets.forEach(b => m.set(b.id, b));
     return m;
   }, [allBuckets]);
 
@@ -674,6 +682,14 @@ export default function WeeklyWorkloadView({
           ))}
         </div>
       </div>
+
+      {/* ── Weekly Hours Summary — scoped to visible tasks ── */}
+      <WeeklyHoursSummary
+        tasks={activeTasks}
+        teamMemberMap={teamMemberMap}
+        phaseLookup={phaseLookup}
+        weekLabel={`${format(selectedWeek.start, "MMM d")} – ${format(selectedWeek.end, "MMM d")}`}
+      />
 
       {/* ── Sections ── */}
       {SECTIONS.map((sec) => {
