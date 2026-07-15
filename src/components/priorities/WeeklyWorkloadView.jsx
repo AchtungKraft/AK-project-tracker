@@ -361,18 +361,30 @@ export default function WeeklyWorkloadView({
     return () => window.removeEventListener("keydown", handler);
   }, [editMode, clearSelection]);
 
-  // ── Checklist item toggle handler — optimistic UI ──
+  // ── Checklist item toggle handler — optimistic UI with error rollback ──
   const queryClient = useQueryClient();
+  const pendingToggles = useRef(new Set());
   const handleToggleChecklistItem = useCallback((item) => {
+    if (pendingToggles.current.has(item.id)) return; // prevent double submission
+    pendingToggles.current.add(item.id);
     const newValue = !item.is_complete;
     // Optimistic update — mutate cache immediately
     queryClient.setQueryData(["workloadChecklists"], (old) => {
       if (!old) return old;
       return old.map(ci => ci.id === item.id ? { ...ci, is_complete: newValue } : ci);
     });
-    // Persist
-    base44.entities.TaskChecklistItem.update(item.id, { is_complete: newValue });
-  }, [queryClient]);
+    // Persist with error rollback
+    base44.entities.TaskChecklistItem.update(item.id, { is_complete: newValue })
+      .catch(() => {
+        // Rollback on failure
+        queryClient.setQueryData(["workloadChecklists"], (old) => {
+          if (!old) return old;
+          return old.map(ci => ci.id === item.id ? { ...ci, is_complete: !newValue } : ci);
+        });
+        toast({ title: "Failed to update checklist item", variant: "destructive" });
+      })
+      .finally(() => { pendingToggles.current.delete(item.id); });
+  }, [queryClient, toast]);
 
   // ── Bulk action handlers ──
   const selectedTasks = useMemo(() => {

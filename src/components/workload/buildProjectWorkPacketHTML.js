@@ -114,11 +114,8 @@ export default function buildProjectWorkPacketHTML(data) {
 
     let marksHtml = "";
     if (includeCompletionMarks) {
-      marksHtml = `<div style="margin-top:4px;display:flex;gap:16px;font-size:10px;color:#6b7280;">
+      marksHtml = `<div style="margin-top:3px;font-size:9px;color:#6b7280;">
         <span>&#9744; Completed</span>
-        <span>&#9744; Blocked</span>
-        <span>&#9744; Needs Parts</span>
-        <span>&#9744; Needs Review</span>
       </div>`;
     }
 

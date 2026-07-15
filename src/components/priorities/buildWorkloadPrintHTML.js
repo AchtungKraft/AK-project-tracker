@@ -149,14 +149,11 @@ function renderTaskRow(task, teamMemberMap, statusMap, blockedSet, fields, data)
     }
   }
 
-  // Completion marks
+  // Completion mark — single task-complete checkbox for technicians
   let marksHtml = "";
   if (fields.showCompletionMarks) {
-    marksHtml = `<div style="margin-top:3px;display:flex;gap:14px;font-size:9px;color:#6b7280;">
-      <span>&#9744; Done</span>
-      <span>&#9744; Blocked</span>
-      <span>&#9744; Parts</span>
-      <span>&#9744; Review</span>
+    marksHtml = `<div style="margin-top:3px;font-size:9px;color:#6b7280;">
+      <span>&#9744; Completed</span>
     </div>`;
   }
 
