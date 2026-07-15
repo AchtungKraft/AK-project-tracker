@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import {
   ChevronLeft,
@@ -15,6 +15,7 @@ import {
   Pencil,
   X,
   ListChecks,
+  Eye,
 } from "lucide-react";
 import { startOfWeek, endOfWeek, addWeeks, addDays, format, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -133,6 +134,7 @@ export default function WeeklyWorkloadView({
   const [weekOffset, setWeekOffset] = useState(0);
   const [editMode, setEditMode] = useState(false);
   const [showChecklists, setShowChecklists] = useState(false);
+  const [showCompletedChecklist, setShowCompletedChecklist] = useState(false);
 
   const selectedWeek = useMemo(() => {
     const base = addWeeks(new Date(), weekOffset);
@@ -359,10 +361,18 @@ export default function WeeklyWorkloadView({
     return () => window.removeEventListener("keydown", handler);
   }, [editMode, clearSelection]);
 
-  // ── Checklist item toggle handler ──
+  // ── Checklist item toggle handler — optimistic UI ──
+  const queryClient = useQueryClient();
   const handleToggleChecklistItem = useCallback((item) => {
-    base44.entities.TaskChecklistItem.update(item.id, { is_complete: !item.is_complete });
-  }, []);
+    const newValue = !item.is_complete;
+    // Optimistic update — mutate cache immediately
+    queryClient.setQueryData(["workloadChecklists"], (old) => {
+      if (!old) return old;
+      return old.map(ci => ci.id === item.id ? { ...ci, is_complete: newValue } : ci);
+    });
+    // Persist
+    base44.entities.TaskChecklistItem.update(item.id, { is_complete: newValue });
+  }, [queryClient]);
 
   // ── Bulk action handlers ──
   const selectedTasks = useMemo(() => {
@@ -584,7 +594,12 @@ export default function WeeklyWorkloadView({
             <Button
               variant={showChecklists ? "default" : "outline"}
               size="sm"
-              onClick={() => setShowChecklists(v => !v)}
+              onClick={() => {
+                setShowChecklists(v => {
+                  if (v) setShowCompletedChecklist(false); // reset review mode when turning off
+                  return !v;
+                });
+              }}
               className={cn(
                 "h-7 px-2 text-xs",
                 showChecklists
@@ -596,6 +611,23 @@ export default function WeeklyWorkloadView({
               <ListChecks className="w-3 h-3 mr-1" />
               Checklists
             </Button>
+            {showChecklists && (
+              <Button
+                variant={showCompletedChecklist ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowCompletedChecklist(v => !v)}
+                className={cn(
+                  "h-7 px-2 text-xs",
+                  showCompletedChecklist
+                    ? "bg-gray-600 hover:bg-gray-700 text-white"
+                    : "border-gray-700 text-white hover:bg-gray-800"
+                )}
+                title="Show completed checklist items"
+              >
+                <Eye className="w-3 h-3 mr-1" />
+                Done
+              </Button>
+            )}
             <Button
               variant={editMode ? "default" : "outline"}
               size="sm"
@@ -684,6 +716,7 @@ export default function WeeklyWorkloadView({
                     weekLabel={`Week of ${format(selectedWeek.start, "MMMM d")}–${format(selectedWeek.end, "d, yyyy")}`}
                     editMode={editMode}
                     showChecklists={showChecklists}
+                    showCompletedChecklist={showCompletedChecklist}
                     onToggleChecklistItem={handleToggleChecklistItem}
                   />
                 ))}

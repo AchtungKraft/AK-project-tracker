@@ -131,17 +131,21 @@ function renderTaskRow(task, teamMemberMap, statusMap, blockedSet, fields, data)
     }
   }
 
-  // Checklists
+  // Checklists — open items only by default; completed items only when explicitly requested
   let checklistHtml = "";
   if (fields.showChecklist) {
-    const items = (data.checklistsByTaskId || {})[task.id] || [];
-    if (items.length > 0) {
-      checklistHtml = items.map(c => {
+    const allItems = (data.checklistsByTaskId || {})[task.id] || [];
+    const includeCompleted = fields.showCompletedChecklist;
+    const visibleItems = includeCompleted ? allItems : allItems.filter(c => !c.is_complete);
+    if (visibleItems.length > 0) {
+      const doneCount = allItems.filter(c => c.is_complete).length;
+      const summaryText = `${doneCount}/${allItems.length} complete`;
+      checklistHtml = visibleItems.map(c => {
         const check = c.is_complete ? "&#9745;" : "&#9744;";
         const style = c.is_complete ? "text-decoration:line-through;color:#9ca3af;" : "";
         return `<div style="margin-left:16px;font-size:10px;${style}">${check} ${esc(c.title)}</div>`;
       }).join("");
-      checklistHtml = `<div style="margin-top:2px;">${checklistHtml}</div>`;
+      checklistHtml = `<div style="margin-top:2px;">${checklistHtml}<div style="margin-left:16px;font-size:9px;color:#9ca3af;margin-top:1px;">${summaryText}</div></div>`;
     }
   }
 

@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Printer } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const SECTION_OPTIONS = [
   { key: "dueThisWeek", label: "Due This Week", defaultOn: true },
@@ -26,7 +27,8 @@ const FIELD_OPTIONS = [
   { key: "showStatus", label: "Show Status", defaultOn: true },
   { key: "showPriority", label: "Show Priority Indicator", defaultOn: true },
   { key: "showBlocked", label: "Show Blocked Indicator", defaultOn: true },
-  { key: "showChecklist", label: "Include Task Checklists", defaultOn: false },
+  { key: "showChecklist", label: "Include Task Checklists (open items)", defaultOn: false },
+  { key: "showCompletedChecklist", label: "Include Completed Checklist Items", defaultOn: false, parent: "showChecklist" },
   { key: "showCompletionMarks", label: "Technician Completion Marks", defaultOn: true },
   { key: "showCompleted", label: "Show Completed Tasks", defaultOn: false },
 ];
@@ -45,7 +47,14 @@ export default function WorkloadPrintOptionsModal({ open, onClose, onPrint, sect
   });
 
   const toggleSection = (key) => setSections((prev) => ({ ...prev, [key]: !prev[key] }));
-  const toggleField = (key) => setFields((prev) => ({ ...prev, [key]: !prev[key] }));
+  const toggleField = (key) => setFields((prev) => {
+    const next = { ...prev, [key]: !prev[key] };
+    // If turning off a parent, also turn off its children
+    if (!next[key]) {
+      FIELD_OPTIONS.forEach(f => { if (f.parent === key) next[f.key] = false; });
+    }
+    return next;
+  });
 
   const selectedSectionKeys = Object.keys(sections).filter((k) => sections[k]);
   const totalTasks = selectedSectionKeys.reduce((sum, k) => sum + (sectionCounts[k] || 0), 0);
@@ -88,16 +97,20 @@ export default function WorkloadPrintOptionsModal({ open, onClose, onPrint, sect
           <div>
             <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Printed Fields</p>
             <div className="space-y-1.5">
-              {FIELD_OPTIONS.map((f) => (
-                <label key={f.key} className="flex items-center gap-2 cursor-pointer hover:bg-gray-800/40 rounded px-2 py-1">
-                  <Checkbox
-                    checked={fields[f.key]}
-                    onCheckedChange={() => toggleField(f.key)}
-                    className="border-gray-600 data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600"
-                  />
-                  <span className="text-sm text-gray-200">{f.label}</span>
-                </label>
-              ))}
+              {FIELD_OPTIONS.map((f) => {
+                // Hide child options when parent is off
+                if (f.parent && !fields[f.parent]) return null;
+                return (
+                  <label key={f.key} className={cn("flex items-center gap-2 cursor-pointer hover:bg-gray-800/40 rounded px-2 py-1", f.parent && "ml-5")}>
+                    <Checkbox
+                      checked={fields[f.key]}
+                      onCheckedChange={() => toggleField(f.key)}
+                      className="border-gray-600 data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600"
+                    />
+                    <span className={cn("text-sm", f.parent ? "text-gray-400" : "text-gray-200")}>{f.label}</span>
+                  </label>
+                );
+              })}
             </div>
           </div>
 

@@ -20,6 +20,7 @@ export default function WorkloadProjectPrintModal({
 }) {
   const [scope, setScope] = useState("current"); // "current" or "all"
   const [includeChecklists, setIncludeChecklists] = useState(false);
+  const [includeCompletedChecklists, setIncludeCompletedChecklists] = useState(false);
   const [includeCompletionMarks, setIncludeCompletionMarks] = useState(true);
   const [includeNotes, setIncludeNotes] = useState(true);
 
@@ -75,11 +76,21 @@ export default function WorkloadProjectPrintModal({
               <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-800/40 rounded px-2 py-1">
                 <Checkbox
                   checked={includeChecklists}
-                  onCheckedChange={setIncludeChecklists}
+                  onCheckedChange={(v) => { setIncludeChecklists(v); if (!v) setIncludeCompletedChecklists(false); }}
                   className="border-gray-600 data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600"
                 />
                 <span className="text-sm text-gray-200">Include Task Checklists</span>
               </label>
+              {includeChecklists && (
+                <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-800/40 rounded px-2 py-1 ml-5">
+                  <Checkbox
+                    checked={includeCompletedChecklists}
+                    onCheckedChange={setIncludeCompletedChecklists}
+                    className="border-gray-600 data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600"
+                  />
+                  <span className="text-sm text-gray-400">Include Completed Items</span>
+                </label>
+              )}
               <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-800/40 rounded px-2 py-1">
                 <Checkbox
                   checked={includeCompletionMarks}
@@ -106,7 +117,7 @@ export default function WorkloadProjectPrintModal({
           </Button>
           <Button
             onClick={() => {
-              onPrint({ scope, includeChecklists, includeCompletionMarks, includeNotes });
+              onPrint({ scope, includeChecklists, includeCompletedChecklists, includeCompletionMarks, includeNotes });
               onClose();
             }}
             disabled={count === 0}

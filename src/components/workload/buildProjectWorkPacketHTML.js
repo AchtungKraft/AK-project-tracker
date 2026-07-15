@@ -53,7 +53,7 @@ export default function buildProjectWorkPacketHTML(data) {
     options = {},
   } = data;
 
-  const { includeChecklists = false, includeCompletionMarks = true, includeNotes = true } = options;
+  const { includeChecklists = false, includeCompletedChecklists = false, includeCompletionMarks = true, includeNotes = true } = options;
   const printedAt = formatTimestamp();
 
   // Group by phase
@@ -100,12 +100,16 @@ export default function buildProjectWorkPacketHTML(data) {
 
     let checklistHtml = "";
     if (includeChecklists && checklist.length > 0) {
-      const items = checklist.map(c => {
-        const check = c.is_complete ? "&#9745;" : "&#9744;";
-        const style = c.is_complete ? "text-decoration:line-through;color:#9ca3af;" : "";
-        return `<div style="margin-left:20px;font-size:11px;${style}">${check} ${esc(c.title)}</div>`;
-      }).join("");
-      checklistHtml = `<div style="margin-top:3px;">${items}</div>`;
+      const visibleChecklist = includeCompletedChecklists ? checklist : checklist.filter(c => !c.is_complete);
+      if (visibleChecklist.length > 0) {
+        const items = visibleChecklist.map(c => {
+          const check = c.is_complete ? "&#9745;" : "&#9744;";
+          const style = c.is_complete ? "text-decoration:line-through;color:#9ca3af;" : "";
+          return `<div style="margin-left:20px;font-size:11px;${style}">${check} ${esc(c.title)}</div>`;
+        }).join("");
+        const summaryText = `${checkDone}/${checkTotal} complete`;
+        checklistHtml = `<div style="margin-top:3px;">${items}<div style="margin-left:20px;font-size:9px;color:#9ca3af;margin-top:1px;">${summaryText}</div></div>`;
+      }
     }
 
     let marksHtml = "";

@@ -412,35 +412,64 @@ function PhaseHeader({ bucket, openCount, expanded, onToggle, editMode, phaseTas
 }
 
 // ── Inline checklist items beneath a task ──
-function InlineChecklistItems({ items, onToggle }) {
+function InlineChecklistItems({ items, onToggle, showCompleted = false }) {
   if (!items || items.length === 0) return null;
   const sorted = [...items].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   const done = sorted.filter(i => i.is_complete).length;
+  const total = sorted.length;
+  const remaining = total - done;
+
+  // Auto-collapse when all items are complete
+  if (done === total) {
+    return (
+      <div className="pl-14 md:pl-16 pr-3 pb-1">
+        <span className="text-[10px] text-green-500 flex items-center gap-1">
+          <Check className="w-2.5 h-2.5" />
+          {total}/{total} Complete
+        </span>
+      </div>
+    );
+  }
+
+  // Show open items; optionally show completed in review mode
+  const openItems = sorted.filter(i => !i.is_complete);
+  const completedItems = sorted.filter(i => i.is_complete);
+  const summaryText = remaining <= total / 2
+    ? `${remaining} Remaining`
+    : `${done}/${total} Complete`;
+
   return (
     <div className="pl-14 md:pl-16 pr-3 pb-1">
-      {sorted.map(item => (
+      {openItems.map(item => (
         <div key={item.id} className="flex items-center gap-1.5 py-[2px]">
           <button
             onClick={(e) => { e.stopPropagation(); if (onToggle) onToggle(item); }}
-            className={cn(
-              "shrink-0 w-3 h-3 rounded-sm border flex items-center justify-center transition-colors",
-              item.is_complete
-                ? "bg-green-700/60 border-green-600 text-green-300"
-                : "border-gray-600 hover:border-gray-400"
-            )}
-          >
-            {item.is_complete && <Check className="w-2 h-2" />}
-          </button>
-          <span className={cn(
-            "text-[11px] leading-tight truncate",
-            item.is_complete ? "text-gray-600 line-through" : "text-gray-400"
-          )}>
+            className="shrink-0 w-3 h-3 rounded-sm border border-gray-600 hover:border-gray-400 flex items-center justify-center transition-colors"
+          />
+          <span className="text-[11px] leading-tight truncate text-gray-400">
             {item.title}
           </span>
         </div>
       ))}
+      {showCompleted && completedItems.length > 0 && (
+        <>
+          {completedItems.map(item => (
+            <div key={item.id} className="flex items-center gap-1.5 py-[2px]">
+              <button
+                onClick={(e) => { e.stopPropagation(); if (onToggle) onToggle(item); }}
+                className="shrink-0 w-3 h-3 rounded-sm border bg-green-700/60 border-green-600 text-green-300 flex items-center justify-center transition-colors"
+              >
+                <Check className="w-2 h-2" />
+              </button>
+              <span className="text-[11px] leading-tight truncate text-gray-600 line-through">
+                {item.title}
+              </span>
+            </div>
+          ))}
+        </>
+      )}
       <div className="text-[9px] text-gray-600 mt-0.5">
-        {done}/{items.length} complete
+        {summaryText}
       </div>
     </div>
   );
@@ -474,6 +503,7 @@ export default function WorkloadProjectGroup({
   weekLabel = "",
   editMode = false,
   showChecklists = false,
+  showCompletedChecklist = false,
   onToggleChecklistItem,
 }) {
   const projectId = project?.id || "__no_project__";
@@ -736,6 +766,7 @@ export default function WorkloadProjectGroup({
                     <InlineChecklistItems
                       items={clItems}
                       onToggle={onToggleChecklistItem}
+                      showCompleted={showCompletedChecklist}
                     />
                   )}
                 </React.Fragment>
