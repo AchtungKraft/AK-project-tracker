@@ -78,6 +78,7 @@ export default function WorkloadTaskRow({
   onToggleSelection,
   showPhase = false,
   showOperationalState = false,
+  isMobile = false,
 }) {
   const due = parseLocalDate(task.due_date);
   const todayStart = startOfDay(new Date());
@@ -112,168 +113,229 @@ export default function WorkloadTaskRow({
     setStatusOpen(false);
   }, [task, updateTaskMutation]);
 
+  // Mobile: compact metadata line
+  const mobileMetaParts = [];
+  if (isMobile) {
+    if (status) mobileMetaParts.push(status.label);
+    if (assignee) mobileMetaParts.push(assignee.full_name?.split(" ")[0]);
+    if (due) mobileMetaParts.push(format(due, "M/d"));
+  }
+
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 px-1 sm:px-2 py-[5px] hover:bg-gray-800/40 transition-colors group/row border-b border-gray-800/20 last:border-b-0",
+        "group/row border-b border-gray-800/20 last:border-b-0 hover:bg-gray-800/40 transition-colors",
+        isMobile ? "px-1 py-1.5" : "flex items-center gap-1.5 px-1 sm:px-2 py-[5px]",
       )}
     >
-      {/* Selection checkbox */}
-      {onToggleSelection && (
-        <span onClick={e => e.stopPropagation()} className="shrink-0">
-          <Checkbox
-            checked={isSelected}
-            onCheckedChange={() => onToggleSelection(task.id)}
-            className="h-3.5 w-3.5 border-gray-600 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
-          />
-        </span>
-      )}
-
-      {/* Complete checkbox */}
-      <span onClick={e => e.stopPropagation()} className="shrink-0">
-        <Checkbox
-          checked={false}
-          onCheckedChange={() => onToggleComplete(task)}
-          className="h-3.5 w-3.5 border-gray-600 data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600"
-        />
-      </span>
-
-      {/* Priority toggle */}
-      <button
-        onClick={e => { e.stopPropagation(); if (onTogglePriority) onTogglePriority(task); }}
-        className={cn(
-          "shrink-0 p-0 transition-colors",
-          task.is_priority ? "text-red-500 hover:text-red-400" : "text-gray-700 hover:text-red-400 opacity-0 group-hover/row:opacity-100"
-        )}
-        title={task.is_priority ? "Remove priority" : "Set priority"}
-      >
-        <Flame className="w-3 h-3" />
-      </button>
-
-      {/* Task name */}
-      <button
-        onClick={() => onTaskClick(task)}
-        className="flex-1 min-w-0 text-left text-[13px] text-gray-200 hover:text-white truncate leading-tight"
-      >
-        {task.name}
-      </button>
-
-      {/* Phase badge */}
-      {showPhase && phaseName && (
-        <span className="text-[9px] text-gray-500 bg-gray-800/60 px-1 py-0 rounded shrink-0 hidden lg:inline truncate max-w-[80px]">
-          {phaseName}
-        </span>
-      )}
-
-      {/* Blocker summary — only in non-blocked sections or when showing operational state */}
-      {blockingReasons.length > 0 && (
-        <BlockerSummary reasons={blockingReasons} />
-      )}
-
-      {/* Operational state badge — only when showOperationalState is true (e.g. IN_PROGRESS with conflict) */}
-      {showOperationalState && stateConfig && opState !== "COMPLETED" && (
-        <Badge
-          className={cn("text-[9px] px-1 py-0 h-4 border-0 shrink-0", stateConfig.bgClass, stateConfig.textClass, isOverride && "ring-1 ring-amber-500/50")}
-        >
-          {stateConfig.label}
-        </Badge>
-      )}
-
-      {/* Downstream count */}
-      {successorCount > 0 && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="flex items-center gap-0.5 text-[10px] text-cyan-400 shrink-0">
-              <GitBranch className="w-2.5 h-2.5" />
-              {successorCount}
+      {isMobile ? (
+        /* ── MOBILE: task-name-first, two-line layout ── */
+        <>
+          <div className="flex items-start gap-1.5">
+            {/* Selection checkbox — only in edit mode, handled by parent */}
+            {onToggleSelection && (
+              <span onClick={e => e.stopPropagation()} className="shrink-0 mt-0.5">
+                <Checkbox
+                  checked={isSelected}
+                  onCheckedChange={() => onToggleSelection(task.id)}
+                  className="h-3.5 w-3.5 border-gray-600 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                />
+              </span>
+            )}
+            {/* Complete checkbox */}
+            <span onClick={e => e.stopPropagation()} className="shrink-0 mt-0.5">
+              <Checkbox
+                checked={false}
+                onCheckedChange={() => onToggleComplete(task)}
+                className="h-3.5 w-3.5 border-gray-600 data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600"
+              />
             </span>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="bg-gray-800 border-gray-700">
-            <p className="text-xs">Blocks {successorCount} downstream task{successorCount !== 1 ? "s" : ""}</p>
-          </TooltipContent>
-        </Tooltip>
-      )}
-
-      {/* Unassigned indicator */}
-      {!task.assigned_team_member_id && (
-        <span className="text-[9px] text-yellow-500 bg-yellow-900/20 px-1 rounded shrink-0 hidden sm:inline">
-          Unassigned
-        </span>
-      )}
-
-      {/* Inline controls — visible on hover */}
-      <div className="flex items-center gap-0 shrink-0 opacity-0 group-hover/row:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-        <Popover open={dateOpen} onOpenChange={setDateOpen}>
-          <PopoverTrigger asChild>
-            <button className="text-gray-600 hover:text-blue-400 p-0.5 rounded" title="Set due date">
-              <CalendarDays className="w-3 h-3" />
+            {/* Priority flame — only show when active */}
+            {task.is_priority && (
+              <Flame className="w-3 h-3 text-red-500 shrink-0 mt-0.5" />
+            )}
+            {/* Task name + metadata */}
+            <button
+              onClick={() => onTaskClick(task)}
+              className="flex-1 min-w-0 text-left"
+            >
+              <span className="text-[13px] text-gray-200 leading-snug line-clamp-2">{task.name}</span>
+              {/* Blocker reason — readable text below name */}
+              {blockingReasons.length > 0 && (
+                <span className="block text-[10px] text-red-400 mt-0.5 leading-tight line-clamp-1">
+                  Blocked by: {blockingReasons[0].label || BLOCKER_TYPE_LABELS[blockingReasons[0].type] || "dependency"}
+                </span>
+              )}
+              {/* Compact metadata line */}
+              {mobileMetaParts.length > 0 && (
+                <span className="block text-[10px] text-gray-500 mt-0.5">
+                  {mobileMetaParts.join(" · ")}
+                </span>
+              )}
             </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0 bg-gray-900 border-gray-700" side="left" align="start">
-            <Calendar mode="single" selected={due || undefined} onSelect={handleDateSelect} className="bg-gray-900" />
-          </PopoverContent>
-        </Popover>
+          </div>
+        </>
+      ) : (
+        /* ── DESKTOP: original dense row ── */
+        <>
+          {/* Selection checkbox */}
+          {onToggleSelection && (
+            <span onClick={e => e.stopPropagation()} className="shrink-0">
+              <Checkbox
+                checked={isSelected}
+                onCheckedChange={() => onToggleSelection(task.id)}
+                className="h-3.5 w-3.5 border-gray-600 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+              />
+            </span>
+          )}
 
-        <Popover open={assignOpen} onOpenChange={setAssignOpen}>
-          <PopoverTrigger asChild>
-            <button className="text-gray-600 hover:text-blue-400 p-0.5 rounded" title="Assign">
-              <User className="w-3 h-3" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-44 p-1 bg-gray-900 border-gray-700" side="left" align="start">
-            <div className="space-y-px max-h-52 overflow-y-auto">
-              <button onClick={() => handleAssign(null)} className={cn("w-full text-left px-2 py-1 rounded text-xs transition-colors", !task.assigned_team_member_id ? "bg-gray-800 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white")}>
-                Unassigned
-              </button>
-              {activeMembers.map(tm => (
-                <button key={tm.id} onClick={() => handleAssign(tm.id)} className={cn("w-full text-left px-2 py-1 rounded text-xs transition-colors", task.assigned_team_member_id === tm.id ? "bg-blue-900/40 text-blue-300" : "text-gray-300 hover:bg-gray-800")}>
-                  {tm.full_name}
+          {/* Complete checkbox */}
+          <span onClick={e => e.stopPropagation()} className="shrink-0">
+            <Checkbox
+              checked={false}
+              onCheckedChange={() => onToggleComplete(task)}
+              className="h-3.5 w-3.5 border-gray-600 data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600"
+            />
+          </span>
+
+          {/* Priority toggle */}
+          <button
+            onClick={e => { e.stopPropagation(); if (onTogglePriority) onTogglePriority(task); }}
+            className={cn(
+              "shrink-0 p-0 transition-colors",
+              task.is_priority ? "text-red-500 hover:text-red-400" : "text-gray-700 hover:text-red-400 opacity-0 group-hover/row:opacity-100"
+            )}
+            title={task.is_priority ? "Remove priority" : "Set priority"}
+          >
+            <Flame className="w-3 h-3" />
+          </button>
+
+          {/* Task name */}
+          <button
+            onClick={() => onTaskClick(task)}
+            className="flex-1 min-w-0 text-left text-[13px] text-gray-200 hover:text-white truncate leading-tight"
+          >
+            {task.name}
+          </button>
+
+          {/* Phase badge */}
+          {showPhase && phaseName && (
+            <span className="text-[9px] text-gray-500 bg-gray-800/60 px-1 py-0 rounded shrink-0 hidden lg:inline truncate max-w-[80px]">
+              {phaseName}
+            </span>
+          )}
+
+          {/* Blocker summary */}
+          {blockingReasons.length > 0 && (
+            <BlockerSummary reasons={blockingReasons} />
+          )}
+
+          {/* Operational state badge */}
+          {showOperationalState && stateConfig && opState !== "COMPLETED" && (
+            <Badge
+              className={cn("text-[9px] px-1 py-0 h-4 border-0 shrink-0", stateConfig.bgClass, stateConfig.textClass, isOverride && "ring-1 ring-amber-500/50")}
+            >
+              {stateConfig.label}
+            </Badge>
+          )}
+
+          {/* Downstream count */}
+          {successorCount > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="flex items-center gap-0.5 text-[10px] text-cyan-400 shrink-0">
+                  <GitBranch className="w-2.5 h-2.5" />
+                  {successorCount}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="bg-gray-800 border-gray-700">
+                <p className="text-xs">Blocks {successorCount} downstream task{successorCount !== 1 ? "s" : ""}</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+
+          {/* Unassigned indicator */}
+          {!task.assigned_team_member_id && (
+            <span className="text-[9px] text-yellow-500 bg-yellow-900/20 px-1 rounded shrink-0 hidden sm:inline">
+              Unassigned
+            </span>
+          )}
+
+          {/* Inline controls — visible on hover */}
+          <div className="flex items-center gap-0 shrink-0 opacity-0 group-hover/row:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+            <Popover open={dateOpen} onOpenChange={setDateOpen}>
+              <PopoverTrigger asChild>
+                <button className="text-gray-600 hover:text-blue-400 p-0.5 rounded" title="Set due date">
+                  <CalendarDays className="w-3 h-3" />
                 </button>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0 bg-gray-900 border-gray-700" side="left" align="start">
+                <Calendar mode="single" selected={due || undefined} onSelect={handleDateSelect} className="bg-gray-900" />
+              </PopoverContent>
+            </Popover>
 
-        <Popover open={statusOpen} onOpenChange={setStatusOpen}>
-          <PopoverTrigger asChild>
-            <button className="text-gray-600 hover:text-blue-400 p-0.5 rounded" title="Change status">
-              <CheckCircle2 className="w-3 h-3" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-40 p-1 bg-gray-900 border-gray-700" side="left" align="start">
-            <div className="space-y-px max-h-52 overflow-y-auto">
-              {taskStatuses.map(s => (
-                <button key={s.id} onClick={() => handleStatusChange(s.id)} className={cn("w-full text-left px-2 py-1 rounded text-xs transition-colors flex items-center gap-1.5", task.status_id === s.id ? "bg-gray-800 text-white" : "text-gray-300 hover:bg-gray-800")}>
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
-                  {s.label}
+            <Popover open={assignOpen} onOpenChange={setAssignOpen}>
+              <PopoverTrigger asChild>
+                <button className="text-gray-600 hover:text-blue-400 p-0.5 rounded" title="Assign">
+                  <User className="w-3 h-3" />
                 </button>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
-      </div>
+              </PopoverTrigger>
+              <PopoverContent className="w-44 p-1 bg-gray-900 border-gray-700" side="left" align="start">
+                <div className="space-y-px max-h-52 overflow-y-auto">
+                  <button onClick={() => handleAssign(null)} className={cn("w-full text-left px-2 py-1 rounded text-xs transition-colors", !task.assigned_team_member_id ? "bg-gray-800 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white")}>
+                    Unassigned
+                  </button>
+                  {activeMembers.map(tm => (
+                    <button key={tm.id} onClick={() => handleAssign(tm.id)} className={cn("w-full text-left px-2 py-1 rounded text-xs transition-colors", task.assigned_team_member_id === tm.id ? "bg-blue-900/40 text-blue-300" : "text-gray-300 hover:bg-gray-800")}>
+                      {tm.full_name}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
 
-      {/* Status badge */}
-      {status && (
-        <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0 hidden sm:inline-flex cursor-default" style={{ borderColor: status.color, color: status.color }}>
-          {status.label}
-        </Badge>
+            <Popover open={statusOpen} onOpenChange={setStatusOpen}>
+              <PopoverTrigger asChild>
+                <button className="text-gray-600 hover:text-blue-400 p-0.5 rounded" title="Change status">
+                  <CheckCircle2 className="w-3 h-3" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-40 p-1 bg-gray-900 border-gray-700" side="left" align="start">
+                <div className="space-y-px max-h-52 overflow-y-auto">
+                  {taskStatuses.map(s => (
+                    <button key={s.id} onClick={() => handleStatusChange(s.id)} className={cn("w-full text-left px-2 py-1 rounded text-xs transition-colors flex items-center gap-1.5", task.status_id === s.id ? "bg-gray-800 text-white" : "text-gray-300 hover:bg-gray-800")}>
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {/* Status badge */}
+          {status && (
+            <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0 hidden sm:inline-flex cursor-default" style={{ borderColor: status.color, color: status.color }}>
+              {status.label}
+            </Badge>
+          )}
+
+          {/* Assignee */}
+          <span className="text-[11px] text-gray-500 w-14 truncate shrink-0 hidden md:block text-right">
+            {assignee?.full_name?.split(" ")[0] || ""}
+          </span>
+
+          {/* Due date */}
+          <span className={cn("text-[11px] w-12 shrink-0 text-right hidden sm:block tabular-nums", isOverdue ? "text-red-400 font-semibold" : "text-gray-500")}>
+            {due ? format(due, "M/d") : "—"}
+          </span>
+
+          {/* Estimated hours */}
+          <span className="text-[10px] text-gray-600 w-8 shrink-0 text-right hidden lg:block tabular-nums">
+            {task.estimated_hours ? fmtHours(task.estimated_hours) : ""}
+          </span>
+        </>
       )}
-
-      {/* Assignee */}
-      <span className="text-[11px] text-gray-500 w-14 truncate shrink-0 hidden md:block text-right">
-        {assignee?.full_name?.split(" ")[0] || ""}
-      </span>
-
-      {/* Due date */}
-      <span className={cn("text-[11px] w-12 shrink-0 text-right hidden sm:block tabular-nums", isOverdue ? "text-red-400 font-semibold" : "text-gray-500")}>
-        {due ? format(due, "M/d") : "—"}
-      </span>
-
-      {/* Estimated hours */}
-      <span className="text-[10px] text-gray-600 w-8 shrink-0 text-right hidden lg:block tabular-nums">
-        {task.estimated_hours ? fmtHours(task.estimated_hours) : ""}
-      </span>
     </div>
   );
 }

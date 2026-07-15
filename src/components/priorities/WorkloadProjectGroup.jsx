@@ -28,6 +28,7 @@ import WorkloadProjectPrintModal from "@/components/workload/WorkloadProjectPrin
 import buildProjectWorkPacketHTML from "@/components/workload/buildProjectWorkPacketHTML";
 import PhaseSelectorPopover from "@/components/workload/PhaseSelectorPopover";
 import { useToast } from "@/components/ui/use-toast";
+import { useIsMobile } from "@/components/mobile/useIsMobile";
 
 const DONE_STATUS_ID = "6913f57422230d8c7ee2ef54";
 
@@ -86,6 +87,7 @@ function WorkloadTaskRow({
   successorCount,
   successorNames,
   editMode,
+  isMobile = false,
 }) {
   const due = parseLocalDate(task.due_date);
   const todayStart = startOfDay(new Date());
@@ -121,213 +123,276 @@ function WorkloadTaskRow({
 
   const depCount = (task.dependencies || []).length;
 
+  // Mobile: compact metadata line
+  const mobileMetaParts = [];
+  if (isMobile) {
+    if (status) mobileMetaParts.push(status.label);
+    if (assignee) mobileMetaParts.push(assignee.full_name?.split(" ")[0]);
+    if (due) mobileMetaParts.push(format(due, "M/d"));
+  }
+
   return (
     <div
       className={cn(
-        "flex items-center gap-1 pr-3 py-[3px] hover:bg-gray-800/40 transition-colors group/row border-b border-gray-800/20 last:border-b-0",
-        GUTTER_TASK_INDENT,
-        blocked && "opacity-60"
+        "group/row border-b border-gray-800/20 last:border-b-0 hover:bg-gray-800/40 transition-colors",
+        isMobile
+          ? cn("pl-4 pr-2 py-1.5", blocked && "opacity-60")
+          : cn("flex items-center gap-1 pr-3 py-[3px]", GUTTER_TASK_INDENT, blocked && "opacity-60"),
       )}
     >
-      {/* Fixed-width gutter slot for bulk selection */}
-      <span className={cn("shrink-0 flex items-center justify-center", GUTTER_SELECT_W)} onClick={(e) => e.stopPropagation()}>
-        {editMode && onToggleSelection ? (
-          <Checkbox
-            checked={isSelected}
-            onCheckedChange={() => onToggleSelection(task.id)}
-            className="h-3.5 w-3.5 border-gray-600 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
-          />
-        ) : null}
-      </span>
+      {isMobile ? (
+        /* ── MOBILE: task-name-first, two-line layout ── */
+        <div className="flex items-start gap-1.5">
+          {/* Bulk selection — only in edit mode */}
+          {editMode && onToggleSelection ? (
+            <span onClick={(e) => e.stopPropagation()} className="shrink-0 mt-0.5">
+              <Checkbox
+                checked={isSelected}
+                onCheckedChange={() => onToggleSelection(task.id)}
+                className="h-3.5 w-3.5 border-gray-600 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+              />
+            </span>
+          ) : null}
 
-      {/* Complete checkbox */}
-      <span onClick={(e) => e.stopPropagation()} className="shrink-0">
-        <Checkbox
-          checked={false}
-          onCheckedChange={() => onToggleComplete(task)}
-          className="h-3.5 w-3.5 border-gray-600 data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600"
-        />
-      </span>
-
-      {/* Priority toggle */}
-      <button
-        onClick={(e) => { e.stopPropagation(); if (onTogglePriority) onTogglePriority(task); }}
-        className={cn(
-          "shrink-0 p-0 transition-colors",
-          task.is_priority
-            ? "text-red-500 hover:text-red-400"
-            : "text-gray-700 hover:text-red-400 opacity-0 group-hover/row:opacity-100"
-        )}
-        title={task.is_priority ? "Remove priority" : "Set priority"}
-      >
-        <Flame className="w-3 h-3" />
-      </button>
-
-      {/* Task name — tighter to checkbox */}
-      <button
-        onClick={() => onTaskClick(task)}
-        className="flex-1 min-w-0 text-left text-[13px] text-gray-200 hover:text-white truncate leading-tight -ml-0.5"
-      >
-        {task.name}
-      </button>
-
-      {/* Checklist progress */}
-      {checklistProgress && checklistProgress.total > 0 && (
-        <span
-          className={cn(
-            "text-[10px] shrink-0 flex items-center gap-0.5",
-            checklistProgress.done === checklistProgress.total ? "text-green-500" : "text-gray-500"
-          )}
-          title={`Checklist: ${checklistProgress.done}/${checklistProgress.total}`}
-        >
-          <ListChecks className="w-2.5 h-2.5" />
-          {checklistProgress.done}/{checklistProgress.total}
-        </span>
-      )}
-
-      {/* Dependency indicators — depends on / unlocks */}
-      <TooltipProvider delayDuration={200}>
-        {depCount > 0 && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className={cn("text-[10px] shrink-0 flex items-center gap-0.5", blocked ? "text-red-400" : "text-blue-400/70")}>
-                <Lock className="w-2.5 h-2.5" />
-                {depCount}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="max-w-xs bg-gray-800 border-gray-700 text-xs">
-              <p className="font-medium text-gray-300 mb-0.5">Depends on:</p>
-              {(task.dependencies || []).map(depId => {
-                const depTask = (projectTasks || []).find(t => t.id === depId) || (allTasks || []).find(t => t.id === depId);
-                return <p key={depId} className="text-gray-400">{depTask?.name || depId}</p>;
-              })}
-            </TooltipContent>
-          </Tooltip>
-        )}
-        {successorCount > 0 && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="text-[10px] shrink-0 flex items-center gap-0.5 text-cyan-400/70">
-                <Unlock className="w-2.5 h-2.5" />
-                {successorCount}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="max-w-xs bg-gray-800 border-gray-700 text-xs">
-              <p className="font-medium text-gray-300 mb-0.5">Unlocks:</p>
-              {(successorNames || []).map((name, i) => <p key={i} className="text-gray-400">{name}</p>)}
-            </TooltipContent>
-          </Tooltip>
-        )}
-      </TooltipProvider>
-
-      {/* Blocking reason — clean single-line display */}
-      {blocked && blockingLabel && (
-        <span className="text-[9px] text-red-400/80 shrink-0 flex items-center gap-0.5 max-w-[200px] truncate" title={`Blocked by: ${blockingLabel}`}>
-          <Clock className="w-2.5 h-2.5 shrink-0" />
-          <span className="truncate">
-            Blocked by: {blockingLabel}
+          {/* Complete checkbox */}
+          <span onClick={(e) => e.stopPropagation()} className="shrink-0 mt-0.5">
+            <Checkbox
+              checked={false}
+              onCheckedChange={() => onToggleComplete(task)}
+              className="h-3.5 w-3.5 border-gray-600 data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600"
+            />
           </span>
-        </span>
-      )}
 
-      {/* Dependency editor */}
-      <span onClick={(e) => e.stopPropagation()} className="shrink-0">
-        <WorkloadDependencyEditor
-          task={task}
-          projectTasks={projectTasks}
-          allTasks={allTasks}
-          bucketMap={bucketMap}
-          teamMemberMap={teamMemberMap}
-          updateTaskMutation={updateTaskMutation}
-        />
-      </span>
+          {/* Priority flame — only show when active */}
+          {task.is_priority && (
+            <Flame className="w-3 h-3 text-red-500 shrink-0 mt-0.5" />
+          )}
 
-      {/* Inline controls — visible on hover */}
-      <div className="flex items-center gap-0 shrink-0 opacity-0 group-hover/row:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-        <Popover open={dateOpen} onOpenChange={setDateOpen}>
-          <PopoverTrigger asChild>
-            <button className="text-gray-600 hover:text-blue-400 p-0.5 rounded" title="Set due date">
-              <CalendarDays className="w-3 h-3" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0 bg-gray-900 border-gray-700" side="left" align="start">
-            <Calendar mode="single" selected={due || undefined} onSelect={handleDateSelect} className="bg-gray-900" />
-          </PopoverContent>
-        </Popover>
+          {/* Task name + metadata */}
+          <button
+            onClick={() => onTaskClick(task)}
+            className="flex-1 min-w-0 text-left"
+          >
+            <span className="text-[13px] text-gray-200 leading-snug line-clamp-2">{task.name}</span>
+            {/* Blocker reason — readable text below name */}
+            {blocked && blockingLabel && (
+              <span className="block text-[10px] text-red-400 mt-0.5 leading-tight line-clamp-1">
+                Blocked by: {blockingLabel}
+              </span>
+            )}
+            {/* Checklist progress */}
+            {checklistProgress && checklistProgress.total > 0 && (
+              <span className={cn(
+                "inline-flex items-center gap-0.5 text-[10px] mt-0.5 mr-2",
+                checklistProgress.done === checklistProgress.total ? "text-green-500" : "text-gray-500"
+              )}>
+                <ListChecks className="w-2.5 h-2.5" />
+                {checklistProgress.done}/{checklistProgress.total}
+              </span>
+            )}
+            {/* Compact metadata line */}
+            {mobileMetaParts.length > 0 && (
+              <span className="block text-[10px] text-gray-500 mt-0.5">
+                {mobileMetaParts.join(" · ")}
+              </span>
+            )}
+          </button>
+        </div>
+      ) : (
+        /* ── DESKTOP: original dense row ── */
+        <>
+          {/* Fixed-width gutter slot for bulk selection */}
+          <span className={cn("shrink-0 flex items-center justify-center", GUTTER_SELECT_W)} onClick={(e) => e.stopPropagation()}>
+            {editMode && onToggleSelection ? (
+              <Checkbox
+                checked={isSelected}
+                onCheckedChange={() => onToggleSelection(task.id)}
+                className="h-3.5 w-3.5 border-gray-600 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+              />
+            ) : null}
+          </span>
 
-        <Popover open={assignOpen} onOpenChange={setAssignOpen}>
-          <PopoverTrigger asChild>
-            <button className="text-gray-600 hover:text-blue-400 p-0.5 rounded" title="Assign">
-              <User className="w-3 h-3" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-44 p-1 bg-gray-900 border-gray-700" side="left" align="start">
-            <div className="space-y-px max-h-52 overflow-y-auto">
-              <button
-                onClick={() => handleAssign(null)}
-                className={cn("w-full text-left px-2 py-1 rounded text-xs transition-colors", !task.assigned_team_member_id ? "bg-gray-800 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white")}
-              >Unassigned</button>
-              {activeMembers.map((tm) => (
-                <button key={tm.id} onClick={() => handleAssign(tm.id)}
-                  className={cn("w-full text-left px-2 py-1 rounded text-xs transition-colors", task.assigned_team_member_id === tm.id ? "bg-blue-900/40 text-blue-300" : "text-gray-300 hover:bg-gray-800")}
-                >{tm.full_name}</button>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
+          {/* Complete checkbox */}
+          <span onClick={(e) => e.stopPropagation()} className="shrink-0">
+            <Checkbox
+              checked={false}
+              onCheckedChange={() => onToggleComplete(task)}
+              className="h-3.5 w-3.5 border-gray-600 data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600"
+            />
+          </span>
 
-        <Popover open={statusOpen} onOpenChange={setStatusOpen}>
-          <PopoverTrigger asChild>
-            <button className="text-gray-600 hover:text-blue-400 p-0.5 rounded" title="Change status">
-              <CheckCircle2 className="w-3 h-3" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-40 p-1 bg-gray-900 border-gray-700" side="left" align="start">
-            <div className="space-y-px max-h-52 overflow-y-auto">
-              {taskStatuses.map((s) => (
-                <button key={s.id} onClick={() => handleStatusChange(s.id)}
-                  className={cn("w-full text-left px-2 py-1 rounded text-xs transition-colors flex items-center gap-1.5", task.status_id === s.id ? "bg-gray-800 text-white" : "text-gray-300 hover:bg-gray-800")}
-                >
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
-                  {s.label}
+          {/* Priority toggle */}
+          <button
+            onClick={(e) => { e.stopPropagation(); if (onTogglePriority) onTogglePriority(task); }}
+            className={cn(
+              "shrink-0 p-0 transition-colors",
+              task.is_priority
+                ? "text-red-500 hover:text-red-400"
+                : "text-gray-700 hover:text-red-400 opacity-0 group-hover/row:opacity-100"
+            )}
+            title={task.is_priority ? "Remove priority" : "Set priority"}
+          >
+            <Flame className="w-3 h-3" />
+          </button>
+
+          {/* Task name */}
+          <button
+            onClick={() => onTaskClick(task)}
+            className="flex-1 min-w-0 text-left text-[13px] text-gray-200 hover:text-white truncate leading-tight -ml-0.5"
+          >
+            {task.name}
+          </button>
+
+          {/* Checklist progress */}
+          {checklistProgress && checklistProgress.total > 0 && (
+            <span
+              className={cn(
+                "text-[10px] shrink-0 flex items-center gap-0.5",
+                checklistProgress.done === checklistProgress.total ? "text-green-500" : "text-gray-500"
+              )}
+              title={`Checklist: ${checklistProgress.done}/${checklistProgress.total}`}
+            >
+              <ListChecks className="w-2.5 h-2.5" />
+              {checklistProgress.done}/{checklistProgress.total}
+            </span>
+          )}
+
+          {/* Dependency indicators */}
+          <TooltipProvider delayDuration={200}>
+            {depCount > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className={cn("text-[10px] shrink-0 flex items-center gap-0.5", blocked ? "text-red-400" : "text-blue-400/70")}>
+                    <Lock className="w-2.5 h-2.5" />
+                    {depCount}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs bg-gray-800 border-gray-700 text-xs">
+                  <p className="font-medium text-gray-300 mb-0.5">Depends on:</p>
+                  {(task.dependencies || []).map(depId => {
+                    const depTask = (projectTasks || []).find(t => t.id === depId) || (allTasks || []).find(t => t.id === depId);
+                    return <p key={depId} className="text-gray-400">{depTask?.name || depId}</p>;
+                  })}
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {successorCount > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-[10px] shrink-0 flex items-center gap-0.5 text-cyan-400/70">
+                    <Unlock className="w-2.5 h-2.5" />
+                    {successorCount}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs bg-gray-800 border-gray-700 text-xs">
+                  <p className="font-medium text-gray-300 mb-0.5">Unlocks:</p>
+                  {(successorNames || []).map((name, i) => <p key={i} className="text-gray-400">{name}</p>)}
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </TooltipProvider>
+
+          {/* Blocking reason */}
+          {blocked && blockingLabel && (
+            <span className="text-[9px] text-red-400/80 shrink-0 flex items-center gap-0.5 max-w-[200px] truncate" title={`Blocked by: ${blockingLabel}`}>
+              <Clock className="w-2.5 h-2.5 shrink-0" />
+              <span className="truncate">Blocked by: {blockingLabel}</span>
+            </span>
+          )}
+
+          {/* Dependency editor */}
+          <span onClick={(e) => e.stopPropagation()} className="shrink-0">
+            <WorkloadDependencyEditor
+              task={task}
+              projectTasks={projectTasks}
+              allTasks={allTasks}
+              bucketMap={bucketMap}
+              teamMemberMap={teamMemberMap}
+              updateTaskMutation={updateTaskMutation}
+            />
+          </span>
+
+          {/* Inline controls — visible on hover */}
+          <div className="flex items-center gap-0 shrink-0 opacity-0 group-hover/row:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+            <Popover open={dateOpen} onOpenChange={setDateOpen}>
+              <PopoverTrigger asChild>
+                <button className="text-gray-600 hover:text-blue-400 p-0.5 rounded" title="Set due date">
+                  <CalendarDays className="w-3 h-3" />
                 </button>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0 bg-gray-900 border-gray-700" side="left" align="start">
+                <Calendar mode="single" selected={due || undefined} onSelect={handleDateSelect} className="bg-gray-900" />
+              </PopoverContent>
+            </Popover>
 
-        {/* Phase move */}
-        {updateTaskMutation && (
-          <PhaseSelectorPopover
-            task={task}
-            buckets={bucketMap}
-            allTasks={projectTasks}
-            onMove={(bucketId) => updateTaskMutation.mutate({ id: task.id, data: { kanban_bucket_id: bucketId || null } })}
-          />
-        )}
-      </div>
+            <Popover open={assignOpen} onOpenChange={setAssignOpen}>
+              <PopoverTrigger asChild>
+                <button className="text-gray-600 hover:text-blue-400 p-0.5 rounded" title="Assign">
+                  <User className="w-3 h-3" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-44 p-1 bg-gray-900 border-gray-700" side="left" align="start">
+                <div className="space-y-px max-h-52 overflow-y-auto">
+                  <button onClick={() => handleAssign(null)} className={cn("w-full text-left px-2 py-1 rounded text-xs transition-colors", !task.assigned_team_member_id ? "bg-gray-800 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white")}>Unassigned</button>
+                  {activeMembers.map((tm) => (
+                    <button key={tm.id} onClick={() => handleAssign(tm.id)} className={cn("w-full text-left px-2 py-1 rounded text-xs transition-colors", task.assigned_team_member_id === tm.id ? "bg-blue-900/40 text-blue-300" : "text-gray-300 hover:bg-gray-800")}>{tm.full_name}</button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
 
-      {/* Status badge */}
-      {status && (
-        <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0 hidden sm:inline-flex cursor-default" style={{ borderColor: status.color, color: status.color }}>
-          {status.label}
-        </Badge>
+            <Popover open={statusOpen} onOpenChange={setStatusOpen}>
+              <PopoverTrigger asChild>
+                <button className="text-gray-600 hover:text-blue-400 p-0.5 rounded" title="Change status">
+                  <CheckCircle2 className="w-3 h-3" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-40 p-1 bg-gray-900 border-gray-700" side="left" align="start">
+                <div className="space-y-px max-h-52 overflow-y-auto">
+                  {taskStatuses.map((s) => (
+                    <button key={s.id} onClick={() => handleStatusChange(s.id)} className={cn("w-full text-left px-2 py-1 rounded text-xs transition-colors flex items-center gap-1.5", task.status_id === s.id ? "bg-gray-800 text-white" : "text-gray-300 hover:bg-gray-800")}>
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {/* Phase move */}
+            {updateTaskMutation && (
+              <PhaseSelectorPopover
+                task={task}
+                buckets={bucketMap}
+                allTasks={projectTasks}
+                onMove={(bucketId) => updateTaskMutation.mutate({ id: task.id, data: { kanban_bucket_id: bucketId || null } })}
+              />
+            )}
+          </div>
+
+          {/* Status badge */}
+          {status && (
+            <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0 hidden sm:inline-flex cursor-default" style={{ borderColor: status.color, color: status.color }}>
+              {status.label}
+            </Badge>
+          )}
+
+          {/* Assignee */}
+          <span className="text-[11px] text-gray-500 w-14 truncate shrink-0 hidden md:block text-right">
+            {assignee?.full_name?.split(" ")[0] || "\u2014"}
+          </span>
+
+          {/* Due date */}
+          <span className={cn("text-[11px] w-12 shrink-0 text-right hidden sm:block tabular-nums", isOverdue ? "text-red-400 font-semibold" : "text-gray-500")}>
+            {due ? format(due, "M/d") : "\u2014"}
+          </span>
+
+          {/* Estimated hours */}
+          <span className="text-[10px] text-gray-600 w-8 shrink-0 text-right hidden lg:block tabular-nums">
+            {task.estimated_hours ? fmtHours(task.estimated_hours) : ""}
+          </span>
+        </>
       )}
-
-      {/* Assignee */}
-      <span className="text-[11px] text-gray-500 w-14 truncate shrink-0 hidden md:block text-right">
-        {assignee?.full_name?.split(" ")[0] || "\u2014"}
-      </span>
-
-      {/* Due date */}
-      <span className={cn("text-[11px] w-12 shrink-0 text-right hidden sm:block tabular-nums", isOverdue ? "text-red-400 font-semibold" : "text-gray-500")}>
-        {due ? format(due, "M/d") : "\u2014"}
-      </span>
-
-      {/* Estimated hours */}
-      <span className="text-[10px] text-gray-600 w-8 shrink-0 text-right hidden lg:block tabular-nums">
-        {task.estimated_hours ? fmtHours(task.estimated_hours) : ""}
-      </span>
     </div>
   );
 }
@@ -391,7 +456,7 @@ function InlineChecklistItems({ items, onToggle, showCompleted = false }) {
   // Auto-collapse when all items are complete
   if (done === total) {
     return (
-      <div className="pl-[3.5rem] sm:pl-[4.5rem] md:pl-[5rem] pr-3 pb-0.5">
+      <div className="pl-8 sm:pl-[4.5rem] md:pl-[5rem] pr-3 pb-0.5">
         <span className="text-[10px] text-green-500/80 flex items-center gap-1">
           <Check className="w-2.5 h-2.5" />
           {total}/{total} Complete
@@ -404,7 +469,7 @@ function InlineChecklistItems({ items, onToggle, showCompleted = false }) {
   const completedItems = sorted.filter(i => i.is_complete);
 
   return (
-    <div className="pl-[3.5rem] sm:pl-[4.5rem] md:pl-[5rem] pr-3 pb-1 animate-in slide-in-from-top-1 duration-150">
+    <div className="pl-8 sm:pl-[4.5rem] md:pl-[5rem] pr-3 pb-1 animate-in slide-in-from-top-1 duration-150">
       {/* Checklist header */}
       <div className="text-[10px] text-gray-500 flex items-center gap-1 pb-0.5">
         <ListChecks className="w-2.5 h-2.5 text-gray-600" />
@@ -521,6 +586,7 @@ export default function WorkloadProjectGroup({
   const [showAll, setShowAll] = useState(false);
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const { toast } = useToast();
+  const isMobile = useIsMobile();
 
   const INITIAL_VISIBLE = 12;
 
@@ -658,7 +724,10 @@ export default function WorkloadProjectGroup({
         }
 
         {/* Project name — strongest typography */}
-        <span className="text-[15px] font-bold text-white tracking-tight truncate min-w-0">
+        <span className={cn(
+          "font-bold text-white tracking-tight min-w-0",
+          isMobile ? "text-[14px] line-clamp-2 leading-tight" : "text-[15px] truncate"
+        )}>
           {project?.name || label || "No Project"}
         </span>
 
@@ -674,8 +743,8 @@ export default function WorkloadProjectGroup({
           </span>
         )}
 
-        {/* Actions — always right-aligned */}
-        {project && (
+        {/* Actions — right-aligned, hidden on mobile */}
+        {project && !isMobile && (
           <div className="flex items-center gap-0.5 shrink-0 ml-auto" onClick={(e) => e.stopPropagation()}>
             <Link
               to={buildProjectDetailUrl(project.id, { source: SOURCES.PRIORITIES })}
@@ -752,6 +821,7 @@ export default function WorkloadProjectGroup({
                     successorCount={succs.length}
                     successorNames={succs.map(s => s.name)}
                     editMode={editMode}
+                    isMobile={isMobile}
                   />
                   {clItems.length > 0 && (
                     <InlineChecklistItems
