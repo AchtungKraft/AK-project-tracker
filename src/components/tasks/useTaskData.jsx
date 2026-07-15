@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/use-toast";
 import { TASK_CACHE_KEYS, invalidateProjectCaches } from "./useTaskInteraction";
 import { normalizeTask, normalizeTasks } from "./normalizeTask";
 import { 
@@ -149,7 +149,7 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
       if (context?.previousProjectTasks && projectId) {
         queryClient.setQueryData(['projectTasks', projectId], context.previousProjectTasks);
       }
-      toast.error('Failed to update task');
+      toast({ title: 'Failed to update task', variant: 'destructive' });
     },
     onSuccess: (updatedTask, variables) => {
       // Increment version on successful mutation
@@ -196,7 +196,7 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
         data: updates,
         mutationTimestamp,
       });
-      toast.success('Task completed');
+      toast({ title: 'Task completed' });
     }
   }, [completedStatus, updateTaskMutation]);
 
@@ -272,7 +272,7 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
           data: { status_id: firstStatus.id, completed_date: null },
           mutationTimestamp,
         });
-        toast.success('Task reopened');
+        toast({ title: 'Task reopened' });
       }
     } else {
       // Step 1: Check for incomplete checklist items
@@ -294,7 +294,7 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
       data: { due_date: dueDate },
       mutationTimestamp
     });
-    toast.success(dueDate ? 'Due date updated' : 'Due date removed');
+    toast({ title: dueDate ? 'Due date updated' : 'Due date removed' });
   };
 
   const handleUpdateStartDate = async (task, startDate) => {
@@ -304,7 +304,7 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
       data: { start_date: startDate },
       mutationTimestamp
     });
-    toast.success(startDate ? 'Start date updated' : 'Start date removed');
+    toast({ title: startDate ? 'Start date updated' : 'Start date removed' });
   };
 
   const handleTogglePriority = async (task, skipConfirm = false) => {
@@ -323,7 +323,7 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
       },
       mutationTimestamp
     });
-    toast.success(task.is_priority ? 'Removed from priority' : 'Marked as priority');
+    toast({ title: task.is_priority ? 'Removed from priority' : 'Marked as priority' });
     return { needsConfirmation: false };
   };
 
@@ -336,7 +336,7 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
       data: { is_priority: false, priority_set_at: null },
       mutationTimestamp
     });
-    toast.success('Removed from priority');
+    toast({ title: 'Removed from priority' });
   };
 
   // Generic task update function for external use
