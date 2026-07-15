@@ -9,9 +9,10 @@ export default function ImageModal({ isOpen, onClose, imageUrl, images = [], cur
   const [imgLoading, setImgLoading] = useState(true);
   const [imgError, setImgError] = useState(false);
 
+  const hasImages = images && images.length > 0;
   const hasMultipleImages = images && images.length > 1;
-  const activeIndex = hasMultipleImages ? currentIndex : 0;
-  const displayUrl = hasMultipleImages ? images[activeIndex] : imageUrl;
+  const activeIndex = hasImages ? currentIndex : 0;
+  const displayUrl = hasImages ? images[activeIndex] : imageUrl;
 
   // Reset load state when image changes
   useEffect(() => {
@@ -143,7 +144,7 @@ export default function ImageModal({ isOpen, onClose, imageUrl, images = [], cur
         </div>
 
         {/* Image Counter */}
-        {hasMultipleImages && (
+        {hasImages && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 px-3 py-1 rounded-full text-white text-sm">
             {activeIndex + 1} / {images.length}
           </div>
