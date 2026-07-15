@@ -11,8 +11,8 @@
  */
 
 // ── Valid overview sub-views (inside ProjectDetail "Overview" tab) ──
-export const VALID_OVERVIEW_VIEWS = ['card', 'calendar', 'execution', 'shop'];
-export const DEFAULT_OVERVIEW_VIEW = 'execution';
+export const VALID_OVERVIEW_VIEWS = ['workload', 'card', 'calendar', 'execution', 'shop'];
+export const DEFAULT_OVERVIEW_VIEW = 'workload';
 
 // ── Valid PriorityDashboard tabs ──
 export const VALID_PRIORITY_TABS = ['card-view', 'calendar-view', 'list-view', 'execution-view', 'shop-view', 'workload-view'];
@@ -29,10 +29,10 @@ export const SOURCES = {
 
 // ── Source → default overview view mapping ──
 const SOURCE_VIEW_MAP = {
-  [SOURCES.PRIORITIES]: 'execution',
+  [SOURCES.PRIORITIES]: 'workload',
   [SOURCES.SHOP]: 'shop',
   [SOURCES.CALENDAR]: 'calendar',
-  [SOURCES.DASHBOARD]: 'card',
+  [SOURCES.DASHBOARD]: 'workload',
   [SOURCES.CLIENT_PORTAL]: 'card',
 };
 

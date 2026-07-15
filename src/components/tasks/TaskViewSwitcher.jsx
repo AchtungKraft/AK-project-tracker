@@ -1,12 +1,12 @@
 import React from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LayoutGrid, Calendar, ClipboardCheck, Flame } from "lucide-react";
+import { LayoutGrid, Calendar, ClipboardCheck, Flame, ListChecks } from "lucide-react";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { cn } from "@/lib/utils";
 
 /**
  * TaskViewSwitcher
- * Reusable Card/Calendar/Execution/Shop view toggle for task displays
+ * Reusable Card/Calendar/Execution/Shop/Workload view toggle for task displays
  * Used by both PriorityDashboard and ProjectDetail
  */
 export default function TaskViewSwitcher({
@@ -15,6 +15,7 @@ export default function TaskViewSwitcher({
   className = "",
   showExecution = false,
   showShop = false,
+  showWorkload = false,
 }) {
   const isMobile = useIsMobile();
 
@@ -30,6 +31,12 @@ export default function TaskViewSwitcher({
         "bg-gray-800/80 border border-gray-700 p-1",
         isMobile ? "h-9 overflow-x-auto" : ""
       )}>
+        {showWorkload && (
+          <TabsTrigger value="workload" className={triggerClass}>
+            <ListChecks className={iconClass} />
+            {!isMobile && <span className="hidden sm:inline">Workload</span>}
+          </TabsTrigger>
+        )}
         <TabsTrigger value="card" className={triggerClass}>
           <LayoutGrid className={iconClass} />
           {!isMobile && <span className="hidden sm:inline">Card View</span>}

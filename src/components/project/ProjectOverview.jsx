@@ -25,6 +25,7 @@ import CreateTaskModal from "../tasks/CreateTaskModal";
 import ProjectCalendarView from "./ProjectCalendarView";
 import PriorityExecutionView from "../priorities/PriorityExecutionView";
 import ShopPriorityView from "../priorities/ShopPriorityView";
+import ProjectWorkloadView from "./ProjectWorkloadView";
 import { useTaskData } from "../tasks/useTaskData";
 import TaskDetailDrawer from "../tasks/TaskDetailDrawer";
 import PriorityRemoveConfirm from "../tasks/PriorityRemoveConfirm";
@@ -411,22 +412,42 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
               setViewMode(mode);
               persistProjectOverviewView(projectId, mode);
             }}
+            showWorkload
             showExecution
             showShop
           />
         </div>
 
-        {/* Shared Task Controls — visible across ALL views */}
-        <ProjectTaskControls
-          groupBy={groupBy}
-          setGroupBy={setGroupBy}
-          subGroupBy={subGroupBy}
-          setSubGroupBy={setSubGroupBy}
-          onCreateTask={() => setShowCreateTask(true)}
-          onManageBuckets={() => setShowManageBuckets(true)}
-        />
+        {/* Shared Task Controls — visible for card/calendar/execution/shop, hidden for workload (it has its own) */}
+        {viewMode !== 'workload' && (
+          <ProjectTaskControls
+            groupBy={groupBy}
+            setGroupBy={setGroupBy}
+            subGroupBy={subGroupBy}
+            setSubGroupBy={setSubGroupBy}
+            onCreateTask={() => setShowCreateTask(true)}
+            onManageBuckets={() => setShowManageBuckets(true)}
+          />
+        )}
 
         {/* Task Views */}
+        {viewMode === 'workload' && (
+          <ProjectWorkloadView
+            projectId={projectId}
+            project={project}
+            activeTasks={activeTasks}
+            allProjectTasks={allProjectTasks}
+            buckets={projectBuckets}
+            statuses={statuses}
+            teamMembers={teamMembers}
+            categories={categories}
+            onToggleComplete={handleToggleComplete}
+            onUpdateDueDate={handleUpdateDueDate}
+            onTogglePriority={wrappedTogglePriority}
+            updateTask={updateTask}
+            onTaskClick={setSelectedTask}
+          />
+        )}
         {viewMode === 'card' && (
           <>
             <ProjectKanban 
