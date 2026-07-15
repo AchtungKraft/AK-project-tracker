@@ -78,27 +78,46 @@ export default function PhaseSelectorPopover({
     }
 
     setIsSubmitting(true);
+    const projectId = task.project_id;
     try {
       const maxOrder = sorted.reduce((max, b) => Math.max(max, b.order || 0), 0);
       const newBucket = await base44.entities.ProjectKanbanBucket.create({
         name,
-        project_id: task.project_id,
+        project_id: projectId,
         order: maxOrder + 1,
         color: "#6B7280",
       });
-      queryClient.invalidateQueries({ queryKey: ["workloadBuckets"] });
-      queryClient.invalidateQueries({ queryKey: ["projectBuckets", task.project_id] });
-      if (onMove) onMove(newBucket.id);
+
+      // Optimistically inject new bucket into ALL bucket caches BEFORE moving the task.
+      // This ensures the workload view's bucketMap includes it when the task update renders.
+      const injectBucket = (old) => [...(old || []), newBucket];
+      queryClient.setQueryData(["projectBuckets", projectId], injectBucket);
+      queryClient.setQueryData(["kanbanBuckets", projectId], injectBucket);
+
+      // Now move the task — the bucket is already in cache so it won't land in "unphased"
+      let taskMoved = false;
+      try {
+        if (onMove) onMove(newBucket.id);
+        taskMoved = true;
+      } catch {
+        toast({ title: `Phase created, but task could not be moved`, variant: "destructive" });
+      }
+
+      // Background-invalidate to sync with server truth
+      queryClient.invalidateQueries({ queryKey: ["projectBuckets", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["kanbanBuckets", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["allPhases"] });
+
       setNewPhaseName("");
       setCreating(false);
       setOpen(false);
-      toast({ title: `Created phase "${name}"` });
+      toast({ title: taskMoved ? `Created phase "${name}"` : `Phase "${name}" created` });
     } catch {
       toast({ title: "Failed to create phase", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
-  }, [newPhaseName, task, sorted, onMove, queryClient]);
+  }, [newPhaseName, task, sorted, onMove, queryClient, toast]);
 
   if (sorted.length === 0 && triggerVariant === "icon") return null;
 
