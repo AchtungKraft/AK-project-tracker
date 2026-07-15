@@ -124,7 +124,7 @@ function WorkloadTaskRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-1 pr-3 py-[5px] hover:bg-gray-800/40 transition-colors group/row border-b border-gray-800/20 last:border-b-0",
+        "flex items-center gap-1 pr-3 py-[3px] hover:bg-gray-800/40 transition-colors group/row border-b border-gray-800/20 last:border-b-0",
         GUTTER_TASK_INDENT,
         blocked && "opacity-60"
       )}
@@ -370,9 +370,9 @@ function PhaseHeader({ bucket, openCount, expanded, onToggle, editMode, phaseTas
         ) : null}
       </span>
 
-      {expanded ? <ChevronDown className="w-2.5 h-2.5 text-gray-500" /> : <ChevronRight className="w-2.5 h-2.5 text-gray-500" />}
-      <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ backgroundColor: bucket?.color || '#6B7280' }} />
-      <span className="text-[10px] font-bold text-gray-200 uppercase tracking-widest">
+      {expanded ? <ChevronDown className="w-3 h-3 text-gray-500" /> : <ChevronRight className="w-3 h-3 text-gray-500" />}
+      <span className="w-[8px] h-[8px] rounded-full shrink-0" style={{ backgroundColor: bucket?.color || '#6B7280' }} />
+      <span className="text-[11px] font-bold text-gray-200 uppercase tracking-wider">
         {bucket?.name || "GENERAL / NO PHASE"}
       </span>
       <span className="text-[10px] text-gray-500 font-normal">({openCount})</span>

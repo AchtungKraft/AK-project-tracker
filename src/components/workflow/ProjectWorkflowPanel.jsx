@@ -11,10 +11,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 function StatPill({ icon: Icon, label, value, color }) {
   if (!value) return null;
   return (
-    <div className={cn("flex items-center gap-1 px-2 py-1 rounded-md border border-gray-800", color)}>
-      <Icon className="w-3 h-3" />
-      <span className="text-xs font-bold tabular-nums">{value}</span>
-      <span className="text-[10px] text-gray-500">{label}</span>
+    <div className={cn("flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-gray-800", color)}>
+      <Icon className="w-2.5 h-2.5" />
+      <span className="text-[11px] font-bold tabular-nums">{value}</span>
+      <span className="text-[9px] text-gray-500">{label}</span>
     </div>
   );
 }
@@ -45,28 +45,29 @@ export default function ProjectWorkflowPanel({ projectId }) {
 
   return (
     <TooltipProvider>
-      <div className="space-y-3">
+      <div className="space-y-1.5">
         {/* Recalculate — secondary unless workflow needs calculation */}
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-end -mb-1">
           {needsCalc ? (
             <Button
               variant="outline"
               size="sm"
               onClick={() => recalculate()}
               disabled={isRecalculating}
-              className="h-6 text-[10px] border-amber-700 text-amber-400 gap-1"
+              className="h-5 text-[9px] border-amber-700 text-amber-400 gap-1 px-2"
             >
-              <RefreshCw className={cn("w-3 h-3", isRecalculating && "animate-spin")} />
+              <RefreshCw className={cn("w-2.5 h-2.5", isRecalculating && "animate-spin")} />
               Calculate
             </Button>
           ) : (
             <button
               onClick={() => recalculate()}
               disabled={isRecalculating}
-              className="text-gray-600 hover:text-gray-400 p-1 rounded transition-colors disabled:opacity-50"
+              className="text-gray-600 hover:text-gray-400 p-0.5 rounded transition-colors disabled:opacity-50"
               title="Recalculate workflow"
+              aria-label="Recalculate workflow"
             >
-              <RefreshCw className={cn("w-3.5 h-3.5", isRecalculating && "animate-spin")} />
+              <RefreshCw className={cn("w-3 h-3", isRecalculating && "animate-spin")} />
             </button>
           )}
         </div>
@@ -99,8 +100,8 @@ export default function ProjectWorkflowPanel({ projectId }) {
           </div>
         )}
 
-        {/* State distribution */}
-        <div className="flex flex-wrap gap-1.5">
+        {/* State distribution — only show pills with values */}
+        <div className="flex flex-wrap gap-1">
           <StatPill icon={CheckCircle2} label="Ready" value={dist.READY} color="text-green-400" />
           <StatPill icon={Clock} label="Active" value={dist.IN_PROGRESS} color="text-amber-400" />
           <StatPill icon={Ban} label="Blocked" value={dist.BLOCKED} color="text-red-400" />
@@ -111,7 +112,7 @@ export default function ProjectWorkflowPanel({ projectId }) {
 
         {/* Phase rollups */}
         {phases.length > 0 && (
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             {phases.map(p => (
               <PhaseRollupCard
                 key={p.bucketId}

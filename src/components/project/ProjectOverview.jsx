@@ -413,7 +413,7 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
         }}>
           <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
             <WorkflowCollapsibleTrigger asChild>
-              <div className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-900/30 transition-colors">
+              <div className="flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-gray-900/30 transition-colors">
                 <div className="flex items-center gap-2">
                   {workflowExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
                   <span className="text-white text-sm font-semibold">Workflow Status</span>
@@ -421,7 +421,7 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
               </div>
             </WorkflowCollapsibleTrigger>
             <WorkflowCollapsibleContent>
-              <CardContent className="p-4 pt-0">
+              <CardContent className="px-3 pb-3 pt-0">
                 <ProjectWorkflowPanel projectId={projectId} />
               </CardContent>
             </WorkflowCollapsibleContent>

@@ -75,7 +75,7 @@ function PhaseHeader({ bucket, openCount, totalCount, isCompleted, expanded, onT
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 py-[6px] px-3 cursor-pointer hover:bg-gray-700/40 transition-colors border-t border-gray-700/30",
+        "flex items-center gap-1.5 py-[5px] px-3 cursor-pointer hover:bg-gray-700/40 transition-colors border-t border-gray-700/30",
         isCompleted ? "bg-gray-800/20" : "bg-gray-800/50",
       )}
       onClick={onToggle}
@@ -138,7 +138,7 @@ function TaskRow({
   const depCount = (task.dependencies || []).length;
 
   return (
-    <div className={cn("flex items-center gap-1 pr-3 py-[5px] hover:bg-gray-800/40 transition-colors group/row border-b border-gray-800/20 last:border-b-0", GUTTER_TASK_INDENT, blocked && "opacity-60")}>
+    <div className={cn("flex items-center gap-1 pr-3 py-[3px] hover:bg-gray-800/40 transition-colors group/row border-b border-gray-800/20 last:border-b-0", GUTTER_TASK_INDENT, blocked && "opacity-60")}>
       <span className={cn("shrink-0 flex items-center justify-center", GUTTER_SELECT_W)} onClick={e => e.stopPropagation()}>
         {editMode && onToggleSelection ? (
           <Checkbox checked={isSelected} onCheckedChange={() => onToggleSelection(task.id)} className="h-3.5 w-3.5 border-gray-600 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600" />
@@ -511,13 +511,17 @@ export default function ProjectWorkloadView({
         allTasksByBucket.get(t.kanban_bucket_id).push(t);
       }
     });
+    // Respect user's manual expansion — check saved state
+    const savedState = loadProjectCollapseState(projectId);
     setCollapsedPhases(prev => {
       const next = new Set(prev);
       let changed = false;
       sortedBuckets.forEach(b => {
         const bt = allTasksByBucket.get(b.id) || [];
         const allDone = bt.length > 0 && bt.every(t => t.status_id === DONE_STATUS_ID);
-        if (allDone && !autoCollapsedRef.current.has(b.id) && !next.has(b.id)) {
+        // Only auto-collapse if: completed, not already tracked, not already collapsed,
+        // AND user hasn't explicitly expanded it (saved[key] === true means user expanded)
+        if (allDone && !autoCollapsedRef.current.has(b.id) && !next.has(b.id) && savedState[b.id] !== true) {
           next.add(b.id);
           autoCollapsedRef.current.add(b.id);
           changed = true;
@@ -525,7 +529,7 @@ export default function ProjectWorkloadView({
       });
       return changed ? next : prev;
     });
-  }, [sortedBuckets, allProjectTasks, bucketMap]);
+  }, [sortedBuckets, allProjectTasks, bucketMap, projectId]);
 
   const handleTaskClick = useCallback((task) => {
     if (externalTaskClick) externalTaskClick(task);
