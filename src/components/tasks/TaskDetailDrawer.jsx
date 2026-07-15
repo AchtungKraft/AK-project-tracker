@@ -172,6 +172,8 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
         due_date: task.due_date || "",
         estimated_hours: task.estimated_hours ?? null,
       });
+      // Reset live deps when task changes (new task opened)
+      setLiveDeps(null);
     }
   }, [task, projectId]);
 
@@ -304,7 +306,9 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
   }, [userTeamMember, formData]);
 
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
-  const [depFormData, setDepFormData] = useState(null);
+  // Live dependency state — initialized from task, updated optimistically on save
+  const [liveDeps, setLiveDeps] = useState(null);
+  const liveDepsResolved = liveDeps ?? (task?.dependencies || []);
 
   // Fetch all project tasks + buckets for dependency editor
   const { data: allProjectTasks = [] } = useQuery({
@@ -320,10 +324,33 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
     staleTime: 60000,
   });
 
+  // Dependency save handler — optimistically updates UI, persists, handles errors
+  const depMutation = useMutation({
+    mutationFn: (newDeps) => base44.entities.Task.update(task.id, { dependencies: newDeps }),
+    onMutate: (newDeps) => {
+      // Optimistic: show the new deps immediately
+      setLiveDeps(newDeps);
+    },
+    onSuccess: () => {
+      TASK_CACHE_KEYS.forEach(key => queryClient.invalidateQueries({ queryKey: key }));
+      queryClient.invalidateQueries({ queryKey: ['projectWorkflow', task?.project_id] });
+      queryClient.invalidateQueries({ queryKey: ['projectTasks', task?.project_id] });
+    },
+    onError: (err, newDeps, context) => {
+      // Rollback: revert to what was there before
+      setLiveDeps(null);
+      toast.error('Failed to save dependency');
+    },
+  });
+
+  const handleDependencyChange = useCallback((newDeps) => {
+    depMutation.mutate(newDeps);
+  }, [depMutation]);
+
   // Pre-compute dependency data for mobile conditional rendering
   const selectedTasks = useMemo(() =>
-    (task?.dependencies || []).map(id => allProjectTasks.find(t => t.id === id)).filter(Boolean),
-    [task?.dependencies, allProjectTasks]
+    liveDepsResolved.map(id => allProjectTasks.find(t => t.id === id)).filter(Boolean),
+    [liveDepsResolved, allProjectTasks]
   );
   const successorTasks = useMemo(() =>
     allProjectTasks.filter(t => t.id !== task?.id && t.dependencies?.includes(task?.id)),
@@ -543,15 +570,12 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                     <TaskDependencyEditor
                       taskId={task?.id}
                       projectId={task?.project_id}
-                      dependencies={depFormData !== null ? depFormData : (task?.dependencies || [])}
+                      dependencies={liveDepsResolved}
                       allTasks={allProjectTasks}
                       buckets={projectBuckets}
                       teamMembers={teamMembers}
-                      onChange={(newDeps) => {
-                        setDepFormData(newDeps);
-                        updateMutation.mutate({ dependencies: newDeps });
-                        setDepFormData(null);
-                      }}
+                      onChange={handleDependencyChange}
+                      isSaving={depMutation.isPending}
                     />
                   </section>
                   <hr className="border-gray-700/50 mb-4" />
@@ -780,15 +804,12 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                 <TaskDependencyEditor
                   taskId={task?.id}
                   projectId={task?.project_id}
-                  dependencies={depFormData !== null ? depFormData : (task?.dependencies || [])}
+                  dependencies={liveDepsResolved}
                   allTasks={allProjectTasks}
                   buckets={projectBuckets}
                   teamMembers={teamMembers}
-                  onChange={(newDeps) => {
-                    setDepFormData(newDeps);
-                    updateMutation.mutate({ dependencies: newDeps });
-                    setDepFormData(null);
-                  }}
+                  onChange={handleDependencyChange}
+                  isSaving={depMutation.isPending}
                 />
               </section>
 

@@ -37,10 +37,13 @@
         }
       },
       "description": "Structured links attached to the comment"
+    },
+    "created_by": {
+      "type": "string",
+      "description": "Display name of user who created the comment"
     }
   },
   "required": [
-    "task_id",
-    "content"
+    "task_id"
   ]
 }

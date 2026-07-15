@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { X, Search, ArrowRight, ArrowDown, AlertTriangle, CheckCircle2, Circle, User, Ban } from "lucide-react";
+import { X, Search, ArrowRight, ArrowDown, AlertTriangle, CheckCircle2, Circle, User, Ban, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getStateConfig } from "./useProjectWorkflow";
 
@@ -71,7 +71,7 @@ function SuccessorRow({ task, buckets, teamMembers }) {
 export default function TaskDependencyEditor({
   taskId, projectId, dependencies = [], allTasks = [],
   buckets = [], teamMembers = [],
-  onChange,
+  onChange, isSaving = false,
 }) {
   const [search, setSearch] = useState("");
   const [showPicker, setShowPicker] = useState(false);
@@ -211,7 +211,10 @@ export default function TaskDependencyEditor({
             <Button variant="ghost" size="sm" onClick={() => { setShowPicker(false); setSearch(""); }} className="w-full h-7 text-xs text-gray-400">Close</Button>
           </div>
         ) : (
-          <Button variant="outline" size="sm" onClick={() => setShowPicker(true)} className="mt-2 h-7 text-xs border-gray-700 text-gray-400">+ Add Dependency</Button>
+          <div className="flex items-center gap-2 mt-2">
+            <Button variant="outline" size="sm" onClick={() => setShowPicker(true)} className="h-7 text-xs border-gray-700 text-gray-400">+ Add Dependency</Button>
+            {isSaving && <Loader2 className="w-3 h-3 animate-spin text-gray-500" />}
+          </div>
         )}
       </div>
 
