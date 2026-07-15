@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Flame,
   Printer,
+  Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,8 +23,10 @@ export default function WorkloadBulkActionBar({
   onSetStatus,
   onTogglePriority,
   onPrintSelected,
+  onMovePhase,
   teamMembers = [],
   statuses = [],
+  buckets = [],
 }) {
   const [dateOpen, setDateOpen] = useState(false);
   const [shiftOpen, setShiftOpen] = useState(false);
@@ -61,7 +64,7 @@ export default function WorkloadBulkActionBar({
 
   if (selectedCount === 0) return null;
 
-  const SHIFT_PRESETS = [
+  const SHIFT_PRESETS_LIST = [
     { label: "+1 Day", days: 1 },
     { label: "+3 Days", days: 3 },
     { label: "+1 Week", days: 7 },
@@ -88,7 +91,7 @@ export default function WorkloadBulkActionBar({
           <PopoverContent className="w-56 p-2 bg-gray-900 border-gray-700" side="top" align="start">
             <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5 px-1">Shift relative to current due date</p>
             <div className="grid grid-cols-2 gap-1 mb-2">
-              {SHIFT_PRESETS.map((p) => (
+              {SHIFT_PRESETS_LIST.map((p) => (
                 <button
                   key={p.days}
                   onClick={() => handleShift(p.days)}
@@ -198,6 +201,11 @@ export default function WorkloadBulkActionBar({
           Priority
         </Button>
 
+        {/* Move Phase */}
+        {onMovePhase && buckets.length > 0 && (
+          <BulkPhasePopover buckets={buckets} onMovePhase={onMovePhase} />
+        )}
+
         {/* Print Selected */}
         <Button
           variant="outline"
@@ -221,5 +229,39 @@ export default function WorkloadBulkActionBar({
         </Button>
       </div>
     </div>
+  );
+}
+
+function BulkPhasePopover({ buckets, onMovePhase }) {
+  const [open, setOpen] = useState(false);
+  const sorted = useMemo(
+    () => [...buckets].sort((a, b) => (a.order || 0) - (b.order || 0)),
+    [buckets]
+  );
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="border-gray-700 text-gray-200 hover:bg-gray-800 h-7 text-xs gap-1">
+          <Layers className="w-3 h-3" />
+          Phase
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-40 p-1 bg-gray-900 border-gray-700" side="top" align="start">
+        <p className="text-[9px] text-gray-500 uppercase tracking-wider px-2 py-1">Move to Phase</p>
+        <div className="space-y-px max-h-52 overflow-y-auto">
+          {sorted.map((b) => (
+            <button
+              key={b.id}
+              onClick={() => { onMovePhase(b.id); setOpen(false); }}
+              className="w-full text-left px-2 py-1 rounded text-xs text-gray-300 hover:bg-gray-800 hover:text-white transition-colors flex items-center gap-1.5"
+            >
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: b.color || '#6B7280' }} />
+              {b.name}
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

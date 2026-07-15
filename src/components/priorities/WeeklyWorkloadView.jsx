@@ -266,6 +266,22 @@ export default function WeeklyWorkloadView({
     queryFn: () => base44.entities.ProjectKanbanBucket.list(),
   });
 
+  // Fetch all checklist items for visible tasks (one query, not per-task)
+  const { data: allChecklistItems = [] } = useQuery({
+    queryKey: ["workloadChecklists"],
+    queryFn: () => base44.entities.TaskChecklistItem.list(),
+    staleTime: 60000,
+  });
+
+  const checklistsByTaskId = useMemo(() => {
+    const m = {};
+    allChecklistItems.forEach(item => {
+      if (!m[item.task_id]) m[item.task_id] = [];
+      m[item.task_id].push(item);
+    });
+    return m;
+  }, [allChecklistItems]);
+
   const bucketsByProjectId = useMemo(() => {
     const m = {};
     allBuckets.forEach((b) => {
@@ -441,6 +457,17 @@ export default function WeeklyWorkloadView({
     toast({ title: allPriority ? `Removed priority from ${count} tasks` : `Set priority on ${count} tasks` });
   }, [selectedTasks, updateTaskMutation, toast, dismiss, clearSelection]);
 
+  const handleBulkMovePhase = useCallback((bucketId) => {
+    if (!updateTaskMutation || selectedTasks.length === 0) return;
+    const count = selectedTasks.length;
+    selectedTasks.forEach((task) => {
+      updateTaskMutation.mutate({ id: task.id, data: { kanban_bucket_id: bucketId } });
+    });
+    clearSelection();
+    dismiss();
+    toast({ title: `Moved ${count} tasks to new phase` });
+  }, [selectedTasks, updateTaskMutation, toast, dismiss, clearSelection]);
+
   const handleBulkPrint = useCallback(() => {
     if (selectedTasks.length === 0) return;
     const printWindow = window.open("", "_blank");
@@ -464,11 +491,13 @@ export default function WeeklyWorkloadView({
     const printData = {
       selectedSections: ["selected"],
       sectionGroups: { selected: groups },
-      fields: { showAssignee: true, showDueDate: true, showEstimate: true, showActualBlank: true, showNotesLine: true, showStatus: true, showPriority: true, showBlocked: true },
+      fields: { showAssignee: true, showDueDate: true, showEstimate: true, showActualBlank: true, showNotesLine: true, showStatus: true, showPriority: true, showBlocked: true, showCompletionMarks: true },
       weekLabel: `Week of ${format(selectedWeek.start, "MMMM d")}–${format(selectedWeek.end, "d, yyyy")}`,
       teamMembers: teamMembers.map((tm) => ({ id: tm.id, full_name: tm.full_name })),
       statuses: statuses.map((s) => ({ id: s.id, label: s.label, color: s.color, scope: s.scope })),
       blockedTaskIds: Array.from(blockedSet),
+      blockingLabels,
+      checklistsByTaskId,
       activeFilters: [`${selectedTasks.length} selected tasks`],
     };
     const html = buildWorkloadPrintHTML(printData);
@@ -529,6 +558,8 @@ export default function WeeklyWorkloadView({
       teamMembers: teamMembers.map((tm) => ({ id: tm.id, full_name: tm.full_name })),
       statuses: statuses.map((s) => ({ id: s.id, label: s.label, color: s.color, scope: s.scope })),
       blockedTaskIds: Array.from(blockedSet),
+      blockingLabels,
+      checklistsByTaskId,
       activeFilters: [],
     };
 
@@ -666,6 +697,9 @@ export default function WeeklyWorkloadView({
                     selectedTaskIds={selectedTaskIds}
                     onToggleTaskSelection={toggleTaskSelection}
                     onSelectProjectTasks={selectProjectTasks}
+                    allTasks={allTasks.length > 0 ? allTasks : tasks}
+                    checklistsByTaskId={checklistsByTaskId}
+                    weekLabel={`Week of ${format(selectedWeek.start, "MMMM d")}–${format(selectedWeek.end, "d, yyyy")}`}
                   />
                 ))}
               </div>
@@ -692,8 +726,10 @@ export default function WeeklyWorkloadView({
         onSetStatus={handleBulkStatus}
         onTogglePriority={handleBulkPriority}
         onPrintSelected={handleBulkPrint}
+        onMovePhase={handleBulkMovePhase}
         teamMembers={teamMembers}
         statuses={statuses}
+        buckets={allBuckets}
       />
 
       <WorkloadPrintOptionsModal

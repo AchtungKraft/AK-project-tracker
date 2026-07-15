@@ -4,29 +4,33 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Progress } from "@/components/ui/progress";
 import {
   ChevronDown,
   ChevronRight,
   Flame,
-  Ban,
   User,
   Plus,
   Printer,
-  Timer,
   CalendarDays,
-  AlertTriangle,
-  CalendarClock,
   CheckCircle2,
   CheckSquare,
   Square,
   Clock,
+  Link2,
+  ListChecks,
+  Layers,
 } from "lucide-react";
 import { format, startOfDay, isBefore } from "date-fns";
 import { cn } from "@/lib/utils";
 import { buildProjectDetailUrl, SOURCES } from "@/lib/workspaceConfig";
+import WorkloadDependencyEditor from "@/components/workload/WorkloadDependencyEditor";
+import WorkloadProjectPrintModal from "@/components/workload/WorkloadProjectPrintModal";
+import buildProjectWorkPacketHTML from "@/components/workload/buildProjectWorkPacketHTML";
+import { useQuery } from "@tanstack/react-query";
+import { base44 } from "@/api/base44Client";
+import { useToast } from "@/components/ui/use-toast";
 
-const INITIAL_VISIBLE = 12;
+const DONE_STATUS_ID = "6913f57422230d8c7ee2ef54";
 
 function parseLocalDate(dateStr) {
   if (!dateStr || typeof dateStr !== "string") return null;
@@ -36,7 +40,7 @@ function parseLocalDate(dateStr) {
 }
 
 function fmtHours(h) {
-  if (!h || h === 0) return "0h";
+  if (!h || h === 0) return "";
   const hrs = Math.floor(h);
   const mins = Math.round((h - hrs) * 60);
   if (mins === 0) return `${hrs}h`;
@@ -44,7 +48,7 @@ function fmtHours(h) {
   return `${hrs}h${mins}m`;
 }
 
-// ── Inline task row with full editing parity ──
+// ── Compact task row ──
 function WorkloadTaskRow({
   task,
   assignee,
@@ -60,6 +64,12 @@ function WorkloadTaskRow({
   updateTaskMutation,
   isSelected,
   onToggleSelection,
+  projectTasks,
+  allTasks,
+  bucketMap,
+  teamMemberMap,
+  checklistProgress,
+  successorCount,
 }) {
   const due = parseLocalDate(task.due_date);
   const todayStart = startOfDay(new Date());
@@ -78,35 +88,28 @@ function WorkloadTaskRow({
     [statuses]
   );
 
-  const handleDateSelect = useCallback(
-    (date) => {
-      if (onUpdateDueDate) onUpdateDueDate(task, date);
-      setDateOpen(false);
-    },
-    [task, onUpdateDueDate]
-  );
+  const handleDateSelect = useCallback((date) => {
+    if (onUpdateDueDate) onUpdateDueDate(task, date);
+    setDateOpen(false);
+  }, [task, onUpdateDueDate]);
 
-  const handleAssign = useCallback(
-    (memberId) => {
-      if (updateTaskMutation) updateTaskMutation.mutate({ id: task.id, data: { assigned_team_member_id: memberId } });
-      setAssignOpen(false);
-    },
-    [task, updateTaskMutation]
-  );
+  const handleAssign = useCallback((memberId) => {
+    if (updateTaskMutation) updateTaskMutation.mutate({ id: task.id, data: { assigned_team_member_id: memberId } });
+    setAssignOpen(false);
+  }, [task, updateTaskMutation]);
 
-  const handleStatusChange = useCallback(
-    (statusId) => {
-      if (updateTaskMutation) updateTaskMutation.mutate({ id: task.id, data: { status_id: statusId } });
-      setStatusOpen(false);
-    },
-    [task, updateTaskMutation]
-  );
+  const handleStatusChange = useCallback((statusId) => {
+    if (updateTaskMutation) updateTaskMutation.mutate({ id: task.id, data: { status_id: statusId } });
+    setStatusOpen(false);
+  }, [task, updateTaskMutation]);
+
+  const depCount = (task.dependencies || []).length;
 
   return (
     <div
       className={cn(
         "flex items-center gap-1.5 px-2 py-[5px] hover:bg-gray-800/40 transition-colors group/row border-b border-gray-800/20 last:border-b-0",
-        blocked && "opacity-50"
+        blocked && "opacity-60"
       )}
     >
       {/* Selection checkbox */}
@@ -131,10 +134,7 @@ function WorkloadTaskRow({
 
       {/* Priority toggle */}
       <button
-        onClick={(e) => {
-          e.stopPropagation();
-          if (onTogglePriority) onTogglePriority(task);
-        }}
+        onClick={(e) => { e.stopPropagation(); if (onTogglePriority) onTogglePriority(task); }}
         className={cn(
           "shrink-0 p-0 transition-colors",
           task.is_priority
@@ -154,7 +154,35 @@ function WorkloadTaskRow({
         {task.name}
       </button>
 
-      {/* Blocking reason — specific explanation, not just "Blocked" */}
+      {/* Checklist progress */}
+      {checklistProgress && checklistProgress.total > 0 && (
+        <span
+          className={cn(
+            "text-[10px] shrink-0 flex items-center gap-0.5",
+            checklistProgress.done === checklistProgress.total ? "text-green-500" : "text-gray-500"
+          )}
+          title={`Checklist: ${checklistProgress.done}/${checklistProgress.total}`}
+        >
+          <ListChecks className="w-2.5 h-2.5" />
+          {checklistProgress.done}/{checklistProgress.total}
+        </span>
+      )}
+
+      {/* Dependency indicator */}
+      {(depCount > 0 || successorCount > 0) && (
+        <span
+          className={cn(
+            "text-[9px] shrink-0 flex items-center gap-0.5",
+            blocked ? "text-red-400" : "text-blue-400/70"
+          )}
+          title={blocked ? blockingLabel : `${depCount} dep${depCount !== 1 ? 's' : ''}, unlocks ${successorCount}`}
+        >
+          <Link2 className="w-2.5 h-2.5" />
+          {blocked ? "" : (successorCount > 0 ? `↗${successorCount}` : "")}
+        </span>
+      )}
+
+      {/* Blocking reason */}
       {blocked && (
         <span className="text-[9px] text-red-400 shrink-0 flex items-center gap-0.5 max-w-[180px] truncate" title={blockingLabel}>
           <Clock className="w-2.5 h-2.5 shrink-0" />
@@ -162,29 +190,40 @@ function WorkloadTaskRow({
         </span>
       )}
 
-      {/* Workflow decoration — subtle badge for waiting states */}
+      {/* Workflow decoration — subtle for waiting states */}
       {!blocked && (() => {
         const opState = task.operational_state;
         if (!opState || opState === "COMPLETED" || opState === "NOT_STARTED" || opState === "READY" || opState === "IN_PROGRESS") return null;
         const WAITING_LABELS = {
-          WAITING_ON_PARTS: "Waiting on Parts",
-          WAITING_ON_VENDOR: "Waiting on Vendor",
-          WAITING_ON_CUSTOMER: "Waiting on Customer",
-          REVIEW_REQUIRED: "Review Required",
+          WAITING_ON_PARTS: "Parts",
+          WAITING_ON_VENDOR: "Vendor",
+          WAITING_ON_CUSTOMER: "Customer",
+          REVIEW_REQUIRED: "Review",
           BLOCKED: "Blocked",
         };
         const label = WAITING_LABELS[opState];
         if (!label) return null;
         return (
-          <span className="text-[9px] text-amber-400/80 shrink-0 hidden sm:inline truncate">
+          <span className="text-[9px] text-amber-400/80 shrink-0 hidden sm:inline">
             {label}
           </span>
         );
       })()}
 
+      {/* Dependency editor */}
+      <span onClick={(e) => e.stopPropagation()} className="shrink-0">
+        <WorkloadDependencyEditor
+          task={task}
+          projectTasks={projectTasks}
+          allTasks={allTasks}
+          bucketMap={bucketMap}
+          teamMemberMap={teamMemberMap}
+          updateTaskMutation={updateTaskMutation}
+        />
+      </span>
+
       {/* Inline controls — visible on hover */}
       <div className="flex items-center gap-0 shrink-0 opacity-0 group-hover/row:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-        {/* Due date editor */}
         <Popover open={dateOpen} onOpenChange={setDateOpen}>
           <PopoverTrigger asChild>
             <button className="text-gray-600 hover:text-blue-400 p-0.5 rounded" title="Set due date">
@@ -196,7 +235,6 @@ function WorkloadTaskRow({
           </PopoverContent>
         </Popover>
 
-        {/* Assignment selector */}
         <Popover open={assignOpen} onOpenChange={setAssignOpen}>
           <PopoverTrigger asChild>
             <button className="text-gray-600 hover:text-blue-400 p-0.5 rounded" title="Assign">
@@ -207,30 +245,17 @@ function WorkloadTaskRow({
             <div className="space-y-px max-h-52 overflow-y-auto">
               <button
                 onClick={() => handleAssign(null)}
-                className={cn(
-                  "w-full text-left px-2 py-1 rounded text-xs transition-colors",
-                  !task.assigned_team_member_id ? "bg-gray-800 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white"
-                )}
-              >
-                Unassigned
-              </button>
+                className={cn("w-full text-left px-2 py-1 rounded text-xs transition-colors", !task.assigned_team_member_id ? "bg-gray-800 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white")}
+              >Unassigned</button>
               {activeMembers.map((tm) => (
-                <button
-                  key={tm.id}
-                  onClick={() => handleAssign(tm.id)}
-                  className={cn(
-                    "w-full text-left px-2 py-1 rounded text-xs transition-colors",
-                    task.assigned_team_member_id === tm.id ? "bg-blue-900/40 text-blue-300" : "text-gray-300 hover:bg-gray-800"
-                  )}
-                >
-                  {tm.full_name}
-                </button>
+                <button key={tm.id} onClick={() => handleAssign(tm.id)}
+                  className={cn("w-full text-left px-2 py-1 rounded text-xs transition-colors", task.assigned_team_member_id === tm.id ? "bg-blue-900/40 text-blue-300" : "text-gray-300 hover:bg-gray-800")}
+                >{tm.full_name}</button>
               ))}
             </div>
           </PopoverContent>
         </Popover>
 
-        {/* Status selector */}
         <Popover open={statusOpen} onOpenChange={setStatusOpen}>
           <PopoverTrigger asChild>
             <button className="text-gray-600 hover:text-blue-400 p-0.5 rounded" title="Change status">
@@ -240,13 +265,8 @@ function WorkloadTaskRow({
           <PopoverContent className="w-40 p-1 bg-gray-900 border-gray-700" side="left" align="start">
             <div className="space-y-px max-h-52 overflow-y-auto">
               {taskStatuses.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => handleStatusChange(s.id)}
-                  className={cn(
-                    "w-full text-left px-2 py-1 rounded text-xs transition-colors flex items-center gap-1.5",
-                    task.status_id === s.id ? "bg-gray-800 text-white" : "text-gray-300 hover:bg-gray-800"
-                  )}
+                <button key={s.id} onClick={() => handleStatusChange(s.id)}
+                  className={cn("w-full text-left px-2 py-1 rounded text-xs transition-colors flex items-center gap-1.5", task.status_id === s.id ? "bg-gray-800 text-white" : "text-gray-300 hover:bg-gray-800")}
                 >
                   <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
                   {s.label}
@@ -255,34 +275,28 @@ function WorkloadTaskRow({
             </div>
           </PopoverContent>
         </Popover>
+
+        {/* Phase move */}
+        {updateTaskMutation && (
+          <PhaseSelector task={task} bucketMap={bucketMap} updateTaskMutation={updateTaskMutation} />
+        )}
       </div>
 
-      {/* Status badge — always visible */}
+      {/* Status badge */}
       {status && (
-        <Popover open={false}>
-          <Badge
-            variant="outline"
-            className="text-[9px] px-1 py-0 shrink-0 hidden sm:inline-flex cursor-default"
-            style={{ borderColor: status.color, color: status.color }}
-          >
-            {status.label}
-          </Badge>
-        </Popover>
+        <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0 hidden sm:inline-flex cursor-default" style={{ borderColor: status.color, color: status.color }}>
+          {status.label}
+        </Badge>
       )}
 
       {/* Assignee */}
       <span className="text-[11px] text-gray-500 w-14 truncate shrink-0 hidden md:block text-right">
-        {assignee?.full_name?.split(" ")[0] || "—"}
+        {assignee?.full_name?.split(" ")[0] || "\u2014"}
       </span>
 
       {/* Due date */}
-      <span
-        className={cn(
-          "text-[11px] w-12 shrink-0 text-right hidden sm:block tabular-nums",
-          isOverdue ? "text-red-400 font-semibold" : "text-gray-500"
-        )}
-      >
-        {due ? format(due, "M/d") : "—"}
+      <span className={cn("text-[11px] w-12 shrink-0 text-right hidden sm:block tabular-nums", isOverdue ? "text-red-400 font-semibold" : "text-gray-500")}>
+        {due ? format(due, "M/d") : "\u2014"}
       </span>
 
       {/* Estimated hours */}
@@ -293,7 +307,71 @@ function WorkloadTaskRow({
   );
 }
 
-// ── Project group with enhanced header + progressive disclosure ──
+// Compact phase selector for inline task row
+function PhaseSelector({ task, bucketMap, updateTaskMutation }) {
+  const [open, setOpen] = useState(false);
+  const buckets = useMemo(() => {
+    return Array.from(bucketMap.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+  }, [bucketMap]);
+
+  if (buckets.length === 0) return null;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button className="text-gray-600 hover:text-blue-400 p-0.5 rounded" title="Move to phase">
+          <Layers className="w-3 h-3" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-40 p-1 bg-gray-900 border-gray-700" side="left" align="start">
+        <p className="text-[9px] text-gray-500 uppercase tracking-wider px-2 py-1">Move to Phase</p>
+        <div className="space-y-px max-h-52 overflow-y-auto">
+          {buckets.map(b => (
+            <button key={b.id} onClick={() => {
+              updateTaskMutation.mutate({ id: task.id, data: { kanban_bucket_id: b.id } });
+              setOpen(false);
+            }}
+              className={cn("w-full text-left px-2 py-1 rounded text-xs transition-colors flex items-center gap-1.5",
+                task.kanban_bucket_id === b.id ? "bg-blue-900/40 text-blue-300" : "text-gray-300 hover:bg-gray-800"
+              )}
+            >
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: b.color || '#6B7280' }} />
+              {b.name}
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// ── Phase header with collapse ──
+function PhaseHeader({ bucket, taskCount, openCount, doneCount, expanded, onToggle, onAddTask }) {
+  return (
+    <div
+      className="flex items-center gap-1.5 px-3 py-[4px] bg-gray-800/15 border-t border-gray-800/40 cursor-pointer hover:bg-gray-800/25 transition-colors"
+      onClick={onToggle}
+    >
+      {expanded ? <ChevronDown className="w-2.5 h-2.5 text-gray-500" /> : <ChevronRight className="w-2.5 h-2.5 text-gray-500" />}
+      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: bucket?.color || '#6B7280' }} />
+      <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{bucket?.name || "Unassigned Phase"}</span>
+      <span className="text-[9px] text-gray-500 ml-1">
+        {openCount} open{doneCount > 0 ? ` \u00B7 ${doneCount} done` : ""}
+      </span>
+      {onAddTask && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onAddTask(); }}
+          className="ml-auto text-gray-600 hover:text-green-400 p-0.5 rounded transition-colors opacity-0 group-hover:opacity-100"
+          title="Add task to this phase"
+        >
+          <Plus className="w-2.5 h-2.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── Main project group ──
 export default function WorkloadProjectGroup({
   project,
   label,
@@ -316,123 +394,162 @@ export default function WorkloadProjectGroup({
   selectedTaskIds,
   onToggleTaskSelection,
   onSelectProjectTasks,
+  allTasks = [],
+  checklistsByTaskId = {},
+  weekLabel = "",
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const [collapsedPhases, setCollapsedPhases] = useState(new Set());
   const [showAll, setShowAll] = useState(false);
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+  const { toast } = useToast();
 
-  const DONE_STATUS_ID = "6913f57422230d8c7ee2ef54";
+  const INITIAL_VISIBLE = 12;
 
-  // Stats from the tasks in THIS section (not all project tasks)
-  const sectionStats = useMemo(() => {
-    let est = 0;
-    let unassigned = 0;
-    let blocked = 0;
-    let overdue = 0;
-    const today = startOfDay(new Date());
-    tasks.forEach((t) => {
-      if (t.estimated_hours > 0) est += t.estimated_hours;
-      if (!t.assigned_team_member_id) unassigned++;
-      if (blockedSet.has(t.id)) blocked++;
-      const d = parseLocalDate(t.due_date);
-      if (d && isBefore(d, today)) overdue++;
+  // Build bucket map for this project
+  const bucketMap = useMemo(() => {
+    const m = new Map();
+    (buckets || []).forEach(b => m.set(b.id, b));
+    return m;
+  }, [buckets]);
+
+  // Successor map — derived from project tasks
+  const successorMap = useMemo(() => {
+    const m = new Map();
+    const allP = allProjectTasks || tasks;
+    allP.forEach(t => {
+      (t.dependencies || []).forEach(depId => {
+        if (!m.has(depId)) m.set(depId, []);
+        m.get(depId).push(t);
+      });
     });
-    return { est, unassigned, blocked, overdue };
-  }, [tasks, blockedSet]);
+    return m;
+  }, [allProjectTasks, tasks]);
 
-  // Progress from ALL tasks in this project (not just this section)
-  const progress = useMemo(() => {
-    if (!allProjectTasks || allProjectTasks.length === 0) return null;
-    const total = allProjectTasks.length;
-    const completed = allProjectTasks.filter((t) => t.status_id === DONE_STATUS_ID).length;
-    const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-    return { completed, total, pct };
+  // Checklist progress per task
+  const checklistProgressMap = useMemo(() => {
+    const m = {};
+    Object.entries(checklistsByTaskId).forEach(([tid, items]) => {
+      if (items.length > 0) {
+        m[tid] = { done: items.filter(i => i.is_complete).length, total: items.length };
+      }
+    });
+    return m;
+  }, [checklistsByTaskId]);
+
+  // Open task count for this project
+  const openTaskCount = useMemo(() => {
+    return (allProjectTasks || []).filter(t => t.status_id !== DONE_STATUS_ID).length;
   }, [allProjectTasks]);
+
+  // Current phase label
+  const currentPhaseLabel = project?.current_phase_name || null;
+
+  const togglePhase = useCallback((phaseId) => {
+    setCollapsedPhases(prev => {
+      const next = new Set(prev);
+      if (next.has(phaseId)) next.delete(phaseId);
+      else next.add(phaseId);
+      return next;
+    });
+  }, []);
+
+  // Print handler
+  const handleProjectPrint = useCallback((opts) => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast({ title: "Print window blocked", variant: "destructive" });
+      return;
+    }
+
+    const printTasks = opts.scope === "current"
+      ? tasks
+      : (allProjectTasks || []).filter(t => t.status_id !== DONE_STATUS_ID);
+
+    const html = buildProjectWorkPacketHTML({
+      project,
+      tasks: printTasks,
+      buckets: buckets || [],
+      teamMemberMap,
+      blockingLabels: blockingLabels || {},
+      blockedSet: blockedSet || new Set(),
+      successorMap,
+      checklistsByTaskId: opts.includeChecklists ? checklistsByTaskId : {},
+      weekLabel,
+      options: {
+        includeChecklists: opts.includeChecklists,
+        includeCompletionMarks: opts.includeCompletionMarks,
+        includeNotes: opts.includeNotes,
+      },
+    });
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+  }, [tasks, allProjectTasks, project, buckets, teamMemberMap, blockingLabels, blockedSet, successorMap, checklistsByTaskId, weekLabel, toast]);
 
   const visibleTasks = showAll ? tasks : tasks.slice(0, INITIAL_VISIBLE);
   const remaining = tasks.length - INITIAL_VISIBLE;
 
   return (
     <div>
-      {/* Project header */}
+      {/* ── Project header — visually distinct ── */}
       <div
-        className="flex items-center gap-1.5 px-2 py-1.5 bg-gray-800/20 hover:bg-gray-800/40 cursor-pointer transition-colors"
-        onClick={() => setExpanded((e) => !e)}
+        className="flex items-center gap-1.5 px-2 py-2 bg-gray-800/40 hover:bg-gray-800/50 cursor-pointer transition-colors border-t-2 border-gray-700/60 group"
+        onClick={() => setExpanded(e => !e)}
       >
-        {/* Select project tasks button */}
+        {/* Select project tasks */}
         {onSelectProjectTasks && (
           <button
             onClick={(e) => {
               e.stopPropagation();
-              const taskIds = tasks.map((t) => t.id);
-              const allSelected = taskIds.every((id) => selectedTaskIds?.has(id));
-              if (allSelected) {
-                // Deselect all in this project (toggle each off)
-                taskIds.forEach((id) => onToggleTaskSelection(id));
-              } else {
-                onSelectProjectTasks(taskIds);
-              }
+              const taskIds = tasks.map(t => t.id);
+              const allSelected = taskIds.every(id => selectedTaskIds?.has(id));
+              if (allSelected) taskIds.forEach(id => onToggleTaskSelection(id));
+              else onSelectProjectTasks(taskIds);
             }}
             className="shrink-0 text-gray-600 hover:text-blue-400 transition-colors"
             title="Select all tasks in this project"
           >
-            {tasks.every((t) => selectedTaskIds?.has(t.id))
+            {tasks.every(t => selectedTaskIds?.has(t.id))
               ? <CheckSquare className="w-3.5 h-3.5 text-blue-400" />
               : <Square className="w-3.5 h-3.5" />
             }
           </button>
         )}
 
-        {expanded ? (
-          <ChevronDown className="w-3 h-3 text-gray-500 shrink-0" />
-        ) : (
-          <ChevronRight className="w-3 h-3 text-gray-500 shrink-0" />
-        )}
+        {expanded
+          ? <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+          : <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+        }
 
-        {/* Full project name — matches Execution view */}
-        <span className="text-sm font-bold text-gray-100 truncate min-w-0">
+        {/* Project name — stronger typography */}
+        <span className="text-sm font-bold text-white truncate min-w-0">
           {project?.name || label || "No Project"}
         </span>
-        <Badge className="bg-gray-800 text-gray-400 border-gray-700 text-[9px] px-1 py-0 shrink-0">
+
+        {/* Task count in this section */}
+        <Badge className="bg-gray-700 text-gray-300 border-gray-600 text-[10px] px-1.5 py-0 shrink-0">
           {tasks.length}
         </Badge>
 
-        {/* Compact metrics */}
-        <div className="flex items-center gap-2 ml-auto shrink-0">
-          {sectionStats.est > 0 && (
-            <span className="text-[10px] text-gray-500 tabular-nums hidden sm:flex items-center gap-0.5" title="Estimated hours">
-              <Timer className="w-2.5 h-2.5" />
-              {fmtHours(sectionStats.est)}
-            </span>
-          )}
-          {sectionStats.overdue > 0 && (
-            <span className="text-[10px] text-red-500 tabular-nums hidden sm:flex items-center gap-0.5" title="Overdue">
-              <AlertTriangle className="w-2.5 h-2.5" />
-              {sectionStats.overdue}
-            </span>
-          )}
-          {sectionStats.unassigned > 0 && (
-            <span className="text-[10px] text-yellow-500 tabular-nums hidden sm:flex items-center gap-0.5" title="Unassigned">
-              <User className="w-2.5 h-2.5" />
-              {sectionStats.unassigned}
-            </span>
-          )}
-          {sectionStats.blocked > 0 && (
-            <span className="text-[10px] text-red-500 tabular-nums hidden sm:flex items-center gap-0.5" title="Blocked">
-              <Ban className="w-2.5 h-2.5" />
-              {sectionStats.blocked}
-            </span>
-          )}
-          {progress && (
-            <span className="text-[10px] text-gray-500 tabular-nums hidden md:flex items-center gap-1" title={`${progress.completed}/${progress.total} complete`}>
-              <Progress value={progress.pct} className="w-10 h-1.5 bg-gray-800" />
-              <span>{progress.pct}%</span>
-            </span>
-          )}
-        </div>
+        {/* Open task count */}
+        {openTaskCount > 0 && openTaskCount !== tasks.length && (
+          <span className="text-[10px] text-gray-500 shrink-0 hidden sm:inline">
+            {openTaskCount} open
+          </span>
+        )}
+
+        {/* Current phase */}
+        {currentPhaseLabel && (
+          <span className="text-[10px] text-gray-500 shrink-0 hidden md:inline truncate max-w-[120px]" title={`Current: ${currentPhaseLabel}`}>
+            {currentPhaseLabel}
+          </span>
+        )}
 
         {/* Actions */}
         {project && (
-          <div className="flex items-center gap-0.5 shrink-0 ml-1" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-0.5 shrink-0 ml-auto" onClick={(e) => e.stopPropagation()}>
             <Link
               to={buildProjectDetailUrl(project.id, { source: SOURCES.PRIORITIES })}
               className="text-[10px] text-gray-500 hover:text-white px-1 py-0.5 rounded hover:bg-gray-700 transition-colors"
@@ -445,14 +562,14 @@ export default function WorkloadProjectGroup({
               className="text-green-500 hover:text-green-300 px-0.5 py-0.5 rounded hover:bg-green-900/20 transition-colors"
               title="Add task"
             >
-              <Plus className="w-3 h-3" />
+              <Plus className="w-3.5 h-3.5" />
             </button>
             <button
-              onClick={() => window.open(`/projectprintview?id=${project.id}`, "_blank")}
-              className="text-gray-600 hover:text-white px-0.5 py-0.5 rounded hover:bg-gray-700 transition-colors"
-              title="Print project tasks"
+              onClick={() => setPrintModalOpen(true)}
+              className="text-gray-500 hover:text-white px-0.5 py-0.5 rounded hover:bg-gray-700 transition-colors"
+              title="Print work packet"
             >
-              <Printer className="w-3 h-3" />
+              <Printer className="w-3.5 h-3.5" />
             </button>
           </div>
         )}
@@ -462,10 +579,7 @@ export default function WorkloadProjectGroup({
       {expanded && (
         <div>
           {(() => {
-            // Group tasks by phase (bucket), with phases ordered by bucket.order
             const projectBuckets = buckets || [];
-            const bucketMap = new Map();
-            projectBuckets.forEach(b => bucketMap.set(b.id, b));
             const sortedBuckets = [...projectBuckets].sort((a, b) => (a.order || 0) - (b.order || 0));
             
             const byPhase = new Map();
@@ -482,99 +596,73 @@ export default function WorkloadProjectGroup({
             });
 
             const hasPhases = sortedBuckets.some(b => byPhase.has(b.id));
+
+            const renderTaskRow = (task) => (
+              <WorkloadTaskRow
+                key={task.id}
+                task={task}
+                assignee={teamMemberMap.get(task.assigned_team_member_id)}
+                status={statusMap.get(task.status_id)}
+                blocked={blockedSet.has(task.id)}
+                blockingLabel={blockingLabels?.[task.id] || "Blocked"}
+                teamMembers={teamMembers}
+                statuses={statuses}
+                onToggleComplete={onToggleComplete}
+                onTaskClick={onTaskClick}
+                onUpdateDueDate={onUpdateDueDate}
+                onTogglePriority={onTogglePriority}
+                updateTaskMutation={updateTaskMutation}
+                isSelected={selectedTaskIds?.has(task.id)}
+                onToggleSelection={onToggleTaskSelection}
+                projectTasks={allProjectTasks || tasks}
+                allTasks={allTasks}
+                bucketMap={bucketMap}
+                teamMemberMap={teamMemberMap}
+                checklistProgress={checklistProgressMap[task.id]}
+                successorCount={(successorMap.get(task.id) || []).length}
+              />
+            );
             
-            // If no phases, render flat (original behavior)
             if (!hasPhases) {
-              return (
-                <>
-                  {allVisibleTasks.map(task => (
-                    <WorkloadTaskRow
-                      key={task.id}
-                      task={task}
-                      assignee={teamMemberMap.get(task.assigned_team_member_id)}
-                      status={statusMap.get(task.status_id)}
-                      blocked={blockedSet.has(task.id)}
-                      blockingLabel={blockingLabels?.[task.id] || "Blocked"}
-                      teamMembers={teamMembers}
-                      statuses={statuses}
-                      onToggleComplete={onToggleComplete}
-                      onTaskClick={onTaskClick}
-                      onUpdateDueDate={onUpdateDueDate}
-                      onTogglePriority={onTogglePriority}
-                      updateTaskMutation={updateTaskMutation}
-                      isSelected={selectedTaskIds?.has(task.id)}
-                      onToggleSelection={onToggleTaskSelection}
-                    />
-                  ))}
-                </>
-              );
+              return allVisibleTasks.map(renderTaskRow);
             }
 
-            // Render phase-grouped tasks
             return (
               <>
                 {sortedBuckets.map(bucket => {
                   const phaseTasks = byPhase.get(bucket.id);
                   if (!phaseTasks || phaseTasks.length === 0) return null;
+                  const openCount = phaseTasks.filter(t => t.status_id !== DONE_STATUS_ID).length;
+                  const doneCount = phaseTasks.length - openCount;
+                  const isPhaseCollapsed = collapsedPhases.has(bucket.id);
+
                   return (
                     <div key={bucket.id}>
-                      <div className="flex items-center gap-1.5 px-3 py-[3px] bg-gray-800/10 border-t border-gray-800/30">
-                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: bucket.color || '#6B7280' }} />
-                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{bucket.name}</span>
-                        <span className="text-[9px] text-gray-600 ml-auto">{phaseTasks.length}</span>
-                      </div>
-                      {phaseTasks.map(task => (
-                        <WorkloadTaskRow
-                          key={task.id}
-                          task={task}
-                          assignee={teamMemberMap.get(task.assigned_team_member_id)}
-                          status={statusMap.get(task.status_id)}
-                          blocked={blockedSet.has(task.id)}
-                          blockingLabel={blockingLabels?.[task.id] || "Blocked"}
-                          teamMembers={teamMembers}
-                          statuses={statuses}
-                          onToggleComplete={onToggleComplete}
-                          onTaskClick={onTaskClick}
-                          onUpdateDueDate={onUpdateDueDate}
-                          onTogglePriority={onTogglePriority}
-                          updateTaskMutation={updateTaskMutation}
-                          isSelected={selectedTaskIds?.has(task.id)}
-                          onToggleSelection={onToggleTaskSelection}
-                        />
-                      ))}
+                      <PhaseHeader
+                        bucket={bucket}
+                        taskCount={phaseTasks.length}
+                        openCount={openCount}
+                        doneCount={doneCount}
+                        expanded={!isPhaseCollapsed}
+                        onToggle={() => togglePhase(bucket.id)}
+                        onAddTask={project ? () => onAddTask(project.id) : null}
+                      />
+                      {!isPhaseCollapsed && phaseTasks.map(renderTaskRow)}
                     </div>
                   );
                 })}
-                {/* Unphased tasks */}
                 {unphased.length > 0 && (
-                  <>
-                    {sortedBuckets.some(b => byPhase.has(b.id)) && (
-                      <div className="flex items-center gap-1.5 px-3 py-[3px] bg-gray-800/10 border-t border-gray-800/30">
-                        <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-gray-600" />
-                        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Unassigned Phase</span>
-                        <span className="text-[9px] text-gray-600 ml-auto">{unphased.length}</span>
-                      </div>
-                    )}
-                    {unphased.map(task => (
-                      <WorkloadTaskRow
-                        key={task.id}
-                        task={task}
-                        assignee={teamMemberMap.get(task.assigned_team_member_id)}
-                        status={statusMap.get(task.status_id)}
-                        blocked={blockedSet.has(task.id)}
-                        blockingLabel={blockingLabels?.[task.id] || "Blocked"}
-                        teamMembers={teamMembers}
-                        statuses={statuses}
-                        onToggleComplete={onToggleComplete}
-                        onTaskClick={onTaskClick}
-                        onUpdateDueDate={onUpdateDueDate}
-                        onTogglePriority={onTogglePriority}
-                        updateTaskMutation={updateTaskMutation}
-                        isSelected={selectedTaskIds?.has(task.id)}
-                        onToggleSelection={onToggleTaskSelection}
-                      />
-                    ))}
-                  </>
+                  <div>
+                    <PhaseHeader
+                      bucket={null}
+                      taskCount={unphased.length}
+                      openCount={unphased.filter(t => t.status_id !== DONE_STATUS_ID).length}
+                      doneCount={unphased.filter(t => t.status_id === DONE_STATUS_ID).length}
+                      expanded={!collapsedPhases.has("__unphased__")}
+                      onToggle={() => togglePhase("__unphased__")}
+                    />
+                    {!collapsedPhases.has("__unphased__") && unphased.map(renderTaskRow)}
+                  </div>
                 )}
               </>
             );
@@ -593,12 +681,22 @@ export default function WorkloadProjectGroup({
               onClick={() => setShowAll(false)}
               className="w-full py-1 text-center text-[11px] text-gray-600 hover:text-gray-400 transition-colors flex items-center justify-center gap-1"
             >
-              <ChevronRight className="w-3 h-3 rotate-[-90deg]" />
+              <ChevronRight className="w-3 h-3 -rotate-90" />
               Collapse Tasks
             </button>
           )}
         </div>
       )}
+
+      {/* Project print modal */}
+      <WorkloadProjectPrintModal
+        open={printModalOpen}
+        onClose={() => setPrintModalOpen(false)}
+        project={project}
+        sectionTaskCount={tasks.length}
+        allOpenTaskCount={openTaskCount}
+        onPrint={handleProjectPrint}
+      />
     </div>
   );
 }

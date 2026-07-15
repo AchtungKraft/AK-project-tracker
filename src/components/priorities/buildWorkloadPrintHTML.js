@@ -66,7 +66,7 @@ const SECTION_LABELS = {
 
 // ── Task row ─────────────────────────────────────────────────────────────────
 
-function renderTaskRow(task, teamMemberMap, statusMap, blockedSet, fields) {
+function renderTaskRow(task, teamMemberMap, statusMap, blockedSet, fields, data) {
   const assignee = teamMemberMap.get(task.assigned_team_member_id);
   const status = statusMap.get(task.status_id);
   const isBlocked = blockedSet.has(task.id);
@@ -119,7 +119,42 @@ function renderTaskRow(task, teamMemberMap, statusMap, blockedSet, fields) {
   const showBlocked = fields.showBlocked !== false;    // default on
   const nameWeight = showPriority && task.is_priority ? "font-weight:bold;" : "";
   const star = showPriority && task.is_priority ? `<span style="font-size:12px;font-weight:bold;">\u2605</span> ` : "";
-  const blocked = showBlocked && isBlocked ? ` <span style="font-size:10px;font-weight:600;border:1px solid #9ca3af;border-radius:3px;padding:0 4px;margin-left:4px;">BLOCKED</span>` : "";
+
+  // Enhanced blocked: show specific reason from blockingLabels
+  let blockedHtml = "";
+  if (showBlocked && isBlocked) {
+    const blockLabel = (data.blockingLabels || {})[task.id];
+    if (blockLabel) {
+      blockedHtml = `<div style="margin-top:2px;font-size:10px;font-weight:600;color:#374151;">BLOCKED \u2014 ${esc(blockLabel)}</div>`;
+    } else {
+      blockedHtml = `<div style="margin-top:2px;font-size:10px;font-weight:600;color:#374151;">BLOCKED</div>`;
+    }
+  }
+
+  // Checklists
+  let checklistHtml = "";
+  if (fields.showChecklist) {
+    const items = (data.checklistsByTaskId || {})[task.id] || [];
+    if (items.length > 0) {
+      checklistHtml = items.map(c => {
+        const check = c.is_complete ? "&#9745;" : "&#9744;";
+        const style = c.is_complete ? "text-decoration:line-through;color:#9ca3af;" : "";
+        return `<div style="margin-left:16px;font-size:10px;${style}">${check} ${esc(c.title)}</div>`;
+      }).join("");
+      checklistHtml = `<div style="margin-top:2px;">${checklistHtml}</div>`;
+    }
+  }
+
+  // Completion marks
+  let marksHtml = "";
+  if (fields.showCompletionMarks) {
+    marksHtml = `<div style="margin-top:3px;display:flex;gap:14px;font-size:9px;color:#6b7280;">
+      <span>&#9744; Done</span>
+      <span>&#9744; Blocked</span>
+      <span>&#9744; Parts</span>
+      <span>&#9744; Review</span>
+    </div>`;
+  }
 
   return `<div style="page-break-inside:avoid;">
     <div style="display:flex;align-items:flex-start;gap:8px;padding:4px 0;border-bottom:1px solid #e5e7eb;">
@@ -127,11 +162,14 @@ function renderTaskRow(task, teamMemberMap, statusMap, blockedSet, fields) {
       <div style="flex:1;min-width:0;">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
           <div style="font-size:13px;line-height:1.4;word-wrap:break-word;overflow-wrap:break-word;${nameWeight}">
-            ${star}${esc(task.name)}${blocked}
+            ${star}${esc(task.name)}
           </div>
           ${timeHtml}
         </div>
         ${metaHtml}
+        ${blockedHtml}
+        ${checklistHtml}
+        ${marksHtml}
         ${notesHtml}
       </div>
     </div>
@@ -140,7 +178,7 @@ function renderTaskRow(task, teamMemberMap, statusMap, blockedSet, fields) {
 
 // ── Project group ────────────────────────────────────────────────────────────
 
-function renderProjectGroup(group, teamMemberMap, statusMap, blockedSet, fields) {
+function renderProjectGroup(group, teamMemberMap, statusMap, blockedSet, fields, data) {
   const { project, label, tasks } = group;
   if (!tasks || tasks.length === 0) return "";
 
@@ -167,7 +205,7 @@ function renderProjectGroup(group, teamMemberMap, statusMap, blockedSet, fields)
     : "";
 
   const tasksHtml = tasks
-    .map((t) => renderTaskRow(t, teamMemberMap, statusMap, blockedSet, fields))
+    .map((t) => renderTaskRow(t, teamMemberMap, statusMap, blockedSet, fields, data))
     .join("");
 
   // page-break-inside:avoid on the header+first task block only — NOT the
@@ -220,7 +258,7 @@ export default function buildWorkloadPrintHTML(data) {
 
     const sectionLabel = SECTION_LABELS[secKey] || secKey;
     const groupsHtml = groups
-      .map((g) => renderProjectGroup(g, teamMemberMap, statusMap, blockedSet, fields))
+      .map((g) => renderProjectGroup(g, teamMemberMap, statusMap, blockedSet, fields, data))
       .join("");
 
     sectionsHtml += `<div style="margin-bottom:24px;">

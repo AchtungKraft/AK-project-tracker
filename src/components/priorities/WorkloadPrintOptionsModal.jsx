@@ -26,6 +26,8 @@ const FIELD_OPTIONS = [
   { key: "showStatus", label: "Show Status", defaultOn: true },
   { key: "showPriority", label: "Show Priority Indicator", defaultOn: true },
   { key: "showBlocked", label: "Show Blocked Indicator", defaultOn: true },
+  { key: "showChecklist", label: "Include Task Checklists", defaultOn: false },
+  { key: "showCompletionMarks", label: "Technician Completion Marks", defaultOn: true },
   { key: "showCompleted", label: "Show Completed Tasks", defaultOn: false },
 ];
 
