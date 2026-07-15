@@ -124,7 +124,7 @@ function WorkloadTaskRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 pr-3 py-[5px] hover:bg-gray-800/40 transition-colors group/row border-b border-gray-800/20 last:border-b-0",
+        "flex items-center gap-1 pr-3 py-[5px] hover:bg-gray-800/40 transition-colors group/row border-b border-gray-800/20 last:border-b-0",
         GUTTER_TASK_INDENT,
         blocked && "opacity-60"
       )}
@@ -163,10 +163,10 @@ function WorkloadTaskRow({
         <Flame className="w-3 h-3" />
       </button>
 
-      {/* Task name */}
+      {/* Task name — tighter to checkbox */}
       <button
         onClick={() => onTaskClick(task)}
-        className="flex-1 min-w-0 text-left text-[13px] text-gray-200 hover:text-white truncate leading-tight"
+        className="flex-1 min-w-0 text-left text-[13px] text-gray-200 hover:text-white truncate leading-tight -ml-0.5"
       >
         {task.name}
       </button>
@@ -391,8 +391,8 @@ function InlineChecklistItems({ items, onToggle, showCompleted = false }) {
   // Auto-collapse when all items are complete
   if (done === total) {
     return (
-      <div className="pl-14 md:pl-16 pr-3 pb-1">
-        <span className="text-[10px] text-green-500 flex items-center gap-1">
+      <div className="pl-[4.5rem] md:pl-[5rem] pr-3 pb-0.5">
+        <span className="text-[10px] text-green-500/80 flex items-center gap-1">
           <Check className="w-2.5 h-2.5" />
           {total}/{total} Complete
         </span>
@@ -400,46 +400,64 @@ function InlineChecklistItems({ items, onToggle, showCompleted = false }) {
     );
   }
 
-  // Show open items; optionally show completed in review mode
   const openItems = sorted.filter(i => !i.is_complete);
   const completedItems = sorted.filter(i => i.is_complete);
-  const summaryText = remaining <= total / 2
-    ? `${remaining} Remaining`
-    : `${done}/${total} Complete`;
 
   return (
-    <div className="pl-14 md:pl-16 pr-3 pb-1">
-      {openItems.map(item => (
-        <div key={item.id} className="flex items-center gap-1.5 py-[2px]">
-          <button
-            onClick={(e) => { e.stopPropagation(); if (onToggle) onToggle(item); }}
-            className="shrink-0 w-3 h-3 rounded-sm border border-gray-600 hover:border-gray-400 flex items-center justify-center transition-colors"
-          />
-          <span className="text-[11px] leading-tight truncate text-gray-400">
-            {item.title}
-          </span>
-        </div>
-      ))}
-      {showCompleted && completedItems.length > 0 && (
-        <>
-          {completedItems.map(item => (
-            <div key={item.id} className="flex items-center gap-1.5 py-[2px]">
-              <button
-                onClick={(e) => { e.stopPropagation(); if (onToggle) onToggle(item); }}
-                className="shrink-0 w-3 h-3 rounded-sm border bg-green-700/60 border-green-600 text-green-300 flex items-center justify-center transition-colors"
-              >
-                <Check className="w-2 h-2" />
-              </button>
-              <span className="text-[11px] leading-tight truncate text-gray-600 line-through">
-                {item.title}
-              </span>
-            </div>
-          ))}
-        </>
-      )}
-      <div className="text-[9px] text-gray-600 mt-0.5">
-        {summaryText}
+    <div className="pl-[4.5rem] md:pl-[5rem] pr-3 pb-1 animate-in slide-in-from-top-1 duration-150">
+      {/* Checklist header */}
+      <div className="text-[10px] text-gray-500 flex items-center gap-1 pb-0.5">
+        <ListChecks className="w-2.5 h-2.5 text-gray-600" />
+        Checklist ({remaining} Remaining)
       </div>
+
+      {/* Items with vertical guide */}
+      <div className="relative ml-[3px]">
+        {/* Subtle vertical guide line */}
+        <div className="absolute left-0 top-0 bottom-0 w-px bg-gray-700/40" />
+
+        {/* Open items */}
+        {openItems.map((item, idx) => (
+          <div key={item.id} className="flex items-center gap-1.5 py-px pl-3 relative">
+            {/* Branch connector */}
+            <div className="absolute left-0 top-1/2 w-2 h-px bg-gray-700/40" />
+            <button
+              onClick={(e) => { e.stopPropagation(); if (onToggle) onToggle(item); }}
+              className="shrink-0 w-2.5 h-2.5 rounded-[3px] border border-gray-600/80 hover:border-gray-400 flex items-center justify-center transition-colors"
+            />
+            <span className="text-[10.5px] leading-tight truncate text-gray-500">
+              {item.title}
+            </span>
+          </div>
+        ))}
+
+        {/* Completed items — separated, only when toggled */}
+        {showCompleted && completedItems.length > 0 && (
+          <div className="mt-px">
+            {completedItems.map(item => (
+              <div key={item.id} className="flex items-center gap-1.5 py-px pl-3 relative">
+                <div className="absolute left-0 top-1/2 w-2 h-px bg-gray-700/40" />
+                <button
+                  onClick={(e) => { e.stopPropagation(); if (onToggle) onToggle(item); }}
+                  className="shrink-0 w-2.5 h-2.5 rounded-[3px] bg-green-800/40 border border-green-700/50 text-green-500 flex items-center justify-center transition-colors"
+                >
+                  <Check className="w-2 h-2" />
+                </button>
+                <span className="text-[10px] leading-tight truncate text-gray-600/70 line-through">
+                  {item.title}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Show completed toggle hint */}
+      {!showCompleted && completedItems.length > 0 && (
+        <div className="text-[9px] text-gray-600/60 pl-3 mt-px">
+          {completedItems.length} completed
+        </div>
+      )}
     </div>
   );
 }
