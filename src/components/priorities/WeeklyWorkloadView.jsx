@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useCallback } from "react";
+import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
@@ -8,15 +8,12 @@ import {
   ChevronRight,
   Calendar,
   AlertTriangle,
-  Clock,
   CalendarClock,
   CalendarOff,
-  User,
-  Timer,
-  FolderKanban,
-  HelpCircle,
+  Clock,
   Printer,
-  CheckSquare,
+  Pencil,
+  X,
 } from "lucide-react";
 import { startOfWeek, endOfWeek, addWeeks, addDays, format, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -116,32 +113,6 @@ const SECTIONS = [
   },
 ];
 
-function JumpPill({ label, count, color, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors hover:brightness-125",
-        color
-      )}
-    >
-      {label}
-      <span className="tabular-nums opacity-80">{count}</span>
-    </button>
-  );
-}
-
-function StatCard({ label, value, icon: Icon, color, bg, sub }) {
-  return (
-    <div className={cn("border border-gray-800 rounded-lg px-2 py-1.5 flex flex-col items-center justify-center min-w-0", bg)}>
-      <Icon className={cn("w-3.5 h-3.5 mb-0.5", color)} />
-      <span className={cn("text-sm font-bold tabular-nums leading-none", color)}>{value}</span>
-      <span className="text-[9px] text-gray-500 leading-tight">{label}</span>
-      {sub && <span className="text-[9px] text-amber-500 leading-tight">{sub}</span>}
-    </div>
-  );
-}
-
 // ── Main View ──
 export default function WeeklyWorkloadView({
   tasks,
@@ -159,6 +130,7 @@ export default function WeeklyWorkloadView({
   updateTaskMutation,
 }) {
   const [weekOffset, setWeekOffset] = useState(0);
+  const [editMode, setEditMode] = useState(false);
 
   const selectedWeek = useMemo(() => {
     const base = addWeeks(new Date(), weekOffset);
@@ -226,7 +198,7 @@ export default function WeeklyWorkloadView({
     return blocked;
   }, [tasks, taskById]);
 
-  // Specific blocking labels — "Waiting on Install Carpet" instead of just "Blocked"
+  // Specific blocking labels — "Blocked by: Install Carpet" format
   const blockingLabels = useMemo(() => {
     const labels = {};
     tasks.forEach((task) => {
@@ -234,11 +206,14 @@ export default function WeeklyWorkloadView({
       // Check task.blocking_reasons from the workflow engine first
       if (task.blocking_reasons?.length > 0) {
         const reason = task.blocking_reasons[0];
-        if (reason.label) { labels[task.id] = `Waiting on ${reason.label}`; return; }
+        if (reason.label) {
+          // Strip existing "Blocked by: " or "Waiting on " prefix from engine labels
+          const cleaned = reason.label.replace(/^(Blocked by:\s*|Waiting on\s*)/i, "");
+          labels[task.id] = cleaned; return;
+        }
         if (reason.type === "DEPENDENCY" && reason.relatedTaskId) {
           const dep = taskById.get(reason.relatedTaskId);
-          labels[task.id] = dep ? `Waiting on ${dep.name}` : "Waiting on dependency";
-          return;
+          labels[task.id] = dep ? dep.name : "dependency"; return;
         }
       }
       // Fallback: derive from dependencies array
@@ -247,15 +222,15 @@ export default function WeeklyWorkloadView({
           .map(depId => taskById.get(depId))
           .filter(dep => dep && dep.status_id !== DONE_STATUS_ID);
         if (incompleteDeps.length === 1) {
-          labels[task.id] = `Waiting on ${incompleteDeps[0].name}`;
+          labels[task.id] = incompleteDeps[0].name;
         } else if (incompleteDeps.length > 1) {
-          labels[task.id] = `Waiting on ${incompleteDeps[0].name} +${incompleteDeps.length - 1}`;
+          labels[task.id] = `${incompleteDeps[0].name} +${incompleteDeps.length - 1}`;
         } else {
-          labels[task.id] = "Blocked";
+          labels[task.id] = null;
         }
         return;
       }
-      labels[task.id] = "Blocked";
+      labels[task.id] = null;
     });
     return labels;
   }, [tasks, blockedSet, taskById]);
@@ -322,35 +297,13 @@ export default function WeeklyWorkloadView({
     [buckets, projectMap, allTasksByProject]
   );
 
-  // ── Summary stats ──
-  const stats = useMemo(() => {
-    const allVisible = [...buckets.overdue, ...buckets.dueThisWeek, ...buckets.upcoming, ...buckets.unscheduled];
-    const unassigned = allVisible.filter((t) => !t.assigned_team_member_id).length;
-    const weekEst = buckets.dueThisWeek.filter((t) => t.estimated_hours > 0);
-    const estThisWeek = weekEst.reduce((s, t) => s + t.estimated_hours, 0);
-    const missingEstWeek = buckets.dueThisWeek.length - weekEst.length;
-    const allEst = allVisible.filter((t) => t.estimated_hours > 0);
-    const totalEstAll = allEst.reduce((s, t) => s + t.estimated_hours, 0);
-    const missingEstAll = allVisible.length - allEst.length;
-
-    // Projects this week
-    const weekProjects = new Set();
-    buckets.dueThisWeek.forEach((t) => { if (t.project_id) weekProjects.add(t.project_id); });
-
-    return {
-      overdue: buckets.overdue.length,
-      dueThisWeek: buckets.dueThisWeek.length,
-      upcoming: buckets.upcoming.length,
-      unscheduled: buckets.unscheduled.length,
-      unassigned,
-      estThisWeek,
-      missingEstWeek,
-      totalEstAll,
-      missingEstAll,
-      total: allVisible.length,
-      projectsThisWeek: weekProjects.size,
-    };
-  }, [buckets]);
+  // ── Section counts for jump pills ──
+  const stats = useMemo(() => ({
+    overdue: buckets.overdue.length,
+    dueThisWeek: buckets.dueThisWeek.length,
+    upcoming: buckets.upcoming.length,
+    unscheduled: buckets.unscheduled.length,
+  }), [buckets]);
 
   // ── Section refs ──
   const sectionRefs = useRef({});
@@ -388,7 +341,21 @@ export default function WeeklyWorkloadView({
     setSelectedTaskIds(allIds);
   }, [buckets]);
 
-  const clearSelection = useCallback(() => setSelectedTaskIds(new Set()), []);
+  const clearSelection = useCallback(() => {
+    setSelectedTaskIds(new Set());
+    setEditMode(false);
+  }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable) return;
+      if (e.key === "e" || e.key === "E") { e.preventDefault(); setEditMode(v => !v); }
+      if (e.key === "Escape" && editMode) { e.preventDefault(); clearSelection(); }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [editMode, clearSelection]);
 
   // ── Bulk action handlers ──
   const selectedTasks = useMemo(() => {
@@ -571,10 +538,10 @@ export default function WeeklyWorkloadView({
   }, [sectionGroups, selectedWeek, teamMembers, statuses, blockedSet]);
 
   return (
-    <div className="space-y-3">
-      {/* ── Week Nav + Jump — STICKY ── */}
-      <div className="sticky top-0 z-20 bg-gray-900/95 backdrop-blur-sm -mx-3 md:-mx-6 px-3 md:px-6 py-2 border-b border-gray-800/50 space-y-2">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+    <div className="space-y-2">
+      {/* ── Toolbar — STICKY ── */}
+      <div className="sticky top-0 z-20 bg-gray-900/95 backdrop-blur-sm -mx-3 md:-mx-6 px-3 md:px-6 py-2 border-b border-gray-800/50">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">
             <Button variant="outline" size="sm" onClick={() => setWeekOffset((o) => o - 1)} className="border-gray-700 text-white hover:bg-gray-800 h-7 w-7 p-0">
               <ChevronLeft className="w-3.5 h-3.5" />
@@ -591,62 +558,53 @@ export default function WeeklyWorkloadView({
             <Button variant="outline" size="sm" onClick={() => setWeekOffset((o) => o + 1)} className="border-gray-700 text-white hover:bg-gray-800 h-7 w-7 p-0">
               <ChevronRight className="w-3.5 h-3.5" />
             </Button>
-            <span className="text-xs text-gray-400 ml-1">
+            <span className="text-xs text-gray-400 ml-1 hidden sm:inline">
               {format(selectedWeek.start, "MMM d")} – {format(selectedWeek.end, "MMM d, yyyy")}
             </span>
+          </div>
+          <div className="flex items-center gap-1.5">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setPrintModalOpen(true)}
-              className="border-gray-700 text-white hover:bg-gray-800 h-7 px-2 text-xs ml-1"
+              className="border-gray-700 text-white hover:bg-gray-800 h-7 px-2 text-xs"
             >
               <Printer className="w-3 h-3 mr-1" />
               Print
             </Button>
             <Button
-              variant="outline"
+              variant={editMode ? "default" : "outline"}
               size="sm"
-              onClick={selectedTaskIds.size > 0 ? clearSelection : selectAllVisible}
+              onClick={() => { if (editMode) clearSelection(); else setEditMode(true); }}
               className={cn(
-                "border-gray-700 text-white hover:bg-gray-800 h-7 px-2 text-xs ml-1",
-                selectedTaskIds.size > 0 && "border-red-600/50 bg-red-600/10"
+                "h-7 px-2 text-xs",
+                editMode
+                  ? "bg-blue-600 hover:bg-blue-700 text-white"
+                  : "border-gray-700 text-white hover:bg-gray-800"
               )}
             >
-              <CheckSquare className="w-3 h-3 mr-1" />
-              {selectedTaskIds.size > 0 ? `${selectedTaskIds.size} Selected` : "Select All"}
+              {editMode ? <><X className="w-3 h-3 mr-1" />Exit Edit</> : <><Pencil className="w-3 h-3 mr-1" />Edit</>}
             </Button>
           </div>
-          <div className="flex flex-wrap gap-1">
-            <JumpPill label="Overdue" count={stats.overdue} color="border-red-600/50 text-red-400 bg-red-600/10" onClick={() => scrollToSection("overdue")} />
-            <JumpPill label="This Week" count={stats.dueThisWeek} color="border-blue-600/50 text-blue-400 bg-blue-600/10" onClick={() => scrollToSection("dueThisWeek")} />
-            <JumpPill label="Upcoming" count={stats.upcoming} color="border-purple-600/50 text-purple-400 bg-purple-600/10" onClick={() => scrollToSection("upcoming")} />
-            <JumpPill label="Unscheduled" count={stats.unscheduled} color="border-amber-600/50 text-amber-400 bg-amber-600/10" onClick={() => scrollToSection("unscheduled")} />
-          </div>
         </div>
-      </div>
 
-      {/* ── Summary Cards ── */}
-      <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-1.5">
-        <StatCard label="Overdue" value={stats.overdue} icon={AlertTriangle} color="text-red-400" bg="bg-red-500/10" />
-        <StatCard label="Due This Week" value={stats.dueThisWeek} icon={CalendarClock} color="text-blue-400" bg="bg-blue-500/10" />
-        <StatCard label="Unscheduled" value={stats.unscheduled} icon={CalendarOff} color="text-amber-400" bg="bg-amber-500/10" />
-        <StatCard label="Unassigned" value={stats.unassigned} icon={User} color="text-yellow-400" bg="bg-yellow-500/10" />
-        <div className={cn("border border-gray-800 rounded-lg px-2 py-1.5 flex flex-col items-center justify-center", "bg-emerald-500/10")}>
-          <Timer className="w-3.5 h-3.5 text-emerald-400 mb-0.5" />
-          <span className="text-sm font-bold text-white tabular-nums leading-none">{fmtHours(stats.estThisWeek)}</span>
-          <span className="text-[9px] text-gray-500 leading-tight">Est. This Week</span>
-          {stats.totalEstAll > 0 && stats.totalEstAll !== stats.estThisWeek && (
-            <span className="text-[8px] text-gray-600 leading-tight">{fmtHours(stats.totalEstAll)} all</span>
-          )}
+        {/* Jump pills */}
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {[
+            { key: "overdue", label: "Overdue", count: stats.overdue, color: "text-red-400 border-red-600/40" },
+            { key: "dueThisWeek", label: "This Week", count: stats.dueThisWeek, color: "text-blue-400 border-blue-600/40" },
+            { key: "upcoming", label: "Upcoming", count: stats.upcoming, color: "text-purple-400 border-purple-600/40" },
+            { key: "unscheduled", label: "Unscheduled", count: stats.unscheduled, color: "text-amber-400 border-amber-600/40" },
+          ].map(p => (
+            <button
+              key={p.key}
+              onClick={() => scrollToSection(p.key)}
+              className={cn("px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors hover:brightness-125 tabular-nums", p.color)}
+            >
+              {p.label} {p.count}
+            </button>
+          ))}
         </div>
-        <StatCard label="Projects" value={stats.projectsThisWeek} icon={FolderKanban} color="text-cyan-400" bg="bg-cyan-500/10" />
-        <StatCard
-          label="Missing Est."
-          value={stats.missingEstAll}
-          icon={HelpCircle}
-          color={stats.missingEstAll > 0 ? "text-amber-400" : "text-gray-600"}
-          bg={stats.missingEstAll > 0 ? "bg-amber-500/10" : "bg-gray-500/5"}
-        />
       </div>
 
       {/* ── Sections ── */}
@@ -695,11 +653,12 @@ export default function WeeklyWorkloadView({
                     onTogglePriority={onTogglePriority}
                     updateTaskMutation={updateTaskMutation}
                     selectedTaskIds={selectedTaskIds}
-                    onToggleTaskSelection={toggleTaskSelection}
-                    onSelectProjectTasks={selectProjectTasks}
+                    onToggleTaskSelection={editMode ? toggleTaskSelection : null}
+                    onSelectProjectTasks={editMode ? selectProjectTasks : null}
                     allTasks={allTasks.length > 0 ? allTasks : tasks}
                     checklistsByTaskId={checklistsByTaskId}
                     weekLabel={`Week of ${format(selectedWeek.start, "MMMM d")}–${format(selectedWeek.end, "d, yyyy")}`}
+                    editMode={editMode}
                   />
                 ))}
               </div>

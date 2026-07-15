@@ -1,9 +1,10 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import {
   ChevronDown,
   ChevronRight,
@@ -13,12 +14,13 @@ import {
   Printer,
   CalendarDays,
   CheckCircle2,
-  CheckSquare,
-  Square,
   Clock,
-  Link2,
+  Lock,
+  Unlock,
   ListChecks,
   Layers,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import { format, startOfDay, isBefore } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -26,8 +28,6 @@ import { buildProjectDetailUrl, SOURCES } from "@/lib/workspaceConfig";
 import WorkloadDependencyEditor from "@/components/workload/WorkloadDependencyEditor";
 import WorkloadProjectPrintModal from "@/components/workload/WorkloadProjectPrintModal";
 import buildProjectWorkPacketHTML from "@/components/workload/buildProjectWorkPacketHTML";
-import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 
 const DONE_STATUS_ID = "6913f57422230d8c7ee2ef54";
@@ -46,6 +46,15 @@ function fmtHours(h) {
   if (mins === 0) return `${hrs}h`;
   if (hrs === 0) return `${mins}m`;
   return `${hrs}h${mins}m`;
+}
+
+// ── Collapse memory helpers ──
+const COLLAPSE_KEY = "ak_workload_collapse";
+function loadCollapseState() {
+  try { return JSON.parse(localStorage.getItem(COLLAPSE_KEY) || "{}"); } catch { return {}; }
+}
+function saveCollapseState(state) {
+  try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(state)); } catch { /* ignore */ }
 }
 
 // ── Compact task row ──
@@ -70,6 +79,8 @@ function WorkloadTaskRow({
   teamMemberMap,
   checklistProgress,
   successorCount,
+  successorNames,
+  editMode,
 }) {
   const due = parseLocalDate(task.due_date);
   const todayStart = startOfDay(new Date());
@@ -108,12 +119,12 @@ function WorkloadTaskRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 px-2 py-[5px] hover:bg-gray-800/40 transition-colors group/row border-b border-gray-800/20 last:border-b-0",
+        "flex items-center gap-1.5 px-3 py-[5px] hover:bg-gray-800/40 transition-colors group/row border-b border-gray-800/20 last:border-b-0",
         blocked && "opacity-60"
       )}
     >
-      {/* Selection checkbox */}
-      {onToggleSelection && (
+      {/* Selection checkbox — edit mode only */}
+      {editMode && onToggleSelection && (
         <span onClick={(e) => e.stopPropagation()} className="shrink-0">
           <Checkbox
             checked={isSelected}
@@ -168,47 +179,50 @@ function WorkloadTaskRow({
         </span>
       )}
 
-      {/* Dependency indicator */}
-      {(depCount > 0 || successorCount > 0) && (
-        <span
-          className={cn(
-            "text-[9px] shrink-0 flex items-center gap-0.5",
-            blocked ? "text-red-400" : "text-blue-400/70"
-          )}
-          title={blocked ? blockingLabel : `${depCount} dep${depCount !== 1 ? 's' : ''}, unlocks ${successorCount}`}
-        >
-          <Link2 className="w-2.5 h-2.5" />
-          {blocked ? "" : (successorCount > 0 ? `↗${successorCount}` : "")}
-        </span>
-      )}
+      {/* Dependency indicators — depends on / unlocks */}
+      <TooltipProvider delayDuration={200}>
+        {depCount > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className={cn("text-[10px] shrink-0 flex items-center gap-0.5", blocked ? "text-red-400" : "text-blue-400/70")}>
+                <Lock className="w-2.5 h-2.5" />
+                {depCount}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-xs bg-gray-800 border-gray-700 text-xs">
+              <p className="font-medium text-gray-300 mb-0.5">Depends on:</p>
+              {(task.dependencies || []).map(depId => {
+                const depTask = (projectTasks || []).find(t => t.id === depId) || (allTasks || []).find(t => t.id === depId);
+                return <p key={depId} className="text-gray-400">{depTask?.name || depId}</p>;
+              })}
+            </TooltipContent>
+          </Tooltip>
+        )}
+        {successorCount > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-[10px] shrink-0 flex items-center gap-0.5 text-cyan-400/70">
+                <Unlock className="w-2.5 h-2.5" />
+                {successorCount}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-xs bg-gray-800 border-gray-700 text-xs">
+              <p className="font-medium text-gray-300 mb-0.5">Unlocks:</p>
+              {(successorNames || []).map((name, i) => <p key={i} className="text-gray-400">{name}</p>)}
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </TooltipProvider>
 
-      {/* Blocking reason */}
+      {/* Blocking reason — "Blocked by: task name" */}
       {blocked && (
-        <span className="text-[9px] text-red-400 shrink-0 flex items-center gap-0.5 max-w-[180px] truncate" title={blockingLabel}>
+        <span className="text-[9px] text-red-400 shrink-0 flex items-center gap-0.5 max-w-[180px] truncate" title={blockingLabel ? `Blocked by: ${blockingLabel}` : "Blocked"}>
           <Clock className="w-2.5 h-2.5 shrink-0" />
-          <span className="truncate">{blockingLabel}</span>
+          <span className="truncate">
+            <span className="font-semibold">Blocked by:</span> {blockingLabel || "dependency"}
+          </span>
         </span>
       )}
-
-      {/* Workflow decoration — subtle for waiting states */}
-      {!blocked && (() => {
-        const opState = task.operational_state;
-        if (!opState || opState === "COMPLETED" || opState === "NOT_STARTED" || opState === "READY" || opState === "IN_PROGRESS") return null;
-        const WAITING_LABELS = {
-          WAITING_ON_PARTS: "Parts",
-          WAITING_ON_VENDOR: "Vendor",
-          WAITING_ON_CUSTOMER: "Customer",
-          REVIEW_REQUIRED: "Review",
-          BLOCKED: "Blocked",
-        };
-        const label = WAITING_LABELS[opState];
-        if (!label) return null;
-        return (
-          <span className="text-[9px] text-amber-400/80 shrink-0 hidden sm:inline">
-            {label}
-          </span>
-        );
-      })()}
 
       {/* Dependency editor */}
       <span onClick={(e) => e.stopPropagation()} className="shrink-0">
@@ -345,28 +359,19 @@ function PhaseSelector({ task, bucketMap, updateTaskMutation }) {
   );
 }
 
-// ── Phase header with collapse ──
-function PhaseHeader({ bucket, taskCount, openCount, doneCount, expanded, onToggle, onAddTask }) {
+// ── Phase header — simplified: "EXTERIOR (5)" ──
+function PhaseHeader({ bucket, openCount, expanded, onToggle }) {
   return (
     <div
-      className="flex items-center gap-1.5 px-3 py-[4px] bg-gray-800/15 border-t border-gray-800/40 cursor-pointer hover:bg-gray-800/25 transition-colors"
+      className="flex items-center gap-1.5 px-4 py-[3px] border-t border-gray-800/30 cursor-pointer hover:bg-gray-800/20 transition-colors"
       onClick={onToggle}
     >
       {expanded ? <ChevronDown className="w-2.5 h-2.5 text-gray-500" /> : <ChevronRight className="w-2.5 h-2.5 text-gray-500" />}
       <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: bucket?.color || '#6B7280' }} />
-      <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{bucket?.name || "Unassigned Phase"}</span>
-      <span className="text-[9px] text-gray-500 ml-1">
-        {openCount} open{doneCount > 0 ? ` \u00B7 ${doneCount} done` : ""}
+      <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+        {bucket?.name || "Unassigned Phase"}
+        <span className="text-gray-600 font-normal ml-1">({openCount})</span>
       </span>
-      {onAddTask && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onAddTask(); }}
-          className="ml-auto text-gray-600 hover:text-green-400 p-0.5 rounded transition-colors opacity-0 group-hover:opacity-100"
-          title="Add task to this phase"
-        >
-          <Plus className="w-2.5 h-2.5" />
-        </button>
-      )}
     </div>
   );
 }
@@ -397,14 +402,60 @@ export default function WorkloadProjectGroup({
   allTasks = [],
   checklistsByTaskId = {},
   weekLabel = "",
+  editMode = false,
 }) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
-  const [collapsedPhases, setCollapsedPhases] = useState(new Set());
+  const projectId = project?.id || "__no_project__";
+  
+  // Collapse memory — projects
+  const [expanded, setExpanded] = useState(() => {
+    const saved = loadCollapseState();
+    if (saved[`proj_${projectId}`] !== undefined) return saved[`proj_${projectId}`];
+    return defaultExpanded;
+  });
+
+  // Collapse memory — phases
+  const [collapsedPhases, setCollapsedPhases] = useState(() => {
+    const saved = loadCollapseState();
+    const set = new Set();
+    Object.keys(saved).forEach(k => {
+      if (k.startsWith(`phase_${projectId}_`) && saved[k] === false) {
+        set.add(k.replace(`phase_${projectId}_`, ""));
+      }
+    });
+    return set;
+  });
+  
   const [showAll, setShowAll] = useState(false);
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const { toast } = useToast();
 
   const INITIAL_VISIBLE = 12;
+
+  // Persist project expand/collapse
+  const handleToggleProject = useCallback(() => {
+    setExpanded(prev => {
+      const next = !prev;
+      const saved = loadCollapseState();
+      saved[`proj_${projectId}`] = next;
+      saveCollapseState(saved);
+      return next;
+    });
+  }, [projectId]);
+
+  // Persist phase expand/collapse
+  const togglePhase = useCallback((phaseId) => {
+    setCollapsedPhases(prev => {
+      const next = new Set(prev);
+      const wasCollapsed = next.has(phaseId);
+      if (wasCollapsed) next.delete(phaseId);
+      else next.add(phaseId);
+      // Save
+      const saved = loadCollapseState();
+      saved[`phase_${projectId}_${phaseId}`] = wasCollapsed; // true = expanded, false = collapsed
+      saveCollapseState(saved);
+      return next;
+    });
+  }, [projectId]);
 
   // Build bucket map for this project
   const bucketMap = useMemo(() => {
@@ -413,7 +464,7 @@ export default function WorkloadProjectGroup({
     return m;
   }, [buckets]);
 
-  // Successor map — derived from project tasks
+  // Successor map
   const successorMap = useMemo(() => {
     const m = new Map();
     const allP = allProjectTasks || tasks;
@@ -437,22 +488,12 @@ export default function WorkloadProjectGroup({
     return m;
   }, [checklistsByTaskId]);
 
-  // Open task count for this project
+  // Open task count
   const openTaskCount = useMemo(() => {
     return (allProjectTasks || []).filter(t => t.status_id !== DONE_STATUS_ID).length;
   }, [allProjectTasks]);
 
-  // Current phase label
   const currentPhaseLabel = project?.current_phase_name || null;
-
-  const togglePhase = useCallback((phaseId) => {
-    setCollapsedPhases(prev => {
-      const next = new Set(prev);
-      if (next.has(phaseId)) next.delete(phaseId);
-      else next.add(phaseId);
-      return next;
-    });
-  }, []);
 
   // Print handler
   const handleProjectPrint = useCallback((opts) => {
@@ -493,13 +534,13 @@ export default function WorkloadProjectGroup({
 
   return (
     <div>
-      {/* ── Project header — visually distinct ── */}
+      {/* ── Project header — primary visual anchor ── */}
       <div
-        className="flex items-center gap-1.5 px-2 py-2 bg-gray-800/40 hover:bg-gray-800/50 cursor-pointer transition-colors border-t-2 border-gray-700/60 group"
-        onClick={() => setExpanded(e => !e)}
+        className="flex items-center gap-2 px-3 py-2.5 bg-gray-800/50 hover:bg-gray-800/60 cursor-pointer transition-colors mt-1 first:mt-0 border-t-2 border-gray-600/50 group"
+        onClick={handleToggleProject}
       >
-        {/* Select project tasks */}
-        {onSelectProjectTasks && (
+        {/* Select project tasks — edit mode only */}
+        {editMode && onSelectProjectTasks && (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -519,35 +560,28 @@ export default function WorkloadProjectGroup({
         )}
 
         {expanded
-          ? <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-          : <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+          ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+          : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
         }
 
-        {/* Project name — stronger typography */}
-        <span className="text-sm font-bold text-white truncate min-w-0">
+        {/* Project name — strongest typography */}
+        <span className="text-sm font-bold text-white tracking-tight truncate min-w-0">
           {project?.name || label || "No Project"}
         </span>
 
-        {/* Task count in this section */}
-        <Badge className="bg-gray-700 text-gray-300 border-gray-600 text-[10px] px-1.5 py-0 shrink-0">
+        {/* Section task count */}
+        <span className="text-[11px] text-gray-500 tabular-nums shrink-0">
           {tasks.length}
-        </Badge>
+        </span>
 
-        {/* Open task count */}
-        {openTaskCount > 0 && openTaskCount !== tasks.length && (
-          <span className="text-[10px] text-gray-500 shrink-0 hidden sm:inline">
-            {openTaskCount} open
-          </span>
-        )}
-
-        {/* Current phase */}
+        {/* Current phase label */}
         {currentPhaseLabel && (
-          <span className="text-[10px] text-gray-500 shrink-0 hidden md:inline truncate max-w-[120px]" title={`Current: ${currentPhaseLabel}`}>
-            {currentPhaseLabel}
+          <span className="text-[10px] text-gray-500 shrink-0 hidden md:inline truncate max-w-[120px]" title={`Phase: ${currentPhaseLabel}`}>
+            · {currentPhaseLabel}
           </span>
         )}
 
-        {/* Actions */}
+        {/* Actions — always right-aligned */}
         {project && (
           <div className="flex items-center gap-0.5 shrink-0 ml-auto" onClick={(e) => e.stopPropagation()}>
             <Link
@@ -597,31 +631,36 @@ export default function WorkloadProjectGroup({
 
             const hasPhases = sortedBuckets.some(b => byPhase.has(b.id));
 
-            const renderTaskRow = (task) => (
-              <WorkloadTaskRow
-                key={task.id}
-                task={task}
-                assignee={teamMemberMap.get(task.assigned_team_member_id)}
-                status={statusMap.get(task.status_id)}
-                blocked={blockedSet.has(task.id)}
-                blockingLabel={blockingLabels?.[task.id] || "Blocked"}
-                teamMembers={teamMembers}
-                statuses={statuses}
-                onToggleComplete={onToggleComplete}
-                onTaskClick={onTaskClick}
-                onUpdateDueDate={onUpdateDueDate}
-                onTogglePriority={onTogglePriority}
-                updateTaskMutation={updateTaskMutation}
-                isSelected={selectedTaskIds?.has(task.id)}
-                onToggleSelection={onToggleTaskSelection}
-                projectTasks={allProjectTasks || tasks}
-                allTasks={allTasks}
-                bucketMap={bucketMap}
-                teamMemberMap={teamMemberMap}
-                checklistProgress={checklistProgressMap[task.id]}
-                successorCount={(successorMap.get(task.id) || []).length}
-              />
-            );
+            const renderTaskRow = (task) => {
+              const succs = successorMap.get(task.id) || [];
+              return (
+                <WorkloadTaskRow
+                  key={task.id}
+                  task={task}
+                  assignee={teamMemberMap.get(task.assigned_team_member_id)}
+                  status={statusMap.get(task.status_id)}
+                  blocked={blockedSet.has(task.id)}
+                  blockingLabel={blockingLabels?.[task.id] || null}
+                  teamMembers={teamMembers}
+                  statuses={statuses}
+                  onToggleComplete={onToggleComplete}
+                  onTaskClick={onTaskClick}
+                  onUpdateDueDate={onUpdateDueDate}
+                  onTogglePriority={onTogglePriority}
+                  updateTaskMutation={updateTaskMutation}
+                  isSelected={selectedTaskIds?.has(task.id)}
+                  onToggleSelection={onToggleTaskSelection}
+                  projectTasks={allProjectTasks || tasks}
+                  allTasks={allTasks}
+                  bucketMap={bucketMap}
+                  teamMemberMap={teamMemberMap}
+                  checklistProgress={checklistProgressMap[task.id]}
+                  successorCount={succs.length}
+                  successorNames={succs.map(s => s.name)}
+                  editMode={editMode}
+                />
+              );
+            };
             
             if (!hasPhases) {
               return allVisibleTasks.map(renderTaskRow);
@@ -633,19 +672,15 @@ export default function WorkloadProjectGroup({
                   const phaseTasks = byPhase.get(bucket.id);
                   if (!phaseTasks || phaseTasks.length === 0) return null;
                   const openCount = phaseTasks.filter(t => t.status_id !== DONE_STATUS_ID).length;
-                  const doneCount = phaseTasks.length - openCount;
                   const isPhaseCollapsed = collapsedPhases.has(bucket.id);
 
                   return (
                     <div key={bucket.id}>
                       <PhaseHeader
                         bucket={bucket}
-                        taskCount={phaseTasks.length}
                         openCount={openCount}
-                        doneCount={doneCount}
                         expanded={!isPhaseCollapsed}
                         onToggle={() => togglePhase(bucket.id)}
-                        onAddTask={project ? () => onAddTask(project.id) : null}
                       />
                       {!isPhaseCollapsed && phaseTasks.map(renderTaskRow)}
                     </div>
@@ -655,9 +690,7 @@ export default function WorkloadProjectGroup({
                   <div>
                     <PhaseHeader
                       bucket={null}
-                      taskCount={unphased.length}
                       openCount={unphased.filter(t => t.status_id !== DONE_STATUS_ID).length}
-                      doneCount={unphased.filter(t => t.status_id === DONE_STATUS_ID).length}
                       expanded={!collapsedPhases.has("__unphased__")}
                       onToggle={() => togglePhase("__unphased__")}
                     />

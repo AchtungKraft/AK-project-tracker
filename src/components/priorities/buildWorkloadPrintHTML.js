@@ -120,14 +120,14 @@ function renderTaskRow(task, teamMemberMap, statusMap, blockedSet, fields, data)
   const nameWeight = showPriority && task.is_priority ? "font-weight:bold;" : "";
   const star = showPriority && task.is_priority ? `<span style="font-size:12px;font-weight:bold;">\u2605</span> ` : "";
 
-  // Enhanced blocked: show specific reason from blockingLabels
+  // Enhanced blocked: show "Blocked by: task name"
   let blockedHtml = "";
   if (showBlocked && isBlocked) {
     const blockLabel = (data.blockingLabels || {})[task.id];
     if (blockLabel) {
-      blockedHtml = `<div style="margin-top:2px;font-size:10px;font-weight:600;color:#374151;">BLOCKED \u2014 ${esc(blockLabel)}</div>`;
+      blockedHtml = `<div style="margin-top:2px;font-size:10px;font-weight:600;color:#374151;">Blocked by: ${esc(blockLabel)}</div>`;
     } else {
-      blockedHtml = `<div style="margin-top:2px;font-size:10px;font-weight:600;color:#374151;">BLOCKED</div>`;
+      blockedHtml = `<div style="margin-top:2px;font-size:10px;font-weight:600;color:#374151;">Blocked</div>`;
     }
   }
 
