@@ -202,6 +202,17 @@ export default function WorkloadOperationalView({
     });
   }, [staleProjects, queryClient, toast]);
 
+  // Estimate update handler for inline editor
+  const handleUpdateEstimate = useCallback((task, hours) => {
+    if (!updateTaskMutation) return Promise.reject();
+    return new Promise((resolve, reject) => {
+      updateTaskMutation.mutate(
+        { id: task.id, data: { estimated_hours: hours } },
+        { onSuccess: resolve, onError: reject }
+      );
+    });
+  }, [updateTaskMutation]);
+
   // Shared props
   const shared = {
     teamMemberMap, statusMap, phaseMap, successorCounts,
@@ -210,6 +221,7 @@ export default function WorkloadOperationalView({
     selectedTaskIds, onToggleTaskSelection: toggleTaskSelection,
     onAddTask: setCreateTaskForProjectId,
     showOperationalState: false,
+    onUpdateEstimate: handleUpdateEstimate,
   };
 
   // Projects with active tasks (for filter dropdown)

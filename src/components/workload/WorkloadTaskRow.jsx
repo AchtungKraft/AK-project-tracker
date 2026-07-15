@@ -11,6 +11,8 @@ import { format, startOfDay, isBefore } from "date-fns";
 import { cn } from "@/lib/utils";
 import { OPERATIONAL_STATE_CONFIG } from "@/components/workflow/useProjectWorkflow";
 import { BLOCKER_TYPE_LABELS } from "./workloadConfig";
+import InlineEstimateEditor from "@/components/tasks/InlineEstimateEditor";
+import { formatDurationCompact } from "@/lib/estimateUtils";
 
 function parseLocalDate(dateStr) {
   if (!dateStr || typeof dateStr !== "string") return null;
@@ -79,6 +81,7 @@ export default function WorkloadTaskRow({
   showPhase = false,
   showOperationalState = false,
   isMobile = false,
+  onUpdateEstimate,
 }) {
   const due = parseLocalDate(task.due_date);
   const todayStart = startOfDay(new Date());
@@ -119,6 +122,8 @@ export default function WorkloadTaskRow({
     if (status) mobileMetaParts.push(status.label);
     if (assignee) mobileMetaParts.push(assignee.full_name?.split(" ")[0]);
     if (due) mobileMetaParts.push(format(due, "M/d"));
+    const estDisplay = formatDurationCompact(task.estimated_hours);
+    if (estDisplay) mobileMetaParts.push(estDisplay);
   }
 
   return (
@@ -330,9 +335,18 @@ export default function WorkloadTaskRow({
             {due ? format(due, "M/d") : "—"}
           </span>
 
-          {/* Estimated hours */}
-          <span className="text-[10px] text-gray-600 w-8 shrink-0 text-right hidden lg:block tabular-nums">
-            {task.estimated_hours ? fmtHours(task.estimated_hours) : ""}
+          {/* Estimated hours — inline editor */}
+          <span className="hidden lg:block shrink-0" onClick={e => e.stopPropagation()}>
+            {onUpdateEstimate ? (
+              <InlineEstimateEditor
+                value={task.estimated_hours}
+                onSave={(hours) => onUpdateEstimate(task, hours)}
+              />
+            ) : (
+              <span className="text-[10px] text-gray-600 w-10 shrink-0 text-right tabular-nums">
+                {task.estimated_hours ? fmtHours(task.estimated_hours) : ""}
+              </span>
+            )}
           </span>
         </>
       )}

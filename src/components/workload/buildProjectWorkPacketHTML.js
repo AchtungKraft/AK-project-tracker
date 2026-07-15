@@ -172,7 +172,14 @@ export default function buildProjectWorkPacketHTML(data) {
     if (phaseTasks.length === 0) return "";
     const openCount = phaseTasks.filter(t => t.status_id !== DONE_STATUS_ID).length;
     const doneCount = phaseTasks.length - openCount;
-    const stats = doneCount > 0 ? `${openCount} OPEN \u00B7 ${doneCount} DONE` : `${openCount} OPEN`;
+    // Sum estimated hours for open tasks
+    let estTotal = 0;
+    phaseTasks.forEach(t => { if (t.status_id !== DONE_STATUS_ID && t.estimated_hours > 0) estTotal += t.estimated_hours; });
+    const estDisplay = fmtHours(estTotal);
+    let statsParts = [];
+    statsParts.push(doneCount > 0 ? `${openCount} OPEN \u00B7 ${doneCount} DONE` : `${openCount} OPEN`);
+    if (estDisplay) statsParts.push(`${estDisplay} Est.`);
+    const stats = statsParts.join(" \u00B7 ");
     return `<div style="margin-bottom:12px;">
       <div style="page-break-inside:avoid;page-break-after:avoid;">
         <div style="display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1.5px solid #374151;margin-bottom:4px;">

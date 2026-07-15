@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -6,12 +6,16 @@ import { cn } from "@/lib/utils";
 import { buildProjectDetailUrl, SOURCES } from "@/lib/workspaceConfig";
 import WorkloadSectionHeader from "./WorkloadSectionHeader";
 import WorkloadTaskRow from "./WorkloadTaskRow";
+import { sumEstimatedHours, formatDuration } from "@/lib/estimateUtils";
 
 function ProjectTaskGroup({ group, shared, defaultExpanded }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
 
   const project = group.project;
   const tasks = group.tasks;
+
+  const estTotal = useMemo(() => sumEstimatedHours(tasks), [tasks]);
+  const estDisplay = formatDuration(estTotal);
 
   return (
     <div className="border-b border-gray-800/10 last:border-b-0">
@@ -37,6 +41,9 @@ function ProjectTaskGroup({ group, shared, defaultExpanded }) {
           </Link>
         ) : (
           <span className="text-sm font-semibold text-gray-500">Unassigned</span>
+        )}
+        {estDisplay && (
+          <span className="text-[10px] text-gray-600 tabular-nums shrink-0">{estDisplay}</span>
         )}
         <Badge className="bg-gray-800 text-gray-400 border-gray-700 text-[10px] px-1.5 py-0 ml-auto shrink-0">
           {tasks.length}
@@ -73,6 +80,7 @@ function ProjectTaskGroup({ group, shared, defaultExpanded }) {
               onToggleSelection={shared.onToggleTaskSelection}
               showPhase
               showOperationalState={shared.showOperationalState}
+              onUpdateEstimate={shared.onUpdateEstimate}
             />
           ))}
         </div>

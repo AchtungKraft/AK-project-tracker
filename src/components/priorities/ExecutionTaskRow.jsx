@@ -6,6 +6,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Flame, CalendarDays, User, Pencil, Trash2, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isUrgentPriority } from "@/utils/taskPrioritySort";
+import InlineEstimateEditor from "@/components/tasks/InlineEstimateEditor";
 
 export default function ExecutionTaskRow({
   task,
@@ -164,12 +165,22 @@ export default function ExecutionTaskRow({
           {assigneeName || "—"}
         </div>
 
-        {task.estimated_hours ? (
-          <div className="text-[10px] text-gray-600 shrink-0 mt-0.5 flex items-center gap-0.5 hidden md:flex" title={`Est: ${task.estimated_hours}h`}>
-            <Clock className="w-2.5 h-2.5" />
-            {task.estimated_hours < 1 ? `${Math.round(task.estimated_hours * 60)}m` : `${task.estimated_hours}h`}
-          </div>
-        ) : null}
+        {/* Estimated hours — inline editor on desktop */}
+        <span className="hidden md:block shrink-0 mt-0.5" onClick={e => e.stopPropagation()}>
+          {updateTaskMutation ? (
+            <InlineEstimateEditor
+              value={task.estimated_hours}
+              onSave={(hours) => new Promise((resolve, reject) => {
+                updateTaskMutation.mutate({ id: task.id, data: { estimated_hours: hours } }, { onSuccess: resolve, onError: reject });
+              })}
+            />
+          ) : task.estimated_hours ? (
+            <div className="text-[10px] text-gray-600 flex items-center gap-0.5" title={`Est: ${task.estimated_hours}h`}>
+              <Clock className="w-2.5 h-2.5" />
+              {task.estimated_hours < 1 ? `${Math.round(task.estimated_hours * 60)}m` : `${task.estimated_hours}h`}
+            </div>
+          ) : null}
+        </span>
 
         <div className={cn(
           "text-xs shrink-0 w-12 text-right mt-0.5",

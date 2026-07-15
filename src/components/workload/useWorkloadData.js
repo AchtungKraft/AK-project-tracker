@@ -6,6 +6,7 @@ import { useMemo } from "react";
 import { startOfDay, startOfWeek, endOfWeek, addDays, subHours } from "date-fns";
 import { sortTasksByPriority } from "@/utils/taskPrioritySort";
 import { WORKLOAD_SECTIONS, COMPLETED_WINDOWS } from "./workloadConfig";
+import { sumEstimatedHours } from "@/lib/estimateUtils";
 
 function parseLocalDate(dateStr) {
   if (!dateStr || typeof dateStr !== "string") return null;
@@ -256,6 +257,7 @@ export default function useWorkloadData({
         tasks: sectionTasks,
         count: sectionTasks.length,
         projectGroups: sortedGroups,
+        estimatedHoursTotal: sumEstimatedHours(sectionTasks),
       };
     });
 

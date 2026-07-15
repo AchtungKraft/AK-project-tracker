@@ -2,6 +2,7 @@ import React from "react";
 import { Badge } from "@/components/ui/badge";
 import { ChevronDown, ChevronRight, Play, CircleCheck, Ban, Package, Truck, UserCheck, Eye, Circle, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatDuration } from "@/lib/estimateUtils";
 
 const ICON_MAP = {
   Play, CircleCheck, Ban, Package, Truck, UserCheck, Eye, Circle, CheckCircle2,
@@ -38,6 +39,12 @@ export default function WorkloadSectionHeader({ section, expanded, onToggle, com
       {!compact && projectCount > 0 && (
         <span className="text-[10px] text-gray-600 tabular-nums">
           {projectCount} project{projectCount !== 1 ? "s" : ""}
+        </span>
+      )}
+
+      {!compact && section.estimatedHoursTotal > 0 && (
+        <span className="text-[10px] text-gray-500 tabular-nums">
+          {formatDuration(section.estimatedHoursTotal)}
         </span>
       )}
 

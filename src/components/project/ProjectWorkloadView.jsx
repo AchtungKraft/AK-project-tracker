@@ -27,6 +27,8 @@ import TaskDetailDrawer from "@/components/tasks/TaskDetailDrawer";
 import { useToast } from "@/components/ui/use-toast";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { invalidateProjectCaches } from "@/components/tasks/useTaskInteraction";
+import { sumEstimatedHours, countMissingEstimates, formatDuration } from "@/lib/estimateUtils";
+import InlineEstimateEditor from "@/components/tasks/InlineEstimateEditor";
 
 const DONE_STATUS_ID = "6913f57422230d8c7ee2ef54";
 
@@ -73,6 +75,10 @@ function PhaseHeader({ bucket, openCount, totalCount, isCompleted, expanded, onT
   const allSelected = phaseTaskIds.length > 0 && selectedCount === phaseTaskIds.length;
   const someSelected = selectedCount > 0 && !allSelected;
 
+  const estTotal = sumEstimatedHours(phaseTasks || []);
+  const estDisplay = formatDuration(estTotal);
+  const missingCount = countMissingEstimates(phaseTasks || []);
+
   return (
     <div
       className={cn(
@@ -107,6 +113,20 @@ function PhaseHeader({ bucket, openCount, totalCount, isCompleted, expanded, onT
         </span>
       ) : (
         <span className="text-[10px] text-gray-500 font-normal">({openCount})</span>
+      )}
+      {/* Phase estimated hours total */}
+      {!isCompleted && estDisplay && (
+        <span className="text-[10px] text-gray-500 font-normal tabular-nums">· {estDisplay}</span>
+      )}
+      {!isCompleted && missingCount > 0 && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="text-[9px] text-yellow-600/70 font-normal">· {missingCount} no est.</span>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="bg-gray-800 border-gray-700">
+            <p className="text-xs">{missingCount} open task{missingCount !== 1 ? "s" : ""} without an estimate</p>
+          </TooltipContent>
+        </Tooltip>
       )}
       <div className="ml-auto flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
         {onAddTask && !isCompleted && (
@@ -236,7 +256,19 @@ function TaskRow({
       )}
       <span className="text-[11px] text-gray-500 w-14 truncate shrink-0 hidden md:block text-right">{assignee?.full_name?.split(" ")[0] || "\u2014"}</span>
       <span className={cn("text-[11px] w-12 shrink-0 text-right hidden sm:block tabular-nums", isOverdue ? "text-red-400 font-semibold" : "text-gray-500")}>{due ? format(due, "M/d") : "\u2014"}</span>
-      <span className="text-[10px] text-gray-600 w-8 shrink-0 text-right hidden lg:block tabular-nums">{task.estimated_hours ? fmtHours(task.estimated_hours) : ""}</span>
+      {/* Estimated hours — inline editor */}
+      <span className="hidden lg:block shrink-0" onClick={e => e.stopPropagation()}>
+        {updateTaskMutation ? (
+          <InlineEstimateEditor
+            value={task.estimated_hours}
+            onSave={(hours) => new Promise((resolve, reject) => {
+              updateTaskMutation.mutate({ id: task.id, data: { estimated_hours: hours } }, { onSuccess: resolve, onError: reject });
+            })}
+          />
+        ) : (
+          <span className="text-[10px] text-gray-600 w-10 shrink-0 text-right tabular-nums">{task.estimated_hours ? fmtHours(task.estimated_hours) : ""}</span>
+        )}
+      </span>
     </div>
   );
 }
@@ -721,7 +753,15 @@ export default function ProjectWorkloadView({
               {(teamMembers || []).filter(m => m.active).map(m => <SelectItem key={m.id} value={m.id}>{m.full_name}</SelectItem>)}
             </SelectContent>
           </Select>
-          <span className="text-[10px] text-gray-500 tabular-nums">{filteredTasks.length} task{filteredTasks.length !== 1 ? "s" : ""}</span>
+          {/* Project estimate summary */}
+          {(() => {
+            const estTotal = sumEstimatedHours(filteredTasks);
+            const missing = countMissingEstimates(filteredTasks);
+            const parts = [`${filteredTasks.length} task${filteredTasks.length !== 1 ? "s" : ""}`];
+            if (estTotal > 0) parts.push(formatDuration(estTotal));
+            if (missing > 0) parts.push(`${missing} no est.`);
+            return <span className="text-[10px] text-gray-500 tabular-nums">{parts.join(" · ")}</span>;
+          })()}
         </div>
 
         {/* ── Task list grouped by phase ── */}
