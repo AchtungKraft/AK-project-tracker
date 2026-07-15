@@ -445,11 +445,11 @@ export default function WeeklyWorkloadView({
     if (!updateTaskMutation || selectedTasks.length === 0) return;
     const count = selectedTasks.length;
     selectedTasks.forEach((task) => {
-      updateTaskMutation.mutate({ id: task.id, data: { kanban_bucket_id: bucketId } });
+      updateTaskMutation.mutate({ id: task.id, data: { kanban_bucket_id: bucketId || null } });
     });
     clearSelection();
     dismiss();
-    toast({ title: `Moved ${count} tasks to new phase` });
+    toast({ title: bucketId ? `Moved ${count} tasks to new phase` : `Moved ${count} tasks to General / No Phase` });
   }, [selectedTasks, updateTaskMutation, toast, dismiss, clearSelection]);
 
   const handleBulkPrint = useCallback(() => {
@@ -748,6 +748,7 @@ export default function WeeklyWorkloadView({
         teamMembers={teamMembers}
         statuses={statuses}
         buckets={allBuckets}
+        selectedTasks={selectedTasks}
       />
 
       <WorkloadPrintOptionsModal

@@ -235,7 +235,7 @@ function renderProjectGroup(group, teamMemberMap, statusMap, blockedSet, fields,
     if (unphased.length > 0) {
       bodyHtml += `<div style="page-break-inside:avoid;display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid #9ca3af;margin-top:8px;margin-bottom:4px;">
         <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#6B7280;"></span>
-        <span style="font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.05em;">Unassigned Phase</span>
+        <span style="font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.05em;">GENERAL / NO PHASE</span>
         <span style="font-size:9px;color:#6b7280;">(${unphased.length})</span>
       </div>`;
       bodyHtml += unphased.map(t => renderTaskRow(t, teamMemberMap, statusMap, blockedSet, fields, data)).join("");

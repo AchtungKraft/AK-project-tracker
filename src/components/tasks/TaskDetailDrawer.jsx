@@ -28,6 +28,7 @@ import TaskCompletionModal from "./TaskCompletionModal";
 import TimeEstimateInput, { formatHours } from "./TimeEstimateInput";
 import OperationalStateBadge from "@/components/workflow/OperationalStateBadge";
 import TaskDependencyEditor from "@/components/workflow/TaskDependencyEditor";
+import PhaseSelectorPopover from "@/components/workload/PhaseSelectorPopover";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   AlertDialog,
@@ -145,6 +146,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
     description: "",
     project_id: projectId || "",
     category_id: "",
+    kanban_bucket_id: "",
     assigned_team_member_id: "",
     status_id: "",
     start_date: "",
@@ -163,6 +165,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
         description: task.description || "",
         project_id: task.project_id || projectId || "",
         category_id: task.category_id || "",
+        kanban_bucket_id: task.kanban_bucket_id || "",
         assigned_team_member_id: task.assigned_team_member_id || "",
         status_id: task.status_id || "",
         start_date: task.start_date || "",
@@ -236,9 +239,12 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
       });
       queryClient.invalidateQueries({ queryKey: ['myTasks'] });
       queryClient.invalidateQueries({ queryKey: ['allTasks'] });
-      // Invalidate workflow cache when dependencies or status change
-      if (variables.dependencies !== undefined || variables.status_id !== undefined) {
+      // Invalidate workflow cache when dependencies, status, or phase change
+      if (variables.dependencies !== undefined || variables.status_id !== undefined || variables.kanban_bucket_id !== undefined) {
         queryClient.invalidateQueries({ queryKey: ['projectWorkflow', task?.project_id] });
+      }
+      if (variables.kanban_bucket_id !== undefined) {
+        queryClient.invalidateQueries({ queryKey: ['workloadBuckets'] });
       }
       setEditing(false);
       toast.success('Task updated successfully');
@@ -275,7 +281,10 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
       setEditing(false);
       return;
     }
-    updateMutation.mutate(formData);
+    updateMutation.mutate({
+      ...formData,
+      kanban_bucket_id: formData.kanban_bucket_id || null,
+    });
   }, [formData, updateMutation, task, taskInteraction]);
 
   const handleDeleteClick = useCallback(() => {
@@ -403,6 +412,12 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
               {categoryPath && (
                 <span className="text-xs text-gray-500">{categoryPath}</span>
               )}
+              {(() => {
+                const bucket = projectBuckets.find(b => b.id === task?.kanban_bucket_id);
+                return bucket ? (
+                  <span className="text-xs text-gray-500">{bucket.name}</span>
+                ) : null;
+              })()}
               {task?.due_date && (
                 <span className="text-xs text-gray-500">{format(new Date(task.due_date), 'MMM d')}</span>
               )}
@@ -474,7 +489,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label className="text-gray-400">Category</Label>
+                    <Label className="text-gray-400">Work Category</Label>
                     <Select value={formData.category_id} onValueChange={(value) => setFormData({ ...formData, category_id: value })}>
                       <SelectTrigger className={getMobileSelectClass(isMobile, "bg-gray-800 border-gray-700 text-white")}>
                         <SelectValue placeholder="Select category" />
@@ -499,16 +514,30 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                     </Select>
                   </div>
                   <div>
-                    <Label className="text-gray-400">Status</Label>
-                    <Select value={formData.status_id} onValueChange={(value) => setFormData({ ...formData, status_id: value })}>
-                      <SelectTrigger className={getMobileSelectClass(isMobile, "bg-gray-800 border-gray-700 text-white")}>
-                        <SelectValue placeholder="Select status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {taskStatuses.map(s => <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <Label className="text-gray-400">Phase / Bucket</Label>
+                    <PhaseSelectorPopover
+                      task={{ ...task, kanban_bucket_id: formData.kanban_bucket_id || null, project_id: formData.project_id }}
+                      buckets={projectBuckets}
+                      allTasks={allProjectTasks}
+                      triggerVariant="select"
+                      currentLabel={(() => {
+                        const b = projectBuckets.find(b => b.id === formData.kanban_bucket_id);
+                        return b ? b.name : null;
+                      })()}
+                      onMove={(bucketId) => setFormData(prev => ({ ...prev, kanban_bucket_id: bucketId || "" }))}
+                    />
                   </div>
+                </div>
+                <div>
+                  <Label className="text-gray-400">Status</Label>
+                  <Select value={formData.status_id} onValueChange={(value) => setFormData({ ...formData, status_id: value })}>
+                    <SelectTrigger className={getMobileSelectClass(isMobile, "bg-gray-800 border-gray-700 text-white")}>
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {taskStatuses.map(s => <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -655,6 +684,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                   setFormData({
                     name: task.name || "", description: task.description || "",
                     project_id: task.project_id || projectId || "", category_id: task.category_id || "",
+                    kanban_bucket_id: task.kanban_bucket_id || "",
                     assigned_team_member_id: task.assigned_team_member_id || "", status_id: task.status_id || "",
                     start_date: task.start_date || "", due_date: task.due_date || "",
                     estimated_hours: task.estimated_hours ?? null,

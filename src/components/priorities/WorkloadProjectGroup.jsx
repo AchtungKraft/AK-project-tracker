@@ -18,7 +18,6 @@ import {
   Lock,
   Unlock,
   ListChecks,
-  Layers,
   Check,
 } from "lucide-react";
 import { format, startOfDay, isBefore } from "date-fns";
@@ -27,6 +26,7 @@ import { buildProjectDetailUrl, SOURCES } from "@/lib/workspaceConfig";
 import WorkloadDependencyEditor from "@/components/workload/WorkloadDependencyEditor";
 import WorkloadProjectPrintModal from "@/components/workload/WorkloadProjectPrintModal";
 import buildProjectWorkPacketHTML from "@/components/workload/buildProjectWorkPacketHTML";
+import PhaseSelectorPopover from "@/components/workload/PhaseSelectorPopover";
 import { useToast } from "@/components/ui/use-toast";
 
 const DONE_STATUS_ID = "6913f57422230d8c7ee2ef54";
@@ -298,7 +298,12 @@ function WorkloadTaskRow({
 
         {/* Phase move */}
         {updateTaskMutation && (
-          <PhaseSelector task={task} bucketMap={bucketMap} updateTaskMutation={updateTaskMutation} />
+          <PhaseSelectorPopover
+            task={task}
+            buckets={bucketMap}
+            allTasks={projectTasks}
+            onMove={(bucketId) => updateTaskMutation.mutate({ id: task.id, data: { kanban_bucket_id: bucketId || null } })}
+          />
         )}
       </div>
 
@@ -327,43 +332,7 @@ function WorkloadTaskRow({
   );
 }
 
-// Compact phase selector for inline task row
-function PhaseSelector({ task, bucketMap, updateTaskMutation }) {
-  const [open, setOpen] = useState(false);
-  const buckets = useMemo(() => {
-    return Array.from(bucketMap.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
-  }, [bucketMap]);
-
-  if (buckets.length === 0) return null;
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button className="text-gray-600 hover:text-blue-400 p-0.5 rounded" title="Move to phase">
-          <Layers className="w-3 h-3" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-40 p-1 bg-gray-900 border-gray-700" side="left" align="start">
-        <p className="text-[9px] text-gray-500 uppercase tracking-wider px-2 py-1">Move to Phase</p>
-        <div className="space-y-px max-h-52 overflow-y-auto">
-          {buckets.map(b => (
-            <button key={b.id} onClick={() => {
-              updateTaskMutation.mutate({ id: task.id, data: { kanban_bucket_id: b.id } });
-              setOpen(false);
-            }}
-              className={cn("w-full text-left px-2 py-1 rounded text-xs transition-colors flex items-center gap-1.5",
-                task.kanban_bucket_id === b.id ? "bg-blue-900/40 text-blue-300" : "text-gray-300 hover:bg-gray-800"
-              )}
-            >
-              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: b.color || '#6B7280' }} />
-              {b.name}
-            </button>
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
+// Phase selector — delegates to shared PhaseSelectorPopover
 
 // ── Phase header — visually distinct from task rows ──
 function PhaseHeader({ bucket, openCount, expanded, onToggle, editMode, phaseTasks, selectedTaskIds, onToggleTaskSelection, onSelectProjectTasks }) {
@@ -404,7 +373,7 @@ function PhaseHeader({ bucket, openCount, expanded, onToggle, editMode, phaseTas
       {expanded ? <ChevronDown className="w-2.5 h-2.5 text-gray-500" /> : <ChevronRight className="w-2.5 h-2.5 text-gray-500" />}
       <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ backgroundColor: bucket?.color || '#6B7280' }} />
       <span className="text-[10px] font-bold text-gray-200 uppercase tracking-widest">
-        {bucket?.name || "Unassigned Phase"}
+        {bucket?.name || "GENERAL / NO PHASE"}
       </span>
       <span className="text-[10px] text-gray-500 font-normal">({openCount})</span>
     </div>

@@ -183,7 +183,7 @@ export default function buildProjectWorkPacketHTML(data) {
     }
   });
   if (unphased.length > 0) {
-    phasesHtml += renderPhaseGroup("Unassigned Phase", "#6B7280", unphased);
+    phasesHtml += renderPhaseGroup("GENERAL / NO PHASE", "#6B7280", unphased);
   }
 
   const projectName = esc(project?.name || "Unknown Project");

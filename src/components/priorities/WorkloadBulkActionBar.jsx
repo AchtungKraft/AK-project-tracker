@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import {
   X,
   CalendarPlus,
@@ -11,6 +12,7 @@ import {
   Flame,
   Printer,
   Layers,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +29,7 @@ export default function WorkloadBulkActionBar({
   teamMembers = [],
   statuses = [],
   buckets = [],
+  selectedTasks = [],
 }) {
   const [dateOpen, setDateOpen] = useState(false);
   const [shiftOpen, setShiftOpen] = useState(false);
@@ -202,8 +205,8 @@ export default function WorkloadBulkActionBar({
         </Button>
 
         {/* Move Phase */}
-        {onMovePhase && buckets.length > 0 && (
-          <BulkPhasePopover buckets={buckets} onMovePhase={onMovePhase} />
+        {onMovePhase && (
+          <BulkPhasePopover buckets={buckets} onMovePhase={onMovePhase} selectedTasks={selectedTasks} />
         )}
 
         {/* Print Selected */}
@@ -232,25 +235,65 @@ export default function WorkloadBulkActionBar({
   );
 }
 
-function BulkPhasePopover({ buckets, onMovePhase }) {
+function BulkPhasePopover({ buckets, onMovePhase, selectedTasks = [] }) {
   const [open, setOpen] = useState(false);
-  const sorted = useMemo(
-    () => [...buckets].sort((a, b) => (a.order || 0) - (b.order || 0)),
-    [buckets]
+
+  // Same-project validation
+  const projectIds = useMemo(() => {
+    const s = new Set();
+    selectedTasks.forEach(t => s.add(t.project_id || "__no_project__"));
+    return s;
+  }, [selectedTasks]);
+
+  const isSingleProject = projectIds.size === 1;
+  const singleProjectId = isSingleProject ? Array.from(projectIds)[0] : null;
+
+  // Filter buckets to the single project
+  const projectBuckets = useMemo(() => {
+    if (!isSingleProject || !singleProjectId) return [];
+    return buckets
+      .filter(b => b.project_id === singleProjectId)
+      .sort((a, b) => (a.order || 0) - (b.order || 0));
+  }, [buckets, isSingleProject, singleProjectId]);
+
+  const button = (
+    <Button
+      variant="outline"
+      size="sm"
+      className={cn(
+        "border-gray-700 text-gray-200 hover:bg-gray-800 h-7 text-xs gap-1",
+        !isSingleProject && "opacity-50 cursor-not-allowed"
+      )}
+      disabled={!isSingleProject}
+    >
+      <Layers className="w-3 h-3" />
+      Phase
+    </Button>
   );
+
+  if (!isSingleProject) {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>{button}</TooltipTrigger>
+          <TooltipContent side="top" className="bg-gray-800 border-gray-700 max-w-xs">
+            <div className="flex items-start gap-1.5 text-xs text-amber-400">
+              <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+              <span>Selected tasks span {projectIds.size} projects. Bulk phase move requires all tasks to be in the same project.</span>
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="border-gray-700 text-gray-200 hover:bg-gray-800 h-7 text-xs gap-1">
-          <Layers className="w-3 h-3" />
-          Phase
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-40 p-1 bg-gray-900 border-gray-700" side="top" align="start">
+      <PopoverTrigger asChild>{button}</PopoverTrigger>
+      <PopoverContent className="w-44 p-1 bg-gray-900 border-gray-700" side="top" align="start">
         <p className="text-[9px] text-gray-500 uppercase tracking-wider px-2 py-1">Move to Phase</p>
         <div className="space-y-px max-h-52 overflow-y-auto">
-          {sorted.map((b) => (
+          {projectBuckets.map((b) => (
             <button
               key={b.id}
               onClick={() => { onMovePhase(b.id); setOpen(false); }}
@@ -260,6 +303,14 @@ function BulkPhasePopover({ buckets, onMovePhase }) {
               {b.name}
             </button>
           ))}
+          {/* General / No Phase */}
+          <button
+            onClick={() => { onMovePhase(null); setOpen(false); }}
+            className="w-full text-left px-2 py-1 rounded text-xs text-gray-400 hover:bg-gray-800 hover:text-white transition-colors flex items-center gap-1.5"
+          >
+            <span className="w-2 h-2 rounded-full shrink-0 bg-gray-600" />
+            General / No Phase
+          </button>
         </div>
       </PopoverContent>
     </Popover>
