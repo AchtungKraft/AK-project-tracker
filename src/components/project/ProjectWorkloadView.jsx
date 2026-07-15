@@ -252,7 +252,7 @@ function InlineChecklistItems({ items, onToggle, showCompleted = false }) {
   if (done === total) {
     return (
       <div className={GUTTER_CL_INDENT + " pr-3 pb-0.5"}>
-        <span className="text-[10px] text-green-500/80 flex items-center gap-1"><Check className="w-2.5 h-2.5" />{total}/{total} Complete</span>
+        <span className="text-[11px] text-green-500/80 font-medium flex items-center gap-1"><Check className="w-3 h-3" />{total}/{total} Complete</span>
       </div>
     );
   }
@@ -260,8 +260,8 @@ function InlineChecklistItems({ items, onToggle, showCompleted = false }) {
   const completedItems = sorted.filter(i => i.is_complete);
   return (
     <div className={GUTTER_CL_INDENT + " pr-3 pb-1 animate-in slide-in-from-top-1 duration-150"}>
-      <div className="text-[10px] text-gray-500 flex items-center gap-1 pb-0.5">
-        <ListChecks className="w-2.5 h-2.5 text-gray-600" /> Checklist ({remaining} Remaining)
+      <div className="text-[11px] text-gray-400 font-medium flex items-center gap-1 pb-0.5">
+        <ListChecks className="w-3 h-3 text-gray-500" /> Checklist ({remaining} Remaining)
       </div>
       <div className="relative ml-[3px]">
         <div className="absolute left-0 top-0 bottom-0 w-px bg-gray-700/40" />
@@ -269,26 +269,26 @@ function InlineChecklistItems({ items, onToggle, showCompleted = false }) {
           <div key={item.id} className="flex items-center gap-1.5 py-px pl-3 relative">
             <div className="absolute left-0 top-1/2 w-2 h-px bg-gray-700/40" />
             <button onClick={e => { e.stopPropagation(); if (onToggle) onToggle(item); }} className="shrink-0 w-2.5 h-2.5 rounded-[3px] border border-gray-600/80 hover:border-gray-400 flex items-center justify-center transition-colors" />
-            <span className="text-[10.5px] leading-tight truncate text-gray-500">{item.title}</span>
+            <span className="text-[11.5px] leading-tight truncate text-gray-400">{item.title}</span>
           </div>
         ))}
         {showCompleted && completedItems.length > 0 && (
           <div className="mt-1">
-            <div className="text-[9px] text-gray-600 uppercase tracking-wider pl-3 pb-0.5">Completed ({completedItems.length})</div>
+            <div className="text-[10px] text-gray-500 font-medium uppercase tracking-wider pl-3 pb-0.5">Completed ({completedItems.length})</div>
             {completedItems.map(item => (
               <div key={item.id} className="flex items-center gap-1.5 py-px pl-3 relative">
                 <div className="absolute left-0 top-1/2 w-2 h-px bg-gray-700/40" />
                 <button onClick={e => { e.stopPropagation(); if (onToggle) onToggle(item); }} className="shrink-0 w-2.5 h-2.5 rounded-[3px] bg-green-800/40 border border-green-700/50 text-green-500 flex items-center justify-center transition-colors hover:border-green-500" title="Uncheck to reopen">
                   <Check className="w-2 h-2" />
                 </button>
-                <span className="text-[10px] leading-tight truncate text-gray-600/70 line-through">{item.title}</span>
+                <span className="text-[11px] leading-tight truncate text-gray-500/70 line-through">{item.title}</span>
               </div>
             ))}
           </div>
         )}
       </div>
       {!showCompleted && completedItems.length > 0 && (
-        <div className="text-[9px] text-gray-600/60 pl-3 mt-px">{completedItems.length} completed</div>
+        <div className="text-[10px] text-gray-500/60 pl-3 mt-px">{completedItems.length} completed</div>
       )}
     </div>
   );

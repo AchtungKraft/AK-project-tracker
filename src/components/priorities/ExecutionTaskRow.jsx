@@ -210,7 +210,7 @@ export default function ExecutionTaskRow({
               onClick={() => { if (!item.is_complete) { setEditingItemId(item.id); setEditingText(item.title); } }}
               className={cn(
                 "flex-1 text-xs leading-snug",
-                item.is_complete ? "text-gray-600 line-through" : "text-gray-400 cursor-pointer hover:text-gray-200"
+                item.is_complete ? "text-gray-500 line-through" : "text-gray-400 cursor-pointer hover:text-gray-200"
               )}
             >
               {item.title}
