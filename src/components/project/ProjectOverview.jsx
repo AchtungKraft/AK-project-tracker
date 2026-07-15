@@ -37,6 +37,11 @@ import { cn } from "@/lib/utils";
 import { computePartsProgressByTaskId } from "@/utils/taskPartsProgress";
 import { resolveProjectOverviewView, persistProjectOverviewView } from "@/lib/workspaceConfig";
 import ProjectWorkflowPanel from "@/components/workflow/ProjectWorkflowPanel";
+import {
+  Collapsible as WorkflowCollapsible,
+  CollapsibleContent as WorkflowCollapsibleContent,
+  CollapsibleTrigger as WorkflowCollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 export default function ProjectOverview({ project, projectId, sharedData = {} }) {
   const queryClient = useQueryClient();
@@ -46,6 +51,10 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
 
   const [selectedImage, setSelectedImage] = useState(null);
   const [infoExpanded, setInfoExpanded] = useState(false);
+  // Workflow Status collapsible — remember per project
+  const [workflowExpanded, setWorkflowExpanded] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(`ak_pd_workflow_${projectId}`) ?? 'true'); } catch { return true; }
+  });
   // Initialize view from URL > source context > localStorage > default
   const [viewMode, setViewMode] = useState(() => resolveProjectOverviewView(projectId));
   const [selectedTask, setSelectedTask] = useState(null);
@@ -397,12 +406,27 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
           </Card>
         </Collapsible>
 
-        {/* Workflow Status Panel */}
-        <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
-          <CardContent className="p-4">
-            <ProjectWorkflowPanel projectId={projectId} />
-          </CardContent>
-        </Card>
+        {/* Workflow Status Panel — Collapsible */}
+        <WorkflowCollapsible open={workflowExpanded} onOpenChange={(v) => {
+          setWorkflowExpanded(v);
+          try { localStorage.setItem(`ak_pd_workflow_${projectId}`, JSON.stringify(v)); } catch {}
+        }}>
+          <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
+            <WorkflowCollapsibleTrigger asChild>
+              <div className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-900/30 transition-colors">
+                <div className="flex items-center gap-2">
+                  {workflowExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                  <span className="text-white text-sm font-semibold">Workflow Status</span>
+                </div>
+              </div>
+            </WorkflowCollapsibleTrigger>
+            <WorkflowCollapsibleContent>
+              <CardContent className="p-4 pt-0">
+                <ProjectWorkflowPanel projectId={projectId} />
+              </CardContent>
+            </WorkflowCollapsibleContent>
+          </Card>
+        </WorkflowCollapsible>
 
         {/* View Switcher - persist to localStorage per project */}
         <div className={cn("flex items-center justify-between", isMobile && "px-1")}>

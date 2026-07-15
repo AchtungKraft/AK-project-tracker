@@ -64,9 +64,9 @@ const GUTTER_TASK_INDENT = "pl-4 md:pl-5";
 const GUTTER_CL_INDENT = "pl-[3.5rem] md:pl-[4rem]";
 
 // ═══════════════════════════════════════════════
-// Phase Header — same visual language as Workload
+// Phase Header — strengthened visual ownership
 // ═══════════════════════════════════════════════
-function PhaseHeader({ bucket, openCount, expanded, onToggle, editMode, phaseTasks, selectedTaskIds, onToggleTaskSelection, onSelectMultiple, onAddTask }) {
+function PhaseHeader({ bucket, openCount, totalCount, isCompleted, expanded, onToggle, editMode, phaseTasks, selectedTaskIds, onToggleTaskSelection, onSelectMultiple, onAddTask }) {
   const phaseTaskIds = (phaseTasks || []).map(t => t.id);
   const selectedCount = phaseTaskIds.filter(id => selectedTaskIds?.has(id)).length;
   const allSelected = phaseTaskIds.length > 0 && selectedCount === phaseTaskIds.length;
@@ -74,7 +74,10 @@ function PhaseHeader({ bucket, openCount, expanded, onToggle, editMode, phaseTas
 
   return (
     <div
-      className="flex items-center gap-1.5 py-[5px] px-3 cursor-pointer hover:bg-gray-700/40 transition-colors border-t border-gray-700/30 bg-gray-800/40"
+      className={cn(
+        "flex items-center gap-1.5 py-[6px] px-3 cursor-pointer hover:bg-gray-700/40 transition-colors border-t border-gray-700/30",
+        isCompleted ? "bg-gray-800/20" : "bg-gray-800/50",
+      )}
       onClick={onToggle}
     >
       <span className={cn("shrink-0 flex items-center justify-center", GUTTER_SELECT_W)} onClick={e => e.stopPropagation()}>
@@ -89,14 +92,23 @@ function PhaseHeader({ bucket, openCount, expanded, onToggle, editMode, phaseTas
           />
         ) : null}
       </span>
-      {expanded ? <ChevronDown className="w-2.5 h-2.5 text-gray-500" /> : <ChevronRight className="w-2.5 h-2.5 text-gray-500" />}
-      <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ backgroundColor: bucket?.color || '#6B7280' }} />
-      <span className="text-[10px] font-bold text-gray-200 uppercase tracking-widest">
+      {expanded ? <ChevronDown className="w-3 h-3 text-gray-500" /> : <ChevronRight className="w-3 h-3 text-gray-500" />}
+      <span className="w-[8px] h-[8px] rounded-full shrink-0" style={{ backgroundColor: isCompleted ? '#10B981' : (bucket?.color || '#6B7280') }} />
+      <span className={cn(
+        "text-[11px] font-bold uppercase tracking-wider",
+        isCompleted ? "text-green-500/70" : "text-gray-200",
+      )}>
         {bucket?.name || "GENERAL / NO PHASE"}
       </span>
-      <span className="text-[10px] text-gray-500 font-normal">({openCount})</span>
+      {isCompleted ? (
+        <span className="text-[10px] text-green-600 font-normal flex items-center gap-0.5">
+          <Check className="w-2.5 h-2.5" /> Completed
+        </span>
+      ) : (
+        <span className="text-[10px] text-gray-500 font-normal">({openCount})</span>
+      )}
       <div className="ml-auto flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
-        {onAddTask && (
+        {onAddTask && !isCompleted && (
           <button onClick={() => onAddTask(bucket?.id || null)} className="text-green-500 hover:text-green-300 px-0.5 py-0.5 rounded hover:bg-green-900/20 transition-colors" title="Add task in phase">
             <Plus className="w-3.5 h-3.5" />
           </button>
@@ -331,7 +343,11 @@ export default function ProjectWorkloadView({
     saveProjectToggles(projectId, { showChecklists: toggles.showChecklists, showCompletedChecklist: toggles.showCompletedChecklist });
   }, [projectId, toggles.showChecklists, toggles.showCompletedChecklist]);
 
-  // Phase collapse memory
+  // Completed tasks section
+  const [completedExpanded, setCompletedExpanded] = useState(false);
+  const completedTasks = useMemo(() => (allProjectTasks || []).filter(t => t.status_id === DONE_STATUS_ID), [allProjectTasks]);
+
+  // Phase collapse memory — auto-collapse completed phases
   const [collapsedPhases, setCollapsedPhases] = useState(() => {
     const saved = loadProjectCollapseState(projectId);
     const set = new Set();
@@ -468,7 +484,7 @@ export default function ProjectWorkloadView({
     return list;
   }, [activeTasks, searchTerm, statusFilter, assigneeFilter]);
 
-  // Group by phase
+  // Group by phase — use bucket order (never alphabetical)
   const sortedBuckets = useMemo(() => [...(buckets || [])].sort((a, b) => (a.order || 0) - (b.order || 0)), [buckets]);
   const { byPhase, unphased } = useMemo(() => {
     const bp = new Map();
@@ -483,6 +499,33 @@ export default function ProjectWorkloadView({
     });
     return { byPhase: bp, unphased: up };
   }, [filteredTasks, bucketMap]);
+
+  // Detect fully-completed phases and auto-collapse them (only on initial load, not overriding user action)
+  const autoCollapsedRef = useRef(new Set());
+  useEffect(() => {
+    if (!sortedBuckets.length || !allProjectTasks?.length) return;
+    const allTasksByBucket = new Map();
+    (allProjectTasks || []).forEach(t => {
+      if (t.kanban_bucket_id && bucketMap.has(t.kanban_bucket_id)) {
+        if (!allTasksByBucket.has(t.kanban_bucket_id)) allTasksByBucket.set(t.kanban_bucket_id, []);
+        allTasksByBucket.get(t.kanban_bucket_id).push(t);
+      }
+    });
+    setCollapsedPhases(prev => {
+      const next = new Set(prev);
+      let changed = false;
+      sortedBuckets.forEach(b => {
+        const bt = allTasksByBucket.get(b.id) || [];
+        const allDone = bt.length > 0 && bt.every(t => t.status_id === DONE_STATUS_ID);
+        if (allDone && !autoCollapsedRef.current.has(b.id) && !next.has(b.id)) {
+          next.add(b.id);
+          autoCollapsedRef.current.add(b.id);
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [sortedBuckets, allProjectTasks, bucketMap]);
 
   const handleTaskClick = useCallback((task) => {
     if (externalTaskClick) externalTaskClick(task);
@@ -677,12 +720,14 @@ export default function ProjectWorkloadView({
                 const phaseTasks = byPhase.get(bucket.id);
                 if (!phaseTasks || phaseTasks.length === 0) return null;
                 const openCount = phaseTasks.filter(t => t.status_id !== DONE_STATUS_ID).length;
+                const isPhaseCompleted = phaseTasks.length > 0 && openCount === 0;
                 const phaseKey = bucket.id;
                 const isCollapsed = collapsedPhases.has(phaseKey);
                 return (
                   <div key={bucket.id}>
                     <PhaseHeader
-                      bucket={bucket} openCount={openCount} expanded={!isCollapsed} onToggle={() => togglePhase(phaseKey)}
+                      bucket={bucket} openCount={openCount} totalCount={phaseTasks.length}
+                      isCompleted={isPhaseCompleted} expanded={!isCollapsed} onToggle={() => togglePhase(phaseKey)}
                       editMode={toggles.editMode} phaseTasks={phaseTasks} selectedTaskIds={selectedTaskIds}
                       onToggleTaskSelection={toggleTaskSelection} onSelectMultiple={selectMultiple}
                       onAddTask={handleAddTaskInPhase}
@@ -691,21 +736,55 @@ export default function ProjectWorkloadView({
                   </div>
                 );
               })}
-              {unphased.length > 0 && (
-                <div>
-                  <PhaseHeader
-                    bucket={null} openCount={unphased.filter(t => t.status_id !== DONE_STATUS_ID).length}
-                    expanded={!collapsedPhases.has("__unphased__")} onToggle={() => togglePhase("__unphased__")}
-                    editMode={toggles.editMode} phaseTasks={unphased} selectedTaskIds={selectedTaskIds}
-                    onToggleTaskSelection={toggleTaskSelection} onSelectMultiple={selectMultiple}
-                    onAddTask={handleAddTaskInPhase}
-                  />
-                  {!collapsedPhases.has("__unphased__") && unphased.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)).map(renderTaskRow)}
-                </div>
-              )}
+              {unphased.length > 0 && (() => {
+                const unphasedOpen = unphased.filter(t => t.status_id !== DONE_STATUS_ID).length;
+                const unphasedCompleted = unphased.length > 0 && unphasedOpen === 0;
+                return (
+                  <div>
+                    <PhaseHeader
+                      bucket={null} openCount={unphasedOpen} totalCount={unphased.length}
+                      isCompleted={unphasedCompleted} expanded={!collapsedPhases.has("__unphased__")} onToggle={() => togglePhase("__unphased__")}
+                      editMode={toggles.editMode} phaseTasks={unphased} selectedTaskIds={selectedTaskIds}
+                      onToggleTaskSelection={toggleTaskSelection} onSelectMultiple={selectMultiple}
+                      onAddTask={handleAddTaskInPhase}
+                    />
+                    {!collapsedPhases.has("__unphased__") && unphased.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)).map(renderTaskRow)}
+                  </div>
+                );
+              })()}
             </>
           )}
         </div>
+
+        {/* ── Completed Tasks — collapsed by default ── */}
+        {completedTasks.length > 0 && (
+          <div className="bg-black/40 backdrop-blur-xl border border-green-900/20 rounded-lg overflow-hidden">
+            <div
+              className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-800/40 transition-colors"
+              onClick={() => setCompletedExpanded(p => !p)}
+            >
+              {completedExpanded ? <ChevronDown className="w-3 h-3 text-green-500/60" /> : <ChevronRight className="w-3 h-3 text-green-500/60" />}
+              <CheckCircle2 className="w-3.5 h-3.5 text-green-500/60" />
+              <span className="text-[11px] font-semibold text-green-500/70 uppercase tracking-wider">Completed Tasks</span>
+              <span className="text-[10px] text-gray-600">({completedTasks.length})</span>
+            </div>
+            {completedExpanded && (
+              <div className="border-t border-green-900/20">
+                {completedTasks.sort((a, b) => new Date(b.completed_date || b.updated_date) - new Date(a.completed_date || a.updated_date)).slice(0, 50).map(task => (
+                  <div key={task.id} className="flex items-center gap-1.5 px-3 py-[4px] border-b border-gray-800/10 last:border-b-0 group/row">
+                    <span className={cn("shrink-0", GUTTER_SELECT_W)} />
+                    <CheckCircle2 className="w-3 h-3 text-green-600/50 shrink-0" />
+                    <button onClick={() => handleTaskClick(task)} className="flex-1 min-w-0 text-left text-[12px] text-gray-500 line-through truncate leading-tight hover:text-gray-400">
+                      {task.name}
+                    </button>
+                    <span className="text-[10px] text-gray-600 shrink-0 hidden sm:block">{teamMemberMap.get(task.assigned_team_member_id)?.full_name?.split(" ")[0] || ""}</span>
+                    {task.completed_date && <span className="text-[10px] text-green-700/60 shrink-0 hidden sm:block tabular-nums">{format(new Date(task.completed_date), "M/d")}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Bulk Action Bar ── */}
         {toggles.editMode && selectedTaskIds.size > 0 && (

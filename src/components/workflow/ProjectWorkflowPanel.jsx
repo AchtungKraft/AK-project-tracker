@@ -46,19 +46,29 @@ export default function ProjectWorkflowPanel({ projectId }) {
   return (
     <TooltipProvider>
       <div className="space-y-3">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-white">Workflow Status</h3>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => recalculate()}
-            disabled={isRecalculating}
-            className="h-7 text-xs border-gray-700 text-gray-400 gap-1"
-          >
-            <RefreshCw className={cn("w-3 h-3", isRecalculating && "animate-spin")} />
-            {needsCalc ? "Calculate" : "Recalculate"}
-          </Button>
+        {/* Recalculate — secondary unless workflow needs calculation */}
+        <div className="flex items-center justify-end">
+          {needsCalc ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => recalculate()}
+              disabled={isRecalculating}
+              className="h-6 text-[10px] border-amber-700 text-amber-400 gap-1"
+            >
+              <RefreshCw className={cn("w-3 h-3", isRecalculating && "animate-spin")} />
+              Calculate
+            </Button>
+          ) : (
+            <button
+              onClick={() => recalculate()}
+              disabled={isRecalculating}
+              className="text-gray-600 hover:text-gray-400 p-1 rounded transition-colors disabled:opacity-50"
+              title="Recalculate workflow"
+            >
+              <RefreshCw className={cn("w-3.5 h-3.5", isRecalculating && "animate-spin")} />
+            </button>
+          )}
         </div>
 
         {/* Needs calculation banner */}

@@ -67,15 +67,26 @@ export default function ProjectHealthSummary({ projectHealth }) {
         </div>
       )}
 
-      {/* Blockers */}
+      {/* Current Constraint */}
       {blockerLabel && (
         <div className="flex items-start gap-1.5 bg-red-950/20 border border-red-900/30 rounded px-2 py-1.5">
           <AlertTriangle className="w-3 h-3 text-red-400 mt-0.5 shrink-0" />
-          <div className="space-y-0.5">
-            <span className="text-xs text-red-300">{blockerLabel}</span>
-            {blockers?.length > 1 && (
-              <div className="text-[10px] text-red-400/70">
-                +{blockers.length - 1} more blocker{blockers.length > 2 ? 's' : ''}
+          <div className="space-y-1">
+            <div>
+              <span className="text-[9px] text-red-400/70 uppercase tracking-wider font-medium">Current Constraint</span>
+              <p className="text-xs text-red-300 mt-0.5">{blockerLabel}</p>
+            </div>
+            {blockers?.length > 0 && (
+              <div>
+                <span className="text-[9px] text-red-400/60 uppercase tracking-wider">Blocking:</span>
+                <div className="flex flex-wrap gap-1 mt-0.5">
+                  {blockers.slice(0, 5).map((b, i) => (
+                    <span key={i} className="text-[10px] text-red-300/80">• {typeof b === 'string' ? b : (b.phaseName || b.label || b.name || 'Unknown')}</span>
+                  ))}
+                  {blockers.length > 5 && (
+                    <span className="text-[10px] text-red-400/50">+{blockers.length - 5} more</span>
+                  )}
+                </div>
               </div>
             )}
           </div>
