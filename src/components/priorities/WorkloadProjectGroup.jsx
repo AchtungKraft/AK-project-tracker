@@ -59,8 +59,8 @@ function saveCollapseState(state) {
 // ── Fixed gutter width constants ──
 // Bulk-select slot: 18px (checkbox 14px + gap). Completion slot: 18px.
 const GUTTER_SELECT_W = "w-[18px]"; // reserved slot for bulk-select checkbox
-const GUTTER_TASK_INDENT = "pl-8 md:pl-10"; // task rows: phase indent + task indent
-const GUTTER_PHASE_INDENT = "pl-4 md:pl-5"; // phase headers: one level in from project
+const GUTTER_TASK_INDENT = "pl-6 sm:pl-8 md:pl-10"; // task rows: phase indent + task indent
+const GUTTER_PHASE_INDENT = "pl-3 sm:pl-4 md:pl-5"; // phase headers: one level in from project
 
 // ── Compact task row ──
 function WorkloadTaskRow({
@@ -391,7 +391,7 @@ function InlineChecklistItems({ items, onToggle, showCompleted = false }) {
   // Auto-collapse when all items are complete
   if (done === total) {
     return (
-      <div className="pl-[4.5rem] md:pl-[5rem] pr-3 pb-0.5">
+      <div className="pl-[3.5rem] sm:pl-[4.5rem] md:pl-[5rem] pr-3 pb-0.5">
         <span className="text-[10px] text-green-500/80 flex items-center gap-1">
           <Check className="w-2.5 h-2.5" />
           {total}/{total} Complete
@@ -404,7 +404,7 @@ function InlineChecklistItems({ items, onToggle, showCompleted = false }) {
   const completedItems = sorted.filter(i => i.is_complete);
 
   return (
-    <div className="pl-[4.5rem] md:pl-[5rem] pr-3 pb-1 animate-in slide-in-from-top-1 duration-150">
+    <div className="pl-[3.5rem] sm:pl-[4.5rem] md:pl-[5rem] pr-3 pb-1 animate-in slide-in-from-top-1 duration-150">
       {/* Checklist header */}
       <div className="text-[10px] text-gray-500 flex items-center gap-1 pb-0.5">
         <ListChecks className="w-2.5 h-2.5 text-gray-600" />
@@ -629,7 +629,7 @@ export default function WorkloadProjectGroup({
     <div>
       {/* ── Project header — primary visual anchor ── */}
       <div
-        className="flex items-center gap-2 px-3 py-3 bg-gray-800/60 hover:bg-gray-800/70 cursor-pointer transition-colors mt-2 first:mt-0 border-t-2 border-gray-600/60 group"
+        className="flex items-center gap-2 px-2 sm:px-3 py-2 sm:py-3 bg-gray-800/60 hover:bg-gray-800/70 cursor-pointer transition-colors mt-2 first:mt-0 border-t-2 border-gray-600/60 group"
         onClick={handleToggleProject}
       >
         {/* Fixed-width gutter slot for bulk selection — same width as task gutter */}

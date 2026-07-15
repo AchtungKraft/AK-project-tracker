@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Flame, Loader2, FolderKanban, RefreshCw, LayoutGrid, Calendar, X, User, List, ClipboardCheck, PanelLeftOpen, Layers } from "lucide-react";
+import { Flame, Loader2, FolderKanban, RefreshCw, LayoutGrid, Calendar, X, User, List, ClipboardCheck, PanelLeftOpen, Layers, ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import MobileFilterTriggerBar, { useActiveFilterCount } from "@/components/mobile/MobileFilterTriggerBar";
@@ -405,6 +406,7 @@ export default function PriorityDashboard() {
   const handleToggleComplete = taskDataToggleComplete;
 
   const isMobile = useIsMobile();
+  const [mobileStatsExpanded, setMobileStatsExpanded] = useState(false);
 
   // Close mobile drawer after interaction
   const closeMobileNav = useCallback(() => {
@@ -441,7 +443,7 @@ export default function PriorityDashboard() {
     <>
       <MobileSafeAreaContainer>
         <div className={`min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black ${isMobile ? 'p-2' : ''}`}>
-          <div className={isMobile ? 'space-y-3' : 'flex h-screen'}>
+          <div className={isMobile ? 'space-y-2' : 'flex h-screen'}>
 
           {/* ── Desktop sidebar ── */}
           {!isMobile && (
@@ -452,9 +454,9 @@ export default function PriorityDashboard() {
 
           {/* ── Main content ── */}
           <div className={`flex-1 min-w-0 overflow-y-auto ${isMobile ? '' : 'p-3 md:p-6'}`}>
-          <div className={isMobile ? 'space-y-3' : 'max-w-7xl mx-auto space-y-6'}>
+          <div className={isMobile ? 'space-y-2' : 'max-w-7xl mx-auto space-y-6'}>
           {/* Header */}
-          <div className={`flex items-center justify-between ${isMobile ? 'gap-2 mb-2' : 'gap-2'}`}>
+          <div className={`flex items-center justify-between ${isMobile ? 'gap-2' : 'gap-2'}`}>
             <div className={`flex items-center ${isMobile ? 'gap-2' : 'gap-2 md:gap-3'}`}>
               {/* Mobile nav trigger */}
               {isMobile && (
@@ -471,15 +473,28 @@ export default function PriorityDashboard() {
                   </SheetContent>
                 </Sheet>
               )}
-              <div className={`flex items-center justify-center bg-red-600/20 rounded-lg border-2 border-red-600 ${isMobile ? 'w-9 h-9' : 'w-10 h-10 md:w-12 md:h-12'}`}>
-                <Flame className={isMobile ? 'w-4 h-4 text-red-500' : 'w-5 h-5 md:w-6 md:h-6 text-red-500'} />
-              </div>
+              {!isMobile && (
+                <div className="flex items-center justify-center bg-red-600/20 rounded-lg border-2 border-red-600 w-10 h-10 md:w-12 md:h-12">
+                  <Flame className="w-5 h-5 md:w-6 md:h-6 text-red-500" />
+                </div>
+              )}
               <div>
-                <h1 className={`font-bold text-white ${isMobile ? 'text-lg' : 'text-xl md:text-3xl'}`}>WORKLOAD</h1>
-                <p className={`text-gray-400 ${isMobile ? 'text-xs' : 'text-xs md:text-sm'}`}>
-                   <span className="md:hidden">{activePriorityTasks.length} tasks • {activePriorityCount} priority{urgentCount > 0 ? ` • ${urgentCount} urgent` : ''}</span>
-                   <span className="hidden md:inline">{activePriorityTasks.length} tasks • {activePriorityCount} priority{urgentCount > 0 ? ` • ${urgentCount} urgent (≤14 days)` : ''}</span>
-                </p>
+                <h1 className={`font-bold text-white ${isMobile ? 'text-base' : 'text-xl md:text-3xl'}`}>WORKLOAD</h1>
+                {/* Mobile: collapsible stats summary */}
+                {isMobile ? (
+                  <button
+                    type="button"
+                    onClick={() => setMobileStatsExpanded(v => !v)}
+                    className="text-gray-400 text-xs flex items-center gap-1"
+                  >
+                    {activePriorityTasks.length} tasks • {activePriorityCount} priority{urgentCount > 0 ? ` • ${urgentCount} urgent` : ''}
+                    <ChevronDown className={cn("w-3 h-3 transition-transform", mobileStatsExpanded && "rotate-180")} />
+                  </button>
+                ) : (
+                  <p className="text-gray-400 text-xs md:text-sm">
+                    {activePriorityTasks.length} tasks • {activePriorityCount} priority{urgentCount > 0 ? ` • ${urgentCount} urgent (≤14 days)` : ''}
+                  </p>
+                )}
               </div>
             </div>
             <Button
@@ -489,14 +504,32 @@ export default function PriorityDashboard() {
                 setIsRefreshing(false);
               }}
               variant="outline"
-              className={`border-gray-700 text-white gap-2 ${isMobile ? 'h-[44px] text-sm px-3' : ''}`}
-              size={isMobile ? undefined : 'sm'}
+              className={`border-gray-700 text-white gap-2 ${isMobile ? 'h-9 text-xs px-2' : ''}`}
+              size={isMobile ? 'sm' : 'sm'}
               disabled={isRefreshing}
             >
               <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
           </div>
+
+          {/* Mobile expanded stats */}
+          {isMobile && mobileStatsExpanded && (
+            <div className="grid grid-cols-3 gap-2 pb-1">
+              <div className="bg-gray-800/60 rounded-lg px-3 py-2 text-center">
+                <p className="text-lg font-bold text-white tabular-nums">{activePriorityTasks.length}</p>
+                <p className="text-[10px] text-gray-400">Total</p>
+              </div>
+              <div className="bg-gray-800/60 rounded-lg px-3 py-2 text-center">
+                <p className="text-lg font-bold text-red-400 tabular-nums">{activePriorityCount}</p>
+                <p className="text-[10px] text-gray-400">Priority</p>
+              </div>
+              <div className="bg-gray-800/60 rounded-lg px-3 py-2 text-center">
+                <p className="text-lg font-bold text-amber-400 tabular-nums">{urgentCount}</p>
+                <p className="text-[10px] text-gray-400">Urgent</p>
+              </div>
+            </div>
+          )}
 
           {/* Mobile Filter Trigger Bar */}
           <MobileFilterTriggerBar

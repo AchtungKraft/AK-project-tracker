@@ -115,7 +115,7 @@ export default function WorkloadTaskRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 px-2 py-[5px] hover:bg-gray-800/40 transition-colors group/row border-b border-gray-800/20 last:border-b-0",
+        "flex items-center gap-1.5 px-1 sm:px-2 py-[5px] hover:bg-gray-800/40 transition-colors group/row border-b border-gray-800/20 last:border-b-0",
       )}
     >
       {/* Selection checkbox */}

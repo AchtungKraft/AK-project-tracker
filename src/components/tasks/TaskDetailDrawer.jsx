@@ -320,6 +320,16 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
     staleTime: 60000,
   });
 
+  // Pre-compute dependency data for mobile conditional rendering
+  const selectedTasks = useMemo(() =>
+    (task?.dependencies || []).map(id => allProjectTasks.find(t => t.id === id)).filter(Boolean),
+    [task?.dependencies, allProjectTasks]
+  );
+  const successorTasks = useMemo(() =>
+    allProjectTasks.filter(t => t.id !== task?.id && t.dependencies?.includes(task?.id)),
+    [allProjectTasks, task?.id]
+  );
+
   const project = projects.find(p => p.id === task?.project_id);
   const category = categories.find(c => c.id === task?.category_id);
   const categoryPath = getCategoryPath(task?.category_id, categories);
@@ -385,50 +395,108 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           if (showDeleteConfirm) e.preventDefault();
         }}
       >
-        {/* ── HEADER BLOCK: metadata → project → title → description ── */}
+        {/* ── HEADER BLOCK: execution-first on mobile ── */}
         <SheetHeader className="pb-0 shrink-0 space-y-0">
-          {/* Muted metadata row — top line */}
-          {!editing && (
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
-              {task?.operational_state && (
-                <span className="flex items-center gap-1">
-                  <span className="text-[9px] text-gray-600 uppercase tracking-wide">Ops:</span>
+          {!editing && isMobile ? (
+            /* ── MOBILE: execution-first structured metadata ── */
+            <>
+              {/* Status + Operational State — top line */}
+              <div className="flex items-center gap-2 mb-1">
+                {status && (
+                  <Badge style={{ backgroundColor: status.color }} className="text-white text-xs px-2 py-0.5 h-5">{status.label}</Badge>
+                )}
+                {task?.operational_state && (
                   <OperationalStateBadge
                     state={task.operational_state}
                     blockingReasons={task.blocking_reasons || []}
                     isOverride={!!task.manual_override}
                   />
-                </span>
+                )}
+              </div>
+              {/* Task Name — dominant */}
+              <SheetTitle className="text-white text-lg font-bold leading-tight">{task?.name}</SheetTitle>
+              {/* Structured metadata rows */}
+              <div className="mt-2 space-y-1">
+                {project && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-gray-500 uppercase tracking-wider w-16 shrink-0">Project</span>
+                    <span className="text-sm text-gray-200 truncate text-right flex-1 min-w-0">{project.name}</span>
+                  </div>
+                )}
+                {(() => {
+                  const bucket = projectBuckets.find(b => b.id === task?.kanban_bucket_id);
+                  return bucket ? (
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-gray-500 uppercase tracking-wider w-16 shrink-0">Phase</span>
+                      <span className="text-sm text-gray-200 truncate text-right flex-1 min-w-0">{bucket.name}</span>
+                    </div>
+                  ) : null;
+                })()}
+                {assignedMember && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-gray-500 uppercase tracking-wider w-16 shrink-0">Assignee</span>
+                    <span className="text-sm text-gray-200 text-right">{assignedMember.full_name}</span>
+                  </div>
+                )}
+                {task?.due_date && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-gray-500 uppercase tracking-wider w-16 shrink-0">Due</span>
+                    <span className="text-sm text-gray-200 text-right">{format(new Date(task.due_date), 'MMM d, yyyy')}</span>
+                  </div>
+                )}
+                {(task?.estimated_hours || task?.actual_hours) && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-gray-500 uppercase tracking-wider w-16 shrink-0">Time</span>
+                    <span className="text-sm text-gray-200 flex items-center gap-2">
+                      {task.estimated_hours && <span>Est: {formatHours(task.estimated_hours)}</span>}
+                      {task.actual_hours && <span>Actual: {formatHours(task.actual_hours)}</span>}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : !editing ? (
+            /* ── DESKTOP: original compact metadata ── */
+            <>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
+                {task?.operational_state && (
+                  <span className="flex items-center gap-1">
+                    <span className="text-[9px] text-gray-600 uppercase tracking-wide">Ops:</span>
+                    <OperationalStateBadge
+                      state={task.operational_state}
+                      blockingReasons={task.blocking_reasons || []}
+                      isOverride={!!task.manual_override}
+                    />
+                  </span>
+                )}
+                {status && (
+                  <span className="flex items-center gap-1">
+                    <span className="text-[9px] text-gray-600 uppercase tracking-wide">Status:</span>
+                    <Badge style={{ backgroundColor: status.color }} className="text-white text-[10px] px-1.5 py-0 h-4 leading-none">{status.label}</Badge>
+                  </span>
+                )}
+                {assignedMember && (
+                  <span className="text-xs text-gray-500">{assignedMember.full_name}</span>
+                )}
+                {categoryPath && (
+                  <span className="text-xs text-gray-500">{categoryPath}</span>
+                )}
+                {(() => {
+                  const bucket = projectBuckets.find(b => b.id === task?.kanban_bucket_id);
+                  return bucket ? (
+                    <span className="text-xs text-gray-500">{bucket.name}</span>
+                  ) : null;
+                })()}
+                {task?.due_date && (
+                  <span className="text-xs text-gray-500">{format(new Date(task.due_date), 'MMM d')}</span>
+                )}
+              </div>
+              {project && (
+                <p className="text-xs text-gray-500">{project.name}</p>
               )}
-              {status && (
-                <span className="flex items-center gap-1">
-                  <span className="text-[9px] text-gray-600 uppercase tracking-wide">Status:</span>
-                  <Badge style={{ backgroundColor: status.color }} className="text-white text-[10px] px-1.5 py-0 h-4 leading-none">{status.label}</Badge>
-                </span>
-              )}
-              {assignedMember && (
-                <span className="text-xs text-gray-500">{assignedMember.full_name}</span>
-              )}
-              {categoryPath && (
-                <span className="text-xs text-gray-500">{categoryPath}</span>
-              )}
-              {(() => {
-                const bucket = projectBuckets.find(b => b.id === task?.kanban_bucket_id);
-                return bucket ? (
-                  <span className="text-xs text-gray-500">{bucket.name}</span>
-                ) : null;
-              })()}
-              {task?.due_date && (
-                <span className="text-xs text-gray-500">{format(new Date(task.due_date), 'MMM d')}</span>
-              )}
-            </div>
-          )}
-          {/* Project context */}
-          {project && !editing && (
-            <p className="text-xs text-gray-500">{project.name}</p>
-          )}
-          {/* Dominant title */}
-          <SheetTitle className="text-white text-xl font-bold leading-tight mt-1">{task?.name}</SheetTitle>
+              <SheetTitle className="text-white text-xl font-bold leading-tight mt-1">{task?.name}</SheetTitle>
+            </>
+          ) : null}
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto pt-0 pb-3">
@@ -436,8 +504,8 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           {/* Description — immediately under title, tight to title */}
           {!editing && <DescriptionBlock text={task?.description} />}
 
-          {/* Time tracking display — lightweight metadata */}
-          {!editing && (task?.estimated_hours || task?.actual_hours) && (
+          {/* Time tracking display — desktop only (mobile shows in header) */}
+          {!editing && !isMobile && (task?.estimated_hours || task?.actual_hours) && (
             <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
               <Clock className="w-3 h-3 shrink-0" />
               {task.estimated_hours && <span>Est: {formatHours(task.estimated_hours)}</span>}
@@ -463,6 +531,78 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
 
           {/* Breathing room before divider */}
           {!editing && <div className="mt-3" />}
+
+          {/* ── MOBILE: Execution-first section order ── */}
+          {!editing && isMobile && (
+            <>
+              {/* Dependencies — only if they exist */}
+              {(selectedTasks.length > 0 || successorTasks.length > 0) && (
+                <>
+                  <section className="mb-4">
+                    <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">Dependencies</h3>
+                    <TaskDependencyEditor
+                      taskId={task?.id}
+                      projectId={task?.project_id}
+                      dependencies={depFormData !== null ? depFormData : (task?.dependencies || [])}
+                      allTasks={allProjectTasks}
+                      buckets={projectBuckets}
+                      teamMembers={teamMembers}
+                      onChange={(newDeps) => {
+                        setDepFormData(newDeps);
+                        updateMutation.mutate({ dependencies: newDeps });
+                        setDepFormData(null);
+                      }}
+                    />
+                  </section>
+                  <hr className="border-gray-700/50 mb-4" />
+                </>
+              )}
+
+              {/* Checklist */}
+              {checklistItems.length > 0 ? (
+                <section className="mb-4">
+                  <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">Checklist</h3>
+                  <ExecutionChecklistSection taskId={task?.id} variant="full" />
+                  {incompleteChecklistCount === 0 && (
+                    <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-md bg-green-900/30 border border-green-800/40">
+                      <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                      <span className="text-sm text-green-300 font-medium">Ready to complete</span>
+                    </div>
+                  )}
+                </section>
+              ) : (
+                <div className="mb-3">
+                  <ExecutionChecklistSection taskId={task?.id} variant="empty-cta" />
+                </div>
+              )}
+
+              <hr className="border-gray-700/50 mb-4" />
+
+              {/* Procedures / Build Knowledge */}
+              <section className="mb-3">
+                <TaskKnowledgeSection taskId={task?.id} />
+              </section>
+
+              <hr className="border-gray-700/50 mb-4" />
+
+              {/* Parts */}
+              <section className="mb-3">
+                <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">Parts</h3>
+                <TaskPartsSection task={task} project={project} />
+              </section>
+
+              <hr className="border-gray-700/50 mb-4" />
+
+              {/* Client Feedback */}
+              <ClientFeedbackLinks taskId={task?.id} />
+
+              {/* Comments — last */}
+              <section className="mb-4">
+                <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">Comments</h3>
+                <TaskCommentsSection taskId={task?.id} initialMaxVisible={2} />
+              </section>
+            </>
+          )}
 
           {/* ── EDIT FORM — replaces header content inline when editing ── */}
           {editing && (
@@ -599,71 +739,76 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
             </section>
           )}
 
-          <hr className="border-gray-700/50 mb-4" />
+          {/* ── DESKTOP section order (mobile renders above, before edit form) ── */}
+          {!editing && !isMobile && (
+            <>
+              <hr className="border-gray-700/50 mb-4" />
 
-          {/* ── CHECKLIST — secondary, supports the task ── */}
-          {checklistItems.length > 0 ? (
-            <section className="mb-5">
-              <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">Checklist</h3>
-              <ExecutionChecklistSection taskId={task?.id} variant="full" />
-              {incompleteChecklistCount === 0 && (
-                <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-md bg-green-900/30 border border-green-800/40">
-                  <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                  <span className="text-sm text-green-300 font-medium">Ready to complete</span>
+              {/* ── CHECKLIST ── */}
+              {checklistItems.length > 0 ? (
+                <section className="mb-5">
+                  <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">Checklist</h3>
+                  <ExecutionChecklistSection taskId={task?.id} variant="full" />
+                  {incompleteChecklistCount === 0 && (
+                    <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-md bg-green-900/30 border border-green-800/40">
+                      <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                      <span className="text-sm text-green-300 font-medium">Ready to complete</span>
+                    </div>
+                  )}
+                </section>
+              ) : (
+                <div className="mb-3">
+                  <ExecutionChecklistSection taskId={task?.id} variant="empty-cta" />
                 </div>
               )}
-            </section>
-          ) : (
-            <div className="mb-3">
-              <ExecutionChecklistSection taskId={task?.id} variant="empty-cta" />
-            </div>
+
+              {/* ── CLIENT FEEDBACK ── */}
+              <ClientFeedbackLinks taskId={task?.id} />
+
+              <hr className="border-gray-700/50 mb-4" />
+
+              {/* ── BUILD KNOWLEDGE ── */}
+              <section className="mb-3">
+                <TaskKnowledgeSection taskId={task?.id} />
+              </section>
+
+              <hr className="border-gray-700/50 mb-4" />
+
+              {/* ── DEPENDENCIES ── */}
+              <section className="mb-3">
+                <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">Dependencies</h3>
+                <TaskDependencyEditor
+                  taskId={task?.id}
+                  projectId={task?.project_id}
+                  dependencies={depFormData !== null ? depFormData : (task?.dependencies || [])}
+                  allTasks={allProjectTasks}
+                  buckets={projectBuckets}
+                  teamMembers={teamMembers}
+                  onChange={(newDeps) => {
+                    setDepFormData(newDeps);
+                    updateMutation.mutate({ dependencies: newDeps });
+                    setDepFormData(null);
+                  }}
+                />
+              </section>
+
+              <hr className="border-gray-700/50 mb-4" />
+
+              {/* ── PARTS ── */}
+              <section className="mb-3">
+                <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">Parts</h3>
+                <TaskPartsSection task={task} project={project} />
+              </section>
+
+              <hr className="border-gray-700/50 mb-4" />
+
+              {/* ── COMMENTS ── */}
+              <section className="mb-4">
+                <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">Comments</h3>
+                <TaskCommentsSection taskId={task?.id} initialMaxVisible={2} />
+              </section>
+            </>
           )}
-
-          {/* ── CLIENT FEEDBACK ── */}
-          <ClientFeedbackLinks taskId={task?.id} />
-
-          <hr className="border-gray-700/50 mb-4" />
-
-          {/* ── BUILD KNOWLEDGE ── */}
-          <section className="mb-3">
-            <TaskKnowledgeSection taskId={task?.id} />
-          </section>
-
-          <hr className="border-gray-700/50 mb-4" />
-
-          {/* ── DEPENDENCIES ── */}
-          <section className="mb-3">
-            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">Dependencies</h3>
-            <TaskDependencyEditor
-              taskId={task?.id}
-              projectId={task?.project_id}
-              dependencies={depFormData !== null ? depFormData : (task?.dependencies || [])}
-              allTasks={allProjectTasks}
-              buckets={projectBuckets}
-              teamMembers={teamMembers}
-              onChange={(newDeps) => {
-                setDepFormData(newDeps);
-                updateMutation.mutate({ dependencies: newDeps });
-                setDepFormData(null);
-              }}
-            />
-          </section>
-
-          <hr className="border-gray-700/50 mb-4" />
-
-          {/* ── PARTS ── */}
-          <section className="mb-3">
-            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">Parts</h3>
-            <TaskPartsSection task={task} project={project} />
-          </section>
-
-          <hr className="border-gray-700/50 mb-4" />
-
-          {/* ── COMMENTS ── */}
-          <section className="mb-4">
-            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">Comments</h3>
-            <TaskCommentsSection taskId={task?.id} initialMaxVisible={2} />
-          </section>
 
         </div>
 
