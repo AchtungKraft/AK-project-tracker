@@ -100,15 +100,28 @@ export default function buildProjectWorkPacketHTML(data) {
 
     let checklistHtml = "";
     if (includeChecklists && checklist.length > 0) {
-      const visibleChecklist = includeCompletedChecklists ? checklist : checklist.filter(c => !c.is_complete);
-      if (visibleChecklist.length > 0) {
-        const items = visibleChecklist.map(c => {
-          const check = c.is_complete ? "&#9745;" : "&#9744;";
-          const style = c.is_complete ? "text-decoration:line-through;color:#9ca3af;" : "";
-          return `<div style="margin-left:20px;font-size:11px;${style}">${check} ${esc(c.title)}</div>`;
-        }).join("");
+      const openItems = checklist.filter(c => !c.is_complete);
+      const completedItems = checklist.filter(c => c.is_complete);
+      const hasOpen = openItems.length > 0;
+      const hasCompleted = completedItems.length > 0;
+
+      if (hasOpen || (includeCompletedChecklists && hasCompleted)) {
+        let itemsHtml = "";
+        // Open items first
+        if (hasOpen) {
+          itemsHtml += openItems.map(c =>
+            `<div style="margin-left:20px;font-size:11px;">&#9744; ${esc(c.title)}</div>`
+          ).join("");
+        }
+        // Completed items in a separate group
+        if (includeCompletedChecklists && hasCompleted) {
+          itemsHtml += `<div style="margin-left:20px;margin-top:3px;font-size:9px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.05em;">Completed (${completedItems.length})</div>`;
+          itemsHtml += completedItems.map(c =>
+            `<div style="margin-left:20px;font-size:11px;text-decoration:line-through;color:#9ca3af;">&#9745; ${esc(c.title)}</div>`
+          ).join("");
+        }
         const summaryText = `${checkDone}/${checkTotal} complete`;
-        checklistHtml = `<div style="margin-top:3px;">${items}<div style="margin-left:20px;font-size:9px;color:#9ca3af;margin-top:1px;">${summaryText}</div></div>`;
+        checklistHtml = `<div style="margin-top:3px;">${itemsHtml}<div style="margin-left:20px;font-size:9px;color:#9ca3af;margin-top:1px;">${summaryText}</div></div>`;
       }
     }
 

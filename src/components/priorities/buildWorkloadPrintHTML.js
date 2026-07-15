@@ -131,21 +131,32 @@ function renderTaskRow(task, teamMemberMap, statusMap, blockedSet, fields, data)
     }
   }
 
-  // Checklists — open items only by default; completed items only when explicitly requested
+  // Checklists — open items only by default; completed items in separate group when requested
   let checklistHtml = "";
   if (fields.showChecklist) {
     const allItems = (data.checklistsByTaskId || {})[task.id] || [];
+    const openItems = allItems.filter(c => !c.is_complete);
+    const completedItems = allItems.filter(c => c.is_complete);
     const includeCompleted = fields.showCompletedChecklist;
-    const visibleItems = includeCompleted ? allItems : allItems.filter(c => !c.is_complete);
-    if (visibleItems.length > 0) {
-      const doneCount = allItems.filter(c => c.is_complete).length;
+    const hasOpen = openItems.length > 0;
+    const hasCompleted = completedItems.length > 0;
+
+    if (hasOpen || (includeCompleted && hasCompleted)) {
+      let itemsHtml = "";
+      if (hasOpen) {
+        itemsHtml += openItems.map(c =>
+          `<div style="margin-left:16px;font-size:10px;">&#9744; ${esc(c.title)}</div>`
+        ).join("");
+      }
+      if (includeCompleted && hasCompleted) {
+        itemsHtml += `<div style="margin-left:16px;margin-top:2px;font-size:9px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.05em;">Completed (${completedItems.length})</div>`;
+        itemsHtml += completedItems.map(c =>
+          `<div style="margin-left:16px;font-size:10px;text-decoration:line-through;color:#9ca3af;">&#9745; ${esc(c.title)}</div>`
+        ).join("");
+      }
+      const doneCount = completedItems.length;
       const summaryText = `${doneCount}/${allItems.length} complete`;
-      checklistHtml = visibleItems.map(c => {
-        const check = c.is_complete ? "&#9745;" : "&#9744;";
-        const style = c.is_complete ? "text-decoration:line-through;color:#9ca3af;" : "";
-        return `<div style="margin-left:16px;font-size:10px;${style}">${check} ${esc(c.title)}</div>`;
-      }).join("");
-      checklistHtml = `<div style="margin-top:2px;">${checklistHtml}<div style="margin-left:16px;font-size:9px;color:#9ca3af;margin-top:1px;">${summaryText}</div></div>`;
+      checklistHtml = `<div style="margin-top:2px;">${itemsHtml}<div style="margin-left:16px;font-size:9px;color:#9ca3af;margin-top:1px;">${summaryText}</div></div>`;
     }
   }
 

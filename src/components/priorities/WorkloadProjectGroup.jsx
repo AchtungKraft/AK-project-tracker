@@ -431,15 +431,19 @@ function InlineChecklistItems({ items, onToggle, showCompleted = false }) {
           </div>
         ))}
 
-        {/* Completed items — separated, only when toggled */}
+        {/* Completed items — separated group, only when toggled */}
         {showCompleted && completedItems.length > 0 && (
-          <div className="mt-px">
+          <div className="mt-1">
+            <div className="text-[9px] text-gray-600 uppercase tracking-wider pl-3 pb-0.5">
+              Completed ({completedItems.length})
+            </div>
             {completedItems.map(item => (
               <div key={item.id} className="flex items-center gap-1.5 py-px pl-3 relative">
                 <div className="absolute left-0 top-1/2 w-2 h-px bg-gray-700/40" />
                 <button
                   onClick={(e) => { e.stopPropagation(); if (onToggle) onToggle(item); }}
-                  className="shrink-0 w-2.5 h-2.5 rounded-[3px] bg-green-800/40 border border-green-700/50 text-green-500 flex items-center justify-center transition-colors"
+                  className="shrink-0 w-2.5 h-2.5 rounded-[3px] bg-green-800/40 border border-green-700/50 text-green-500 flex items-center justify-center transition-colors hover:border-green-500"
+                  title="Uncheck to reopen"
                 >
                   <Check className="w-2 h-2" />
                 </button>
