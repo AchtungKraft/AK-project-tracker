@@ -43,9 +43,11 @@ export default function TaskChecklistSection({ taskId }) {
     return [...incomplete, ...complete];
   }, [items]);
 
-  // Invalidate entire taskChecklistItems tree — covers task, shop, and print scopes
+  // Invalidate entire taskChecklistItems tree — covers task, shop, print, and workload scopes
   const invalidateChecklist = () => {
     queryClient.invalidateQueries({ queryKey: ['taskChecklistItems'] });
+    queryClient.invalidateQueries({ queryKey: ['projectChecklistItems'] });
+    queryClient.invalidateQueries({ queryKey: ['workloadChecklists'] });
   };
 
   const [isReordering, setIsReordering] = useState(false);

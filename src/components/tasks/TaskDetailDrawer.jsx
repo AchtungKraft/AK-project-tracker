@@ -22,7 +22,7 @@ import TaskPartsSection from "./TaskPartsSection";
 import TaskKnowledgeSection from "@/components/knowledge/TaskKnowledgeSection";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { getMobileInputClass, getMobileTextareaClass, getMobileSelectClass } from "@/components/mobile/MobileFormStyles";
-import { TASK_CACHE_KEYS } from "./useTaskInteraction";
+import { TASK_CACHE_KEYS, invalidateProjectCaches } from "./useTaskInteraction";
 import { useTaskInteractionContext } from "./TaskInteractionProvider";
 import TaskCompletionModal from "./TaskCompletionModal";
 import TimeEstimateInput, { formatHours } from "./TimeEstimateInput";
@@ -234,20 +234,8 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
 
   const updateMutation = useMutation({
     mutationFn: (data) => base44.entities.Task.update(task.id, data),
-    onSuccess: (_, variables) => {
-      // Use centralized cache keys
-      TASK_CACHE_KEYS.forEach(key => {
-        queryClient.invalidateQueries({ queryKey: key });
-      });
-      queryClient.invalidateQueries({ queryKey: ['myTasks'] });
-      queryClient.invalidateQueries({ queryKey: ['allTasks'] });
-      // Invalidate workflow cache when dependencies, status, or phase change
-      if (variables.dependencies !== undefined || variables.status_id !== undefined || variables.kanban_bucket_id !== undefined) {
-        queryClient.invalidateQueries({ queryKey: ['projectWorkflow', task?.project_id] });
-      }
-      if (variables.kanban_bucket_id !== undefined) {
-        queryClient.invalidateQueries({ queryKey: ['workloadBuckets'] });
-      }
+    onSuccess: () => {
+      invalidateProjectCaches(queryClient, task?.project_id || projectId);
       setEditing(false);
       toast({ title: 'Task updated successfully' });
     },
@@ -259,13 +247,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
   const deleteMutation = useMutation({
     mutationFn: () => base44.entities.Task.delete(task.id),
     onSuccess: () => {
-      // Use centralized cache keys
-      TASK_CACHE_KEYS.forEach(key => {
-        queryClient.invalidateQueries({ queryKey: key });
-      });
-      queryClient.invalidateQueries({ queryKey: ['myTasks'] });
-      queryClient.invalidateQueries({ queryKey: ['allTasks'] });
-      queryClient.invalidateQueries({ queryKey: ['projectTasks', projectId] });
+      invalidateProjectCaches(queryClient, task?.project_id || projectId);
       setShowDeleteConfirm(false);
       toast({ title: 'Task deleted successfully' });
       onClose();
@@ -332,9 +314,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
       setLiveDeps(newDeps);
     },
     onSuccess: () => {
-      TASK_CACHE_KEYS.forEach(key => queryClient.invalidateQueries({ queryKey: key }));
-      queryClient.invalidateQueries({ queryKey: ['projectWorkflow', task?.project_id] });
-      queryClient.invalidateQueries({ queryKey: ['projectTasks', task?.project_id] });
+      invalidateProjectCaches(queryClient, task?.project_id);
     },
     onError: (err, newDeps, context) => {
       // Rollback: revert to what was there before
@@ -389,9 +369,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
       return base44.entities.Task.update(task.id, updates);
     },
     onSuccess: () => {
-      TASK_CACHE_KEYS.forEach(key => queryClient.invalidateQueries({ queryKey: key }));
-      queryClient.invalidateQueries({ queryKey: ['myTasks'] });
-      queryClient.invalidateQueries({ queryKey: ['allTasks'] });
+      invalidateProjectCaches(queryClient, task?.project_id || projectId);
       toast({ title: 'Task completed' });
       setShowCompleteConfirm(false);
       onClose();
@@ -408,6 +386,8 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           // Refresh checklist data in all parent views when drawer closes
           queryClient.invalidateQueries({ queryKey: ['taskChecklistItems'] });
           queryClient.invalidateQueries({ queryKey: ['executionChecklist'] });
+          queryClient.invalidateQueries({ queryKey: ['projectChecklistItems'] });
+          queryClient.invalidateQueries({ queryKey: ['workloadChecklists'] });
           onClose();
         }
       }} 

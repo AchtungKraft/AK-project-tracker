@@ -19,8 +19,48 @@ export const TASK_CACHE_KEYS = [
   ['projectTasks'],
   ['priorityTasks'],
   ['allTasksForCalendar'],
+  ['allTasks'],
   ['task'], // Individual task queries
 ];
+
+/**
+ * Canonical query key helpers — every component must use these
+ * to avoid key mismatches between views.
+ */
+export const executionKeys = {
+  projectTasks: (pid) => ['projectTasks', pid],
+  projectBuckets: (pid) => ['projectBuckets', pid],
+  projectChecklists: (pid) => ['projectChecklistItems', pid],
+  projectWorkflow: (pid) => ['projectWorkflow', pid],
+  allTasks: () => ['allTasks'],
+  allPhases: () => ['allPhases'],
+  allChecklists: () => ['workloadChecklists'],
+};
+
+/**
+ * Invalidate all task-related caches for a specific project.
+ * Call this after any task/phase/checklist mutation.
+ */
+export function invalidateProjectCaches(queryClient, projectId) {
+  // Task caches
+  TASK_CACHE_KEYS.forEach(key => queryClient.invalidateQueries({ queryKey: key }));
+  queryClient.invalidateQueries({ queryKey: ['myTasks'] });
+  
+  // Project-scoped caches
+  if (projectId) {
+    queryClient.invalidateQueries({ queryKey: executionKeys.projectTasks(projectId) });
+    queryClient.invalidateQueries({ queryKey: ['tasks', projectId] });
+    queryClient.invalidateQueries({ queryKey: executionKeys.projectBuckets(projectId) });
+    queryClient.invalidateQueries({ queryKey: ['kanbanBuckets', projectId] });
+    queryClient.invalidateQueries({ queryKey: executionKeys.projectChecklists(projectId) });
+    queryClient.invalidateQueries({ queryKey: executionKeys.projectWorkflow(projectId) });
+    queryClient.invalidateQueries({ queryKey: ['projectTaskComments', projectId] });
+  }
+  
+  // Global caches used by Global Workload
+  queryClient.invalidateQueries({ queryKey: executionKeys.allChecklists() });
+  queryClient.invalidateQueries({ queryKey: executionKeys.allPhases() });
+}
 
 /**
  * useTaskInteraction - THE ONLY allowed interface for task mutations
@@ -119,8 +159,12 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
     TASK_CACHE_KEYS.forEach(key => {
       queryClient.invalidateQueries({ queryKey: key });
     });
-    // Invalidate workflow caches so UI picks up automation-resolved state
+    queryClient.invalidateQueries({ queryKey: ['myTasks'] });
     queryClient.invalidateQueries({ queryKey: ['projectWorkflow'] });
+    queryClient.invalidateQueries({ queryKey: ['projectChecklistItems'] });
+    queryClient.invalidateQueries({ queryKey: ['workloadChecklists'] });
+    queryClient.invalidateQueries({ queryKey: ['projectBuckets'] });
+    queryClient.invalidateQueries({ queryKey: ['kanbanBuckets'] });
   }, [queryClient]);
 
   const optimisticUpdateAllCaches = useCallback((taskId, updates, mutationTimestamp) => {

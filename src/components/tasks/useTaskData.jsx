@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
-import { TASK_CACHE_KEYS } from "./useTaskInteraction";
+import { TASK_CACHE_KEYS, invalidateProjectCaches } from "./useTaskInteraction";
 import { normalizeTask, normalizeTasks } from "./normalizeTask";
 import { 
   incrementTaskVersion, 
@@ -26,8 +26,9 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
   const taskVersionRef = useRef(getTaskVersion());
 
   // Fetch tasks based on scope - normalize after fetch
+  // Use canonical key ['projectTasks', pid] for project scope to match ProjectDetail
   const { data: tasks = [], isLoading: tasksLoading } = useQuery({
-    queryKey: scope === 'project' ? ['tasks', projectId] : ['allTasks'],
+    queryKey: scope === 'project' ? ['projectTasks', projectId] : ['allTasks'],
     queryFn: async () => {
       let rawTasks;
       if (scope === 'project' && projectId) {
@@ -109,11 +110,8 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
     mutationFn: ({ id, data, mutationTimestamp }) => base44.entities.Task.update(id, data),
     onMutate: async ({ id, data, mutationTimestamp }) => {
       // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ['tasks'] });
       await queryClient.cancelQueries({ queryKey: ['allTasks'] });
-      // priorityTasks derived from allTasks — no separate cache to cancel
       if (projectId) {
-        await queryClient.cancelQueries({ queryKey: ['tasks', projectId] });
         await queryClient.cancelQueries({ queryKey: ['projectTasks', projectId] });
       }
 
@@ -128,8 +126,7 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
 
       // Snapshot previous values
       const previousAllTasks = queryClient.getQueryData(['allTasks']);
-      const previousProjectTasks = projectId ? queryClient.getQueryData(['tasks', projectId]) : null;
-      // priorityTasks derived from allTasks — no separate snapshot needed
+      const previousProjectTasks = projectId ? queryClient.getQueryData(['projectTasks', projectId]) : null;
 
       // Optimistically update all caches with normalization
       const updateCache = (old) => {
@@ -139,7 +136,6 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
 
       queryClient.setQueryData(['allTasks'], updateCache);
       if (projectId) {
-        queryClient.setQueryData(['tasks', projectId], updateCache);
         queryClient.setQueryData(['projectTasks', projectId], updateCache);
       }
 
@@ -151,13 +147,11 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
         queryClient.setQueryData(['allTasks'], context.previousAllTasks);
       }
       if (context?.previousProjectTasks && projectId) {
-        queryClient.setQueryData(['tasks', projectId], context.previousProjectTasks);
+        queryClient.setQueryData(['projectTasks', projectId], context.previousProjectTasks);
       }
       toast.error('Failed to update task');
     },
     onSuccess: (updatedTask, variables) => {
-      console.log("TASK UPDATED", variables.id, variables.data);
-      
       // Increment version on successful mutation
       taskVersionRef.current = incrementTaskVersion();
       
@@ -168,26 +162,13 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
         source: 'useTaskData',
       });
       
-      // Use centralized cache keys
-      TASK_CACHE_KEYS.forEach(key => {
-        queryClient.invalidateQueries({ queryKey: key });
-      });
+      // Use canonical invalidation — covers both Project and Global Workload
+      invalidateProjectCaches(queryClient, projectId);
       
-      // Additional keys not in centralized list
-      queryClient.invalidateQueries({ queryKey: ['myTasks'] });
-      queryClient.invalidateQueries({ queryKey: ['allTasks'] });
-      
-      // Project-specific queries
-      if (projectId) {
-        queryClient.invalidateQueries({ queryKey: ['tasks', projectId] });
-        queryClient.invalidateQueries({ queryKey: ['projectTasks', projectId] });
-      }
-      
-      // Also invalidate for any project ID in the task data or the updated task
+      // Also invalidate for the task's own project if different from the hook's scope
       const taskProjectId = variables?.data?.project_id || updatedTask?.project_id;
       if (taskProjectId && taskProjectId !== projectId) {
-        queryClient.invalidateQueries({ queryKey: ['tasks', taskProjectId] });
-        queryClient.invalidateQueries({ queryKey: ['projectTasks', taskProjectId] });
+        invalidateProjectCaches(queryClient, taskProjectId);
       }
     },
   });

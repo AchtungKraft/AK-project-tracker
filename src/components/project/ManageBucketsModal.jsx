@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Loader2, Plus, Trash2, Edit2, GripVertical, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import { invalidateProjectCaches } from "@/components/tasks/useTaskInteraction";
 
 export default function ManageBucketsModal({ projectId, onClose }) {
   const queryClient = useQueryClient();
@@ -19,17 +20,23 @@ export default function ManageBucketsModal({ projectId, onClose }) {
   const [editingId, setEditingId] = useState(null);
   const [editingData, setEditingData] = useState({});
 
+  // Use canonical key ['projectBuckets', pid] — matches ProjectDetail
   const { data: buckets = [] } = useQuery({
-    queryKey: ['kanbanBuckets', projectId],
+    queryKey: ['projectBuckets', projectId],
     queryFn: () => base44.entities.ProjectKanbanBucket.filter({ project_id: projectId }),
   });
 
   const sortedBuckets = [...buckets].sort((a, b) => (a.order || 0) - (b.order || 0));
 
+  const invalidateBuckets = () => {
+    // Invalidate all bucket-related caches to sync Project Workload + Global Workload
+    invalidateProjectCaches(queryClient, projectId);
+  };
+
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.ProjectKanbanBucket.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['kanbanBuckets', projectId] });
+      invalidateBuckets();
       setNewBucket({ name: "", color: "#3B82F6", description: "" });
       toast.success('Bucket created');
     },
@@ -38,7 +45,7 @@ export default function ManageBucketsModal({ projectId, onClose }) {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.ProjectKanbanBucket.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['kanbanBuckets', projectId] });
+      invalidateBuckets();
       setEditingId(null);
       toast.success('Bucket updated');
     },
@@ -47,7 +54,7 @@ export default function ManageBucketsModal({ projectId, onClose }) {
   const deleteMutation = useMutation({
     mutationFn: (id) => base44.entities.ProjectKanbanBucket.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['kanbanBuckets', projectId] });
+      invalidateBuckets();
       toast.success('Bucket deleted');
     },
   });

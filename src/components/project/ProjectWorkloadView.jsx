@@ -26,6 +26,7 @@ import ManageBucketsModal from "@/components/project/ManageBucketsModal";
 import TaskDetailDrawer from "@/components/tasks/TaskDetailDrawer";
 import { useToast } from "@/components/ui/use-toast";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
+import { invalidateProjectCaches } from "@/components/tasks/useTaskInteraction";
 
 const DONE_STATUS_ID = "6913f57422230d8c7ee2ef54";
 
@@ -437,16 +438,19 @@ export default function ProjectWorkloadView({
     if (pendingToggles.current.has(item.id)) return;
     pendingToggles.current.add(item.id);
     const newState = !item.is_complete;
-    // Optimistic update
-    queryClient.setQueryData(['projectChecklistItems', projectId], old =>
-      (old || []).map(i => i.id === item.id ? { ...i, is_complete: newState } : i)
-    );
+    // Optimistic update — both project-scoped and global checklist caches
+    const updateCl = (old) => (old || []).map(i => i.id === item.id ? { ...i, is_complete: newState } : i);
+    queryClient.setQueryData(['projectChecklistItems', projectId], updateCl);
+    queryClient.setQueryData(['workloadChecklists'], updateCl);
     try {
       await base44.entities.TaskChecklistItem.update(item.id, { is_complete: newState });
+      // Invalidate both caches to ensure consistency
+      queryClient.invalidateQueries({ queryKey: ['projectChecklistItems', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['workloadChecklists'] });
     } catch {
-      queryClient.setQueryData(['projectChecklistItems', projectId], old =>
-        (old || []).map(i => i.id === item.id ? { ...i, is_complete: !newState } : i)
-      );
+      const rollback = (old) => (old || []).map(i => i.id === item.id ? { ...i, is_complete: !newState } : i);
+      queryClient.setQueryData(['projectChecklistItems', projectId], rollback);
+      queryClient.setQueryData(['workloadChecklists'], rollback);
     } finally {
       pendingToggles.current.delete(item.id);
     }
@@ -454,18 +458,24 @@ export default function ProjectWorkloadView({
 
   // Update mutation for inline edits
   const updateTaskMutation = useMutation({
-    mutationFn: ({ id, data }) => {
-      // Optimistic
-      queryClient.setQueryData(['projectTasks', projectId], old =>
-        (old || []).map(t => t.id === id ? { ...t, ...data } : t)
-      );
-      return base44.entities.Task.update(id, data);
+    mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
+    onMutate: async ({ id, data }) => {
+      // Cancel and snapshot for optimistic update
+      await queryClient.cancelQueries({ queryKey: ['projectTasks', projectId] });
+      await queryClient.cancelQueries({ queryKey: ['allTasks'] });
+      const prev = queryClient.getQueryData(['projectTasks', projectId]);
+      const prevAll = queryClient.getQueryData(['allTasks']);
+      const updateCache = (old) => (old || []).map(t => t.id === id ? { ...t, ...data } : t);
+      queryClient.setQueryData(['projectTasks', projectId], updateCache);
+      queryClient.setQueryData(['allTasks'], updateCache);
+      return { prev, prevAll };
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projectTasks', projectId] });
+      invalidateProjectCaches(queryClient, projectId);
     },
-    onError: () => {
-      queryClient.invalidateQueries({ queryKey: ['projectTasks', projectId] });
+    onError: (_err, _vars, context) => {
+      if (context?.prev) queryClient.setQueryData(['projectTasks', projectId], context.prev);
+      if (context?.prevAll) queryClient.setQueryData(['allTasks'], context.prevAll);
     },
   });
 
@@ -558,7 +568,7 @@ export default function ProjectWorkloadView({
   const handleBulkSetDueDate = useCallback(async (date) => {
     const dateStr = format(date, "yyyy-MM-dd");
     await Promise.all(selectedTasksList.map(t => base44.entities.Task.update(t.id, { due_date: dateStr })));
-    queryClient.invalidateQueries({ queryKey: ['projectTasks', projectId] });
+    invalidateProjectCaches(queryClient, projectId);
     clearSelection();
   }, [selectedTasksList, projectId, queryClient, clearSelection]);
   const handleBulkShiftDates = useCallback(async (days) => {
@@ -569,28 +579,28 @@ export default function ProjectWorkloadView({
       newDate.setDate(newDate.getDate() + days);
       return base44.entities.Task.update(t.id, { due_date: format(newDate, "yyyy-MM-dd") });
     }).filter(Boolean));
-    queryClient.invalidateQueries({ queryKey: ['projectTasks', projectId] });
+    invalidateProjectCaches(queryClient, projectId);
     clearSelection();
   }, [selectedTasksList, projectId, queryClient, clearSelection]);
   const handleBulkAssign = useCallback(async (memberId) => {
     await Promise.all(selectedTasksList.map(t => base44.entities.Task.update(t.id, { assigned_team_member_id: memberId })));
-    queryClient.invalidateQueries({ queryKey: ['projectTasks', projectId] });
+    invalidateProjectCaches(queryClient, projectId);
     clearSelection();
   }, [selectedTasksList, projectId, queryClient, clearSelection]);
   const handleBulkStatus = useCallback(async (statusId) => {
     await Promise.all(selectedTasksList.map(t => base44.entities.Task.update(t.id, { status_id: statusId })));
-    queryClient.invalidateQueries({ queryKey: ['projectTasks', projectId] });
+    invalidateProjectCaches(queryClient, projectId);
     clearSelection();
   }, [selectedTasksList, projectId, queryClient, clearSelection]);
   const handleBulkPriority = useCallback(async () => {
     const allPriority = selectedTasksList.every(t => t.is_priority);
     await Promise.all(selectedTasksList.map(t => base44.entities.Task.update(t.id, { is_priority: !allPriority })));
-    queryClient.invalidateQueries({ queryKey: ['projectTasks', projectId] });
+    invalidateProjectCaches(queryClient, projectId);
     clearSelection();
   }, [selectedTasksList, projectId, queryClient, clearSelection]);
   const handleBulkMovePhase = useCallback(async (bucketId) => {
     await Promise.all(selectedTasksList.map(t => base44.entities.Task.update(t.id, { kanban_bucket_id: bucketId || null })));
-    queryClient.invalidateQueries({ queryKey: ['projectTasks', projectId] });
+    invalidateProjectCaches(queryClient, projectId);
     clearSelection();
   }, [selectedTasksList, projectId, queryClient, clearSelection]);
 

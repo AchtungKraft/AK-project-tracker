@@ -17,6 +17,7 @@ import { useTaskCategories, useTaskStatuses, useAssignableTeamMembers } from "./
 import { TaskCategorySelect, TaskStatusSelect, TaskAssigneeSelect } from "./TaskDropdownSelects";
 import ProjectSelect from "@/components/shared/ProjectSelect";
 import TimeEstimateInput from "./TimeEstimateInput";
+import { invalidateProjectCaches } from "./useTaskInteraction";
 
 export default function CreateTaskModal({ onClose, projectId, defaultAssigneeId, defaultBucketId, defaultIsPriority = false }) {
   const queryClient = useQueryClient();
@@ -68,12 +69,8 @@ export default function CreateTaskModal({ onClose, projectId, defaultAssigneeId,
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Task.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['myTasks'] });
-      queryClient.invalidateQueries({ queryKey: ['allTasks'] });
-      queryClient.invalidateQueries({ queryKey: ['projectTasks'] });
-      queryClient.invalidateQueries({ queryKey: ['priorityTasks'] });
+    onSuccess: (_result, variables) => {
+      invalidateProjectCaches(queryClient, variables.project_id || projectId);
       toast.success('Task created successfully');
       onClose();
     },
