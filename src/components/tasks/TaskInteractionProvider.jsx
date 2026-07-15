@@ -111,6 +111,10 @@ export function TaskInteractionProvider({
         task={interaction.pendingTimeCompletion?.task}
         incompleteChecklistCount={interaction.pendingTimeCompletion?.incompleteChecklistCount || 0}
         isLoading={interaction.isUpdating}
+        onOpenTask={(depTask) => {
+          interaction.cancelTimeCompletion();
+          interaction.openTaskDrawer(depTask);
+        }}
       />
     </TaskInteractionContext.Provider>
   );

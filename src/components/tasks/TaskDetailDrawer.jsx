@@ -911,6 +911,13 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
       task={task}
       isLoading={completeMutation.isPending}
       incompleteChecklistCount={incompleteChecklistCount}
+      onOpenTask={(depTask) => {
+        setShowCompleteConfirm(false);
+        if (taskInteraction?.openTaskDrawer) {
+          onClose();
+          setTimeout(() => taskInteraction.openTaskDrawer(depTask), 100);
+        }
+      }}
     />
 
     {/* Delete Confirmation */}
