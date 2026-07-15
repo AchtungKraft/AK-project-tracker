@@ -89,7 +89,7 @@ export default function buildProjectWorkPacketHTML(data) {
 
     let blockHtml = "";
     if (isBlocked && blockLabel) {
-      blockHtml = `<div style="margin-top:2px;font-size:11px;font-weight:600;color:#374151;">BLOCKED \u2014 ${esc(blockLabel)}</div>`;
+      blockHtml = `<div style="margin-top:2px;font-size:11px;font-weight:600;color:#374151;">Blocked by: ${esc(blockLabel)}</div>`;
     }
 
     let unlocksHtml = "";

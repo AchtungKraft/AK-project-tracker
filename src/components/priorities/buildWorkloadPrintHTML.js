@@ -185,18 +185,11 @@ function renderProjectGroup(group, teamMemberMap, statusMap, blockedSet, fields,
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   let estTotal = 0;
-  let overdueCount = 0;
-  let unassignedCount = 0;
   tasks.forEach((t) => {
     if (t.estimated_hours > 0) estTotal += t.estimated_hours;
-    const d = parseLocalDate(t.due_date);
-    if (d && d < today) overdueCount++;
-    if (!t.assigned_team_member_id) unassignedCount++;
   });
 
   const meta = [`${tasks.length} Task${tasks.length !== 1 ? "s" : ""}`];
-  if (overdueCount > 0) meta.push(`${overdueCount} Overdue`);
-  if (unassignedCount > 0) meta.push(`${unassignedCount} Unassigned`);
   if (estTotal > 0) meta.push(`${fmtHours(estTotal)} Est.`);
 
   const projectName = esc(project?.name || label || "No Project");
@@ -204,20 +197,57 @@ function renderProjectGroup(group, teamMemberMap, statusMap, blockedSet, fields,
     ? ` <span style="color:#6b7280;font-weight:normal;margin-left:8px;">\u2014 ${esc(project.client_name)}</span>`
     : "";
 
-  const tasksHtml = tasks
-    .map((t) => renderTaskRow(t, teamMemberMap, statusMap, blockedSet, fields, data))
-    .join("");
+  // Group tasks by phase (if bucket info available)
+  const buckets = (data.bucketsByProjectId || {})[project?.id] || [];
+  const bucketMap = new Map();
+  buckets.forEach(b => bucketMap.set(b.id, b));
+  const sortedBuckets = [...buckets].sort((a, b) => (a.order || 0) - (b.order || 0));
 
-  // page-break-inside:avoid on the header+first task block only — NOT the
-  // entire group, which would create large blank areas for many-task projects.
+  const byPhase = new Map();
+  const unphased = [];
+  tasks.forEach(t => {
+    if (t.kanban_bucket_id && bucketMap.has(t.kanban_bucket_id)) {
+      if (!byPhase.has(t.kanban_bucket_id)) byPhase.set(t.kanban_bucket_id, []);
+      byPhase.get(t.kanban_bucket_id).push(t);
+    } else {
+      unphased.push(t);
+    }
+  });
+
+  const hasPhases = sortedBuckets.some(b => byPhase.has(b.id));
+
+  let bodyHtml = "";
+  if (hasPhases) {
+    sortedBuckets.forEach(b => {
+      const pt = byPhase.get(b.id);
+      if (!pt || pt.length === 0) return;
+      bodyHtml += `<div style="page-break-inside:avoid;page-break-after:avoid;display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid #9ca3af;margin-top:8px;margin-bottom:4px;">
+        <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${b.color || '#6B7280'};"></span>
+        <span style="font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.05em;">${esc(b.name)}</span>
+        <span style="font-size:9px;color:#6b7280;">(${pt.length})</span>
+      </div>`;
+      bodyHtml += pt.map(t => renderTaskRow(t, teamMemberMap, statusMap, blockedSet, fields, data)).join("");
+    });
+    if (unphased.length > 0) {
+      bodyHtml += `<div style="page-break-inside:avoid;display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid #9ca3af;margin-top:8px;margin-bottom:4px;">
+        <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#6B7280;"></span>
+        <span style="font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.05em;">Unassigned Phase</span>
+        <span style="font-size:9px;color:#6b7280;">(${unphased.length})</span>
+      </div>`;
+      bodyHtml += unphased.map(t => renderTaskRow(t, teamMemberMap, statusMap, blockedSet, fields, data)).join("");
+    }
+  } else {
+    bodyHtml = tasks.map(t => renderTaskRow(t, teamMemberMap, statusMap, blockedSet, fields, data)).join("");
+  }
+
   return `<div style="margin-bottom:16px;">
     <div style="page-break-inside:avoid;">
       <div style="border-bottom:2px solid black;padding-bottom:2px;margin-bottom:4px;">
-        <div style="font-size:13px;font-weight:bold;">${projectName}${clientName}</div>
-        <div style="font-size:12px;color:#6b7280;">${esc(meta.join(" \u2022 "))}</div>
+        <div style="font-size:14px;font-weight:bold;">${projectName}${clientName}</div>
+        <div style="font-size:11px;color:#6b7280;">${esc(meta.join(" \u2022 "))}</div>
       </div>
     </div>
-    ${tasksHtml}
+    ${bodyHtml}
     <div style="margin-top:4px;margin-bottom:8px;page-break-inside:avoid;">
       <span style="color:#9ca3af;font-size:8px;">Project Notes:</span>
       <div style="border:1px solid #d1d5db;border-radius:4px;height:24px;"></div>

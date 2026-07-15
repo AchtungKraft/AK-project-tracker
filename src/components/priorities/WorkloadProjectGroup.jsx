@@ -19,6 +19,7 @@ import {
   Unlock,
   ListChecks,
   Layers,
+  Check,
 } from "lucide-react";
 import { format, startOfDay, isBefore } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -219,12 +220,12 @@ function WorkloadTaskRow({
         )}
       </TooltipProvider>
 
-      {/* Blocking reason — "Blocked by: task name" */}
-      {blocked && (
-        <span className="text-[9px] text-red-400 shrink-0 flex items-center gap-0.5 max-w-[180px] truncate" title={blockingLabel ? `Blocked by: ${blockingLabel}` : "Blocked"}>
+      {/* Blocking reason — clean single-line display */}
+      {blocked && blockingLabel && (
+        <span className="text-[9px] text-red-400/80 shrink-0 flex items-center gap-0.5 max-w-[200px] truncate" title={`Blocked by: ${blockingLabel}`}>
           <Clock className="w-2.5 h-2.5 shrink-0" />
           <span className="truncate">
-            <span className="font-semibold">Blocked by:</span> {blockingLabel || "dependency"}
+            Blocked by: {blockingLabel}
           </span>
         </span>
       )}
@@ -384,7 +385,7 @@ function PhaseHeader({ bucket, openCount, expanded, onToggle, editMode, phaseTas
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 py-[4px] pr-3 cursor-pointer hover:bg-gray-700/30 transition-colors border-t border-gray-700/40 bg-gray-800/30",
+        "flex items-center gap-1.5 py-[5px] pr-3 cursor-pointer hover:bg-gray-700/40 transition-colors border-t border-gray-700/30 bg-gray-800/40",
         GUTTER_PHASE_INDENT
       )}
       onClick={onToggle}
@@ -401,11 +402,46 @@ function PhaseHeader({ bucket, openCount, expanded, onToggle, editMode, phaseTas
       </span>
 
       {expanded ? <ChevronDown className="w-2.5 h-2.5 text-gray-500" /> : <ChevronRight className="w-2.5 h-2.5 text-gray-500" />}
-      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: bucket?.color || '#6B7280' }} />
-      <span className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">
+      <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ backgroundColor: bucket?.color || '#6B7280' }} />
+      <span className="text-[10px] font-bold text-gray-200 uppercase tracking-widest">
         {bucket?.name || "Unassigned Phase"}
       </span>
       <span className="text-[10px] text-gray-500 font-normal">({openCount})</span>
+    </div>
+  );
+}
+
+// ── Inline checklist items beneath a task ──
+function InlineChecklistItems({ items, onToggle }) {
+  if (!items || items.length === 0) return null;
+  const sorted = [...items].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const done = sorted.filter(i => i.is_complete).length;
+  return (
+    <div className="pl-14 md:pl-16 pr-3 pb-1">
+      {sorted.map(item => (
+        <div key={item.id} className="flex items-center gap-1.5 py-[2px]">
+          <button
+            onClick={(e) => { e.stopPropagation(); if (onToggle) onToggle(item); }}
+            className={cn(
+              "shrink-0 w-3 h-3 rounded-sm border flex items-center justify-center transition-colors",
+              item.is_complete
+                ? "bg-green-700/60 border-green-600 text-green-300"
+                : "border-gray-600 hover:border-gray-400"
+            )}
+          >
+            {item.is_complete && <Check className="w-2 h-2" />}
+          </button>
+          <span className={cn(
+            "text-[11px] leading-tight truncate",
+            item.is_complete ? "text-gray-600 line-through" : "text-gray-400"
+          )}>
+            {item.title}
+          </span>
+        </div>
+      ))}
+      <div className="text-[9px] text-gray-600 mt-0.5">
+        {done}/{items.length} complete
+      </div>
     </div>
   );
 }
@@ -437,6 +473,8 @@ export default function WorkloadProjectGroup({
   checklistsByTaskId = {},
   weekLabel = "",
   editMode = false,
+  showChecklists = false,
+  onToggleChecklistItem,
 }) {
   const projectId = project?.id || "__no_project__";
   
@@ -570,7 +608,7 @@ export default function WorkloadProjectGroup({
     <div>
       {/* ── Project header — primary visual anchor ── */}
       <div
-        className="flex items-center gap-2 px-3 py-2.5 bg-gray-800/50 hover:bg-gray-800/60 cursor-pointer transition-colors mt-1 first:mt-0 border-t-2 border-gray-600/50 group"
+        className="flex items-center gap-2 px-3 py-3 bg-gray-800/60 hover:bg-gray-800/70 cursor-pointer transition-colors mt-2 first:mt-0 border-t-2 border-gray-600/60 group"
         onClick={handleToggleProject}
       >
         {/* Fixed-width gutter slot for bulk selection — same width as task gutter */}
@@ -599,18 +637,18 @@ export default function WorkloadProjectGroup({
         }
 
         {/* Project name — strongest typography */}
-        <span className="text-sm font-bold text-white tracking-tight truncate min-w-0">
+        <span className="text-[15px] font-bold text-white tracking-tight truncate min-w-0">
           {project?.name || label || "No Project"}
         </span>
 
         {/* Section task count */}
-        <span className="text-[11px] text-gray-500 tabular-nums shrink-0">
+        <span className="text-[10px] text-gray-500 tabular-nums shrink-0">
           {tasks.length}
         </span>
 
-        {/* Current phase label */}
+        {/* Current phase label — subtle */}
         {currentPhaseLabel && (
-          <span className="text-[10px] text-gray-500 shrink-0 hidden md:inline truncate max-w-[120px]" title={`Phase: ${currentPhaseLabel}`}>
+          <span className="text-[9px] text-gray-600 shrink-0 hidden md:inline truncate max-w-[120px]" title={`Phase: ${currentPhaseLabel}`}>
             · {currentPhaseLabel}
           </span>
         )}
@@ -667,32 +705,40 @@ export default function WorkloadProjectGroup({
 
             const renderTaskRow = (task) => {
               const succs = successorMap.get(task.id) || [];
+              const clItems = showChecklists ? (checklistsByTaskId[task.id] || []) : [];
               return (
-                <WorkloadTaskRow
-                  key={task.id}
-                  task={task}
-                  assignee={teamMemberMap.get(task.assigned_team_member_id)}
-                  status={statusMap.get(task.status_id)}
-                  blocked={blockedSet.has(task.id)}
-                  blockingLabel={blockingLabels?.[task.id] || null}
-                  teamMembers={teamMembers}
-                  statuses={statuses}
-                  onToggleComplete={onToggleComplete}
-                  onTaskClick={onTaskClick}
-                  onUpdateDueDate={onUpdateDueDate}
-                  onTogglePriority={onTogglePriority}
-                  updateTaskMutation={updateTaskMutation}
-                  isSelected={selectedTaskIds?.has(task.id)}
-                  onToggleSelection={onToggleTaskSelection}
-                  projectTasks={allProjectTasks || tasks}
-                  allTasks={allTasks}
-                  bucketMap={bucketMap}
-                  teamMemberMap={teamMemberMap}
-                  checklistProgress={checklistProgressMap[task.id]}
-                  successorCount={succs.length}
-                  successorNames={succs.map(s => s.name)}
-                  editMode={editMode}
-                />
+                <React.Fragment key={task.id}>
+                  <WorkloadTaskRow
+                    task={task}
+                    assignee={teamMemberMap.get(task.assigned_team_member_id)}
+                    status={statusMap.get(task.status_id)}
+                    blocked={blockedSet.has(task.id)}
+                    blockingLabel={blockingLabels?.[task.id] || null}
+                    teamMembers={teamMembers}
+                    statuses={statuses}
+                    onToggleComplete={onToggleComplete}
+                    onTaskClick={onTaskClick}
+                    onUpdateDueDate={onUpdateDueDate}
+                    onTogglePriority={onTogglePriority}
+                    updateTaskMutation={updateTaskMutation}
+                    isSelected={selectedTaskIds?.has(task.id)}
+                    onToggleSelection={onToggleTaskSelection}
+                    projectTasks={allProjectTasks || tasks}
+                    allTasks={allTasks}
+                    bucketMap={bucketMap}
+                    teamMemberMap={teamMemberMap}
+                    checklistProgress={checklistProgressMap[task.id]}
+                    successorCount={succs.length}
+                    successorNames={succs.map(s => s.name)}
+                    editMode={editMode}
+                  />
+                  {clItems.length > 0 && (
+                    <InlineChecklistItems
+                      items={clItems}
+                      onToggle={onToggleChecklistItem}
+                    />
+                  )}
+                </React.Fragment>
               );
             };
             

@@ -14,6 +14,7 @@ import {
   Printer,
   Pencil,
   X,
+  ListChecks,
 } from "lucide-react";
 import { startOfWeek, endOfWeek, addWeeks, addDays, format, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -131,6 +132,7 @@ export default function WeeklyWorkloadView({
 }) {
   const [weekOffset, setWeekOffset] = useState(0);
   const [editMode, setEditMode] = useState(false);
+  const [showChecklists, setShowChecklists] = useState(false);
 
   const selectedWeek = useMemo(() => {
     const base = addWeeks(new Date(), weekOffset);
@@ -357,6 +359,11 @@ export default function WeeklyWorkloadView({
     return () => window.removeEventListener("keydown", handler);
   }, [editMode, clearSelection]);
 
+  // ── Checklist item toggle handler ──
+  const handleToggleChecklistItem = useCallback((item) => {
+    base44.entities.TaskChecklistItem.update(item.id, { is_complete: !item.is_complete });
+  }, []);
+
   // ── Bulk action handlers ──
   const selectedTasks = useMemo(() => {
     if (selectedTaskIds.size === 0) return [];
@@ -465,6 +472,7 @@ export default function WeeklyWorkloadView({
       blockedTaskIds: Array.from(blockedSet),
       blockingLabels,
       checklistsByTaskId,
+      bucketsByProjectId,
       activeFilters: [`${selectedTasks.length} selected tasks`],
     };
     const html = buildWorkloadPrintHTML(printData);
@@ -527,6 +535,7 @@ export default function WeeklyWorkloadView({
       blockedTaskIds: Array.from(blockedSet),
       blockingLabels,
       checklistsByTaskId,
+      bucketsByProjectId,
       activeFilters: [],
     };
 
@@ -571,6 +580,21 @@ export default function WeeklyWorkloadView({
             >
               <Printer className="w-3 h-3 mr-1" />
               Print
+            </Button>
+            <Button
+              variant={showChecklists ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowChecklists(v => !v)}
+              className={cn(
+                "h-7 px-2 text-xs",
+                showChecklists
+                  ? "bg-emerald-700 hover:bg-emerald-800 text-white"
+                  : "border-gray-700 text-white hover:bg-gray-800"
+              )}
+              title="Toggle inline checklists"
+            >
+              <ListChecks className="w-3 h-3 mr-1" />
+              Checklists
             </Button>
             <Button
               variant={editMode ? "default" : "outline"}
@@ -659,6 +683,8 @@ export default function WeeklyWorkloadView({
                     checklistsByTaskId={checklistsByTaskId}
                     weekLabel={`Week of ${format(selectedWeek.start, "MMMM d")}–${format(selectedWeek.end, "d, yyyy")}`}
                     editMode={editMode}
+                    showChecklists={showChecklists}
+                    onToggleChecklistItem={handleToggleChecklistItem}
                   />
                 ))}
               </div>
