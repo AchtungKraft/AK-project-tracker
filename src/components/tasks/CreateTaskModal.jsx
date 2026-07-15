@@ -12,7 +12,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Loader2, CalendarIcon, UserPlus } from "lucide-react";
 import { format } from "date-fns";
-import { toast } from "sonner";
+import { useToast } from "@/components/ui/use-toast";
 import { useTaskCategories, useTaskStatuses, useAssignableTeamMembers } from "./useTaskDropdownData";
 import { TaskCategorySelect, TaskStatusSelect, TaskAssigneeSelect } from "./TaskDropdownSelects";
 import ProjectSelect from "@/components/shared/ProjectSelect";
@@ -21,6 +21,7 @@ import { invalidateProjectCaches } from "./useTaskInteraction";
 
 export default function CreateTaskModal({ onClose, projectId, defaultAssigneeId, defaultBucketId, defaultIsPriority = false }) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [user, setUser] = useState(null);
   const [taskData, setTaskData] = useState({
     name: "",
@@ -71,11 +72,11 @@ export default function CreateTaskModal({ onClose, projectId, defaultAssigneeId,
     mutationFn: (data) => base44.entities.Task.create(data),
     onSuccess: (_result, variables) => {
       invalidateProjectCaches(queryClient, variables.project_id || projectId);
-      toast.success('Task created successfully');
+      toast({ title: 'Task created successfully' });
       onClose();
     },
     onError: () => {
-      toast.error('Failed to create task');
+      toast({ title: 'Failed to create task', variant: 'destructive' });
     },
   });
 
@@ -88,7 +89,7 @@ export default function CreateTaskModal({ onClose, projectId, defaultAssigneeId,
     if (userTeamMember) {
       setTaskData({ ...taskData, assigned_team_member_id: userTeamMember.id });
     } else {
-      toast.error('Could not find your team member profile');
+      toast({ title: 'Could not find your team member profile', variant: 'destructive' });
     }
   };
 

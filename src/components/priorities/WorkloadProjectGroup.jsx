@@ -29,6 +29,8 @@ import buildProjectWorkPacketHTML from "@/components/workload/buildProjectWorkPa
 import PhaseSelectorPopover from "@/components/workload/PhaseSelectorPopover";
 import { useToast } from "@/components/ui/use-toast";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
+import InlineEstimateEditor from "@/components/tasks/InlineEstimateEditor";
+import { formatDurationCompact } from "@/lib/estimateUtils";
 
 const DONE_STATUS_ID = "6913f57422230d8c7ee2ef54";
 
@@ -129,6 +131,8 @@ function WorkloadTaskRow({
     if (status) mobileMetaParts.push(status.label);
     if (assignee) mobileMetaParts.push(assignee.full_name?.split(" ")[0]);
     if (due) mobileMetaParts.push(format(due, "M/d"));
+    const estDisplay = formatDurationCompact(task.estimated_hours);
+    if (estDisplay) mobileMetaParts.push(estDisplay);
   }
 
   return (
@@ -387,9 +391,20 @@ function WorkloadTaskRow({
             {due ? format(due, "M/d") : "\u2014"}
           </span>
 
-          {/* Estimated hours */}
-          <span className="text-[10px] text-gray-600 w-8 shrink-0 text-right hidden lg:block tabular-nums">
-            {task.estimated_hours ? fmtHours(task.estimated_hours) : ""}
+          {/* Estimated hours — inline editor */}
+          <span className="hidden lg:block shrink-0" onClick={e => e.stopPropagation()}>
+            {updateTaskMutation ? (
+              <InlineEstimateEditor
+                value={task.estimated_hours}
+                onSave={(hours) => new Promise((resolve, reject) => {
+                  updateTaskMutation.mutate({ id: task.id, data: { estimated_hours: hours } }, { onSuccess: resolve, onError: reject });
+                })}
+              />
+            ) : (
+              <span className="text-[10px] text-gray-600 w-10 shrink-0 text-right tabular-nums">
+                {task.estimated_hours ? fmtHours(task.estimated_hours) : ""}
+              </span>
+            )}
           </span>
         </>
       )}
