@@ -471,8 +471,8 @@ function InlineChecklistItems({ items, onToggle, showCompleted = false }) {
   return (
     <div className="pl-8 sm:pl-[4.5rem] md:pl-[5rem] pr-3 pb-1 animate-in slide-in-from-top-1 duration-150">
       {/* Checklist header */}
-      <div className="text-[10px] text-gray-500 flex items-center gap-1 pb-0.5">
-        <ListChecks className="w-2.5 h-2.5 text-gray-600" />
+      <div className="text-[11px] text-gray-400 font-medium flex items-center gap-1 pb-0.5">
+        <ListChecks className="w-3 h-3 text-gray-500" />
         Checklist ({remaining} Remaining)
       </div>
 
@@ -490,7 +490,7 @@ function InlineChecklistItems({ items, onToggle, showCompleted = false }) {
               onClick={(e) => { e.stopPropagation(); if (onToggle) onToggle(item); }}
               className="shrink-0 w-2.5 h-2.5 rounded-[3px] border border-gray-600/80 hover:border-gray-400 flex items-center justify-center transition-colors"
             />
-            <span className="text-[10.5px] leading-tight truncate text-gray-500">
+            <span className="text-[13px] leading-tight truncate text-white">
               {item.title}
             </span>
           </div>
@@ -512,7 +512,7 @@ function InlineChecklistItems({ items, onToggle, showCompleted = false }) {
                 >
                   <Check className="w-2 h-2" />
                 </button>
-                <span className="text-[10px] leading-tight truncate text-gray-600/70 line-through">
+                <span className="text-[12px] leading-tight truncate text-gray-400 line-through">
                   {item.title}
                 </span>
               </div>
