@@ -532,8 +532,8 @@ export default function ProjectWorkloadView({
 
   // ── Canonical rollup — built once from filtered tasks ──
   const projectRollup = useMemo(
-    () => buildWorkloadRollup(filteredTasks, { phaseLookup: bucketMap }),
-    [filteredTasks, bucketMap]
+    () => buildWorkloadRollup(filteredTasks, { teamMemberMap, phaseLookup: bucketMap }),
+    [filteredTasks, teamMemberMap, bucketMap]
   );
   const phaseRollups = useMemo(
     () => getProjectPhaseRollups(projectRollup, projectId),

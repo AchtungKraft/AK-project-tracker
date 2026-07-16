@@ -172,7 +172,42 @@ export function buildWorkloadRollup(visibleTasks, opts = {}) {
   // Sort assignees by hours DESC
   const byAssignee = Array.from(byAssigneeMap.values()).sort((a, b) => b.hours - a.hours);
 
-  return { totals, byProject, byPhase: byPhaseMap, byAssignee };
+  const result = { totals, byProject, byPhase: byPhaseMap, byAssignee };
+
+  // Dev-mode reconciliation assertion — non-user-facing
+  if (import.meta.env?.DEV) {
+    assertRollupReconciles(result);
+  }
+
+  return result;
+}
+
+/**
+ * Dev-only assertion: totals must equal sum of byPhase and sum of byAssignee.
+ * Logs a warning when values fail to reconcile — never shown in production.
+ */
+function assertRollupReconciles(rollup) {
+  const { totals, byPhase, byAssignee } = rollup;
+  const round = (n) => Math.round(n * 100) / 100;
+
+  const phaseHours = round(Object.values(byPhase).reduce((s, p) => s + p.hours, 0));
+  const phaseMissing = Object.values(byPhase).reduce((s, p) => s + p.missingEstimates, 0);
+  const assigneeHours = round(byAssignee.reduce((s, a) => s + a.hours, 0));
+  const assigneeMissing = byAssignee.reduce((s, a) => s + a.missingEstimates, 0);
+  const totalHours = round(totals.hours);
+
+  if (totalHours !== phaseHours) {
+    console.warn(`[Rollup Reconciliation] Hours mismatch: totals=${totalHours} phaseSum=${phaseHours}`);
+  }
+  if (totalHours !== assigneeHours) {
+    console.warn(`[Rollup Reconciliation] Hours mismatch: totals=${totalHours} assigneeSum=${assigneeHours}`);
+  }
+  if (totals.missingEstimates !== phaseMissing) {
+    console.warn(`[Rollup Reconciliation] Missing mismatch: totals=${totals.missingEstimates} phaseSum=${phaseMissing}`);
+  }
+  if (totals.missingEstimates !== assigneeMissing) {
+    console.warn(`[Rollup Reconciliation] Missing mismatch: totals=${totals.missingEstimates} assigneeSum=${assigneeMissing}`);
+  }
 }
 
 // ─── Convenience: phase rollup for a specific project ─────────
