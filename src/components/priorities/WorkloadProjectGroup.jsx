@@ -681,8 +681,8 @@ export default function WorkloadProjectGroup({
 
   // Canonical rollup for this project group (section-scoped)
   const projectRollup = useMemo(
-    () => buildWorkloadRollup(tasks, { phaseLookup: bucketMap }),
-    [tasks, bucketMap]
+    () => buildWorkloadRollup(tasks, { teamMemberMap, phaseLookup: bucketMap }),
+    [tasks, teamMemberMap, bucketMap]
   );
   const projectTotals = projectRollup.totals;
   const projectEstDisplay = formatDuration(projectTotals.hours);
