@@ -26,6 +26,7 @@ import WorkloadPrintOptionsModal from "./WorkloadPrintOptionsModal";
 import WorkloadBulkActionBar from "./WorkloadBulkActionBar";
 import buildWorkloadPrintHTML from "./buildWorkloadPrintHTML";
 import WeeklyHoursSummary from "./WeeklyHoursSummary";
+import { buildWorkloadRollup, getProjectPhaseRollups } from "@/lib/workloadRollups";
 import { useToast } from "@/components/ui/use-toast";
 
 const DONE_STATUS_ID = "6913f57422230d8c7ee2ef54";
@@ -298,6 +299,16 @@ export default function WeeklyWorkloadView({
 
     return { overdue, dueThisWeek, upcoming, unscheduled };
   }, [activeTasks, today, selectedWeek, nextWeek]);
+
+  // ── Canonical rollup — built once, consumed everywhere ──
+  const weekRollup = useMemo(
+    () => buildWorkloadRollup(buckets.dueThisWeek, { teamMemberMap, phaseLookup }),
+    [buckets.dueThisWeek, teamMemberMap, phaseLookup]
+  );
+  const overdueRollup = useMemo(
+    () => buildWorkloadRollup(buckets.overdue),
+    [buckets.overdue]
+  );
 
   const sectionGroups = useMemo(
     () => ({
@@ -683,14 +694,15 @@ export default function WeeklyWorkloadView({
         </div>
       </div>
 
-      {/* ── Weekly Hours Summary — scoped to selected week + overdue ── */}
+      {/* ── Weekly Hours Summary — consumes canonical rollup, no recalculation ── */}
       <WeeklyHoursSummary
-        thisWeekTasks={buckets.dueThisWeek}
-        overdueTasks={buckets.overdue}
-        teamMemberMap={teamMemberMap}
-        phaseLookup={phaseLookup}
+        rollup={weekRollup}
+        overdueRollup={overdueRollup}
         weekLabel={`${format(selectedWeek.start, "MMM d")} – ${format(selectedWeek.end, "MMM d")}`}
       />
+
+      {/* ── Per-section rollups for project/phase headers ── */}
+      {/* Each section builds its own rollup so project & phase totals are section-scoped */}
 
       {/* ── Sections ── */}
       {SECTIONS.map((sec) => {

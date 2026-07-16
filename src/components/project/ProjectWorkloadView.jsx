@@ -27,7 +27,8 @@ import TaskDetailDrawer from "@/components/tasks/TaskDetailDrawer";
 import { useToast } from "@/components/ui/use-toast";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { invalidateProjectCaches } from "@/components/tasks/useTaskInteraction";
-import { sumEstimatedHours, countMissingEstimates, formatDuration } from "@/lib/estimateUtils";
+import { formatDuration } from "@/lib/estimateUtils";
+import { buildWorkloadRollup, getProjectPhaseRollups } from "@/lib/workloadRollups";
 import InlineEstimateEditor from "@/components/tasks/InlineEstimateEditor";
 import CompletedTasksByPhase from "./CompletedTasksByPhase";
 import { sortTasksByPriority } from "@/utils/taskPrioritySort";
@@ -71,15 +72,15 @@ const GUTTER_CL_INDENT = "pl-[3.5rem] md:pl-[4rem]";
 // ═══════════════════════════════════════════════
 // Phase Header — strengthened visual ownership
 // ═══════════════════════════════════════════════
-function PhaseHeader({ bucket, openCount, totalCount, isCompleted, expanded, onToggle, editMode, phaseTasks, selectedTaskIds, onToggleTaskSelection, onSelectMultiple, onAddTask }) {
+function PhaseHeader({ bucket, openCount, totalCount, isCompleted, expanded, onToggle, editMode, phaseTasks, selectedTaskIds, onToggleTaskSelection, onSelectMultiple, onAddTask, phaseRollup }) {
   const phaseTaskIds = (phaseTasks || []).map(t => t.id);
   const selectedCount = phaseTaskIds.filter(id => selectedTaskIds?.has(id)).length;
   const allSelected = phaseTaskIds.length > 0 && selectedCount === phaseTaskIds.length;
   const someSelected = selectedCount > 0 && !allSelected;
 
-  const estTotal = sumEstimatedHours(phaseTasks || []);
-  const estDisplay = formatDuration(estTotal);
-  const missingCount = countMissingEstimates(phaseTasks || []);
+  // Phase totals from canonical rollup — no recalculation
+  const estDisplay = phaseRollup ? formatDuration(phaseRollup.hours) : null;
+  const missingCount = phaseRollup ? phaseRollup.missingEstimates : 0;
 
   return (
     <div
@@ -528,6 +529,16 @@ export default function ProjectWorkloadView({
     return list;
   }, [activeTasks, searchTerm, statusFilter, assigneeFilter]);
 
+  // ── Canonical rollup — built once from filtered tasks ──
+  const projectRollup = useMemo(
+    () => buildWorkloadRollup(filteredTasks, { phaseLookup: bucketMap }),
+    [filteredTasks, bucketMap]
+  );
+  const phaseRollups = useMemo(
+    () => getProjectPhaseRollups(projectRollup, projectId),
+    [projectRollup, projectId]
+  );
+
   // Group by phase — use bucket order (never alphabetical)
   const sortedBuckets = useMemo(() => [...(buckets || [])].sort((a, b) => (a.order || 0) - (b.order || 0)), [buckets]);
   const { byPhase, unphased } = useMemo(() => {
@@ -755,13 +766,11 @@ export default function ProjectWorkloadView({
               {(teamMembers || []).filter(m => m.active).map(m => <SelectItem key={m.id} value={m.id}>{m.full_name}</SelectItem>)}
             </SelectContent>
           </Select>
-          {/* Project estimate summary */}
+          {/* Project estimate summary — from canonical rollup */}
           {(() => {
-            const estTotal = sumEstimatedHours(filteredTasks);
-            const missing = countMissingEstimates(filteredTasks);
-            const parts = [`${filteredTasks.length} task${filteredTasks.length !== 1 ? "s" : ""}`];
-            if (estTotal > 0) parts.push(formatDuration(estTotal));
-            if (missing > 0) parts.push(`${missing} no est.`);
+            const parts = [`${projectRollup.totals.taskCount} task${projectRollup.totals.taskCount !== 1 ? "s" : ""}`];
+            if (projectRollup.totals.hours > 0) parts.push(formatDuration(projectRollup.totals.hours));
+            if (projectRollup.totals.missingEstimates > 0) parts.push(`${projectRollup.totals.missingEstimates} no est.`);
             return <span className="text-[10px] text-gray-500 tabular-nums">{parts.join(" · ")}</span>;
           })()}
         </div>
@@ -787,6 +796,7 @@ export default function ProjectWorkloadView({
                       editMode={toggles.editMode} phaseTasks={phaseTasks} selectedTaskIds={selectedTaskIds}
                       onToggleTaskSelection={toggleTaskSelection} onSelectMultiple={selectMultiple}
                       onAddTask={handleAddTaskInPhase}
+                      phaseRollup={phaseRollups.get(bucket.id)}
                     />
                     {!isCollapsed && sortTasksByPriority(phaseTasks).map(renderTaskRow)}
                   </div>
@@ -803,6 +813,7 @@ export default function ProjectWorkloadView({
                       editMode={toggles.editMode} phaseTasks={unphased} selectedTaskIds={selectedTaskIds}
                       onToggleTaskSelection={toggleTaskSelection} onSelectMultiple={selectMultiple}
                       onAddTask={handleAddTaskInPhase}
+                      phaseRollup={phaseRollups.get("__unphased__")}
                     />
                     {!collapsedPhases.has("__unphased__") && sortTasksByPriority(unphased).map(renderTaskRow)}
                   </div>

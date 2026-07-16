@@ -43,6 +43,22 @@ import { sortTasksByPriority, isUrgentPriority } from "@/utils/taskPrioritySort"
 import { resolvePriorityTab, persistPriorityTab } from "@/lib/workspaceConfig";
 import PriorityProjectNav from "../components/priorities/PriorityProjectNav";
 import WeeklyHoursSummary from "../components/priorities/WeeklyHoursSummary";
+import { buildWorkloadRollup } from "@/lib/workloadRollups";
+
+// Memoized wrapper so the rollup only rebuilds when tasks/maps change, not on every render
+function GlobalHoursSummary({ tasks, teamMemberMap, phaseLookup, onFilterAssignee }) {
+  const rollup = useMemo(
+    () => buildWorkloadRollup(tasks, { teamMemberMap, phaseLookup }),
+    [tasks, teamMemberMap, phaseLookup]
+  );
+  return (
+    <WeeklyHoursSummary
+      rollup={rollup}
+      weekLabel="All Open"
+      onFilterAssignee={onFilterAssignee}
+    />
+  );
+}
 
 export default function PriorityDashboard() {
   const queryClient = useQueryClient();
@@ -653,12 +669,10 @@ export default function PriorityDashboard() {
 
           {/* Weekly Hours Summary — hidden on Workload tab (Workload has its own week-scoped summary) */}
           {activeTab !== 'workload-view' && (
-            <WeeklyHoursSummary
-              thisWeekTasks={activePriorityTasks}
-              overdueTasks={[]}
+            <GlobalHoursSummary
+              tasks={activePriorityTasks}
               teamMemberMap={teamMemberMap}
               phaseLookup={phaseLookup}
-              weekLabel="All Open"
               onFilterAssignee={(memberId) => {
                 if (memberId) handleAssignedToChange([memberId]);
                 else handleAssignedToChange([]);

@@ -1,13 +1,23 @@
 /**
- * Shared workload rollup utilities.
- * Single source of truth for weekly hours summaries, assignee/phase grouping,
- * and canonical task sorting.
+ * Canonical Workload Rollup — SINGLE SOURCE OF TRUTH
+ *
+ * Every displayed hour total in the app originates from this module.
+ * No UI component should calculate hours independently.
+ *
+ * Data flow:
+ *   visibleTasks → buildWorkloadRollup() → { totals, byProject, byPhase, byAssignee }
+ *
+ * Consumers:
+ *   - WeeklyHoursSummary (totals + byAssignee + byPhase)
+ *   - WorkloadProjectGroup headers (byProject[id])
+ *   - Phase headers (byPhase[compositeKey])
+ *   - ProjectWorkloadView (same builder, different task scope)
+ *   - Print views (same rollup)
  *
  * ESTIMATE RULES:
  * - Include: open tasks (not completed, not cancelled)
- * - Exclude: completed, cancelled, skipped (if treated as non-actionable)
- * - Missing estimate: null, undefined, 0, or invalid → counts as "missing", not zero hours
- * - Zero is treated as "not estimated" (missing)
+ * - Exclude: completed, cancelled
+ * - Missing estimate: null, undefined, 0 → counts as "missing", not zero hours
  *
  * SORT RULES (open tasks):
  *   1. Priority DESC (priority tasks first)
@@ -35,10 +45,7 @@ function parseDateValue(dateStr) {
  */
 export function sortOperationalTasks(tasks) {
   return [...tasks].sort((a, b) => {
-    // 1. Priority first
     if (a.is_priority !== b.is_priority) return a.is_priority ? -1 : 1;
-
-    // 2. Due date ascending, nulls last (within same priority tier)
     const aDue = parseDateValue(a.due_date);
     const bDue = parseDateValue(b.due_date);
     if (aDue !== bDue) {
@@ -46,11 +53,8 @@ export function sortOperationalTasks(tasks) {
       if (bDue === null) return -1;
       return aDue - bDue;
     }
-
-    // 3. Tie-breaker: name then created_date
     const nameCompare = (a.name || "").localeCompare(b.name || "");
     if (nameCompare !== 0) return nameCompare;
-
     const aCreated = parseDateValue(a.created_date);
     const bCreated = parseDateValue(b.created_date);
     if (aCreated !== null && bCreated !== null) return aCreated - bCreated;
@@ -66,174 +70,133 @@ export function sortCompletedTasks(tasks) {
   return [...tasks].sort((a, b) => {
     const aTime = parseDateValue(a.completed_date) || parseDateValue(a.updated_date) || 0;
     const bTime = parseDateValue(b.completed_date) || parseDateValue(b.updated_date) || 0;
-    if (aTime !== bTime) return bTime - aTime; // newest first
+    if (aTime !== bTime) return bTime - aTime;
     return (a.name || "").localeCompare(b.name || "");
   });
 }
 
-// ─── Rollup helpers ───────────────────────────────────────────
+// ─── Internal accumulator ─────────────────────────────────────
 
-/**
- * Sum estimated_hours for open tasks that have a valid estimate.
- */
-export function sumEstimatedHoursRaw(tasks) {
-  let total = 0;
-  for (const t of tasks) {
-    if (!isOpenTask(t)) continue;
-    if (t.estimated_hours && t.estimated_hours > 0) total += t.estimated_hours;
-  }
-  return total;
+function createBucket() {
+  return { hours: 0, priorityHours: 0, nonPriorityHours: 0, missingEstimates: 0, taskCount: 0 };
 }
 
-/**
- * Count open tasks missing an estimate.
- */
-export function countMissingEstimatesRaw(tasks) {
-  let count = 0;
-  for (const t of tasks) {
-    if (!isOpenTask(t)) continue;
-    if (!t.estimated_hours || t.estimated_hours <= 0) count++;
+function accumulateTask(bucket, task) {
+  bucket.taskCount++;
+  const hasEst = task.estimated_hours && task.estimated_hours > 0;
+  if (hasEst) {
+    bucket.hours += task.estimated_hours;
+    if (task.is_priority) bucket.priorityHours += task.estimated_hours;
+    else bucket.nonPriorityHours += task.estimated_hours;
+  } else {
+    bucket.missingEstimates++;
   }
-  return count;
 }
 
-/**
- * Split estimated hours into priority vs non-priority.
- * Returns { totalHours, priorityHours, nonPriorityHours, missingTotal, missingPriority, missingOther }
- */
-export function splitPriorityEstimatedHours(tasks) {
-  let priorityHours = 0;
-  let nonPriorityHours = 0;
-  let missingPriority = 0;
-  let missingOther = 0;
+// ─── Canonical Rollup Builder ─────────────────────────────────
 
-  for (const t of tasks) {
-    if (!isOpenTask(t)) continue;
-    const hasEst = t.estimated_hours && t.estimated_hours > 0;
-    if (t.is_priority) {
-      if (hasEst) priorityHours += t.estimated_hours;
-      else missingPriority++;
-    } else {
-      if (hasEst) nonPriorityHours += t.estimated_hours;
-      else missingOther++;
+/**
+ * Build the complete canonical rollup from a set of visible tasks.
+ *
+ * This is the ONLY function that should calculate hours.
+ * Every view renders from the returned object — no recalculation.
+ *
+ * @param {Array} visibleTasks - the tasks to roll up (already filtered to the correct scope)
+ * @param {Object} [opts]
+ * @param {Map} [opts.teamMemberMap] - Map<id, teamMember> for assignee grouping
+ * @param {Map} [opts.phaseLookup]   - Map<bucketId, bucket> for phase grouping
+ * @returns {WorkloadRollup}
+ *
+ * @typedef {Object} WorkloadRollup
+ * @property {RollupBucket} totals
+ * @property {Object<string, RollupBucket & {projectName: string}>} byProject
+ * @property {Object<string, RollupBucket & {phaseId: string, phaseName: string, phaseColor: string}>} byPhase
+ * @property {Array<RollupBucket & {memberId: string, memberName: string}>} byAssignee
+ *
+ * @typedef {Object} RollupBucket
+ * @property {number} hours
+ * @property {number} priorityHours
+ * @property {number} nonPriorityHours
+ * @property {number} missingEstimates
+ * @property {number} taskCount
+ */
+export function buildWorkloadRollup(visibleTasks, opts = {}) {
+  const { teamMemberMap, phaseLookup } = opts;
+
+  const totals = createBucket();
+  const byProject = {};     // keyed by project_id
+  const byPhaseMap = {};    // keyed by composite "projectId::bucketId" for uniqueness
+  const byAssigneeMap = new Map();
+
+  for (const task of visibleTasks) {
+    if (!isOpenTask(task)) continue;
+
+    // ── Totals ──
+    accumulateTask(totals, task);
+
+    // ── By Project ──
+    const pid = task.project_id || "__no_project__";
+    if (!byProject[pid]) {
+      byProject[pid] = { ...createBucket(), projectId: pid };
     }
-  }
+    accumulateTask(byProject[pid], task);
 
-  return {
-    totalHours: priorityHours + nonPriorityHours,
-    priorityHours,
-    nonPriorityHours,
-    missingTotal: missingPriority + missingOther,
-    missingPriority,
-    missingOther,
-  };
-}
+    // ── By Phase (composite key: projectId::bucketId) ──
+    const bucketId = task.kanban_bucket_id || "__unphased__";
+    const phaseKey = `${pid}::${bucketId}`;
+    if (!byPhaseMap[phaseKey]) {
+      const bucket = phaseLookup?.get(bucketId);
+      byPhaseMap[phaseKey] = {
+        ...createBucket(),
+        phaseId: bucketId,
+        projectId: pid,
+        phaseName: bucket?.name || "General / No Phase",
+        phaseColor: bucket?.color || "#6B7280",
+      };
+    }
+    accumulateTask(byPhaseMap[phaseKey], task);
 
-/**
- * Group estimated hours by assigned team member.
- * Returns array of { memberId, memberName, totalHours, priorityHours, taskCount, missingCount }
- * sorted by totalHours DESC.
- */
-export function groupEstimatedHoursByAssignee(tasks, teamMemberMap) {
-  const groups = new Map();
-
-  for (const t of tasks) {
-    if (!isOpenTask(t)) continue;
-    const mid = t.assigned_team_member_id || "__unassigned__";
-    if (!groups.has(mid)) {
+    // ── By Assignee ──
+    const mid = task.assigned_team_member_id || "__unassigned__";
+    if (!byAssigneeMap.has(mid)) {
       const member = teamMemberMap?.get(mid);
-      groups.set(mid, {
+      byAssigneeMap.set(mid, {
+        ...createBucket(),
         memberId: mid,
         memberName: member?.full_name || "Unassigned",
-        totalHours: 0,
-        priorityHours: 0,
-        taskCount: 0,
-        missingCount: 0,
       });
     }
-    const g = groups.get(mid);
-    g.taskCount++;
-    const hasEst = t.estimated_hours && t.estimated_hours > 0;
-    if (hasEst) {
-      g.totalHours += t.estimated_hours;
-      if (t.is_priority) g.priorityHours += t.estimated_hours;
-    } else {
-      g.missingCount++;
-    }
+    accumulateTask(byAssigneeMap.get(mid), task);
   }
 
-  return Array.from(groups.values()).sort((a, b) => b.totalHours - a.totalHours);
+  // Sort assignees by hours DESC
+  const byAssignee = Array.from(byAssigneeMap.values()).sort((a, b) => b.hours - a.hours);
+
+  return { totals, byProject, byPhase: byPhaseMap, byAssignee };
 }
 
+// ─── Convenience: phase rollup for a specific project ─────────
+
 /**
- * Group estimated hours by phase (kanban bucket).
- * Phase names from different projects are aggregated by display name.
- * Returns array of { phaseName, phaseColor, totalHours, priorityHours, taskCount, missingCount }
- * sorted by totalHours DESC.
+ * Extract phase rollups for a single project from the canonical rollup.
+ * Returns a Map<bucketId, RollupBucket> for quick lookup.
  */
-export function groupEstimatedHoursByPhase(tasks, phaseLookup) {
-  const groups = new Map();
-
-  for (const t of tasks) {
-    if (!isOpenTask(t)) continue;
-    const bucket = phaseLookup?.get(t.kanban_bucket_id);
-    const phaseName = bucket?.name || "General / No Phase";
-    const phaseColor = bucket?.color || "#6B7280";
-
-    if (!groups.has(phaseName)) {
-      groups.set(phaseName, {
-        phaseName,
-        phaseColor,
-        totalHours: 0,
-        priorityHours: 0,
-        taskCount: 0,
-        missingCount: 0,
-      });
-    }
-    const g = groups.get(phaseName);
-    g.taskCount++;
-    const hasEst = t.estimated_hours && t.estimated_hours > 0;
-    if (hasEst) {
-      g.totalHours += t.estimated_hours;
-      if (t.is_priority) g.priorityHours += t.estimated_hours;
-    } else {
-      g.missingCount++;
+export function getProjectPhaseRollups(rollup, projectId) {
+  const result = new Map();
+  const pid = projectId || "__no_project__";
+  for (const [key, value] of Object.entries(rollup.byPhase)) {
+    if (key.startsWith(`${pid}::`)) {
+      result.set(value.phaseId, value);
     }
   }
-
-  return Array.from(groups.values()).sort((a, b) => b.totalHours - a.totalHours);
+  return result;
 }
 
-// ─── Canonical weekly rollup ──────────────────────────────────
+// ─── Legacy compatibility re-exports ──────────────────────────
+// These are kept for any remaining callers during transition.
+// New code should use buildWorkloadRollup() exclusively.
 
-/**
- * Build a complete weekly hours rollup from a task set.
- * Single source of truth — every weekly-hours display consumes this result.
- *
- * @param {Array} tasks - already-filtered tasks for the selected scope
- * @returns {{ taskCount, totalEstimatedHours, priorityEstimatedHours, nonPriorityEstimatedHours,
- *             missingEstimateCount, priorityMissingEstimateCount, byAssignee, byPhase }}
- */
-export function buildWeeklyHoursRollup(tasks, teamMemberMap, phaseLookup) {
-  const split = splitPriorityEstimatedHours(tasks);
-  return {
-    taskCount: tasks.filter(t => isOpenTask(t)).length,
-    totalEstimatedHours: split.totalHours,
-    priorityEstimatedHours: split.priorityHours,
-    nonPriorityEstimatedHours: split.nonPriorityHours,
-    missingEstimateCount: split.missingTotal,
-    priorityMissingEstimateCount: split.missingPriority,
-    byAssignee: teamMemberMap ? groupEstimatedHoursByAssignee(tasks, teamMemberMap) : [],
-    byPhase: phaseLookup ? groupEstimatedHoursByPhase(tasks, phaseLookup) : [],
-  };
-}
-
-/**
- * Compute scoped task-group totals (for project/phase headers in workload sections).
- * Uses the same isOpenTask + estimate rules as all other rollups.
- *
- * @returns {{ totalHours, missingCount, taskCount }}
- */
+/** @deprecated Use buildWorkloadRollup().totals.hours instead */
 export function computeScopedTotals(tasks) {
   let totalHours = 0;
   let missingCount = 0;

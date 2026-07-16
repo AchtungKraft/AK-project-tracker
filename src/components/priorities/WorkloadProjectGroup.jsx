@@ -31,7 +31,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import InlineEstimateEditor from "@/components/tasks/InlineEstimateEditor";
 import { formatDurationCompact } from "@/lib/estimateUtils";
-import { computeScopedTotals, formatDuration } from "@/lib/workloadRollups";
+import { buildWorkloadRollup, getProjectPhaseRollups, formatDuration } from "@/lib/workloadRollups";
 
 const DONE_STATUS_ID = "6913f57422230d8c7ee2ef54";
 
@@ -416,16 +416,16 @@ function WorkloadTaskRow({
 // Phase selector — delegates to shared PhaseSelectorPopover
 
 // ── Phase header — visually distinct from task rows ──
-function PhaseHeader({ bucket, openCount, expanded, onToggle, editMode, phaseTasks, selectedTaskIds, onToggleTaskSelection, onSelectProjectTasks }) {
+function PhaseHeader({ bucket, openCount, expanded, onToggle, editMode, phaseTasks, selectedTaskIds, onToggleTaskSelection, onSelectProjectTasks, phaseRollup }) {
   // Selection state for this phase (edit mode)
   const phaseTaskIds = (phaseTasks || []).map(t => t.id);
   const selectedCount = phaseTaskIds.filter(id => selectedTaskIds?.has(id)).length;
   const allSelected = phaseTaskIds.length > 0 && selectedCount === phaseTaskIds.length;
   const someSelected = selectedCount > 0 && !allSelected;
 
-  // Phase-scoped totals — uses shared utility for parity with Project Detail
-  const phaseTotals = useMemo(() => computeScopedTotals(phaseTasks || []), [phaseTasks]);
-  const estDisplay = formatDuration(phaseTotals.totalHours);
+  // Phase totals — consumed directly from canonical rollup (no recalculation)
+  const estDisplay = phaseRollup ? formatDuration(phaseRollup.hours) : null;
+  const missingCount = phaseRollup ? phaseRollup.missingEstimates : 0;
 
   const handlePhaseSelect = (e) => {
     e.stopPropagation();
@@ -464,8 +464,8 @@ function PhaseHeader({ bucket, openCount, expanded, onToggle, editMode, phaseTas
       {estDisplay && (
         <span className="text-[10px] text-gray-500 font-normal tabular-nums">· {estDisplay}</span>
       )}
-      {phaseTotals.missingCount > 0 && (
-        <span className="text-[9px] text-yellow-600/70 font-normal">· {phaseTotals.missingCount} no est.</span>
+      {missingCount > 0 && (
+        <span className="text-[9px] text-yellow-600/70 font-normal">· {missingCount} no est.</span>
       )}
     </div>
   );
@@ -680,9 +680,19 @@ export default function WorkloadProjectGroup({
 
   const currentPhaseLabel = project?.current_phase_name || null;
 
-  // Project-scoped totals (only tasks visible in this section)
-  const projectTotals = useMemo(() => computeScopedTotals(tasks), [tasks]);
-  const projectEstDisplay = formatDuration(projectTotals.totalHours);
+  // Canonical rollup for this project group (section-scoped)
+  const projectRollup = useMemo(
+    () => buildWorkloadRollup(tasks, { phaseLookup: bucketMap }),
+    [tasks, bucketMap]
+  );
+  const projectTotals = projectRollup.totals;
+  const projectEstDisplay = formatDuration(projectTotals.hours);
+
+  // Phase rollups extracted from the canonical rollup
+  const phaseRollups = useMemo(
+    () => getProjectPhaseRollups(projectRollup, projectId),
+    [projectRollup, projectId]
+  );
 
   // Print handler
   const handleProjectPrint = useCallback((opts) => {
@@ -763,10 +773,10 @@ export default function WorkloadProjectGroup({
 
         {/* Section task count + estimate totals */}
         <span className="text-[10px] text-gray-500 tabular-nums shrink-0">
-          {tasks.length} {isMobile ? "" : (tasks.length === 1 ? "Task" : "Tasks")}
+          {projectTotals.taskCount} {isMobile ? "" : (projectTotals.taskCount === 1 ? "Task" : "Tasks")}
           {projectEstDisplay && <> · <span className="text-gray-400">{projectEstDisplay}</span></>}
-          {!isMobile && projectTotals.missingCount > 0 && (
-            <> · <span className="text-yellow-600/70">{projectTotals.missingCount} No Est.</span></>
+          {!isMobile && projectTotals.missingEstimates > 0 && (
+            <> · <span className="text-yellow-600/70">{projectTotals.missingEstimates} No Est.</span></>
           )}
         </span>
 
@@ -892,6 +902,7 @@ export default function WorkloadProjectGroup({
                         selectedTaskIds={selectedTaskIds}
                         onToggleTaskSelection={onToggleTaskSelection}
                         onSelectProjectTasks={onSelectProjectTasks}
+                        phaseRollup={phaseRollups.get(bucket.id)}
                       />
                       {!isPhaseCollapsed && phaseTasks.map(renderTaskRow)}
                     </div>
@@ -909,6 +920,7 @@ export default function WorkloadProjectGroup({
                       selectedTaskIds={selectedTaskIds}
                       onToggleTaskSelection={onToggleTaskSelection}
                       onSelectProjectTasks={onSelectProjectTasks}
+                      phaseRollup={phaseRollups.get("__unphased__")}
                     />
                     {!collapsedPhases.has("__unphased__") && unphased.map(renderTaskRow)}
                   </div>
