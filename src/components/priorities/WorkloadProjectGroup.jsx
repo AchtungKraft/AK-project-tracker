@@ -736,86 +736,173 @@ export default function WorkloadProjectGroup({
     <div>
       {/* ── Project header — primary visual anchor ── */}
       <div
-        className="flex items-center gap-2 px-2 sm:px-3 py-2 sm:py-3 bg-gray-800/60 hover:bg-gray-800/70 cursor-pointer transition-colors mt-2 first:mt-0 border-t-2 border-gray-600/60 group"
+        className={cn(
+          "bg-gray-800/60 hover:bg-gray-800/70 cursor-pointer transition-colors mt-2 first:mt-0 border-t-2 border-gray-600/60 group",
+          isMobile ? "px-2 py-2" : "flex items-center gap-2 px-3 py-3"
+        )}
         onClick={handleToggleProject}
       >
-        {/* Fixed-width gutter slot for bulk selection — same width as task gutter */}
-        <span className={cn("shrink-0 flex items-center justify-center", GUTTER_SELECT_W)} onClick={(e) => e.stopPropagation()}>
-          {editMode && onSelectProjectTasks ? (() => {
-            const taskIds = tasks.map(t => t.id);
-            const selCount = taskIds.filter(id => selectedTaskIds?.has(id)).length;
-            const allSel = taskIds.length > 0 && selCount === taskIds.length;
-            const someSel = selCount > 0 && !allSel;
-            return (
-              <Checkbox
-                checked={allSel ? true : someSel ? "indeterminate" : false}
-                onCheckedChange={() => {
-                  if (allSel) taskIds.forEach(id => onToggleTaskSelection(id));
-                  else onSelectProjectTasks(taskIds);
-                }}
-                className="h-3.5 w-3.5 border-gray-500 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 data-[state=indeterminate]:bg-blue-600 data-[state=indeterminate]:border-blue-600"
-              />
-            );
-          })() : null}
-        </span>
+        {isMobile ? (
+          /* ── MOBILE: two-line project header ── */
+          <>
+            {/* Line 1: chevron + name + compact actions */}
+            <div className="flex items-start gap-1.5">
+              {/* Bulk selection gutter */}
+              <span className={cn("shrink-0 flex items-center justify-center mt-0.5", GUTTER_SELECT_W)} onClick={(e) => e.stopPropagation()}>
+                {editMode && onSelectProjectTasks ? (() => {
+                  const taskIds = tasks.map(t => t.id);
+                  const selCount = taskIds.filter(id => selectedTaskIds?.has(id)).length;
+                  const allSel = taskIds.length > 0 && selCount === taskIds.length;
+                  const someSel = selCount > 0 && !allSel;
+                  return (
+                    <Checkbox
+                      checked={allSel ? true : someSel ? "indeterminate" : false}
+                      onCheckedChange={() => {
+                        if (allSel) taskIds.forEach(id => onToggleTaskSelection(id));
+                        else onSelectProjectTasks(taskIds);
+                      }}
+                      className="h-3.5 w-3.5 border-gray-500 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 data-[state=indeterminate]:bg-blue-600 data-[state=indeterminate]:border-blue-600"
+                    />
+                  );
+                })() : null}
+              </span>
 
-        {expanded
-          ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
-          : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
-        }
+              {/* Chevron — aligned with first text line */}
+              <span className="shrink-0 mt-0.5">
+                {expanded
+                  ? <ChevronDown className="w-4 h-4 text-gray-400" />
+                  : <ChevronRight className="w-4 h-4 text-gray-400" />
+                }
+              </span>
 
-        {/* Project name — strongest typography */}
-        <span className={cn(
-          "font-bold text-white tracking-tight min-w-0",
-          isMobile ? "text-[14px] line-clamp-2 leading-tight" : "text-[15px] truncate"
-        )}>
-          {project?.name || label || "No Project"}
-        </span>
+              {/* Name — full width, up to two lines */}
+              <span className="font-bold text-white tracking-tight min-w-0 flex-1 text-[14px] line-clamp-2 leading-tight">
+                {project?.name || label || "No Project"}
+              </span>
 
-        {/* Project type label — same color as left navigation */}
-        <ProjectTypeLabel projectType={projectType} />
+              {/* Compact action icons — far right */}
+              {project && (
+                <div className="flex items-center gap-0.5 shrink-0 ml-auto" onClick={(e) => e.stopPropagation()}>
+                  <Link
+                    to={buildProjectDetailUrl(project.id, { source: SOURCES.PRIORITIES })}
+                    className="text-[10px] text-gray-500 hover:text-white px-1 py-0.5 rounded hover:bg-gray-700 transition-colors"
+                  >
+                    Open
+                  </Link>
+                  <button
+                    onClick={() => onAddTask(project.id)}
+                    className="text-green-500 hover:text-green-300 px-0.5 py-0.5 rounded hover:bg-green-900/20 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
 
-        {/* Section task count + estimate totals */}
-        <span className="text-[10px] text-gray-500 tabular-nums shrink-0">
-          {projectTotals.taskCount} {isMobile ? "" : (projectTotals.taskCount === 1 ? "Task" : "Tasks")}
-          {projectEstDisplay && <> · <span className="text-gray-400">{projectEstDisplay}</span></>}
-          {!isMobile && projectTotals.missingEstimates > 0 && (
-            <> · <span className="text-yellow-600/70">{projectTotals.missingEstimates} No Est.</span></>
-          )}
-        </span>
+            {/* Line 2: type · task count · hours · missing — left-aligned under name */}
+            <div className="flex items-center gap-0 mt-1" style={{ paddingLeft: 'calc(18px + 22px)' }}>
+              <span className="text-[10px] text-gray-500 tabular-nums flex items-center gap-0 flex-wrap">
+                {projectType && (
+                  <>
+                    <ProjectTypeLabel projectType={projectType} variant="mobileMetadata" />
+                    <span className="mx-1 text-gray-600">·</span>
+                  </>
+                )}
+                <span>{projectTotals.taskCount} {projectTotals.taskCount === 1 ? "Task" : "Tasks"}</span>
+                {projectEstDisplay && (
+                  <>
+                    <span className="mx-1 text-gray-600">·</span>
+                    <span className="text-gray-400">{projectEstDisplay}</span>
+                  </>
+                )}
+                {projectTotals.missingEstimates > 0 && (
+                  <>
+                    <span className="mx-1 text-gray-600">·</span>
+                    <span className="text-yellow-600/70">{projectTotals.missingEstimates} No Est.</span>
+                  </>
+                )}
+              </span>
+            </div>
+          </>
+        ) : (
+          /* ── DESKTOP: single-line project header (unchanged) ── */
+          <>
+            {/* Fixed-width gutter slot for bulk selection */}
+            <span className={cn("shrink-0 flex items-center justify-center", GUTTER_SELECT_W)} onClick={(e) => e.stopPropagation()}>
+              {editMode && onSelectProjectTasks ? (() => {
+                const taskIds = tasks.map(t => t.id);
+                const selCount = taskIds.filter(id => selectedTaskIds?.has(id)).length;
+                const allSel = taskIds.length > 0 && selCount === taskIds.length;
+                const someSel = selCount > 0 && !allSel;
+                return (
+                  <Checkbox
+                    checked={allSel ? true : someSel ? "indeterminate" : false}
+                    onCheckedChange={() => {
+                      if (allSel) taskIds.forEach(id => onToggleTaskSelection(id));
+                      else onSelectProjectTasks(taskIds);
+                    }}
+                    className="h-3.5 w-3.5 border-gray-500 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 data-[state=indeterminate]:bg-blue-600 data-[state=indeterminate]:border-blue-600"
+                  />
+                );
+              })() : null}
+            </span>
 
-        {/* Current phase label — subtle */}
-        {currentPhaseLabel && !isMobile && (
-          <span className="text-[9px] text-gray-600 shrink-0 hidden md:inline truncate max-w-[120px]" title={`Phase: ${currentPhaseLabel}`}>
-            · {currentPhaseLabel}
-          </span>
-        )}
+            {expanded
+              ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+              : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
+            }
 
-        {/* Actions — right-aligned, hidden on mobile */}
-        {project && !isMobile && (
-          <div className="flex items-center gap-0.5 shrink-0 ml-auto" onClick={(e) => e.stopPropagation()}>
-            <Link
-              to={buildProjectDetailUrl(project.id, { source: SOURCES.PRIORITIES })}
-              className="text-[10px] text-gray-500 hover:text-white px-1 py-0.5 rounded hover:bg-gray-700 transition-colors"
-              title="Open project"
-            >
-              Open
-            </Link>
-            <button
-              onClick={() => onAddTask(project.id)}
-              className="text-green-500 hover:text-green-300 px-0.5 py-0.5 rounded hover:bg-green-900/20 transition-colors"
-              title="Add task"
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setPrintModalOpen(true)}
-              className="text-gray-500 hover:text-white px-0.5 py-0.5 rounded hover:bg-gray-700 transition-colors"
-              title="Print work packet"
-            >
-              <Printer className="w-3.5 h-3.5" />
-            </button>
-          </div>
+            {/* Project name */}
+            <span className="font-bold text-white tracking-tight min-w-0 text-[15px] truncate">
+              {project?.name || label || "No Project"}
+            </span>
+
+            {/* Project type label */}
+            <ProjectTypeLabel projectType={projectType} />
+
+            {/* Section task count + estimate totals */}
+            <span className="text-[10px] text-gray-500 tabular-nums shrink-0">
+              {projectTotals.taskCount} {projectTotals.taskCount === 1 ? "Task" : "Tasks"}
+              {projectEstDisplay && <> · <span className="text-gray-400">{projectEstDisplay}</span></>}
+              {projectTotals.missingEstimates > 0 && (
+                <> · <span className="text-yellow-600/70">{projectTotals.missingEstimates} No Est.</span></>
+              )}
+            </span>
+
+            {/* Current phase label — subtle */}
+            {currentPhaseLabel && (
+              <span className="text-[9px] text-gray-600 shrink-0 hidden md:inline truncate max-w-[120px]" title={`Phase: ${currentPhaseLabel}`}>
+                · {currentPhaseLabel}
+              </span>
+            )}
+
+            {/* Actions — right-aligned */}
+            {project && (
+              <div className="flex items-center gap-0.5 shrink-0 ml-auto" onClick={(e) => e.stopPropagation()}>
+                <Link
+                  to={buildProjectDetailUrl(project.id, { source: SOURCES.PRIORITIES })}
+                  className="text-[10px] text-gray-500 hover:text-white px-1 py-0.5 rounded hover:bg-gray-700 transition-colors"
+                  title="Open project"
+                >
+                  Open
+                </Link>
+                <button
+                  onClick={() => onAddTask(project.id)}
+                  className="text-green-500 hover:text-green-300 px-0.5 py-0.5 rounded hover:bg-green-900/20 transition-colors"
+                  title="Add task"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setPrintModalOpen(true)}
+                  className="text-gray-500 hover:text-white px-0.5 py-0.5 rounded hover:bg-gray-700 transition-colors"
+                  title="Print work packet"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
