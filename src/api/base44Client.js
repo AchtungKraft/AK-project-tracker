@@ -25,8 +25,15 @@ const entitiesProxy = new Proxy(_base44.entities, {
       get(eTarget, method) {
         const original = eTarget[method];
         if (method === 'list' && typeof original === 'function') {
+          // list(sort?, limit?, skip?, fields?)
           return function patchedList(sort, limit, ...rest) {
             return original.call(eTarget, sort, limit ?? DEFAULT_LIST_LIMIT, ...rest);
+          };
+        }
+        if (method === 'filter' && typeof original === 'function') {
+          // filter(query, sort?, limit?, skip?, fields?)
+          return function patchedFilter(query, sort, limit, ...rest) {
+            return original.call(eTarget, query, sort, limit ?? DEFAULT_LIST_LIMIT, ...rest);
           };
         }
         return original;
