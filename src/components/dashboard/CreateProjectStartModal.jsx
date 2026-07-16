@@ -14,6 +14,7 @@ export default function CreateProjectStartModal({ onClose }) {
   const [sourceProject, setSourceProject] = useState(null);
 
   if (step === "form") {
+    // sourceProject is null for Blank mode, set for Clone mode — no stale data
     return <CreateProjectModal onClose={onClose} sourceProject={sourceProject} />;
   }
 
