@@ -483,6 +483,17 @@ export default function WeeklyWorkloadView({
     toast({ title: bucketId ? `Moved ${count} tasks to new phase` : `Moved ${count} tasks to General / No Phase` });
   }, [selectedTasks, updateTaskMutation, toast, dismiss, clearSelection]);
 
+  const handleBulkDelete = useCallback(async () => {
+    if (selectedTasks.length === 0) return;
+    const count = selectedTasks.length;
+    await Promise.all(selectedTasks.map(t => base44.entities.Task.delete(t.id)));
+    clearSelection();
+    dismiss();
+    queryClient.invalidateQueries({ queryKey: ['allTasks'] });
+    queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    toast({ title: `Deleted ${count} task${count !== 1 ? 's' : ''}` });
+  }, [selectedTasks, clearSelection, dismiss, queryClient, toast]);
+
   const handleBulkPrint = useCallback(() => {
     if (selectedTasks.length === 0) return;
     const printWindow = window.open("", "_blank");
@@ -786,6 +797,7 @@ export default function WeeklyWorkloadView({
         onTogglePriority={handleBulkPriority}
         onPrintSelected={handleBulkPrint}
         onMovePhase={handleBulkMovePhase}
+        onBulkDelete={handleBulkDelete}
         teamMembers={teamMembers}
         statuses={statuses}
         buckets={allBuckets}

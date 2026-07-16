@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { CalendarIcon, Loader2, UserPlus, ExternalLink, CheckCircle2, Clock } from "lucide-react";
+import { CalendarIcon, Loader2, UserPlus, ExternalLink, CheckCircle2, Clock, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
@@ -870,13 +870,22 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                 <CheckCircle2 className="w-4 h-4" />
                 Complete Task
               </Button>
-              <Button
-                variant="ghost"
-                onClick={() => setEditing(true)}
-                className="h-10 min-h-[40px] px-4 border border-white/15 text-white/60 bg-transparent hover:bg-white/5 hover:text-white/80"
-              >
-                Edit
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  onClick={() => setEditing(true)}
+                  className="flex-1 h-10 min-h-[40px] px-4 border border-white/15 text-white/60 bg-transparent hover:bg-white/5 hover:text-white/80"
+                >
+                  Edit
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={handleDeleteClick}
+                  className="h-10 min-h-[40px] px-3 border border-red-900/30 text-red-400/60 bg-transparent hover:bg-red-950/30 hover:text-red-400"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           )}
         </div>
@@ -900,13 +909,33 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
       }}
     />
 
-    {/* Delete Confirmation */}
+    {/* Delete Confirmation — shows dependency/checklist/comment context */}
     <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
       <AlertDialogContent className="bg-gray-900 border-red-900/30 text-white">
         <AlertDialogHeader>
           <AlertDialogTitle>Delete Task?</AlertDialogTitle>
-          <AlertDialogDescription className="text-gray-400">
-            Delete "{task?.name || 'this task'}"? This action cannot be undone.
+          <AlertDialogDescription asChild>
+            <div className="text-gray-400 space-y-2">
+              <p>Delete "<span className="text-gray-200 font-medium">{task?.name || 'this task'}</span>"? This action cannot be undone.</p>
+              {/* Related data summary */}
+              {(checklistItems.length > 0 || successorTasks.length > 0 || selectedTasks.length > 0) && (
+                <div className="bg-gray-800/50 rounded-md px-3 py-2 space-y-1 text-xs">
+                  {checklistItems.length > 0 && (
+                    <p className="text-gray-300">{checklistItems.length} checklist item{checklistItems.length !== 1 ? 's' : ''} will be removed</p>
+                  )}
+                  {selectedTasks.length > 0 && (
+                    <p className="text-gray-300">Depends on: {selectedTasks.map(t => t.name).join(', ')}</p>
+                  )}
+                  {successorTasks.length > 0 && (
+                    <div>
+                      <p className="text-amber-400 font-medium">This task blocks:</p>
+                      {successorTasks.map(t => <p key={t.id} className="text-gray-300 pl-2">• {t.name}</p>)}
+                      <p className="text-gray-500 mt-1">Dependency references will be removed from blocked tasks.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

@@ -13,7 +13,18 @@ import {
   Printer,
   Layers,
   AlertTriangle,
+  Trash2,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 
 export default function WorkloadBulkActionBar({
@@ -26,6 +37,7 @@ export default function WorkloadBulkActionBar({
   onTogglePriority,
   onPrintSelected,
   onMovePhase,
+  onBulkDelete,
   teamMembers = [],
   statuses = [],
   buckets = [],
@@ -36,6 +48,8 @@ export default function WorkloadBulkActionBar({
   const [assignOpen, setAssignOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [customDays, setCustomDays] = useState("");
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const activeMembers = useMemo(
     () => (teamMembers || []).filter((tm) => tm.active),
@@ -220,6 +234,19 @@ export default function WorkloadBulkActionBar({
           Print
         </Button>
 
+        {/* Delete Selected */}
+        {onBulkDelete && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setDeleteConfirmOpen(true)}
+            className="border-red-900/50 text-red-400 hover:bg-red-950/30 hover:text-red-300 h-7 text-xs gap-1"
+          >
+            <Trash2 className="w-3 h-3" />
+            Delete
+          </Button>
+        )}
+
         {/* Clear */}
         <Button
           variant="ghost"
@@ -231,6 +258,41 @@ export default function WorkloadBulkActionBar({
           Clear
         </Button>
       </div>
+
+      {/* Bulk Delete Confirmation */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent className="bg-gray-900 border-red-900/30 text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedCount} Task{selectedCount !== 1 ? 's' : ''}?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="text-gray-400 space-y-2">
+                <p>This will permanently delete the selected tasks. This action cannot be undone.</p>
+                <div className="bg-gray-800/50 rounded-md px-3 py-2 space-y-0.5 text-xs max-h-40 overflow-y-auto">
+                  {selectedTasks.map(t => (
+                    <p key={t.id} className="text-gray-300 truncate">• {t.name}</p>
+                  ))}
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting} className="border-gray-700 text-white hover:bg-gray-800">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isDeleting}
+              onClick={async (e) => {
+                e.preventDefault();
+                setIsDeleting(true);
+                await onBulkDelete();
+                setIsDeleting(false);
+                setDeleteConfirmOpen(false);
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {isDeleting ? 'Deleting...' : `Delete ${selectedCount} Task${selectedCount !== 1 ? 's' : ''}`}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

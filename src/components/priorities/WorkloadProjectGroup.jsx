@@ -609,12 +609,11 @@ export default function WorkloadProjectGroup({
     return set;
   });
   
-  const [showAll, setShowAll] = useState(false);
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const { toast } = useToast();
   const isMobile = useIsMobile();
 
-  const INITIAL_VISIBLE = 12;
+
 
   // Persist project expand/collapse
   const handleToggleProject = useCallback(() => {
@@ -728,8 +727,7 @@ export default function WorkloadProjectGroup({
     printWindow.document.close();
   }, [tasks, allProjectTasks, project, buckets, teamMemberMap, blockingLabels, blockedSet, successorMap, checklistsByTaskId, weekLabel, toast]);
 
-  const visibleTasks = showAll ? tasks : tasks.slice(0, INITIAL_VISIBLE);
-  const remaining = tasks.length - INITIAL_VISIBLE;
+
 
   return (
     <div>
@@ -824,9 +822,8 @@ export default function WorkloadProjectGroup({
             
             const byPhase = new Map();
             const unphased = [];
-            const allVisibleTasks = showAll ? tasks : tasks.slice(0, INITIAL_VISIBLE);
             
-            allVisibleTasks.forEach(t => {
+            tasks.forEach(t => {
               if (t.kanban_bucket_id && bucketMap.has(t.kanban_bucket_id)) {
                 if (!byPhase.has(t.kanban_bucket_id)) byPhase.set(t.kanban_bucket_id, []);
                 byPhase.get(t.kanban_bucket_id).push(t);
@@ -879,7 +876,7 @@ export default function WorkloadProjectGroup({
             };
             
             if (!hasPhases) {
-              return allVisibleTasks.map(renderTaskRow);
+              return tasks.map(renderTaskRow);
             }
 
             return (
@@ -928,24 +925,7 @@ export default function WorkloadProjectGroup({
               </>
             );
           })()}
-          {!showAll && remaining > 0 && (
-            <button
-              onClick={() => setShowAll(true)}
-              className="w-full py-1.5 text-center text-xs text-gray-500 hover:text-white hover:bg-gray-800/40 transition-colors flex items-center justify-center gap-1"
-            >
-              <ChevronDown className="w-3 h-3" />
-              Show {remaining} More Tasks
-            </button>
-          )}
-          {showAll && remaining > 0 && (
-            <button
-              onClick={() => setShowAll(false)}
-              className="w-full py-1 text-center text-[11px] text-gray-600 hover:text-gray-400 transition-colors flex items-center justify-center gap-1"
-            >
-              <ChevronRight className="w-3 h-3 -rotate-90" />
-              Collapse Tasks
-            </button>
-          )}
+
         </div>
       )}
 

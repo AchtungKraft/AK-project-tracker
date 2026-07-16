@@ -32,6 +32,7 @@ import { buildWorkloadRollup, getProjectPhaseRollups } from "@/lib/workloadRollu
 import InlineEstimateEditor from "@/components/tasks/InlineEstimateEditor";
 import CompletedTasksByPhase from "./CompletedTasksByPhase";
 import { sortTasksByPriority } from "@/utils/taskPrioritySort";
+import WeeklyHoursSummary from "@/components/priorities/WeeklyHoursSummary";
 
 const DONE_STATUS_ID = "6913f57422230d8c7ee2ef54";
 
@@ -649,6 +650,13 @@ export default function ProjectWorkloadView({
     clearSelection();
   }, [selectedTasksList, projectId, queryClient, clearSelection]);
 
+  const handleBulkDelete = useCallback(async () => {
+    await Promise.all(selectedTasksList.map(t => base44.entities.Task.delete(t.id)));
+    invalidateProjectCaches(queryClient, projectId);
+    clearSelection();
+    toast({ title: `Deleted ${selectedTasksList.length} task${selectedTasksList.length !== 1 ? 's' : ''}` });
+  }, [selectedTasksList, projectId, queryClient, clearSelection, toast]);
+
   // Print handler
   const handleProjectPrint = useCallback((opts) => {
     const printWindow = window.open("", "_blank");
@@ -766,14 +774,13 @@ export default function ProjectWorkloadView({
               {(teamMembers || []).filter(m => m.active).map(m => <SelectItem key={m.id} value={m.id}>{m.full_name}</SelectItem>)}
             </SelectContent>
           </Select>
-          {/* Project estimate summary — from canonical rollup */}
-          {(() => {
-            const parts = [`${projectRollup.totals.taskCount} task${projectRollup.totals.taskCount !== 1 ? "s" : ""}`];
-            if (projectRollup.totals.hours > 0) parts.push(formatDuration(projectRollup.totals.hours));
-            if (projectRollup.totals.missingEstimates > 0) parts.push(`${projectRollup.totals.missingEstimates} no est.`);
-            return <span className="text-[10px] text-gray-500 tabular-nums">{parts.join(" · ")}</span>;
-          })()}
         </div>
+
+        {/* ── Project Hours Summary Bar — canonical rollup ── */}
+        <WeeklyHoursSummary
+          rollup={projectRollup}
+          weekLabel="All Open"
+        />
 
         {/* ── Task list grouped by phase ── */}
         <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg overflow-hidden">
@@ -850,6 +857,7 @@ export default function ProjectWorkloadView({
               handleProjectPrint({ scope: "current", includeChecklists: toggles.showChecklists, includeCompletionMarks: false, includeNotes: false });
             }}
             onMovePhase={handleBulkMovePhase}
+            onBulkDelete={handleBulkDelete}
             teamMembers={teamMembers}
             statuses={statuses}
             buckets={buckets}
