@@ -91,7 +91,7 @@ export default function ProjectSourceSelector({ onClose, onBack, onSelect }) {
 
       <div className="pt-2 border-t border-gray-700/50">
         <p className="text-[11px] text-gray-500 leading-relaxed">
-          Copies client name, contact, email, phone, and project type into a new project. No tasks, files, comments, invoices, or history are copied.
+          Copies the available client contact and project-type fields from the selected project. Tasks, phases, files, financial records, and work history are not copied.
         </p>
       </div>
     </div>
