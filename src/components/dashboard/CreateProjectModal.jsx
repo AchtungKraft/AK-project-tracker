@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -6,28 +6,56 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
 import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { referenceDataConfig } from "@/components/common/queryConfig";
 
-export default function CreateProjectModal({ onClose }) {
+/**
+ * Suggest a next project number based on the source project name.
+ * If the name ends with _NN, increment it. Otherwise append _02.
+ */
+function suggestProjectNumber(sourceName) {
+  if (!sourceName) return "";
+  const suffixMatch = sourceName.match(/^(.+_)(\d{2,})$/);
+  if (suffixMatch) {
+    const prefix = suffixMatch[1];
+    const num = parseInt(suffixMatch[2], 10) + 1;
+    return prefix + String(num).padStart(suffixMatch[2].length, "0");
+  }
+  return sourceName + "_02";
+}
+
+export default function CreateProjectModal({ onClose, sourceProject = null }) {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
-  const [projectData, setProjectData] = useState({
-    name: "",
-    client_name: "",
-    client_email: "",
-    client_phone: "",
-    vin: "",
-    project_type_id: "",
-    status_id: "",
-    start_date: "",
-    target_completion: "",
-    assigned_team: [],
-  });
+
+  // Build initial state from sourceProject if provided
+  const initialData = useMemo(() => {
+    if (!sourceProject) {
+      return {
+        name: "", client_name: "", client_email: "", client_phone: "",
+        vin: "", project_type_id: "", status_id: "",
+        start_date: "", target_completion: "", assigned_team: [],
+      };
+    }
+    return {
+      name: suggestProjectNumber(sourceProject.name),
+      client_name: sourceProject.client_name || "",
+      client_email: sourceProject.client_email || "",
+      client_phone: sourceProject.client_phone || "",
+      vin: "",  // VIN is per-vehicle, never copied
+      project_type_id: sourceProject.project_type_id || "",
+      status_id: "",  // New project starts fresh
+      start_date: "",
+      target_completion: "",
+      assigned_team: [],
+    };
+  }, [sourceProject]);
+
+  const [projectData, setProjectData] = useState(initialData);
 
   // PHASE 1: Use extended caching for reference data
   const { data: projectTypes = [] } = useQuery({
@@ -90,6 +118,14 @@ export default function CreateProjectModal({ onClose }) {
 
   const formContent = (
     <form onSubmit={handleSubmit} className="space-y-4">
+          {sourceProject && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-950/30 border border-blue-800/40 text-sm">
+              <CheckCircle2 className="w-4 h-4 text-blue-400 shrink-0" />
+              <span className="text-gray-300">
+                Source: <span className="text-white font-medium">{sourceProject.name}</span>
+              </span>
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label>Project Name</Label>

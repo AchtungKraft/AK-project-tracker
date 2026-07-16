@@ -24,7 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import CreateProjectModal from "../components/dashboard/CreateProjectModal";
+import CreateProjectStartModal from "../components/dashboard/CreateProjectStartModal";
 import ProjectCard from "../components/dashboard/ProjectCard";
 import ProjectListView from "../components/dashboard/ProjectListView";
 import EditProjectModal from "../components/dashboard/EditProjectModal";
@@ -537,7 +537,7 @@ export default function Dashboard() {
       </div>
 
       {showCreateModal && (
-        <CreateProjectModal onClose={() => setShowCreateModal(false)} />
+        <CreateProjectStartModal onClose={() => setShowCreateModal(false)} />
       )}
 
       {editingProject && (
