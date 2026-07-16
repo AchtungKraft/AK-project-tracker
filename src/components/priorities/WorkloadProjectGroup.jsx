@@ -32,6 +32,7 @@ import { useIsMobile } from "@/components/mobile/useIsMobile";
 import InlineEstimateEditor from "@/components/tasks/InlineEstimateEditor";
 import { formatDurationCompact } from "@/lib/estimateUtils";
 import { buildWorkloadRollup, getProjectPhaseRollups, formatDuration } from "@/lib/workloadRollups";
+import ProjectTypeLabel from "@/components/shared/ProjectTypeLabel";
 
 const DONE_STATUS_ID = "6913f57422230d8c7ee2ef54";
 
@@ -580,6 +581,7 @@ export default function WorkloadProjectGroup({
   selectedTaskIds,
   onToggleTaskSelection,
   onSelectProjectTasks,
+  projectTypeMap,
   allTasks = [],
   checklistsByTaskId = {},
   weekLabel = "",
@@ -678,6 +680,7 @@ export default function WorkloadProjectGroup({
   }, [allProjectTasks]);
 
   const currentPhaseLabel = project?.current_phase_name || null;
+  const projectType = projectTypeMap?.get(project?.project_type_id) || null;
 
   // Canonical rollup for this project group (section-scoped)
   const projectRollup = useMemo(
@@ -768,6 +771,9 @@ export default function WorkloadProjectGroup({
         )}>
           {project?.name || label || "No Project"}
         </span>
+
+        {/* Project type label — same color as left navigation */}
+        <ProjectTypeLabel projectType={projectType} />
 
         {/* Section task count + estimate totals */}
         <span className="text-[10px] text-gray-500 tabular-nums shrink-0">

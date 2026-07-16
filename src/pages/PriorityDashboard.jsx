@@ -934,6 +934,7 @@ export default function PriorityDashboard() {
                 tasks={activePriorityTasks}
                 allTasks={allTasksData}
                 projects={projects}
+                projectTypes={projectTypes}
                 teamMembers={teamMembers}
                 categories={categories}
                 statuses={statuses}

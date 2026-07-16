@@ -122,6 +122,7 @@ export default function WeeklyWorkloadView({
   tasks,
   allTasks = [],
   projects,
+  projectTypes = [],
   teamMembers,
   categories,
   statuses,
@@ -159,6 +160,12 @@ export default function WeeklyWorkloadView({
     projects.forEach((p) => m.set(p.id, p));
     return m;
   }, [projects]);
+
+  const projectTypeMap = useMemo(() => {
+    const m = new Map();
+    projectTypes.forEach((pt) => m.set(pt.id, pt));
+    return m;
+  }, [projectTypes]);
 
   const teamMemberMap = useMemo(() => {
     const m = new Map();
@@ -746,6 +753,7 @@ export default function WeeklyWorkloadView({
                     label={g.label}
                     tasks={g.tasks}
                     allProjectTasks={g.allProjectTasks}
+                    projectTypeMap={projectTypeMap}
                     teamMemberMap={teamMemberMap}
                     statusMap={statusMap}
                     blockedSet={blockedSet}
