@@ -305,7 +305,7 @@ export default function FinancialExceptionDashboard() {
   // Fetch projects for filter dropdown - uses factory key
   const { data: projects = [] } = useQuery({
     queryKey: projectKeys.list(),
-    queryFn: () => base44.entities.Project.list('-created_date', 200),
+    queryFn: () => base44.entities.Project.list(),
   });
 
   // Build financial contexts for drawer

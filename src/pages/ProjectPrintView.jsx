@@ -62,7 +62,7 @@ export default function ProjectPrintView() {
 
   const { data: projects = [] } = useQuery({
     queryKey: ["printProjects", projectIds],
-    queryFn: () => base44.entities.Project.list('-created_date', 200),
+    queryFn: () => base44.entities.Project.list(),
     select: (data) => data.filter(p => projectIds.includes(p.id)),
     enabled: projectIds.length > 0,
   });
@@ -71,7 +71,7 @@ export default function ProjectPrintView() {
 
   const { data: allProjectTasks = [] } = useQuery({
     queryKey: ["printTasks", projectIds],
-    queryFn: () => base44.entities.Task.list('-created_date', 500),
+    queryFn: () => base44.entities.Task.list(),
     select: (data) => data.filter(t => projectIds.includes(t.project_id)),
     enabled: projectIds.length > 0,
   });

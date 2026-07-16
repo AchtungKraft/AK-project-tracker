@@ -81,7 +81,7 @@ export default function MyTasks() {
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list('-created_date', 200),
+    queryFn: () => base44.entities.Project.list(),
   });
 
   const { data: categories = [] } = useQuery({

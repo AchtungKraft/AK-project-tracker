@@ -68,7 +68,7 @@ export default function SupplyQueueSimplified() {
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects-queue'],
-    queryFn: () => base44.entities.Project.list('-created_date', 200),
+    queryFn: () => base44.entities.Project.list(),
   });
 
   const { data: vendors = [] } = useQuery({

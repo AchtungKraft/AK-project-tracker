@@ -55,7 +55,7 @@ export default function ClientPortalAdmin() {
 
   const { data: projects = [], isLoading: loadingProjects } = useQuery({
     queryKey: ["projects"],
-    queryFn: () => base44.entities.Project.list('-created_date', 200),
+    queryFn: () => base44.entities.Project.list(),
   });
 
   // Mutations

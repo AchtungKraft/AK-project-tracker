@@ -52,11 +52,11 @@ export default function ProductionBoard() {
   // ── Data queries ──
   const { data: allTasks = [], isLoading } = useQuery({
     queryKey: ["allTasks"],
-    queryFn: () => base44.entities.Task.list('-created_date', 500),
+    queryFn: () => base44.entities.Task.list(),
   });
   const { data: projects = [] } = useQuery({
     queryKey: ["projects"],
-    queryFn: () => base44.entities.Project.list('-created_date', 200),
+    queryFn: () => base44.entities.Project.list(),
   });
   const { data: teamMembers = [] } = useQuery({
     queryKey: ["teamMembers"],
