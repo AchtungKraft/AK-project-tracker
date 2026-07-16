@@ -31,6 +31,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import InlineEstimateEditor from "@/components/tasks/InlineEstimateEditor";
 import { formatDurationCompact } from "@/lib/estimateUtils";
+import { computeScopedTotals, formatDuration } from "@/lib/workloadRollups";
 
 const DONE_STATUS_ID = "6913f57422230d8c7ee2ef54";
 
@@ -422,6 +423,10 @@ function PhaseHeader({ bucket, openCount, expanded, onToggle, editMode, phaseTas
   const allSelected = phaseTaskIds.length > 0 && selectedCount === phaseTaskIds.length;
   const someSelected = selectedCount > 0 && !allSelected;
 
+  // Phase-scoped totals — uses shared utility for parity with Project Detail
+  const phaseTotals = useMemo(() => computeScopedTotals(phaseTasks || []), [phaseTasks]);
+  const estDisplay = formatDuration(phaseTotals.totalHours);
+
   const handlePhaseSelect = (e) => {
     e.stopPropagation();
     if (allSelected) {
@@ -456,6 +461,12 @@ function PhaseHeader({ bucket, openCount, expanded, onToggle, editMode, phaseTas
         {bucket?.name || "GENERAL / NO PHASE"}
       </span>
       <span className="text-[10px] text-gray-500 font-normal">({openCount})</span>
+      {estDisplay && (
+        <span className="text-[10px] text-gray-500 font-normal tabular-nums">· {estDisplay}</span>
+      )}
+      {phaseTotals.missingCount > 0 && (
+        <span className="text-[9px] text-yellow-600/70 font-normal">· {phaseTotals.missingCount} no est.</span>
+      )}
     </div>
   );
 }
@@ -669,6 +680,10 @@ export default function WorkloadProjectGroup({
 
   const currentPhaseLabel = project?.current_phase_name || null;
 
+  // Project-scoped totals (only tasks visible in this section)
+  const projectTotals = useMemo(() => computeScopedTotals(tasks), [tasks]);
+  const projectEstDisplay = formatDuration(projectTotals.totalHours);
+
   // Print handler
   const handleProjectPrint = useCallback((opts) => {
     const printWindow = window.open("", "_blank");
@@ -746,13 +761,17 @@ export default function WorkloadProjectGroup({
           {project?.name || label || "No Project"}
         </span>
 
-        {/* Section task count */}
+        {/* Section task count + estimate totals */}
         <span className="text-[10px] text-gray-500 tabular-nums shrink-0">
-          {tasks.length}
+          {tasks.length} {isMobile ? "" : (tasks.length === 1 ? "Task" : "Tasks")}
+          {projectEstDisplay && <> · <span className="text-gray-400">{projectEstDisplay}</span></>}
+          {!isMobile && projectTotals.missingCount > 0 && (
+            <> · <span className="text-yellow-600/70">{projectTotals.missingCount} No Est.</span></>
+          )}
         </span>
 
         {/* Current phase label — subtle */}
-        {currentPhaseLabel && (
+        {currentPhaseLabel && !isMobile && (
           <span className="text-[9px] text-gray-600 shrink-0 hidden md:inline truncate max-w-[120px]" title={`Phase: ${currentPhaseLabel}`}>
             · {currentPhaseLabel}
           </span>

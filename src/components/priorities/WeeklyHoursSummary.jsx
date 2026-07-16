@@ -2,15 +2,25 @@ import React, { useState, useMemo } from "react";
 import { ChevronDown, Clock, Flame, AlertTriangle, User, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  splitPriorityEstimatedHours,
-  groupEstimatedHoursByAssignee,
-  groupEstimatedHoursByPhase,
+  buildWeeklyHoursRollup,
   formatDuration,
 } from "@/lib/workloadRollups";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 
+/**
+ * WeeklyHoursSummary — single canonical weekly summary.
+ *
+ * Props:
+ *   thisWeekTasks  – tasks due in the selected week (required)
+ *   overdueTasks   – tasks overdue (optional, shown separately)
+ *   teamMemberMap  – Map<id, teamMember>
+ *   phaseLookup    – Map<id, bucket>
+ *   weekLabel      – e.g. "Jul 13 – Jul 19"
+ *   onFilterAssignee / onFilterPhase – optional click handlers
+ */
 export default function WeeklyHoursSummary({
-  tasks,
+  thisWeekTasks = [],
+  overdueTasks = [],
   teamMemberMap,
   phaseLookup,
   weekLabel,
@@ -20,18 +30,36 @@ export default function WeeklyHoursSummary({
   const [expanded, setExpanded] = useState(false);
   const isMobile = useIsMobile();
 
-  const summary = useMemo(() => splitPriorityEstimatedHours(tasks), [tasks]);
-  const assigneeGroups = useMemo(
-    () => (expanded ? groupEstimatedHoursByAssignee(tasks, teamMemberMap) : []),
-    [tasks, teamMemberMap, expanded]
-  );
-  const phaseGroups = useMemo(
-    () => (expanded ? groupEstimatedHoursByPhase(tasks, phaseLookup) : []),
-    [tasks, phaseLookup, expanded]
+  // Canonical rollup — selected week only
+  const weekRollup = useMemo(
+    () => buildWeeklyHoursRollup(thisWeekTasks, teamMemberMap, expanded ? phaseLookup : null),
+    [thisWeekTasks, teamMemberMap, phaseLookup, expanded]
   );
 
-  const totalDisplay = formatDuration(summary.totalHours) || "0h";
-  const priorityDisplay = formatDuration(summary.priorityHours) || "0h";
+  // Overdue rollup — separate
+  const overdueRollup = useMemo(
+    () => buildWeeklyHoursRollup(overdueTasks, null, null),
+    [overdueTasks]
+  );
+
+  // Expanded detail: assignee & phase come from the week rollup
+  const assigneeGroups = useMemo(
+    () => (expanded ? weekRollup.byAssignee : []),
+    [expanded, weekRollup.byAssignee]
+  );
+  const phaseGroups = useMemo(
+    () => (expanded ? weekRollup.byPhase : []),
+    [expanded, weekRollup.byPhase]
+  );
+
+  const weekDisplay = formatDuration(weekRollup.totalEstimatedHours) || "0h";
+  const priorityDisplay = formatDuration(weekRollup.priorityEstimatedHours) || "0h";
+  const overdueDisplay = formatDuration(overdueRollup.totalEstimatedHours);
+  const hasOverdue = overdueRollup.taskCount > 0;
+
+  // Label: "This Week" when week-scoped, "Total" when showing all open tasks
+  const isWeekScoped = !weekLabel || weekLabel !== "All Open";
+  const totalLabel = isWeekScoped ? "This Week" : "Total";
 
   if (isMobile) {
     return (
@@ -42,11 +70,12 @@ export default function WeeklyHoursSummary({
         >
           <Clock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
           <span className="text-xs text-gray-300">
-            <span className="text-white font-semibold">{totalDisplay}</span> Total
-            {" · "}
-            <span className="text-red-400 font-semibold">{priorityDisplay}</span> Priority
-            {summary.missingTotal > 0 && (
-              <> · <span className="text-yellow-500">{summary.missingTotal} Missing</span></>
+            <span className="text-white font-semibold">{weekDisplay}</span> {totalLabel}
+            {hasOverdue && (
+              <> · <span className="text-red-400 font-semibold">{overdueDisplay}</span> Overdue</>
+            )}
+            {weekRollup.missingEstimateCount > 0 && (
+              <> · <span className="text-yellow-500">{weekRollup.missingEstimateCount} Missing</span></>
             )}
           </span>
           <ChevronDown className={cn("w-3 h-3 text-gray-500 ml-auto transition-transform", expanded && "rotate-180")} />
@@ -75,12 +104,22 @@ export default function WeeklyHoursSummary({
           </span>
         )}
         <div className="flex items-center gap-4 text-sm">
-          <span className="text-white font-bold tabular-nums">{totalDisplay} <span className="text-gray-400 font-normal text-xs">Total</span></span>
-          <span className="text-red-400 font-bold tabular-nums">{priorityDisplay} <span className="text-gray-400 font-normal text-xs">Priority</span></span>
-          {summary.missingTotal > 0 && (
+          <span className="text-white font-bold tabular-nums">
+            {weekDisplay} <span className="text-gray-400 font-normal text-xs">{totalLabel}</span>
+          </span>
+          <span className="text-red-400 font-bold tabular-nums">
+            {priorityDisplay} <span className="text-gray-400 font-normal text-xs">Priority</span>
+          </span>
+          {hasOverdue && (
+            <span className="text-orange-400 font-bold tabular-nums flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3" />
+              {overdueDisplay} <span className="text-gray-400 font-normal text-xs">Overdue</span>
+            </span>
+          )}
+          {weekRollup.missingEstimateCount > 0 && (
             <span className="text-yellow-500 font-bold tabular-nums flex items-center gap-1">
               <AlertTriangle className="w-3 h-3" />
-              {summary.missingTotal} <span className="text-gray-400 font-normal text-xs">Missing Est.</span>
+              {weekRollup.missingEstimateCount} <span className="text-gray-400 font-normal text-xs">Missing Est.</span>
             </span>
           )}
         </div>
@@ -96,14 +135,21 @@ export default function WeeklyHoursSummary({
               <Flame className="w-3 h-3 text-red-400" /> Hours Breakdown
             </div>
             <div className="grid grid-cols-3 gap-2">
-              <MetricCard label="Total" value={totalDisplay} color="text-white" />
+              <MetricCard label={totalLabel} value={weekDisplay} color="text-white" />
               <MetricCard label="Priority" value={priorityDisplay} color="text-red-400" />
-              <MetricCard label="Non-Priority" value={formatDuration(summary.nonPriorityHours) || "0h"} color="text-gray-300" />
+              <MetricCard label="Non-Priority" value={formatDuration(weekRollup.nonPriorityEstimatedHours) || "0h"} color="text-gray-300" />
             </div>
+            {hasOverdue && (
+              <div className="grid grid-cols-3 gap-2">
+                <MetricCard label="Overdue" value={overdueDisplay} color="text-orange-400" />
+                <MetricCard label="Open Commitment" value={formatDuration(weekRollup.totalEstimatedHours + overdueRollup.totalEstimatedHours) || "0h"} color="text-emerald-400" />
+                <MetricCard label="Overdue Tasks" value={overdueRollup.taskCount} color="text-orange-400" small />
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-2">
-              <MetricCard label="Missing Est. (Priority)" value={summary.missingPriority} color="text-yellow-500" small />
-              <MetricCard label="Missing Est. (Other)" value={summary.missingOther} color="text-yellow-600" small />
-              <MetricCard label="Missing Est. (Total)" value={summary.missingTotal} color="text-yellow-500" small />
+              <MetricCard label="Missing Est. (Priority)" value={weekRollup.priorityMissingEstimateCount} color="text-yellow-500" small />
+              <MetricCard label="Missing Est. (Other)" value={weekRollup.missingEstimateCount - weekRollup.priorityMissingEstimateCount} color="text-yellow-600" small />
+              <MetricCard label="Missing Est. (Total)" value={weekRollup.missingEstimateCount} color="text-yellow-500" small />
             </div>
           </div>
 

@@ -683,9 +683,10 @@ export default function WeeklyWorkloadView({
         </div>
       </div>
 
-      {/* ── Weekly Hours Summary — scoped to visible tasks ── */}
+      {/* ── Weekly Hours Summary — scoped to selected week + overdue ── */}
       <WeeklyHoursSummary
-        tasks={activeTasks}
+        thisWeekTasks={buckets.dueThisWeek}
+        overdueTasks={buckets.overdue}
         teamMemberMap={teamMemberMap}
         phaseLookup={phaseLookup}
         weekLabel={`${format(selectedWeek.start, "MMM d")} – ${format(selectedWeek.end, "MMM d")}`}

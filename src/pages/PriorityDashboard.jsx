@@ -651,16 +651,20 @@ export default function PriorityDashboard() {
             </div>
           </MobileFilterTriggerBar>
 
-          {/* Weekly Hours Summary */}
-          <WeeklyHoursSummary
-            tasks={activePriorityTasks}
-            teamMemberMap={teamMemberMap}
-            phaseLookup={phaseLookup}
-            onFilterAssignee={(memberId) => {
-              if (memberId) handleAssignedToChange([memberId]);
-              else handleAssignedToChange([]);
-            }}
-          />
+          {/* Weekly Hours Summary — hidden on Workload tab (Workload has its own week-scoped summary) */}
+          {activeTab !== 'workload-view' && (
+            <WeeklyHoursSummary
+              thisWeekTasks={activePriorityTasks}
+              overdueTasks={[]}
+              teamMemberMap={teamMemberMap}
+              phaseLookup={phaseLookup}
+              weekLabel="All Open"
+              onFilterAssignee={(memberId) => {
+                if (memberId) handleAssignedToChange([memberId]);
+                else handleAssignedToChange([]);
+              }}
+            />
+          )}
 
           {/* Tabs */}
           <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">

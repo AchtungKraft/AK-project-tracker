@@ -204,4 +204,50 @@ export function groupEstimatedHoursByPhase(tasks, phaseLookup) {
   return Array.from(groups.values()).sort((a, b) => b.totalHours - a.totalHours);
 }
 
+// ─── Canonical weekly rollup ──────────────────────────────────
+
+/**
+ * Build a complete weekly hours rollup from a task set.
+ * Single source of truth — every weekly-hours display consumes this result.
+ *
+ * @param {Array} tasks - already-filtered tasks for the selected scope
+ * @returns {{ taskCount, totalEstimatedHours, priorityEstimatedHours, nonPriorityEstimatedHours,
+ *             missingEstimateCount, priorityMissingEstimateCount, byAssignee, byPhase }}
+ */
+export function buildWeeklyHoursRollup(tasks, teamMemberMap, phaseLookup) {
+  const split = splitPriorityEstimatedHours(tasks);
+  return {
+    taskCount: tasks.filter(t => isOpenTask(t)).length,
+    totalEstimatedHours: split.totalHours,
+    priorityEstimatedHours: split.priorityHours,
+    nonPriorityEstimatedHours: split.nonPriorityHours,
+    missingEstimateCount: split.missingTotal,
+    priorityMissingEstimateCount: split.missingPriority,
+    byAssignee: teamMemberMap ? groupEstimatedHoursByAssignee(tasks, teamMemberMap) : [],
+    byPhase: phaseLookup ? groupEstimatedHoursByPhase(tasks, phaseLookup) : [],
+  };
+}
+
+/**
+ * Compute scoped task-group totals (for project/phase headers in workload sections).
+ * Uses the same isOpenTask + estimate rules as all other rollups.
+ *
+ * @returns {{ totalHours, missingCount, taskCount }}
+ */
+export function computeScopedTotals(tasks) {
+  let totalHours = 0;
+  let missingCount = 0;
+  let taskCount = 0;
+  for (const t of tasks) {
+    if (!isOpenTask(t)) continue;
+    taskCount++;
+    if (t.estimated_hours && t.estimated_hours > 0) {
+      totalHours += t.estimated_hours;
+    } else {
+      missingCount++;
+    }
+  }
+  return { totalHours, missingCount, taskCount };
+}
+
 export { formatDuration };
