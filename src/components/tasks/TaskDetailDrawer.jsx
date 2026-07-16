@@ -11,8 +11,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { CalendarIcon, Loader2, UserPlus, ExternalLink, CheckCircle2, Clock, Trash2 } from "lucide-react";
-import { format } from "date-fns";
 import { toast } from "@/components/ui/use-toast";
+import { parseLocalDate, toDateString, formatCalendarDate } from "@/lib/dateUtils";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -448,7 +448,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                 {task?.due_date && (
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] text-gray-500 uppercase tracking-wider w-16 shrink-0">Due</span>
-                    <span className="text-sm text-gray-200 text-right">{format(new Date(task.due_date), 'MMM d, yyyy')}</span>
+                    <span className="text-sm text-gray-200 text-right">{formatCalendarDate(task.due_date, 'MMM d, yyyy')}</span>
                   </div>
                 )}
                 {(task?.estimated_hours || task?.actual_hours) && (
@@ -495,7 +495,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                   ) : null;
                 })()}
                 {task?.due_date && (
-                  <span className="text-xs text-gray-500">{format(new Date(task.due_date), 'MMM d')}</span>
+                  <span className="text-xs text-gray-500">{formatCalendarDate(task.due_date, 'MMM d')}</span>
                 )}
               </div>
               {project && (
@@ -716,11 +716,11 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                       <PopoverTrigger asChild>
                         <Button type="button" variant="outline" className="w-full justify-start bg-gray-800 border-gray-700 text-white">
                           <CalendarIcon className="mr-2 h-4 w-4" />
-                          {formData.start_date ? format(new Date(formData.start_date), 'PPP') : 'Pick a date'}
+                          {formData.start_date ? formatCalendarDate(formData.start_date) : 'Pick a date'}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0">
-                        <Calendar mode="single" selected={formData.start_date ? new Date(formData.start_date) : undefined} onSelect={(date) => setFormData({ ...formData, start_date: date ? format(date, 'yyyy-MM-dd') : '' })} />
+                        <Calendar mode="single" selected={parseLocalDate(formData.start_date) || undefined} onSelect={(date) => setFormData({ ...formData, start_date: toDateString(date) })} />
                       </PopoverContent>
                     </Popover>
                   </div>
@@ -730,11 +730,11 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                       <PopoverTrigger asChild>
                         <Button type="button" variant="outline" className="w-full justify-start bg-gray-800 border-gray-700 text-white">
                           <CalendarIcon className="mr-2 h-4 w-4" />
-                          {formData.due_date ? format(new Date(formData.due_date), 'PPP') : 'Pick a date'}
+                          {formData.due_date ? formatCalendarDate(formData.due_date) : 'Pick a date'}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0">
-                        <Calendar mode="single" selected={formData.due_date ? new Date(formData.due_date) : undefined} onSelect={(date) => setFormData({ ...formData, due_date: date ? format(date, 'yyyy-MM-dd') : '' })} />
+                        <Calendar mode="single" selected={parseLocalDate(formData.due_date) || undefined} onSelect={(date) => setFormData({ ...formData, due_date: toDateString(date) })} />
                       </PopoverContent>
                     </Popover>
                   </div>

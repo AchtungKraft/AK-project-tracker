@@ -5,8 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChevronLeft, ChevronRight, Calendar, FolderKanban, User, Tag, AlertCircle, Flame } from "lucide-react";
-import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, parseISO, isWithinInterval, isBefore } from "date-fns";
+import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, isWithinInterval, isBefore } from "date-fns";
 import { createPageUrl } from "@/utils";
+import { parseLocalDate } from "@/lib/dateUtils";
 import { buildProjectDetailUrl, SOURCES } from "@/lib/workspaceConfig";
 import TaskCard from "../project/TaskCard";
 import { toast } from "sonner";
@@ -64,9 +65,9 @@ export default function PriorityCalendarView({
     tasks.forEach(task => {
       // Use start_date first, fall back to due_date
       const dateToUse = task.start_date || task.due_date;
+      const taskDate = parseLocalDate(dateToUse);
       
-      if (dateToUse) {
-        const taskDate = parseISO(dateToUse);
+      if (taskDate) {
         if (isBefore(taskDate, today)) {
           pastDue.push({ ...task, _calendarDate: dateToUse });
         } else {
@@ -86,8 +87,8 @@ export default function PriorityCalendarView({
     
     weekRanges.forEach((range, index) => {
       grouped[index] = tasksWithDueDate.filter(task => {
-        const taskDate = parseISO(task._calendarDate);
-        return isWithinInterval(taskDate, { start: range.start, end: range.end });
+        const taskDate = parseLocalDate(task._calendarDate);
+        return taskDate && isWithinInterval(taskDate, { start: range.start, end: range.end });
       });
     });
     
@@ -126,16 +127,16 @@ export default function PriorityCalendarView({
       
       // Check if start_date is in range
       if (task.start_date) {
-        const startDate = parseISO(task.start_date);
-        if (isWithinInterval(startDate, { start: rangeStart, end: rangeEnd })) {
+        const startDate = parseLocalDate(task.start_date);
+        if (startDate && isWithinInterval(startDate, { start: rangeStart, end: rangeEnd })) {
           return true;
         }
       }
       
       // Check if due_date is in range (only if no start_date matched)
       if (task.due_date) {
-        const dueDate = parseISO(task.due_date);
-        if (isWithinInterval(dueDate, { start: rangeStart, end: rangeEnd })) {
+        const dueDate = parseLocalDate(task.due_date);
+        if (dueDate && isWithinInterval(dueDate, { start: rangeStart, end: rangeEnd })) {
           return true;
         }
       }

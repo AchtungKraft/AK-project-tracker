@@ -2,8 +2,8 @@ import React, { useState } from "react";
 import { User, CheckCircle2, Circle, MessageSquare, CalendarIcon, AlertCircle, PlayCircle, Flag, Loader2, Package } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { parseLocalDate, toDateString, formatCalendarDate } from "@/lib/dateUtils";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { Button } from "@/components/ui/button";
 import PriorityRemoveConfirm from "@/components/tasks/PriorityRemoveConfirm";
@@ -62,7 +62,7 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
     if (onUpdateDueDate) {
       setIsUpdatingDueDate(true);
       try {
-        await onUpdateDueDate(task, date ? format(date, 'yyyy-MM-dd') : null);
+        await onUpdateDueDate(task, date ? toDateString(date) : null);
       } finally {
         setIsUpdatingDueDate(false);
         setDueDateCalendarOpen(false);
@@ -74,7 +74,7 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
     if (onUpdateStartDate) {
       setIsUpdatingStartDate(true);
       try {
-        await onUpdateStartDate(task, date ? format(date, 'yyyy-MM-dd') : null);
+        await onUpdateStartDate(task, date ? toDateString(date) : null);
       } finally {
         setIsUpdatingStartDate(false);
         setStartDateCalendarOpen(false);
@@ -143,7 +143,7 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
                 task.start_date ? 'text-blue-400' : 'text-gray-500 hover:text-blue-300',
                 isCompact ? "p-0.5" : "p-1"
               )}
-              title={task.start_date ? `Start: ${format(new Date(task.start_date), 'MMM d, yyyy')}` : 'Set start date'}
+              title={task.start_date ? `Start: ${formatCalendarDate(task.start_date, 'MMM d, yyyy')}` : 'Set start date'}
             >
               {isUpdatingStartDate ? (
                 <Loader2 className={cn(isCompact ? "w-3 h-3" : "w-3.5 h-3.5", "animate-spin")} />
@@ -155,9 +155,9 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
           <PopoverContent className="w-auto p-0 bg-gray-900 border-gray-700" onClick={(e) => e.stopPropagation()} side={isMobile ? "top" : "bottom"} align={isMobile ? "center" : "start"}>
             <div className="p-2 border-b border-gray-700">
               <p className="text-xs text-gray-400">Start Date</p>
-              {task.start_date && <p className="text-sm text-white">{format(new Date(task.start_date), 'MMM d, yyyy')}</p>}
+              {task.start_date && <p className="text-sm text-white">{formatCalendarDate(task.start_date, 'MMM d, yyyy')}</p>}
             </div>
-            <Calendar mode="single" selected={task.start_date ? new Date(task.start_date) : undefined} onSelect={handleStartDateSelect} defaultMonth={task.start_date ? new Date(task.start_date) : new Date()} className="bg-gray-900" />
+            <Calendar mode="single" selected={parseLocalDate(task.start_date) || undefined} onSelect={handleStartDateSelect} defaultMonth={parseLocalDate(task.start_date) || new Date()} className="bg-gray-900" />
             {task.start_date && (
               <div className="p-2 border-t border-gray-700">
                 <Button variant="ghost" size="sm" onClick={() => handleStartDateSelect(null)} className="w-full text-red-400 hover:text-red-300 hover:bg-red-900/20">Clear Start Date</Button>
@@ -177,7 +177,7 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
                 task.due_date ? 'text-red-400' : 'text-gray-500 hover:text-red-300',
                 isCompact ? "p-0.5" : "p-1"
               )}
-              title={task.due_date ? `Due: ${format(new Date(task.due_date), 'MMM d, yyyy')}` : 'Set due date'}
+              title={task.due_date ? `Due: ${formatCalendarDate(task.due_date, 'MMM d, yyyy')}` : 'Set due date'}
             >
               {isUpdatingDueDate ? (
                 <Loader2 className={cn(isCompact ? "w-3 h-3" : "w-3.5 h-3.5", "animate-spin")} />
@@ -189,9 +189,9 @@ export default function TaskCard({ task, teamMembers = [], categories = [], stat
           <PopoverContent className="w-auto p-0 bg-gray-900 border-gray-700" onClick={(e) => e.stopPropagation()} side={isMobile ? "top" : "bottom"} align={isMobile ? "center" : "start"}>
             <div className="p-2 border-b border-gray-700">
               <p className="text-xs text-gray-400">Due Date</p>
-              {task.due_date && <p className="text-sm text-white">{format(new Date(task.due_date), 'MMM d, yyyy')}</p>}
+              {task.due_date && <p className="text-sm text-white">{formatCalendarDate(task.due_date, 'MMM d, yyyy')}</p>}
             </div>
-            <Calendar mode="single" selected={task.due_date ? new Date(task.due_date) : undefined} onSelect={handleDueDateSelect} defaultMonth={task.due_date ? new Date(task.due_date) : new Date()} className="bg-gray-900" />
+            <Calendar mode="single" selected={parseLocalDate(task.due_date) || undefined} onSelect={handleDueDateSelect} defaultMonth={parseLocalDate(task.due_date) || new Date()} className="bg-gray-900" />
             {task.due_date && (
               <div className="p-2 border-t border-gray-700">
                 <Button variant="ghost" size="sm" onClick={() => handleDueDateSelect(null)} className="w-full text-red-400 hover:text-red-300 hover:bg-red-900/20">Clear Due Date</Button>

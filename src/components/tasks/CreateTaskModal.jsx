@@ -11,8 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Loader2, CalendarIcon, UserPlus } from "lucide-react";
-import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
+import { parseLocalDate, toDateString, formatCalendarDate } from "@/lib/dateUtils";
 import { useTaskCategories, useTaskStatuses, useAssignableTeamMembers } from "./useTaskDropdownData";
 import { TaskCategorySelect, TaskStatusSelect, TaskAssigneeSelect } from "./TaskDropdownSelects";
 import ProjectSelect from "@/components/shared/ProjectSelect";
@@ -219,14 +219,14 @@ export default function CreateTaskModal({ onClose, projectId, defaultAssigneeId,
                     className="w-full justify-start bg-gray-800 border-gray-700 text-white"
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {taskData.start_date ? format(new Date(taskData.start_date), 'PPP') : 'Pick a date'}
+                    {taskData.start_date ? formatCalendarDate(taskData.start_date) : 'Pick a date'}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0">
                   <Calendar
                     mode="single"
-                    selected={taskData.start_date ? new Date(taskData.start_date) : undefined}
-                    onSelect={(date) => setTaskData({ ...taskData, start_date: date ? format(date, 'yyyy-MM-dd') : '' })}
+                    selected={parseLocalDate(taskData.start_date) || undefined}
+                    onSelect={(date) => setTaskData({ ...taskData, start_date: toDateString(date) })}
                   />
                 </PopoverContent>
               </Popover>
@@ -242,14 +242,14 @@ export default function CreateTaskModal({ onClose, projectId, defaultAssigneeId,
                     className="w-full justify-start bg-gray-800 border-gray-700 text-white"
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {taskData.due_date ? format(new Date(taskData.due_date), 'PPP') : 'Pick a date'}
+                    {taskData.due_date ? formatCalendarDate(taskData.due_date) : 'Pick a date'}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0">
                   <Calendar
                     mode="single"
-                    selected={taskData.due_date ? new Date(taskData.due_date) : undefined}
-                    onSelect={(date) => setTaskData({ ...taskData, due_date: date ? format(date, 'yyyy-MM-dd') : '' })}
+                    selected={parseLocalDate(taskData.due_date) || undefined}
+                    onSelect={(date) => setTaskData({ ...taskData, due_date: toDateString(date) })}
                   />
                 </PopoverContent>
               </Popover>

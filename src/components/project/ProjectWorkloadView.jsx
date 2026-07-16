@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { format, startOfDay, isBefore } from "date-fns";
 import { cn } from "@/lib/utils";
+import { toDateString } from "@/lib/dateUtils";
 import WorkloadDependencyEditor from "@/components/workload/WorkloadDependencyEditor";
 import PhaseSelectorPopover from "@/components/workload/PhaseSelectorPopover";
 import WorkloadProjectPrintModal from "@/components/workload/WorkloadProjectPrintModal";
@@ -612,7 +613,7 @@ export default function ProjectWorkloadView({
   // Bulk actions
   const selectedTasksList = useMemo(() => filteredTasks.filter(t => selectedTaskIds.has(t.id)), [filteredTasks, selectedTaskIds]);
   const handleBulkSetDueDate = useCallback(async (date) => {
-    const dateStr = format(date, "yyyy-MM-dd");
+    const dateStr = toDateString(date);
     await Promise.all(selectedTasksList.map(t => base44.entities.Task.update(t.id, { due_date: dateStr })));
     invalidateProjectCaches(queryClient, projectId);
     clearSelection();
@@ -623,7 +624,7 @@ export default function ProjectWorkloadView({
       if (!d) return null;
       const newDate = new Date(d);
       newDate.setDate(newDate.getDate() + days);
-      return base44.entities.Task.update(t.id, { due_date: format(newDate, "yyyy-MM-dd") });
+      return base44.entities.Task.update(t.id, { due_date: toDateString(newDate) });
     }).filter(Boolean));
     invalidateProjectCaches(queryClient, projectId);
     clearSelection();

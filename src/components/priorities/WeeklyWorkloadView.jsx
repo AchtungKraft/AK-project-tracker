@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { startOfWeek, endOfWeek, addWeeks, addDays, format, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
+import { toDateString } from "@/lib/dateUtils";
 import { sortTasksByPriority } from "@/utils/taskPrioritySort";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 import WorkloadProjectGroup from "./WorkloadProjectGroup";
@@ -425,7 +426,7 @@ export default function WeeklyWorkloadView({
     selectedTasks.forEach((task) => {
       const base = parseLocalDate(task.due_date) || new Date();
       const shifted = addDays(base, days);
-      const dateStr = format(shifted, "yyyy-MM-dd");
+      const dateStr = toDateString(shifted);
       updateTaskMutation.mutate({ id: task.id, data: { due_date: dateStr } });
     });
     clearSelection();
@@ -436,7 +437,7 @@ export default function WeeklyWorkloadView({
   const handleBulkSetDueDate = useCallback((date) => {
     if (!updateTaskMutation || !date) return;
     const count = selectedTasks.length;
-    const dateStr = format(date, "yyyy-MM-dd");
+    const dateStr = toDateString(date);
     selectedTasks.forEach((task) => {
       updateTaskMutation.mutate({ id: task.id, data: { due_date: dateStr } });
     });

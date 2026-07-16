@@ -11,6 +11,7 @@ import {
   shouldApplyMutation,
   getTaskVersion
 } from "./taskStateEvents";
+import { toDateString } from "@/lib/dateUtils";
 
 /**
  * useTaskData
@@ -289,22 +290,26 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
 
   const handleUpdateDueDate = async (task, dueDate) => {
     const mutationTimestamp = Date.now();
+    // Normalize: Date objects → "YYYY-MM-DD", null/undefined → null
+    const dateStr = dueDate instanceof Date ? toDateString(dueDate) : (dueDate || null);
     await updateTaskMutation.mutateAsync({
       id: task.id,
-      data: { due_date: dueDate },
+      data: { due_date: dateStr },
       mutationTimestamp
     });
-    toast({ title: dueDate ? 'Due date updated' : 'Due date removed' });
+    toast({ title: dateStr ? 'Due date updated' : 'Due date removed' });
   };
 
   const handleUpdateStartDate = async (task, startDate) => {
     const mutationTimestamp = Date.now();
+    // Normalize: Date objects → "YYYY-MM-DD", null/undefined → null
+    const dateStr = startDate instanceof Date ? toDateString(startDate) : (startDate || null);
     await updateTaskMutation.mutateAsync({
       id: task.id,
-      data: { start_date: startDate },
+      data: { start_date: dateStr },
       mutationTimestamp
     });
-    toast({ title: startDate ? 'Start date updated' : 'Start date removed' });
+    toast({ title: dateStr ? 'Start date updated' : 'Start date removed' });
   };
 
   const handleTogglePriority = async (task, skipConfirm = false) => {
