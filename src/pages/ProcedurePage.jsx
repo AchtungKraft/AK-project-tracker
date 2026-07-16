@@ -79,7 +79,7 @@ export default function ProcedurePage() {
 
   const { data: tasks = [] } = useQuery({
     queryKey: ['tasks'],
-    queryFn: () => base44.entities.Task.list(),
+    queryFn: () => base44.entities.Task.list('-created_date', 500),
     staleTime: 60000,
   });
 

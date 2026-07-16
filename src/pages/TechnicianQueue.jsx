@@ -192,11 +192,11 @@ export default function TechnicianQueue() {
 
   const { data: allTasks = [], isLoading } = useQuery({
     queryKey: ["allTasks"],
-    queryFn: () => base44.entities.Task.list(),
+    queryFn: () => base44.entities.Task.list('-created_date', 500),
   });
   const { data: projects = [] } = useQuery({
     queryKey: ["projects"],
-    queryFn: () => base44.entities.Project.list(),
+    queryFn: () => base44.entities.Project.list('-created_date', 200),
   });
   const { data: teamMembers = [] } = useQuery({
     queryKey: ["teamMembers"],

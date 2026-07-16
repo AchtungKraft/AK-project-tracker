@@ -59,7 +59,7 @@ export default function CreditLedger() {
   // Fetch projects for names - uses factory key
   const { data: projects = [] } = useQuery({
     queryKey: projectKeys.list(),
-    queryFn: () => base44.entities.Project.list(),
+    queryFn: () => base44.entities.Project.list('-created_date', 200),
     staleTime: 60000,
   });
 

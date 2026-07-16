@@ -49,7 +49,7 @@ export default function MyPriorities() {
 
   const { data: allTasksRaw = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['allTasks'],
-    queryFn: () => base44.entities.Task.list(),
+    queryFn: () => base44.entities.Task.list('-created_date', 500),
   });
 
   // Use full task list — priority influences sort order, not inclusion
@@ -65,7 +65,7 @@ export default function MyPriorities() {
 
   const { data: allProjects = [] } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list(),
+    queryFn: () => base44.entities.Project.list('-created_date', 200),
   });
 
   const { data: categories = [] } = useQuery({

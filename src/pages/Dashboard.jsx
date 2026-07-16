@@ -101,7 +101,7 @@ export default function Dashboard() {
   // PHASE 1: Apply extended caching to prevent refetch storms
   const { data: projects = [], isLoading: projectsLoading } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list('-created_date'),
+    queryFn: () => base44.entities.Project.list('-created_date', 200),
     ...operationalDataConfig,
   });
 

@@ -157,7 +157,7 @@ export default function PriorityDashboard() {
   // Fetch ALL tasks — priority sorting is applied client-side
   const { data: allTasksData = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['allTasks'],
-    queryFn: () => base44.entities.Task.list(),
+    queryFn: () => base44.entities.Task.list('-created_date', 500),
   });
 
   // All tasks sorted by priority (urgent first, then by due date)
@@ -173,7 +173,7 @@ export default function PriorityDashboard() {
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => base44.entities.Project.list(),
+    queryFn: () => base44.entities.Project.list('-created_date', 200),
   });
 
   // O(1) project lookup map — built once, reused everywhere
@@ -249,7 +249,7 @@ export default function PriorityDashboard() {
   // Fetch all task comments (not scoped to priority-only)
   const { data: allTaskComments = [] } = useQuery({
     queryKey: ['allTaskComments'],
-    queryFn: () => base44.entities.TaskComment.list(),
+    queryFn: () => base44.entities.TaskComment.list('-created_date', 500),
   });
 
   // Create a map of task_id -> comment count for efficient lookup
@@ -264,7 +264,7 @@ export default function PriorityDashboard() {
   // Fetch all TaskPartLinks
   const { data: allTaskPartLinks = [] } = useQuery({
     queryKey: ['taskPartLinks', 'all'],
-    queryFn: () => base44.entities.TaskPartLink.list(),
+    queryFn: () => base44.entities.TaskPartLink.list('-created_date', 500),
   });
 
   // Get active team members sorted by sort_order for the Assigned To filter

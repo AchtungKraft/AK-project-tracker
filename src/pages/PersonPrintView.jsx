@@ -86,7 +86,7 @@ export default function PersonPrintView() {
 
   const { data: projects = [] } = useQuery({
     queryKey: ["printPersonProjects"],
-    queryFn: () => base44.entities.Project.list(),
+    queryFn: () => base44.entities.Project.list('-created_date', 200),
   });
 
   const { data: allBuckets = [] } = useQuery({
