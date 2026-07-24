@@ -17,7 +17,8 @@ import AddToBuildModal from "./AddToBuildModal";
 import AddToNeedToBuyModal from "./AddToNeedToBuyModal";
 import { useReferenceData, ReferenceDataGate } from "@/components/common/useReferenceData";
 import { operationalDataConfig } from "@/components/common/queryConfig";
-import { printPartsList } from "./PartsListPrintView";
+import { buildSummaryReport, buildIllustratedCatalog, buildPriceList, openPrintWindow } from "./PartsListPrintView";
+import PrintOptionsModal from "./print/PrintOptionsModal";
 
 const EXPLORER_STORAGE_KEY = 'achtung_parts_explorer_state';
 
@@ -255,32 +256,46 @@ export default function PartsExplorerLayout({ onPartClick }) {
     setCurrentPage(1);
   }, [debouncedSearchTerm, selectedCategoryId]);
 
-  // Print handler — prints ALL filtered parts (not just current page)
-  const handlePrint = () => {
+  // Print suite state
+  const [printReportType, setPrintReportType] = useState(null);
+
+  const getCategoryLabel = () => {
     const selectedCat = selectedCategoryId ? categories.find(c => c.id === selectedCategoryId) : null;
-    let categoryLabel = null;
-    if (selectedCat) {
-      if (selectedCat.parent_id) {
-        const parent = categories.find(c => c.id === selectedCat.parent_id);
-        categoryLabel = parent ? `${parent.name} › ${selectedCat.name}` : selectedCat.name;
-      } else {
-        categoryLabel = selectedCat.name;
-      }
+    if (!selectedCat) return null;
+    if (selectedCat.parent_id) {
+      const parent = categories.find(c => c.id === selectedCat.parent_id);
+      return parent ? `${parent.name} › ${selectedCat.name}` : selectedCat.name;
     }
-    printPartsList({
+    return selectedCat.name;
+  };
+
+  const handlePrintReport = (reportType) => {
+    setPrintReportType(reportType);
+  };
+
+  const executePrint = (options) => {
+    const baseData = {
       parts: filteredParts,
       categories,
       vendors,
       makes: carMakes,
       models: carModels,
       years: carYears,
-      inventoryViewMap,
-      inventoryItems,
-      locations: locationsList,
-      vendorSources,
-      title: "Parts Catalog",
-      categoryLabel,
-    });
+      categoryLabel: getCategoryLabel(),
+      searchTerm: debouncedSearchTerm || "",
+      options,
+    };
+
+    let html;
+    if (printReportType === "summary") {
+      html = buildSummaryReport({ ...baseData, inventoryViewMap, vendorSources });
+    } else if (printReportType === "illustrated") {
+      html = buildIllustratedCatalog({ ...baseData, inventoryViewMap, inventoryItems, locations: locationsList, vendorSources });
+    } else if (printReportType === "priceList") {
+      html = buildPriceList(baseData);
+    }
+
+    if (html) openPrintWindow(html);
   };
 
   // PHASE 4: Render gate - don't render list until reference data is ready
@@ -389,7 +404,7 @@ export default function PartsExplorerLayout({ onPartClick }) {
                 partsCount={filteredParts.length}
                 showArchived={showArchived}
                 onToggleArchived={() => setShowArchived(!showArchived)}
-                onPrint={handlePrint}
+                onPrintReport={handlePrintReport}
               />
             </div>
 
@@ -488,6 +503,14 @@ export default function PartsExplorerLayout({ onPartClick }) {
         <AddToNeedToBuyModal 
           part={needToBuyModalPart}
           onClose={() => setNeedToBuyModalPart(null)} 
+        />
+      )}
+
+      {printReportType && (
+        <PrintOptionsModal
+          reportType={printReportType}
+          onClose={() => setPrintReportType(null)}
+          onPrint={executePrint}
         />
       )}
     </>

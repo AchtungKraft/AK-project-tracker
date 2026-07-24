@@ -1,7 +1,13 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { LayoutGrid, List, Filter, Archive, Printer } from "lucide-react";
+import { LayoutGrid, List, Filter, Archive, Printer, FileText, BookOpen, DollarSign, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function PartsViewToolbar({ 
   viewMode, 
@@ -11,7 +17,7 @@ export default function PartsViewToolbar({
   partsCount,
   showArchived,
   onToggleArchived,
-  onPrint,
+  onPrintReport,
 }) {
   return (
     <div className="flex items-center justify-between gap-3">
@@ -20,17 +26,44 @@ export default function PartsViewToolbar({
       </div>
       
       <div className="flex items-center gap-2">
-        {/* Print Button */}
-        {onPrint && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onPrint}
-            className="h-8 text-xs gap-2 text-gray-400 hover:text-white"
-          >
-            <Printer className="w-4 h-4" />
-            <span className="hidden sm:inline">Print</span>
-          </Button>
+        {/* Print Dropdown */}
+        {onPrintReport && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs gap-1.5 text-gray-400 hover:text-white"
+              >
+                <Printer className="w-4 h-4" />
+                <span className="hidden sm:inline">Print</span>
+                <ChevronDown className="w-3 h-3 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onClick={() => onPrintReport("summary")} className="gap-2 cursor-pointer">
+                <FileText className="w-4 h-4 text-gray-400" />
+                <div>
+                  <div className="text-sm">Summary Report</div>
+                  <div className="text-xs text-gray-500">Dense table for operations</div>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onPrintReport("illustrated")} className="gap-2 cursor-pointer">
+                <BookOpen className="w-4 h-4 text-gray-400" />
+                <div>
+                  <div className="text-sm">Illustrated Catalog</div>
+                  <div className="text-xs text-gray-500">Visual cards with images</div>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onPrintReport("priceList")} className="gap-2 cursor-pointer">
+                <DollarSign className="w-4 h-4 text-gray-400" />
+                <div>
+                  <div className="text-sm">Price List</div>
+                  <div className="text-xs text-gray-500">Client-facing retail</div>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
 
         {/* Show Archived Toggle */}
