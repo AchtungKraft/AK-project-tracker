@@ -17,6 +17,7 @@ import AddToBuildModal from "./AddToBuildModal";
 import AddToNeedToBuyModal from "./AddToNeedToBuyModal";
 import { useReferenceData, ReferenceDataGate } from "@/components/common/useReferenceData";
 import { operationalDataConfig } from "@/components/common/queryConfig";
+import { printPartsList } from "./PartsListPrintView";
 
 const EXPLORER_STORAGE_KEY = 'achtung_parts_explorer_state';
 
@@ -50,6 +51,21 @@ export default function PartsExplorerLayout({ onPartClick }) {
     years: carYears,
     isError: referenceError,
   } = useReferenceData();
+
+  // Inventory view for print detail
+  const { data: partsInventoryView = [] } = useQuery({
+    queryKey: ['partsInventoryView'],
+    queryFn: async () => {
+      const res = await base44.functions.invoke('getPartsInventoryView', {});
+      return res.data?.parts || [];
+    },
+  });
+
+  const inventoryViewMap = useMemo(() => {
+    const map = new Map();
+    partsInventoryView.forEach(p => map.set(p.part_id, p));
+    return map;
+  }, [partsInventoryView]);
 
   // Load saved state
   useEffect(() => {
@@ -225,6 +241,31 @@ export default function PartsExplorerLayout({ onPartClick }) {
     setCurrentPage(1);
   }, [debouncedSearchTerm, selectedCategoryId]);
 
+  // Print handler — prints ALL filtered parts (not just current page)
+  const handlePrint = () => {
+    const selectedCat = selectedCategoryId ? categories.find(c => c.id === selectedCategoryId) : null;
+    let categoryLabel = null;
+    if (selectedCat) {
+      if (selectedCat.parent_id) {
+        const parent = categories.find(c => c.id === selectedCat.parent_id);
+        categoryLabel = parent ? `${parent.name} › ${selectedCat.name}` : selectedCat.name;
+      } else {
+        categoryLabel = selectedCat.name;
+      }
+    }
+    printPartsList({
+      parts: filteredParts,
+      categories,
+      vendors,
+      makes: carMakes,
+      models: carModels,
+      years: carYears,
+      inventoryViewMap,
+      title: "Parts Catalog",
+      categoryLabel,
+    });
+  };
+
   // PHASE 4: Render gate - don't render list until reference data is ready
   if (!referenceReady) {
     return (
@@ -331,6 +372,7 @@ export default function PartsExplorerLayout({ onPartClick }) {
                 partsCount={filteredParts.length}
                 showArchived={showArchived}
                 onToggleArchived={() => setShowArchived(!showArchived)}
+                onPrint={handlePrint}
               />
             </div>
 

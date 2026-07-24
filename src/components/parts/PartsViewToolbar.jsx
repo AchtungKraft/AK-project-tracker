@@ -1,6 +1,6 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { LayoutGrid, List, Filter, Archive } from "lucide-react";
+import { LayoutGrid, List, Filter, Archive, Printer } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function PartsViewToolbar({ 
@@ -11,6 +11,7 @@ export default function PartsViewToolbar({
   partsCount,
   showArchived,
   onToggleArchived,
+  onPrint,
 }) {
   return (
     <div className="flex items-center justify-between gap-3">
@@ -19,6 +20,19 @@ export default function PartsViewToolbar({
       </div>
       
       <div className="flex items-center gap-2">
+        {/* Print Button */}
+        {onPrint && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onPrint}
+            className="h-8 text-xs gap-2 text-gray-400 hover:text-white"
+          >
+            <Printer className="w-4 h-4" />
+            <span className="hidden sm:inline">Print</span>
+          </Button>
+        )}
+
         {/* Show Archived Toggle */}
         <Button
           variant="ghost"
