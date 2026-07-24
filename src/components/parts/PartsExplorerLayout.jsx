@@ -67,6 +67,20 @@ export default function PartsExplorerLayout({ onPartClick }) {
     return map;
   }, [partsInventoryView]);
 
+  // Additional data for print: inventory items (locations), locations, vendor sources
+  const { data: inventoryItems = [] } = useQuery({
+    queryKey: ['inventoryItems-print'],
+    queryFn: () => base44.entities.InventoryItem.list(),
+  });
+  const { data: locationsList = [] } = useQuery({
+    queryKey: ['locations-print'],
+    queryFn: () => base44.entities.Location.list(),
+  });
+  const { data: vendorSources = [] } = useQuery({
+    queryKey: ['vendorSources-print'],
+    queryFn: () => base44.entities.PartVendorSource.list(),
+  });
+
   // Load saved state
   useEffect(() => {
     try {
@@ -261,6 +275,9 @@ export default function PartsExplorerLayout({ onPartClick }) {
       models: carModels,
       years: carYears,
       inventoryViewMap,
+      inventoryItems,
+      locations: locationsList,
+      vendorSources,
       title: "Parts Catalog",
       categoryLabel,
     });
