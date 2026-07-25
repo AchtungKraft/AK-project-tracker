@@ -6,11 +6,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { Eye, Edit2, Calendar, Users, AlertCircle } from "lucide-react";
+import { Eye, Edit2, Calendar, Users, AlertCircle, Search } from "lucide-react";
 import { format } from "date-fns";
 import ImageModal from "../ui/ImageModal";
 
-export default function ProjectCard({ project, status, projectType, teamMembers, onEdit, needsAttention = false, attentionMessage = '' }) {
+export default function ProjectCard({ project, status, projectType, teamMembers, onEdit, needsAttention = false, attentionMessage = '', isOutsideFilters = false }) {
   const [selectedImage, setSelectedImage] = useState(null);
   const navigate = useNavigate();
 
@@ -119,6 +119,14 @@ export default function ProjectCard({ project, status, projectType, teamMembers,
             <div className="md:hidden flex items-center gap-1.5 text-amber-400 text-xs">
               <AlertCircle className="w-3 h-3 shrink-0" />
               <span className="truncate">{attentionMessage}</span>
+            </div>
+          )}
+
+          {/* Outside filters badge during search */}
+          {isOutsideFilters && (
+            <div className="flex items-center gap-1.5 text-blue-400 text-xs bg-blue-950/30 border border-blue-800/40 rounded px-2 py-1">
+              <Search className="w-3 h-3 shrink-0" />
+              <span>Outside current filters</span>
             </div>
           )}
 

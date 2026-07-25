@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Calendar, User, Car } from "lucide-react";
+import { Calendar, User, Car, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 
@@ -11,7 +11,8 @@ export default function ProjectListView({
   projectTypes, 
   teamMembers,
   groupBy,
-  onEdit 
+  onEdit,
+  outsideFilterIds = new Set(),
 }) {
   // Sort groups
   const sortedGroups = Object.entries(groupedProjects).sort((a, b) => {
@@ -124,6 +125,12 @@ export default function ProjectListView({
                             {assignedMembers.length > 0 && (
                               <span className="text-gray-500">
                                 Team: {assignedMembers.map(m => m.full_name).join(', ')}
+                              </span>
+                            )}
+                            {outsideFilterIds.has(project.id) && (
+                              <span className="flex items-center gap-1 text-blue-400">
+                                <Search className="w-3 h-3" />
+                                Outside current filters
                               </span>
                             )}
                           </div>

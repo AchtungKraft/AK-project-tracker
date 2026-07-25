@@ -167,17 +167,49 @@ export default function Dashboard() {
       .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   }, [teamMembers]);
 
-  const filteredProjects = projects.filter(p => {
-    const matchesSearch = p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         p.client_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         p.vin?.toLowerCase().includes(searchTerm.toLowerCase());
+  // Search helper — matches against all relevant project fields
+  const projectMatchesSearch = useCallback((p, term) => {
+    if (!term) return true;
+    const lower = term.toLowerCase();
+    const status = statuses.find(s => s.id === p.status_id);
+    const pType = projectTypes.find(t => t.id === p.project_type_id);
+    return [
+      p.name, p.id, p.client_name, p.client_email, p.client_phone, p.vin,
+      status?.label, pType?.name,
+      p.current_phase_name, p.next_phase_name,
+      p.current_milestone_name, p.next_milestone_name,
+    ].some(val => val && val.toLowerCase().includes(lower));
+  }, [statuses, projectTypes]);
+
+  // Filter helper — checks if a project passes the current dashboard filters
+  const projectPassesFilters = useCallback((p) => {
     const matchesStatus = statusFilter === 'all' || p.status_id === statusFilter;
     const matchesType = selectedTypes.length === 0 || selectedTypes.includes(p.project_type_id);
-    // Filter by assigned team members (OR logic - show if ANY team member in assigned_team matches)
     const matchesAssigned = assignedTo.length === 0 || 
       (p.assigned_team && p.assigned_team.some(memberId => assignedTo.includes(memberId)));
-    return matchesSearch && matchesStatus && matchesType && matchesAssigned;
-  });
+    return matchesStatus && matchesType && matchesAssigned;
+  }, [statusFilter, selectedTypes, assignedTo]);
+
+  const hasActiveSearch = searchTerm.trim().length > 0;
+
+  // When searching: search ALL projects, ignoring filters.
+  // When not searching: apply filters normally.
+  const filteredProjects = useMemo(() => {
+    if (hasActiveSearch) {
+      return projects.filter(p => projectMatchesSearch(p, searchTerm));
+    }
+    return projects.filter(p => projectPassesFilters(p));
+  }, [projects, hasActiveSearch, searchTerm, projectMatchesSearch, projectPassesFilters]);
+
+  // Build a set of project IDs that are outside the current filters (for badge display during search)
+  const outsideFilterIds = useMemo(() => {
+    if (!hasActiveSearch) return new Set();
+    const ids = new Set();
+    filteredProjects.forEach(p => {
+      if (!projectPassesFilters(p)) ids.add(p.id);
+    });
+    return ids;
+  }, [hasActiveSearch, filteredProjects, projectPassesFilters]);
 
   // Group projects
   const groupedProjects = {};
@@ -464,7 +496,12 @@ export default function Dashboard() {
           </Tabs>
           <span className={`text-gray-500 ${isMobile ? 'text-xs' : 'text-sm'}`}>
             {filteredProjects.length} project{filteredProjects.length !== 1 ? 's' : ''}
-            {isMobile && statusFilter !== 'all' && ` • ${projectStatuses.find(s => s.id === statusFilter)?.label || 'Filtered'}`}
+            {hasActiveSearch && outsideFilterIds.size > 0 && (
+              <span className="text-blue-400 ml-1">
+                ({outsideFilterIds.size} outside filters)
+              </span>
+            )}
+            {isMobile && !hasActiveSearch && statusFilter !== 'all' && ` • ${projectStatuses.find(s => s.id === statusFilter)?.label || 'Filtered'}`}
           </span>
         </div>
 
@@ -488,6 +525,7 @@ export default function Dashboard() {
             teamMembers={teamMembers}
             groupBy={groupBy}
             onEdit={setEditingProject}
+            outsideFilterIds={outsideFilterIds}
           />
         ) : (
           <div className={isMobile ? 'space-y-4' : 'space-y-6'}>
@@ -525,6 +563,7 @@ export default function Dashboard() {
                           projectType={projectType}
                           teamMembers={teamMembers}
                           onEdit={setEditingProject}
+                          isOutsideFilters={outsideFilterIds.has(project.id)}
                         />
                       );
                     })}
