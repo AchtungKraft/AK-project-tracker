@@ -16,7 +16,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getRequestTypeInfo } from "@/components/clientportal/utils";
-import { getRequestStateCanonical } from "@/components/clientportal/stateHelpers";
+// canonicalState is now derived inside buildOperationalViewModel
 import { isStructuredReview } from "@/components/clientportal/reviewBehavior";
 import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThread.jsx";
 import ToDoListDisplay from "../components/clientportal/ToDoListDisplay.jsx";
@@ -32,6 +32,7 @@ import OperationalSummary from "../components/clientportal/OperationalSummary.js
 import DetailActionBar from "../components/clientportal/DetailActionBar.jsx";
 import NextActionPanel from "../components/clientportal/NextActionPanel.jsx";
 import ReviewCycleSummary from "../components/clientportal/ReviewCycleSummary.jsx";
+import { buildOperationalViewModel } from "../components/clientportal/buildOperationalViewModel.jsx";
 import { MetadataCardSkeleton, ThreadSkeleton, CommentFormSkeleton } from "../components/clientportal/FeedbackDetailSkeleton.jsx";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import FeedbackCommentComposer from "../components/clientportal/FeedbackCommentComposer.jsx";
@@ -365,10 +366,14 @@ export default function ClientFeedbackDetail() {
     return extractLinks(request.content_html, request.body, attachmentUrls, request.links);
   }, [request?.content_html, request?.body, request?.links, stableAttachments]);
 
-  // Canonical state key for button logic (not dependent on request.status)
-  const canonicalState = useMemo(() => {
-    return request ? getRequestStateCanonical(request, stableDecisions, stableAttachments) : null;
-  }, [request?.id, request?.posted_at, stableDecisions, stableAttachments]);
+  // ── SINGLE CANONICAL ENRICHMENT ──
+  // buildOperationalViewModel produces the same enriched shape as the Hub.
+  // Every component below consumes this — no independent derivation.
+  const enrichedRequest = useMemo(() => {
+    return request ? buildOperationalViewModel(request, stableComments, stableDecisions, stableAttachments) : null;
+  }, [request?.id, request?.updated_date, request?.posted_at, request?.status, request?.review_state, stableComments, stableDecisions, stableAttachments]);
+
+  const canonicalState = enrichedRequest?.canonicalState || null;
   const canAct = canonicalState?.key === 'awaiting_review' || canonicalState?.key === 'changes_requested';
 
   // Determine button labels based on request type
@@ -601,7 +606,7 @@ export default function ClientFeedbackDetail() {
                 <Badge className={cn("text-xs border shrink-0", getRequestTypeInfo(request.request_type).color)}>
                   {getRequestTypeInfo(request.request_type).label}
                 </Badge>
-                {isQueueHidden(request) && (
+                {isQueueHidden(enrichedRequest) && (
                   <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/40 text-xs shrink-0">
                     <EyeOff className="w-3 h-3 mr-1" />
                     {request.queue_resume_date 
@@ -612,10 +617,10 @@ export default function ClientFeedbackDetail() {
               </div>
 
               {/* Next Action — what should happen now? */}
-              <NextActionPanel canonicalState={canonicalState} request={request} comments={stableComments} isMobile={isMobile} />
+              <NextActionPanel canonicalState={canonicalState} request={enrichedRequest} isMobile={isMobile} />
 
               {/* Operational Summary — important dates */}
-              <OperationalSummary request={request} isMobile={isMobile} />
+              <OperationalSummary request={enrichedRequest} isMobile={isMobile} />
 
               {/* Mobile: Approve/Changes buttons for non-structured-review */}
               {isMobile && canAct && !isStructuredReview(request?.request_type) && (
@@ -652,7 +657,7 @@ export default function ClientFeedbackDetail() {
               {/* Hierarchical action bar */}
               <DetailActionBar
                 canonicalState={canonicalState}
-                request={request}
+                request={enrichedRequest}
                 isMobile={isMobile}
                 isDeleting={deleteRequestMutation.isPending}
                 onPostToClient={handlePostToClient}
@@ -724,7 +729,7 @@ export default function ClientFeedbackDetail() {
           </Card>
 
           {/* Review Cycle — how has this review progressed? */}
-          <ReviewCycleSummary request={request} comments={stableComments} isMobile={isMobile} />
+          <ReviewCycleSummary request={enrichedRequest} isMobile={isMobile} />
 
           {/* Comment Composer — positioned above thread */}
           <FeedbackCommentComposer

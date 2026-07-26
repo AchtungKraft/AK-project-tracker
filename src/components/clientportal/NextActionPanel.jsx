@@ -1,4 +1,3 @@
-import React from "react";
 import { cn } from "@/lib/utils";
 import { ArrowRight, Clock, Eye, Send, CheckCircle2, AlertTriangle, MessageSquare, Archive } from "lucide-react";
 
@@ -54,10 +53,8 @@ function deriveNextAction(canonicalState, request) {
 
   // Team is actively reviewing
   if (isReviewing) {
-    const reviewHours = request.review_started_at
-      ? (Date.now() - new Date(request.review_started_at).getTime()) / 3600000
-      : 0;
-    const reviewStale = reviewHours > 48;
+    const reviewHours = request.reviewHours || 0;
+    const reviewStale = request.isReviewStale || false;
     const clientComments = request.clientCommentCount || 0;
     let detail;
     if (reviewStale) {
@@ -124,11 +121,7 @@ function deriveNextAction(canonicalState, request) {
       };
     }
 
-    const waitDays = clientActivity
-      ? Math.floor((Date.now() - new Date(clientActivity).getTime()) / 86400000)
-      : request.posted_at
-        ? Math.floor((Date.now() - new Date(request.posted_at).getTime()) / 86400000)
-        : 0;
+    const waitDays = request.waitingDays || 0;
 
     if (waitDays > 14) {
       return {
@@ -180,34 +173,14 @@ function formatRelative(dateStr) {
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export default function NextActionPanel({ canonicalState, request, comments = [], isMobile = false }) {
-  // Enrich request with client activity data if not already present
-  const enrichedRequest = React.useMemo(() => {
-    if (request?.latestActivityActor) return request; // Already enriched
-    if (!request || comments.length === 0) return request;
-    
-    const clientComments = comments
-      .filter(c => c.is_client_comment || c.author_type === 'client_contact')
-      .sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
-    
-    const latestClientDate = clientComments[0]?.created_date || null;
-    const latestComment = comments
-      .filter(c => c.created_date)
-      .sort((a, b) => new Date(b.created_date) - new Date(a.created_date))[0];
-    
-    const latestActor = latestComment
-      ? (latestComment.is_client_comment || latestComment.author_type === 'client_contact' ? 'client' : 'team')
-      : 'team';
-
-    return {
-      ...request,
-      latestActivityActor: latestActor,
-      latestClientActivityAt: latestClientDate,
-      clientCommentCount: clientComments.length,
-    };
-  }, [request, comments]);
-
-  const action = deriveNextAction(canonicalState, enrichedRequest);
+/**
+ * NextActionPanel — PRESENTATION ONLY
+ * 
+ * Consumes an enriched request from buildOperationalViewModel.
+ * Never scans comments. Never derives ownership. Never calculates waiting.
+ */
+export default function NextActionPanel({ canonicalState, request, isMobile = false }) {
+  const action = deriveNextAction(canonicalState, request);
   if (!action) return null;
 
   const Icon = action.icon;

@@ -1,69 +1,15 @@
 import React from "react";
-import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
 /**
- * Review Cycle — PROGRESSION ONLY
+ * ReviewCycleSummary — PRESENTATION ONLY
  * 
- * Responsibility: "How has this review progressed?"
- * Shows the sequence of interactions as a visual flow:
- *   Sent → Viewed → Client Reply → Team Reply
- * 
- * Does NOT show: posted date (OperationalSummary), due date
- * (OperationalSummary), or waiting duration (NextAction).
+ * Consumes pre-computed reviewSteps from buildOperationalViewModel.
+ * No activity scanning. No business logic. No date calculations.
  */
-export default function ReviewCycleSummary({ request, comments = [], isMobile = false }) {
-  if (!request?.posted_at) return null;
-
-  // Derive latest client reply from comments (not always enriched on request)
-  const latestClientReply = request.latestClientActivityAt || (() => {
-    const clientComments = comments
-      .filter(c => c.is_client_comment || c.actor === 'client')
-      .map(c => c.created_date)
-      .filter(Boolean);
-    return clientComments.length > 0
-      ? clientComments.sort((a, b) => new Date(b) - new Date(a))[0]
-      : null;
-  })();
-
-  // Build steps in chronological order of the review cycle
-  const steps = [];
-
-  steps.push({
-    label: "Sent",
-    date: format(new Date(request.posted_at), "MMM d"),
-    done: true,
-  });
-
-  steps.push({
-    label: "Client Viewed",
-    date: request.client_last_viewed_at
-      ? format(new Date(request.client_last_viewed_at), "MMM d")
-      : null,
-    done: !!request.client_last_viewed_at,
-  });
-
-  const hasClientReply = !!latestClientReply;
-  steps.push({
-    label: "Client Replied",
-    date: hasClientReply
-      ? format(new Date(latestClientReply), "MMM d")
-      : null,
-    done: hasClientReply,
-  });
-
-  // Only show team reply step if client has replied first
-  if (hasClientReply && request.last_viewed_by_internal_at) {
-    const internalDate = new Date(request.last_viewed_by_internal_at);
-    const clientDate = new Date(latestClientReply);
-    if (internalDate > clientDate) {
-      steps.push({
-        label: "Team Replied",
-        date: format(internalDate, "MMM d"),
-        done: true,
-      });
-    }
-  }
+export default function ReviewCycleSummary({ request, isMobile = false }) {
+  const steps = request?.reviewSteps;
+  if (!steps || steps.length === 0) return null;
 
   // Don't render if there's only the "Sent" step — too trivial
   const completedSteps = steps.filter(s => s.done).length;

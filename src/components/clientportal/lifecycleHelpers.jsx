@@ -10,6 +10,7 @@
 
 import { getRequestStateCanonical } from "./stateHelpers";
 import { buildFeedbackTimeline, getEventTimestamp, getTime } from "./feedbackTimeline";
+import { buildOperationalViewModel } from "./buildOperationalViewModel";
 
 /**
  * Determine the request state based on posted_at + decisions (canonical).
@@ -146,104 +147,14 @@ export const getSortComparator = (mode) => {
 /**
  * Enrich a request with computed fields including actor-driven attention logic.
  *
- * IMPORTANT:
- * - Timeline (allEvents) is NEVER filtered by posted_at — full history preserved.
- * - State logic uses canonical state from getRequestStateCanonical.
- * - Do NOT use request.status for state decisions here.
+ * DELEGATES to buildOperationalViewModel — the single canonical enrichment.
+ * This wrapper filters comments/decisions by request_id (hub passes bulk arrays).
  */
 export const enrichRequest = (request, comments, decisions, attachments) => {
   const requestComments = comments.filter(c => c.request_id === request.id);
   const requestDecisions = decisions.filter(d => d.request_id === request.id);
 
-  const clientComments = requestComments.filter(
-    c => c.author_type === 'client_contact'
-  );
-
-  // SINGLE EVENT SOURCE: buildFeedbackTimeline is the ONLY event builder.
-  // Do NOT sort comments/decisions manually outside this call.
-  const { allEvents, latestDisplayEvent, latestStateEvent } = buildFeedbackTimeline(
-    request,
-    requestComments,
-    requestDecisions
-  );
-
-  // DEV INTEGRITY ASSERTION (Part 5)
-  if (!latestDisplayEvent && request.posted_at) {
-    console.warn('[enrichRequest] Missing latestDisplayEvent for posted request', request.id);
-  }
-
-  const latestActivityActor = latestDisplayEvent?.actor || 'team';
-  const latestActivityAt = latestDisplayEvent?.date || request.updated_date;
-
-  // Check for overdue — use consistent end-of-day logic (UTC)
-  let isOverdue = false;
-  if (request.due_date) {
-    const due = new Date(request.due_date);
-    due.setUTCHours(23, 59, 59, 999);
-    isOverdue = due.getTime() < Date.now();
-  }
-
-  // Derive canonical state for enrichment (single source of truth)
-  const canonicalKey = getRequestStateCanonical(request, requestDecisions, []).key;
-
-  // Check if archived request has new client activity
-  const isArchivedWithClientResponse =
-    canonicalKey === 'archived' &&
-    latestActivityActor === 'client';
-
-  // CANONICAL RULE: Request requires team action if:
-  // - Request is NOT archived AND any of:
-  //   - Request is overdue
-  //   - Latest activity was by client
-  //   - Request is approved (awaiting AK confirmation to close)
-  // - OR request is archived but client responded (exception case)
-  const requiresTeamAction =
-    (
-      canonicalKey !== 'archived' &&
-      (
-        isOverdue ||
-        latestActivityActor === 'client' ||
-        canonicalKey === 'approved'
-      )
-    ) ||
-    isArchivedWithClientResponse;
-
-  const internalComments = requestComments.filter(
-    c => c.author_type === 'internal_user'
-  );
-
-  // Derive latest interaction content from allEvents (SINGLE SOURCE — no manual sort)
-  // Includes both comments and decisions for displayable message preview
-  const latestInteractionEvent = allEvents.find(e => e.kind === 'comment' || e.kind === 'decision');
-  const latestCommentContent = latestInteractionEvent?.kind === 'comment'
-    ? (latestInteractionEvent.comment?.content_fallback || latestInteractionEvent.comment?.body || null)
-    : (latestInteractionEvent?.body || null);
-  const latestCommentActor = latestInteractionEvent?.actor || null;
-
-  // Derive last client comment from allEvents (SINGLE SOURCE — no manual sort)
-  const lastClientCommentEvent = allEvents.find(
-    e => e.kind === 'comment' && e.actor === 'client'
-  );
-
-  // Compute approval timestamp for recently-approved display
-  const approvedAt = getApprovalTimestamp(request, requestDecisions);
-
-  return {
-    ...request,
-    decisions: requestDecisions,
-    lastClientComment: lastClientCommentEvent?.comment || null,
-    clientCommentCount: clientComments.length,
-    internalCommentCount: internalComments.length,
-    totalCommentCount: clientComments.length,
-    isOverdue,
-    latestActivityActor,
-    latestActivityAt,
-    latestCommentContent,
-    latestCommentActor,
-    isArchivedWithClientResponse,
-    requiresTeamAction,
-    approvedAt,
-  };
+  return buildOperationalViewModel(request, requestComments, requestDecisions, attachments);
 };
 
 /**
