@@ -99,24 +99,27 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
   const isChangesRequestedDecision = event.type === 'decision' && event.decision.decision === 'changes_requested';
   const isRequestPost = event.type === 'request_post';
 
+  // Actor label for timeline clarity
+  const actorLabel = isClientComment ? 'CLIENT' : isInternalComment ? 'TEAM' : null;
+
   let cardClassName = "bg-black/60 backdrop-blur-xl border";
   let cardStyle = {};
 
   if (isRequestPost) {
-    cardClassName = "backdrop-blur-xl border border-green-500/50";
+    cardClassName = "backdrop-blur-xl border-l-[3px] border-l-green-500 border border-green-500/30";
     cardStyle = { backgroundColor: 'oklch(39.3% 0.095 152.535)' };
   } else if (isApprovedDecision) {
-    cardClassName = "bg-blue-900/30 backdrop-blur-xl border border-blue-500/50";
+    cardClassName = "bg-blue-900/30 backdrop-blur-xl border-l-[3px] border-l-blue-500 border border-blue-500/30";
   } else if (isChangesRequestedDecision) {
-    cardClassName = "bg-orange-900/30 backdrop-blur-xl border border-orange-500/50";
+    cardClassName = "bg-orange-900/30 backdrop-blur-xl border-l-[3px] border-l-orange-500 border border-orange-500/30";
   } else if (isInternalComment && event.comment?.visibility === 'internal_only') {
-    cardClassName = "backdrop-blur-xl border border-amber-500/50";
+    cardClassName = "backdrop-blur-xl border-l-[3px] border-l-amber-500 border border-amber-500/30";
     cardStyle = { backgroundColor: 'oklch(35% 0.06 80)' };
   } else if (isInternalComment) {
-    cardClassName = "backdrop-blur-xl border border-green-500/50";
+    cardClassName = "backdrop-blur-xl border-l-[3px] border-l-green-500 border border-green-500/30";
     cardStyle = { backgroundColor: 'oklch(39.3% 0.095 152.535)' };
   } else if (isClientComment) {
-    cardClassName = "bg-yellow-900/20 backdrop-blur-xl border border-yellow-500/50";
+    cardClassName = "bg-yellow-900/20 backdrop-blur-xl border-l-[3px] border-l-yellow-500 border border-yellow-500/30";
   } else {
     cardClassName = "bg-black/60 backdrop-blur-xl border border-gray-700";
   }
@@ -124,8 +127,8 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
   return (
     <Card className={cardClassName} style={cardStyle}>
       <CardContent className="p-3 md:p-4">
-        {/* Header Badge */}
-        <div className="mb-3">
+        {/* Header Badge — actor + event type */}
+        <div className="mb-3 flex items-center gap-2">
           {isRequestPost &&
           <Badge className="bg-green-500/20 text-green-400 border-green-500/50 border font-semibold text-xs">
               FOR REVIEW
@@ -138,12 +141,12 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
           }
           {isInternalComment && event.comment?.visibility !== 'internal_only' &&
           <Badge className="bg-green-500/20 text-green-400 border-green-500/50 border font-semibold text-xs">
-              FOR REVIEW
+              TEAM REPLY
             </Badge>
           }
           {isClientComment &&
           <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/50 border font-semibold text-xs">
-              COMMENT
+              CLIENT REPLY
             </Badge>
           }
           {isApprovedDecision &&
@@ -152,8 +155,8 @@ const TimelineEventCard = React.memo(function TimelineEventCard({
             </Badge>
           }
           {isChangesRequestedDecision &&
-          <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/50 border font-semibold text-xs">
-              CHANGE REQUESTED
+          <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/50 border font-semibold text-xs">
+              CHANGES REQUESTED
             </Badge>
           }
         </div>
@@ -744,7 +747,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         {request?.posted_at && previousCycle.length > 0 && (
           <CycleHeader label="Current Review Cycle" date={request.posted_at} />
         )}
-        <div className={request?.posted_at && previousCycle.length > 0 ? "space-y-6 rounded-lg bg-white/[0.02] p-2 -m-2" : "space-y-6"}>
+        <div className={request?.posted_at && previousCycle.length > 0 ? "space-y-4 rounded-lg bg-white/[0.02] p-3 -m-1" : "space-y-4"}>
           {currentCycle.map(renderEvent)}
         </div>
 
@@ -752,8 +755,7 @@ export default function ClientFeedbackThread({ requestId, clientContactId, isCli
         {previousCycle.length > 0 && (
           <>
             <CycleDivider />
-            <CycleHeader label="Previous Activity" />
-            <div className="space-y-6 opacity-80">
+            <div className="space-y-4 opacity-70">
               {previousCycle.map(renderEvent)}
             </div>
           </>

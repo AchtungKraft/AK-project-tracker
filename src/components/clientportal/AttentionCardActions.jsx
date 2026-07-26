@@ -62,7 +62,7 @@ export default function AttentionCardActions({ item, onAction }) {
               className="text-gray-300 focus:text-white gap-2 cursor-pointer"
             >
               <Clock className="w-4 h-4" />
-              Later
+              Defer
             </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-gray-700/50" />
             <DropdownMenuItem
@@ -91,7 +91,7 @@ export default function AttentionCardActions({ item, onAction }) {
               className="text-gray-300 focus:text-white gap-2 cursor-pointer"
             >
               <Clock className="w-4 h-4" />
-              Later
+              Defer
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={(e) => handleAction('archive', e)}
@@ -119,7 +119,7 @@ export default function AttentionCardActions({ item, onAction }) {
               className="text-gray-300 focus:text-white gap-2 cursor-pointer"
             >
               <Clock className="w-4 h-4" />
-              Later
+              Defer
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={(e) => handleAction('archive', e)}

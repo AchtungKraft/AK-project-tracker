@@ -28,14 +28,14 @@ const PRIORITY = {
  */
 export const ATTENTION_BADGE_CONFIG = {
   needs_sending: {
-    label: "Needs Sending",
+    label: "Draft",
     color: "purple",
     bgClass: "bg-purple-600/20",
     borderClass: "border-purple-600/50",
     textClass: "text-purple-400",
   },
   needs_response: {
-    label: "Client Waiting",
+    label: "Needs Response",
     color: "red",
     bgClass: "bg-red-600/20",
     borderClass: "border-red-600/50",
@@ -49,7 +49,7 @@ export const ATTENTION_BADGE_CONFIG = {
     textClass: "text-red-400",
   },
   needs_review: {
-    label: "Needs Review",
+    label: "AK Review",
     color: "amber",
     bgClass: "bg-amber-600/20",
     borderClass: "border-amber-600/50",
@@ -89,8 +89,8 @@ export const BOARD_COLUMNS = [
   },
   {
     key: 'client_waiting',
-    label: 'Client Waiting',
-    subtitle: 'Waiting on your response',
+    label: 'Needs Response',
+    subtitle: 'Client replied — AK action needed',
     color: 'red',
     headerBg: 'bg-red-500/10',
     headerBorder: 'border-red-500/30',
@@ -101,8 +101,8 @@ export const BOARD_COLUMNS = [
   },
   {
     key: 'review_active',
-    label: 'Active Review',
-    subtitle: 'Recent activity, needs action',
+    label: 'AK Review',
+    subtitle: 'Marked for internal review',
     color: 'amber',
     headerBg: 'bg-amber-500/10',
     headerBorder: 'border-amber-500/30',
@@ -113,8 +113,8 @@ export const BOARD_COLUMNS = [
   },
   {
     key: 'follow_up',
-    label: 'Follow-Up',
-    subtitle: 'No client response — consider follow-up',
+    label: 'Waiting on Client',
+    subtitle: 'Sent to client — no response yet',
     color: 'orange',
     headerBg: 'bg-orange-500/10',
     headerBorder: 'border-orange-500/30',

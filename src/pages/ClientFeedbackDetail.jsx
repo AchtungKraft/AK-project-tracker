@@ -30,6 +30,7 @@ import HideFromQueueModal from "../components/clientportal/HideFromQueueModal.js
 import { isQueueHidden } from "../components/clientportal/attentionHelpers.jsx";
 import OperationalSummary from "../components/clientportal/OperationalSummary.jsx";
 import DetailActionBar from "../components/clientportal/DetailActionBar.jsx";
+import NextActionPanel from "../components/clientportal/NextActionPanel.jsx";
 import { MetadataCardSkeleton, ThreadSkeleton, CommentFormSkeleton } from "../components/clientportal/FeedbackDetailSkeleton.jsx";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import FeedbackCommentComposer from "../components/clientportal/FeedbackCommentComposer.jsx";
@@ -596,12 +597,12 @@ export default function ClientFeedbackDetail() {
                 </div>
               )}
               
-              {/* Status badges — grouped: Type → Workflow → Operational */}
+              {/* Identity + Workflow badges — compact row */}
               <div className={cn(
-                "flex items-center gap-2",
-                isMobile ? "overflow-x-auto pb-1 -mx-3 px-3 scrollbar-hide" : "flex-wrap gap-2"
+                "flex items-center gap-1.5",
+                isMobile ? "overflow-x-auto pb-1 -mx-3 px-3 scrollbar-hide" : "flex-wrap gap-1.5"
               )}>
-                {/* Request type */}
+                {/* Identity: Request type */}
                 <Badge className={cn("text-xs border shrink-0", getRequestTypeInfo(request.request_type).color)}>
                   {getRequestTypeInfo(request.request_type).label}
                 </Badge>
@@ -612,7 +613,7 @@ export default function ClientFeedbackDetail() {
                     {requestState.label}
                   </Badge>
                 )}
-                {/* Operational: reviewing or hidden (pick most relevant) */}
+                {/* Operations: reviewing or hidden */}
                 {request.review_state === 'in_review' && (
                   <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/40 text-xs shrink-0">
                     Reviewing
@@ -622,19 +623,16 @@ export default function ClientFeedbackDetail() {
                   <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/40 text-xs shrink-0">
                     <EyeOff className="w-3 h-3 mr-1" />
                     {request.queue_resume_date 
-                      ? `Hidden until ${format(new Date(request.queue_resume_date), 'MMM d')}`
-                      : 'Hidden'}
-                  </Badge>
-                )}
-                {/* Due date */}
-                {request.due_date && (
-                  <Badge variant="outline" className="border-gray-600 text-gray-200 shrink-0">
-                    Due {format(new Date(request.due_date), 'MMM d')}
+                      ? `Deferred until ${format(new Date(request.queue_resume_date), 'MMM d')}`
+                      : 'Deferred'}
                   </Badge>
                 )}
               </div>
 
-              {/* Operational summary */}
+              {/* Next Action Panel — primary operational read */}
+              <NextActionPanel canonicalState={canonicalState} request={request} isMobile={isMobile} />
+
+              {/* Operational metrics */}
               <OperationalSummary request={request} isMobile={isMobile} />
 
               {/* Mobile: Approve/Changes buttons for non-structured-review */}

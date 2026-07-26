@@ -1,30 +1,38 @@
 import React from "react";
-import { format, formatDistanceToNow } from "date-fns";
+import { format, differenceInDays } from "date-fns";
 import { cn } from "@/lib/utils";
+import { parseLocalDate } from "@/lib/dateUtils";
 
 /**
  * Compact operational summary for a feedback request.
- * Shows key lifecycle timestamps at a glance.
+ * Shows key lifecycle timestamps at a glance — only values that exist.
  */
 export default function OperationalSummary({ request, isMobile = false }) {
   if (!request) return null;
 
   const items = [];
 
+  // Posted
   if (request.posted_at) {
     items.push({ label: "Posted", value: format(new Date(request.posted_at), "MMM d") });
   }
 
+  // Client viewed
   if (request.client_last_viewed_at) {
     items.push({ label: "Viewed", value: format(new Date(request.client_last_viewed_at), "MMM d") });
   }
 
-  // Last client activity — from latest client comment/decision timestamp
+  // Last client activity
   const clientActivityDate = request.latestClientActivityAt || request.client_last_viewed_at;
   if (clientActivityDate && request.posted_at) {
-    items.push({ label: "Client Activity", value: format(new Date(clientActivityDate), "MMM d") });
+    items.push({ label: "Client", value: formatRelativeShort(clientActivityDate) });
   } else if (request.posted_at && !clientActivityDate) {
-    items.push({ label: "Client Activity", value: "None", muted: true });
+    items.push({ label: "Client", value: "None", muted: true });
+  }
+
+  // Last internal activity
+  if (request.last_viewed_by_internal_at && request.posted_at) {
+    items.push({ label: "Internal", value: formatRelativeShort(request.last_viewed_by_internal_at) });
   }
 
   // Waiting duration — only for posted, non-archived requests
@@ -41,16 +49,44 @@ export default function OperationalSummary({ request, isMobile = false }) {
     }
   }
 
+  // Due date — show as "Due In" or "Overdue By"
+  if (request.due_date) {
+    const dueDate = parseLocalDate(request.due_date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const daysDiff = differenceInDays(dueDate, today);
+
+    if (daysDiff < 0) {
+      items.push({
+        label: "Overdue",
+        value: `${Math.abs(daysDiff)}d`,
+        warn: true,
+      });
+    } else if (daysDiff === 0) {
+      items.push({
+        label: "Due",
+        value: "Today",
+        highlight: true,
+      });
+    } else {
+      items.push({
+        label: "Due In",
+        value: `${daysDiff}d`,
+        highlight: daysDiff <= 3,
+      });
+    }
+  }
+
   if (items.length === 0) return null;
 
   return (
     <div className={cn(
-      "flex items-center gap-3 text-xs",
-      isMobile ? "gap-2 flex-wrap" : "gap-4"
+      "flex items-center text-xs",
+      isMobile ? "gap-1.5 flex-wrap" : "gap-0"
     )}>
       {items.map((item, i) => (
         <React.Fragment key={item.label}>
-          {i > 0 && <span className="text-gray-700">·</span>}
+          {i > 0 && <span className="text-gray-700 mx-1.5">·</span>}
           <span className={cn(
             "whitespace-nowrap",
             item.warn ? "text-red-400 font-medium" :
@@ -65,4 +101,15 @@ export default function OperationalSummary({ request, isMobile = false }) {
       ))}
     </div>
   );
+}
+
+function formatRelativeShort(dateStr) {
+  if (!dateStr) return '';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const hours = Math.floor(diff / 3600000);
+  if (hours < 1) return '<1h';
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return format(new Date(dateStr), 'MMM d');
 }

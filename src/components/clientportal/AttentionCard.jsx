@@ -1,13 +1,14 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { FolderKanban, ChevronRight } from "lucide-react";
-import { format, formatDistanceToNow } from "date-fns";
+import { ChevronRight } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 import InlineDueDatePicker from "./InlineDueDatePicker";
 import { ATTENTION_BADGE_CONFIG, getWaitingTimeLabel } from "./attentionHelpers";
 import { Badge } from "@/components/ui/badge";
 import AttentionCardActions from "./AttentionCardActions";
+import { OwnershipBadge } from "./NextActionPanel";
 
 const BORDER_COLORS = {
   needs_response: 'border-l-red-500',
@@ -15,6 +16,7 @@ const BORDER_COLORS = {
   needs_review: 'border-l-amber-500',
   follow_up: 'border-l-orange-500',
   approved_recent: 'border-l-green-500',
+  needs_sending: 'border-l-purple-500',
 };
 
 const RISK_BORDER = {
@@ -30,12 +32,11 @@ const RISK_BG = {
 };
 
 export default function AttentionCard({ item, onUpdateDueDate, onAction, muted = false }) {
-  const { request, project, type, isOverdue, lastActor, lastActivityAt } = item;
+  const { request, project, type, isOverdue, lastActivityAt } = item;
   const config = ATTENTION_BADGE_CONFIG[type];
   const risk = item.followUpMeta?.riskTier;
   const requestUrl = createPageUrl("ClientFeedbackDetail") + `?id=${request.id}&projectId=${request.project_id}&from=hub&tab=attention`;
 
-  // Portal hover preview state
   const cardRef = useRef(null);
   const [isHovered, setIsHovered] = useState(false);
   const [hoverPosition, setHoverPosition] = useState(null);
@@ -43,34 +44,26 @@ export default function AttentionCard({ item, onUpdateDueDate, onAction, muted =
   const onEnter = () => {
     const rect = cardRef.current?.getBoundingClientRect();
     if (!rect) return;
-    // Position directly over the card
-    setHoverPosition({
-      top: rect.top,
-      left: rect.left,
-      width: rect.width,
-    });
+    setHoverPosition({ top: rect.top, left: rect.left, width: rect.width });
     setIsHovered(true);
   };
-
   const onLeave = () => setIsHovered(false);
 
-  // Message snippet for inline display — unified across comments and decisions
+  // Comment snippet
   const snippet = request.latestCommentContent || null;
-  const truncatedSnippet = snippet ? (snippet.length > 80 ? snippet.slice(0, 80) + '…' : snippet) : null;
+  const truncatedSnippet = snippet ? (snippet.length > 70 ? snippet.slice(0, 70) + '…' : snippet) : null;
 
-  // Hover preview snippet (longer, from unified field)
+  // Hover preview
   const hoverSnippet = item.lastCommentSnippet
     ? (item.lastCommentSnippet.length > 200 ? item.lastCommentSnippet.slice(0, 200) + '…' : item.lastCommentSnippet)
     : null;
 
-  // Waiting time label for needs_response
+  // Waiting time
   const waitingLabel = type === 'needs_response' && lastActivityAt
     ? getWaitingTimeLabel(lastActivityAt)
     : null;
 
-  const isNewClientActivity = lastActor === 'client' && type !== 'approved_recent';
-
-  // Resolve border color — risk tier overrides for follow-up
+  // Border color
   const borderColor = type === 'follow_up' && risk
     ? RISK_BORDER[risk]
     : (BORDER_COLORS[type] || 'border-l-gray-500');
@@ -80,12 +73,12 @@ export default function AttentionCard({ item, onUpdateDueDate, onAction, muted =
   if (isOverdue) {
     cardClasses = 'bg-red-950/30 border-red-500/50 border-l-4 border-l-red-500';
   } else if (type === 'approved_recent') {
-    cardClasses = 'border-l-[3px] border-l-emerald-500 bg-emerald-950/25 border border-emerald-500/30 hover:border-emerald-400/50 hover:bg-emerald-950/35';
+    cardClasses = 'border-l-[3px] border-l-emerald-500 bg-emerald-950/25 border border-emerald-500/30 hover:border-emerald-400/50';
   } else if (type === 'follow_up' && risk) {
     const borderWidth = risk === 'high' ? 'border-l-[4px] border-2' : 'border-l-[3px]';
-    cardClasses = `${borderWidth} ${borderColor} ${RISK_BG[risk]} hover:border-gray-500 hover:bg-gray-900/80`;
+    cardClasses = `${borderWidth} ${borderColor} ${RISK_BG[risk]} hover:border-gray-500`;
   } else {
-    cardClasses = `border-l-[3px] ${borderColor} ${muted ? 'bg-black/20 border-gray-800 opacity-70' : 'bg-black/40 border-gray-700 hover:border-gray-500 hover:bg-gray-900/80'}`;
+    cardClasses = `border-l-[3px] ${borderColor} ${muted ? 'bg-black/20 border-gray-800 opacity-70' : 'bg-black/40 border-gray-700 hover:border-gray-500'}`;
   }
 
   return (
@@ -93,91 +86,56 @@ export default function AttentionCard({ item, onUpdateDueDate, onAction, muted =
       ref={cardRef}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
-      className={`relative rounded-lg border transition-all duration-200 group/card min-h-[44px] hover:shadow-lg hover:scale-[1.01] ${cardClasses}`}
+      className={`relative rounded-lg border transition-all duration-150 group/card min-h-[44px] ${cardClasses}`}
     >
-      <div className="p-2.5 md:p-3">
-        {/* Navigable content zone */}
+      <div className="p-2.5">
         <Link to={requestUrl} className="block hover:opacity-90 transition-opacity">
-          {/* Top row: badges — Workflow → Operational → Priority */}
-          <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-            {/* Workflow badge */}
-            {config && (
-              <Badge className={`${config.bgClass} ${config.textClass} ${config.borderClass} text-[10px] px-1.5 py-0`}>
-                {config.label}
-              </Badge>
-            )}
-            {/* Operational badges — pick most relevant, avoid duplicates */}
-            {isNewClientActivity && (
-              <span className="inline-flex items-center gap-1 text-[10px] text-red-400 font-semibold">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-                NEW
-              </span>
-            )}
-            {request.review_state === 'in_review' && !isNewClientActivity && (
-              <Badge className={`text-[10px] px-1.5 py-0 ${
-                item.isReviewStale
-                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
-                  : 'bg-blue-500/20 text-blue-400 border-blue-500/40'
-              }`}>
-                {item.isReviewStale ? 'Stale Review' : 'Reviewing'}
-              </Badge>
-            )}
-            {/* Priority badges */}
-            {isOverdue && (
-              <Badge className="bg-red-600 text-white text-[10px] px-1.5 py-0 font-semibold">
-                Overdue
-              </Badge>
-            )}
-            {item.isStalled && !isOverdue && (
-              <span className="text-[10px] text-yellow-400 font-semibold">⚠ Stalled</span>
-            )}
-            {/* Queue visibility — only show if hidden */}
-            {item.request.queue_hidden && item.request.queue_resume_date && (
-              <Badge className="bg-gray-600/20 text-gray-400 border-gray-500/30 text-[10px] px-1.5 py-0">
-                Hidden until {format(new Date(item.request.queue_resume_date), 'MMM d')}
-              </Badge>
-            )}
-            {item.request.queue_hidden && !item.request.queue_resume_date && (
-              <Badge className="bg-gray-600/20 text-gray-400 border-gray-500/30 text-[10px] px-1.5 py-0">
-                Hidden
-              </Badge>
-            )}
+          {/* Row 1: Ownership + Priority badges */}
+          <div className="flex items-center justify-between mb-1">
+            <OwnershipBadge item={item} />
+            <div className="flex items-center gap-1">
+              {isOverdue && (
+                <Badge className="bg-red-600 text-white text-[10px] px-1.5 py-0 font-semibold">
+                  Overdue
+                </Badge>
+              )}
+              {item.isReviewStale && !isOverdue && (
+                <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/40 text-[10px] px-1.5 py-0">
+                  Stale
+                </Badge>
+              )}
+              {item.isStalled && !isOverdue && !item.isReviewStale && (
+                <span className="text-[10px] text-yellow-400 font-semibold">⚠ Stalled</span>
+              )}
+            </div>
           </div>
 
-          {/* Title */}
-          <h4 className="font-medium text-sm text-white group-hover/card:text-red-400 transition-colors line-clamp-2 mb-1">
+          {/* Row 2: Title */}
+          <h4 className="font-medium text-sm text-white group-hover/card:text-red-400 transition-colors line-clamp-1 mb-0.5">
             {request.title}
           </h4>
 
-          {/* Project name */}
-          <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-1">
-            <FolderKanban className="w-3 h-3 shrink-0" />
-            <span className="truncate">{project?.name || 'Unknown Project'}</span>
+          {/* Row 3: Project + timing on same line */}
+          <div className="flex items-center justify-between gap-2 text-[11px] text-gray-500 mb-1">
+            <span className="truncate">{project?.name || 'Unknown'}</span>
+            <span className="shrink-0">
+              {waitingLabel || item.followUpLabel || item.lastActivityLabel || ''}
+            </span>
           </div>
 
-          {/* Comment snippet */}
-          <p className="text-xs text-gray-500 italic line-clamp-1 mb-1">
-            {truncatedSnippet ? `"${truncatedSnippet}"` : 'No recent message'}
-          </p>
-
-          {/* Activity / Waiting label */}
-          {waitingLabel ? (
-            <p className="text-[11px] text-red-400 font-medium">{waitingLabel}</p>
-          ) : item.followUpLabel ? (
-            <p className="text-[11px] text-orange-400 font-medium">
-              {item.followUpLabel}
-              {item.followUpMeta?.actionLabel && <span className="text-gray-500 ml-1">· {item.followUpMeta.actionLabel}</span>}
+          {/* Row 4: Snippet (optional) */}
+          {truncatedSnippet && (
+            <p className="text-[11px] text-gray-500 italic line-clamp-1">
+              "{truncatedSnippet}"
             </p>
-          ) : item.lastActivityLabel ? (
-            <p className="text-[11px] text-gray-500">{item.lastActivityLabel}</p>
-          ) : null}
+          )}
         </Link>
 
-        {/* Action zone — outside Link */}
-        <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-gray-800/50">
+        {/* Footer: due date + actions */}
+        <div className="flex items-center justify-between mt-1.5 pt-1 border-t border-gray-800/40">
           <div className="flex items-center gap-2 text-[11px] text-gray-500">
             {request.clientCommentCount > 0 && (
-              <span>{request.clientCommentCount} client {request.clientCommentCount === 1 ? 'reply' : 'replies'}</span>
+              <span>{request.clientCommentCount} {request.clientCommentCount === 1 ? 'reply' : 'replies'}</span>
             )}
             {request.due_date && (
               <span className={isOverdue ? 'text-red-400 font-medium' : ''}>
@@ -185,7 +143,7 @@ export default function AttentionCard({ item, onUpdateDueDate, onAction, muted =
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
             {onUpdateDueDate && (
               <InlineDueDatePicker
                 dueDate={request.due_date}
@@ -196,15 +154,14 @@ export default function AttentionCard({ item, onUpdateDueDate, onAction, muted =
             {onAction && (
               <AttentionCardActions item={item} onAction={onAction} />
             )}
-            <Link to={requestUrl} className="shrink-0 flex items-center gap-1">
-              <span className="text-xs text-gray-600 hidden group-hover/card:inline transition-opacity">Open</span>
-              <ChevronRight className="w-4 h-4 text-gray-500 group-hover/card:text-red-400 transition-colors" />
+            <Link to={requestUrl} className="shrink-0">
+              <ChevronRight className="w-4 h-4 text-gray-600 group-hover/card:text-red-400 transition-colors" />
             </Link>
           </div>
         </div>
       </div>
 
-      {/* Hover comment preview — portalled over the card */}
+      {/* Hover preview */}
       {isHovered && hoverSnippet && hoverPosition && createPortal(
         <div
           style={{

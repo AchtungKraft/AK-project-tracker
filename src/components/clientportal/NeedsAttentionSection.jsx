@@ -14,7 +14,7 @@ import ActiveReviewGroups from "./ActiveReviewGroups";
 /**
  * A single scrollable board column.
  */
-function BoardColumn({ col, items, onUpdateDueDate, onAction, muted = false }) {
+function BoardColumn({ col, items, onUpdateDueDate, onAction }) {
   const isFollowUp = col.key === 'follow_up';
   const isDrafts = col.key === 'needs_sending';
   const isClientWaiting = col.key === 'client_waiting';
@@ -59,7 +59,7 @@ function BoardColumn({ col, items, onUpdateDueDate, onAction, muted = false }) {
               item={item}
               onUpdateDueDate={onUpdateDueDate}
               onAction={onAction}
-              muted={muted}
+
             />
           ))
         )}
@@ -163,7 +163,6 @@ const NeedsAttentionSection = ({
               items={columnData[col.key] || []}
               onUpdateDueDate={onUpdateDueDate}
               onAction={onCardAction}
-              muted={col.key === 'follow_up'}
             />
           ))}
         </div>
