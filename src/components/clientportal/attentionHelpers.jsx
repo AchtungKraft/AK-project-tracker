@@ -6,7 +6,6 @@
  */
 
 import { isRequestOverdue } from './lifecycleHelpers';
-import { getRequestStateCanonical } from './stateHelpers';
 import { getTime } from './feedbackTimeline';
 
 /**
@@ -187,7 +186,8 @@ export function isRecentActivity(item) {
  */
 function isRecentlyApproved(request, canonicalKey) {
   if (canonicalKey !== 'approved') return false;
-  const approvalDate = request.approved_at || request.updated_date;
+  // Use pre-computed approvedAt from enriched model, fallback to updated_date
+  const approvalDate = request.approvedAt || request.updated_date;
   if (!approvalDate) return false;
   const diffHours = (Date.now() - getTime(approvalDate)) / 3600000;
   return diffHours <= 48;
@@ -229,9 +229,9 @@ export function buildAttentionList(projectGroups) {
       // OPERATIONAL FILTER: Skip requests hidden from Action Queue
       if (isQueueHidden(request)) return;
 
-      // Derive canonical state — single source of truth (NOT request.status)
-      const decisions = request.decisions || [];
-      const canonicalState = getRequestStateCanonical(request, decisions, []);
+      // Use pre-computed canonical state from enriched request (buildOperationalViewModel)
+      const canonicalState = request.canonicalState;
+      if (!canonicalState) return; // safety: skip unenriched requests
 
       const item = classifyRequest(request, group.project, canonicalState);
       if (item) items.push(item);
@@ -374,9 +374,8 @@ function classifyRequest(request, project, canonicalState) {
   // Stalled: client waiting but no activity for 72h+
   const isStalled = type === 'needs_response' && hoursSinceLastActivity > 72;
 
-  // Stale review indicator: in_review for >48h
-  const isReviewStale = request.review_state === 'in_review' && request.review_started_at &&
-    ((Date.now() - getTime(request.review_started_at)) / (1000 * 60 * 60)) > 48;
+  // Stale review indicator — read from enriched model (buildOperationalViewModel)
+  const isReviewStale = request.isReviewStale || false;
 
   return {
     request,
