@@ -10,6 +10,33 @@ import { Badge } from "@/components/ui/badge";
 import AttentionCardActions from "./AttentionCardActions";
 import { OwnershipBadge } from "./NextActionPanel";
 
+/**
+ * Subtle aging indicator — a tiny bar that progresses from green → amber → red
+ * based on how long the item has been waiting. No bright alarms.
+ */
+function AgingIndicator({ item }) {
+  const { lastActivityAt, type } = item;
+  if (!lastActivityAt || type === 'needs_sending' || type === 'approved_recent') return null;
+  
+  const hours = (Date.now() - new Date(lastActivityAt).getTime()) / 3600000;
+  
+  let aging, color;
+  if (hours < 24) { aging = 'Fresh'; color = 'bg-gray-600'; }
+  else if (hours < 72) { aging = 'Waiting'; color = 'bg-amber-600/50'; }
+  else if (hours < 168) { aging = 'Aging'; color = 'bg-orange-500/60'; }
+  else { aging = 'Stale'; color = 'bg-red-500/50'; }
+  
+  // Only show for items that have been waiting more than a day
+  if (hours < 24) return null;
+  
+  return (
+    <span className={`inline-flex items-center gap-1 text-[9px] text-gray-500 uppercase tracking-wider`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${color}`} />
+      {aging}
+    </span>
+  );
+}
+
 const BORDER_COLORS = {
   needs_response: 'border-l-red-500',
   overdue: 'border-l-red-600',
@@ -115,9 +142,12 @@ export default function AttentionCard({ item, onUpdateDueDate, onAction, muted =
             {request.title}
           </h4>
 
-          {/* Row 3: Project + timing on same line */}
+          {/* Row 3: Project + aging + timing */}
           <div className="flex items-center justify-between gap-2 text-[11px] text-gray-500 mb-1">
-            <span className="truncate">{project?.name || 'Unknown'}</span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="truncate">{project?.name || 'Unknown'}</span>
+              <AgingIndicator item={item} />
+            </div>
             <span className="shrink-0">
               {waitingLabel || item.followUpLabel || item.lastActivityLabel || ''}
             </span>

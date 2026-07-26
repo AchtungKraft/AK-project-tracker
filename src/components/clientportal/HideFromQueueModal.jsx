@@ -47,7 +47,7 @@ export default function HideFromQueueModal({ open, onClose, onConfirm, isSaving 
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Clock className="w-5 h-5 text-gray-400" />
-            Work on this Later
+            Later
           </DialogTitle>
           <DialogDescription className="text-gray-400">
             This request will be removed from today's operational queue. It remains active, searchable, and visible within the project. The client experience is unchanged.

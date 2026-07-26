@@ -36,7 +36,7 @@ function deriveNextAction(canonicalState, request) {
       icon: Send,
       iconBg: 'bg-purple-500/15',
       headline: 'Ready to Send',
-      detail: 'Draft has not been posted to client',
+      detail: 'Review complete. Post to client when ready.',
     };
   }
 
@@ -54,17 +54,28 @@ function deriveNextAction(canonicalState, request) {
 
   // In review by team
   if (isReviewing) {
-    const reviewStale = request.review_started_at &&
-      ((Date.now() - new Date(request.review_started_at).getTime()) / 3600000) > 48;
+    const reviewHours = request.review_started_at
+      ? (Date.now() - new Date(request.review_started_at).getTime()) / 3600000
+      : 0;
+    const reviewStale = reviewHours > 48;
+    const clientComments = request.clientCommentCount || 0;
+    let detail;
+    if (reviewStale) {
+      detail = `In review for ${Math.floor(reviewHours / 24)}d. Complete or stop reviewing.`;
+    } else if (clientComments > 0) {
+      detail = `Client sent ${clientComments} ${clientComments === 1 ? 'reply' : 'replies'}. Review and respond.`;
+    } else {
+      detail = clientActivity
+        ? `Client last active ${formatRelative(clientActivity)}.`
+        : 'Awaiting team response.';
+    }
     return {
-      owner: 'AK Reviewing',
+      owner: 'Active Review',
       ownerColor: 'text-blue-400',
       icon: Eye,
       iconBg: 'bg-blue-500/15',
       headline: reviewStale ? 'Review Stale — Complete or Stop' : 'Under Review',
-      detail: clientActivity
-        ? `Client last active ${formatRelative(clientActivity)}`
-        : 'Awaiting team response',
+      detail,
     };
   }
 
@@ -72,14 +83,14 @@ function deriveNextAction(canonicalState, request) {
   if (lastActor === 'client') {
     const clientComments = request.clientCommentCount || 0;
     const detail = clientComments > 0
-      ? `Client sent ${clientComments} ${clientComments === 1 ? 'reply' : 'replies'}`
-      : 'Client has responded';
+      ? `Client sent ${clientComments} ${clientComments === 1 ? 'reply' : 'replies'}. Review and respond.`
+      : 'Client has responded. Review and respond.';
     return {
       owner: 'AK Action',
       ownerColor: 'text-red-400',
       icon: MessageSquare,
       iconBg: 'bg-red-500/15',
-      headline: 'Internal Review Required',
+      headline: 'Client Replied — Review Needed',
       detail,
     };
   }
@@ -102,11 +113,11 @@ function deriveNextAction(canonicalState, request) {
   if (key === 'awaiting_review') {
     if (isHidden) {
       return {
-        owner: 'Deferred',
+        owner: 'Later',
         ownerColor: 'text-gray-400',
         icon: Clock,
         iconBg: 'bg-gray-500/15',
-        headline: 'Deferred',
+        headline: 'Set Aside',
         detail: request.queue_resume_date
           ? `Will return ${formatRelative(request.queue_resume_date)}`
           : 'Hidden until manually resumed',
@@ -119,14 +130,25 @@ function deriveNextAction(canonicalState, request) {
         ? Math.floor((Date.now() - new Date(request.posted_at).getTime()) / 86400000)
         : 0;
 
+    if (waitDays > 14) {
+      return {
+        owner: 'Waiting on Client',
+        ownerColor: 'text-red-400',
+        icon: AlertTriangle,
+        iconBg: 'bg-red-500/15',
+        headline: `Client Silent — ${waitDays}d`,
+        detail: 'Consider following up or escalating.',
+      };
+    }
+
     if (waitDays > 7) {
       return {
         owner: 'Waiting on Client',
         ownerColor: 'text-orange-400',
         icon: AlertTriangle,
         iconBg: 'bg-orange-500/15',
-        headline: `Client Silent — ${waitDays}d`,
-        detail: 'Consider follow-up or escalation',
+        headline: `Client has not responded — ${waitDays}d`,
+        detail: `Last activity ${formatRelative(clientActivity || request.posted_at)}. Consider following up.`,
       };
     }
 
@@ -137,8 +159,8 @@ function deriveNextAction(canonicalState, request) {
       iconBg: 'bg-amber-500/15',
       headline: 'Waiting on Client',
       detail: clientActivity
-        ? `Client last active ${formatRelative(clientActivity)}`
-        : 'No client activity yet',
+        ? `Client last active ${formatRelative(clientActivity)}. No internal action required.`
+        : 'No client activity yet. No internal action required.',
     };
   }
 
@@ -204,25 +226,25 @@ export function OwnershipBadge({ item }) {
     label = 'AK: Send';
     colorClass = 'text-purple-400';
   } else if (type === 'needs_response') {
-    label = 'AK: Respond';
+    label = 'Client Replied';
     colorClass = 'text-red-400';
   } else if (isReviewing) {
-    label = 'AK: Reviewing';
+    label = 'Active Review';
     colorClass = 'text-blue-400';
   } else if (type === 'needs_review') {
-    label = 'AK: Review';
+    label = 'Active Review';
     colorClass = 'text-amber-400';
   } else if (type === 'follow_up') {
-    label = 'Client: Pending';
+    label = 'Follow-Up';
     colorClass = 'text-orange-400';
   } else if (type === 'approved_recent') {
     label = 'Resolved';
     colorClass = 'text-green-400';
   } else if (lastActor === 'client') {
-    label = 'AK: Respond';
+    label = 'Client Replied';
     colorClass = 'text-red-400';
   } else {
-    label = 'Client: Pending';
+    label = 'Follow-Up';
     colorClass = 'text-gray-400';
   }
 

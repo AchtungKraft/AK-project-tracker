@@ -31,6 +31,7 @@ import { isQueueHidden } from "../components/clientportal/attentionHelpers.jsx";
 import OperationalSummary from "../components/clientportal/OperationalSummary.jsx";
 import DetailActionBar from "../components/clientportal/DetailActionBar.jsx";
 import NextActionPanel from "../components/clientportal/NextActionPanel.jsx";
+import ReviewCycleSummary from "../components/clientportal/ReviewCycleSummary.jsx";
 import { MetadataCardSkeleton, ThreadSkeleton, CommentFormSkeleton } from "../components/clientportal/FeedbackDetailSkeleton.jsx";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import FeedbackCommentComposer from "../components/clientportal/FeedbackCommentComposer.jsx";
@@ -310,7 +311,7 @@ export default function ClientFeedbackDetail() {
   const handleHideFromQueue = (resumeDate) => {
     updateRequestMutation.mutate(
       { id: requestId, data: { queue_hidden: true, queue_hidden_at: new Date().toISOString(), queue_resume_date: resumeDate || null } },
-      { onSuccess: () => { setShowHideModal(false); toast.success(resumeDate ? `Deferred until ${resumeDate}` : 'Deferred — will return when resumed'); } }
+      { onSuccess: () => { setShowHideModal(false); toast.success(resumeDate ? `Set aside until ${resumeDate}` : 'Set aside — will return when resumed'); } }
     );
   };
 
@@ -623,8 +624,8 @@ export default function ClientFeedbackDetail() {
                   <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/40 text-xs shrink-0">
                     <EyeOff className="w-3 h-3 mr-1" />
                     {request.queue_resume_date 
-                      ? `Deferred until ${format(new Date(request.queue_resume_date), 'MMM d')}`
-                      : 'Deferred'}
+                      ? `Later — returns ${format(new Date(request.queue_resume_date), 'MMM d')}`
+                      : 'Later'}
                   </Badge>
                 )}
               </div>
@@ -740,6 +741,9 @@ export default function ClientFeedbackDetail() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Review Cycle Summary — compact lifecycle overview above thread */}
+          <ReviewCycleSummary request={request} isMobile={isMobile} />
 
           {/* Comment Composer — positioned above thread */}
           <FeedbackCommentComposer

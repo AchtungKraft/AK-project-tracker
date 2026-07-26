@@ -149,7 +149,7 @@ export default function ClientPortalHub() {
       });
       setHideModalRequest(null);
       queryClient.invalidateQueries({ queryKey: ['clientPortalHubData'] });
-      toast.success(resumeDate ? `Deferred until ${resumeDate}` : 'Deferred — will return when resumed');
+      toast.success(resumeDate ? `Set aside until ${resumeDate}` : 'Set aside — will return when resumed');
     } catch (error) {
       toast.error('Failed to remove from queue');
     } finally {

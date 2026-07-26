@@ -120,7 +120,7 @@ export default function DetailActionBar({
     if (hidden) {
       overflowItems.push({ label: "Resume in Queue", icon: Play, onClick: onResumeInQueue, className: "text-green-400 focus:text-green-300" });
     } else {
-      overflowItems.push({ label: "Defer", icon: Clock, onClick: onShowLaterModal, className: "text-gray-300 focus:text-white" });
+      overflowItems.push({ label: "Later", icon: Clock, onClick: onShowLaterModal, className: "text-gray-300 focus:text-white" });
     }
   }
 
