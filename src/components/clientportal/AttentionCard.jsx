@@ -98,17 +98,20 @@ export default function AttentionCard({ item, onUpdateDueDate, onAction, muted =
       <div className="p-2.5 md:p-3">
         {/* Navigable content zone */}
         <Link to={requestUrl} className="block hover:opacity-90 transition-opacity">
-          {/* Top row: badges */}
+          {/* Top row: badges — Workflow → Operational → Priority */}
           <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+            {/* Workflow badge */}
             {config && (
               <Badge className={`${config.bgClass} ${config.textClass} ${config.borderClass} text-[10px] px-1.5 py-0`}>
                 {config.label}
               </Badge>
             )}
-            {isOverdue && (
-              <Badge className="bg-red-600 text-white text-[10px] px-1.5 py-0 font-semibold">
-                OVERDUE
-              </Badge>
+            {/* Operational badges — pick most relevant, avoid duplicates */}
+            {isNewClientActivity && (
+              <span className="inline-flex items-center gap-1 text-[10px] text-red-400 font-semibold">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                NEW
+              </span>
             )}
             {request.review_state === 'in_review' && !isNewClientActivity && (
               <Badge className={`text-[10px] px-1.5 py-0 ${
@@ -116,32 +119,27 @@ export default function AttentionCard({ item, onUpdateDueDate, onAction, muted =
                   ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
                   : 'bg-blue-500/20 text-blue-400 border-blue-500/40'
               }`}>
-                {item.isReviewStale ? 'REVIEW DELAYED' : 'IN REVIEW'}
+                {item.isReviewStale ? 'Stale Review' : 'Reviewing'}
               </Badge>
             )}
-            {isNewClientActivity && (
-              <span className="inline-flex items-center gap-1 text-[10px] text-red-400 font-semibold">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-                NEW
-              </span>
+            {/* Priority badges */}
+            {isOverdue && (
+              <Badge className="bg-red-600 text-white text-[10px] px-1.5 py-0 font-semibold">
+                Overdue
+              </Badge>
             )}
-            {item.isStalled && (
+            {item.isStalled && !isOverdue && (
               <span className="text-[10px] text-yellow-400 font-semibold">⚠ Stalled</span>
             )}
-            {/* Operational overlay badges */}
-            {item.isReviewStale && !item.request.queue_hidden && (
-              <Badge className="bg-amber-600/15 text-amber-400 border-amber-500/30 text-[10px] px-1.5 py-0">
-                Stale Review
-              </Badge>
-            )}
+            {/* Queue visibility — only show if hidden */}
             {item.request.queue_hidden && item.request.queue_resume_date && (
               <Badge className="bg-gray-600/20 text-gray-400 border-gray-500/30 text-[10px] px-1.5 py-0">
-                Resume {format(new Date(item.request.queue_resume_date), 'MMM d')}
+                Hidden until {format(new Date(item.request.queue_resume_date), 'MMM d')}
               </Badge>
             )}
             {item.request.queue_hidden && !item.request.queue_resume_date && (
               <Badge className="bg-gray-600/20 text-gray-400 border-gray-500/30 text-[10px] px-1.5 py-0">
-                Hidden Until Resumed
+                Hidden
               </Badge>
             )}
           </div>
@@ -162,26 +160,17 @@ export default function AttentionCard({ item, onUpdateDueDate, onAction, muted =
             {truncatedSnippet ? `"${truncatedSnippet}"` : 'No recent message'}
           </p>
 
-          {/* Activity / Waiting / Follow-up label */}
+          {/* Activity / Waiting label */}
           {waitingLabel ? (
             <p className="text-[11px] text-red-400 font-medium">{waitingLabel}</p>
           ) : item.followUpLabel ? (
-            <div>
-              <p className="text-[11px] text-orange-400 font-medium">{item.followUpLabel}</p>
-              <p className="text-[10px] text-gray-500">Last message: Team</p>
-            </div>
+            <p className="text-[11px] text-orange-400 font-medium">
+              {item.followUpLabel}
+              {item.followUpMeta?.actionLabel && <span className="text-gray-500 ml-1">· {item.followUpMeta.actionLabel}</span>}
+            </p>
           ) : item.lastActivityLabel ? (
             <p className="text-[11px] text-gray-500">{item.lastActivityLabel}</p>
           ) : null}
-
-          {/* Follow-up action guidance */}
-          {type === 'follow_up' && item.followUpMeta && (
-            <p className={`text-xs mt-1 font-medium ${
-              risk === 'high' ? 'text-orange-400' : risk === 'medium' ? 'text-amber-400' : 'text-gray-400'
-            }`}>
-              → {item.followUpMeta.actionLabel}
-            </p>
-          )}
         </Link>
 
         {/* Action zone — outside Link */}

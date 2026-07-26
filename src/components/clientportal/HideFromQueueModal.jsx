@@ -11,7 +11,7 @@ const QUICK_OPTIONS = [
   { label: "Tomorrow", getValue: () => format(addDays(new Date(), 1), 'yyyy-MM-dd') },
   { label: "Next Week", getValue: () => format(startOfWeek(addWeeks(new Date(), 1), { weekStartsOn: 1 }), 'yyyy-MM-dd') },
   { label: "Choose Date", value: 'custom' },
-  { label: "Remove Until I Resume", value: null },
+  { label: "Until I Resume", value: null },
 ];
 
 export default function HideFromQueueModal({ open, onClose, onConfirm, isSaving }) {
@@ -47,10 +47,10 @@ export default function HideFromQueueModal({ open, onClose, onConfirm, isSaving 
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Clock className="w-5 h-5 text-gray-400" />
-            Remove from Queue
+            Work on this Later
           </DialogTitle>
           <DialogDescription className="text-gray-400">
-            Remove this request from today's operational queue. It will remain fully active within the project and can optionally return automatically on a future date.
+            This request will be removed from today's operational queue. It remains active, searchable, and visible within the project. The client experience is unchanged.
           </DialogDescription>
         </DialogHeader>
 
@@ -127,7 +127,7 @@ export default function HideFromQueueModal({ open, onClose, onConfirm, isSaving 
             className="bg-gray-700 hover:bg-gray-600 text-white"
           >
             <Clock className="w-4 h-4 mr-1" />
-            Remove
+            Confirm
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -5,11 +5,9 @@ import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Loader2, Archive, CheckCircle2, AlertCircle, Plus, ExternalLink, X, Trash2, RotateCw, FileText, Pencil, Upload, Eye, EyeOff, ChevronRight, Play } from "lucide-react";
+import { ArrowLeft, Loader2, CheckCircle2, AlertCircle, Plus, ExternalLink, Pencil, Upload, EyeOff, ChevronRight } from "lucide-react";
 import useFileUploader from "../components/clientportal/useFileUploader";
 import FileUploadStatusList from "../components/clientportal/FileUploadStatusList";
 import { NotFoundState, RateLimitState, UnknownErrorState } from "@/components/feedback/FeedbackErrorStates";
@@ -30,6 +28,8 @@ import ImageModal from "../components/ui/ImageModal";
 import EditRequestModal from "../components/clientportal/EditRequestModal.jsx";
 import HideFromQueueModal from "../components/clientportal/HideFromQueueModal.jsx";
 import { isQueueHidden } from "../components/clientportal/attentionHelpers.jsx";
+import OperationalSummary from "../components/clientportal/OperationalSummary.jsx";
+import DetailActionBar from "../components/clientportal/DetailActionBar.jsx";
 import { MetadataCardSkeleton, ThreadSkeleton, CommentFormSkeleton } from "../components/clientportal/FeedbackDetailSkeleton.jsx";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import FeedbackCommentComposer from "../components/clientportal/FeedbackCommentComposer.jsx";
@@ -302,14 +302,14 @@ export default function ClientFeedbackDetail() {
   const handleFinishReview = () => {
     updateRequestMutation.mutate(
       { id: requestId, data: { review_state: 'none', review_started_at: null } },
-      { onSuccess: () => toast.success('Review finished') }
+      { onSuccess: () => toast.success('Stopped reviewing') }
     );
   };
 
   const handleHideFromQueue = (resumeDate) => {
     updateRequestMutation.mutate(
       { id: requestId, data: { queue_hidden: true, queue_hidden_at: new Date().toISOString(), queue_resume_date: resumeDate || null } },
-      { onSuccess: () => { setShowHideModal(false); toast.success(resumeDate ? `Removed until ${resumeDate}` : 'Removed from queue'); } }
+      { onSuccess: () => { setShowHideModal(false); toast.success(resumeDate ? `Deferred until ${resumeDate}` : 'Deferred — will return when resumed'); } }
     );
   };
 
@@ -596,40 +596,46 @@ export default function ClientFeedbackDetail() {
                 </div>
               )}
               
-              {/* Status badges - horizontal scroll on mobile */}
+              {/* Status badges — grouped: Type → Workflow → Operational */}
               <div className={cn(
                 "flex items-center gap-2",
-                isMobile ? "overflow-x-auto pb-1 -mx-3 px-3 scrollbar-hide" : "flex-wrap gap-3"
+                isMobile ? "overflow-x-auto pb-1 -mx-3 px-3 scrollbar-hide" : "flex-wrap gap-2"
               )}>
+                {/* Request type */}
                 <Badge className={cn("text-xs border shrink-0", getRequestTypeInfo(request.request_type).color)}>
                   {getRequestTypeInfo(request.request_type).label}
                 </Badge>
+                {/* Workflow status */}
                 {requestState && (
                   <Badge className={cn("flex items-center gap-1 shrink-0", requestState.color)}>
                     <requestState.icon className="w-3 h-3" />
                     {requestState.label}
                   </Badge>
                 )}
+                {/* Operational: reviewing or hidden (pick most relevant) */}
                 {request.review_state === 'in_review' && (
                   <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/40 text-xs shrink-0">
-                    <Eye className="w-3 h-3 mr-1" />
-                    In Review
+                    Reviewing
                   </Badge>
                 )}
                 {isQueueHidden(request) && (
                   <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/40 text-xs shrink-0">
                     <EyeOff className="w-3 h-3 mr-1" />
                     {request.queue_resume_date 
-                      ? `Resume ${format(new Date(request.queue_resume_date), 'MMM d')}`
-                      : 'Hidden Until Resumed'}
+                      ? `Hidden until ${format(new Date(request.queue_resume_date), 'MMM d')}`
+                      : 'Hidden'}
                   </Badge>
                 )}
+                {/* Due date */}
                 {request.due_date && (
                   <Badge variant="outline" className="border-gray-600 text-gray-200 shrink-0">
-                    Due: {format(new Date(request.due_date), 'MMM d')}
+                    Due {format(new Date(request.due_date), 'MMM d')}
                   </Badge>
                 )}
               </div>
+
+              {/* Operational summary */}
+              <OperationalSummary request={request} isMobile={isMobile} />
 
               {/* Mobile: Approve/Changes buttons for non-structured-review */}
               {isMobile && canAct && !isStructuredReview(request?.request_type) && (
@@ -663,175 +669,30 @@ export default function ClientFeedbackDetail() {
                 <p className="text-xs text-gray-400 italic">Select images below to review</p>
               )}
 
-              {/* Review overlay controls — Start/Finish Review */}
-              {request.review_state === 'in_review' && canonicalState?.key !== 'draft' && canonicalState?.key !== 'archived' && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleFinishReview}
-                  className={cn(
-                    "border-blue-500/50 text-blue-400 hover:bg-blue-500/10",
-                    isMobile ? "w-full h-10" : "h-8 text-xs"
-                  )}
-                >
-                  <CheckCircle2 className="w-4 h-4 mr-1" />
-                  Finish Review
-                </Button>
-              )}
-              {request.review_state !== 'in_review' && canonicalState?.key !== 'draft' && canonicalState?.key !== 'archived' && canonicalState?.key !== 'approved' && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => updateRequestMutation.mutate({
-                    id: requestId,
-                    data: { review_state: 'in_review', review_started_at: new Date().toISOString() }
-                  }, { onSuccess: () => toast.success('Marked as In Review') })}
-                  className={cn(
-                    "border-blue-500/50 text-blue-400 hover:bg-blue-500/10",
-                    isMobile ? "w-full h-10" : "h-8 text-xs"
-                  )}
-                >
-                  <Eye className="w-4 h-4 mr-1" />
-                  Start Review
-                </Button>
-              )}
-
-              {/* Action buttons - restructured for mobile */}
-              {isMobile ? (
-                <div className="space-y-2">
-                  {/* Primary action row */}
-                  {canonicalState?.key === 'draft' && (
-                    <Button size="sm" onClick={handlePostToClient} className="w-full h-10 bg-blue-600 hover:bg-blue-700">
-                      Post to Client
-                    </Button>
-                  )}
-                  {['awaiting_review', 'changes_requested', 'approved'].includes(canonicalState?.key) && (
-                    <Button size="sm" onClick={handleResendForApproval} className="w-full h-10 bg-purple-600 hover:bg-purple-700 text-white">
-                      <RotateCw className="w-4 h-4 mr-1" />
-                      Resend for Review
-                    </Button>
-                  )}
-                  {canonicalState?.key === 'archived' && (
-                    <Button size="sm" onClick={() => {
-                      if (confirm('Move this request back to draft?')) {
-                        updateRequestMutation.mutate({ id: requestId, data: { status: 'draft', posted_at: null } });
-                        toast.success('Moved to Drafts');
-                      }
-                    }} className="w-full h-10 bg-gray-700 hover:bg-gray-600 text-white">
-                      <FileText className="w-4 h-4 mr-1" />
-                      Move to Draft
-                    </Button>
-                  )}
-                  
-                  {/* Hide / Resume from Action Queue */}
-                  {canonicalState?.key !== 'draft' && canonicalState?.key !== 'archived' && (
-                    isQueueHidden(request) ? (
-                      <Button size="sm" onClick={handleResumeInQueue} variant="outline" className="w-full h-9 border-green-600/50 text-green-400 text-xs">
-                        <Play className="w-3.5 h-3.5 mr-1" />
-                        Resume in Queue
-                      </Button>
-                    ) : (
-                      <Button size="sm" onClick={() => setShowHideModal(true)} variant="outline" className="w-full h-9 border-gray-600 text-gray-300 text-xs">
-                        <EyeOff className="w-3.5 h-3.5 mr-1" />
-                        Later
-                      </Button>
-                    )
-                  )}
-                  
-                  {/* Secondary inline row */}
-                  <div className="flex gap-2">
-                    {(canonicalState?.key === 'draft' || ['awaiting_review', 'changes_requested', 'approved'].includes(canonicalState?.key)) && (
-                      <Button 
-                        size="sm" 
-                        onClick={handleArchive} 
-                        variant="outline" 
-                        className="flex-1 h-9 border-gray-600 text-gray-300 text-xs"
-                      >
-                        <Archive className="w-3.5 h-3.5 mr-1" />
-                        Archive
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      onClick={handleDeleteRequest}
-                      disabled={deleteRequestMutation.isPending}
-                      variant="outline"
-                      className="flex-1 h-9 border-red-600/50 text-red-400 text-xs hover:bg-red-600/20"
-                    >
-                      {deleteRequestMutation.isPending ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <><Trash2 className="w-3.5 h-3.5 mr-1" />Delete</>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                /* Desktop action buttons */
-                <div className="flex gap-2 flex-wrap">
-                  {canonicalState?.key === 'draft' && (
-                    <>
-                      <Button size="sm" onClick={handlePostToClient} className="bg-blue-600 hover:bg-blue-700">
-                        Post to Client
-                      </Button>
-                      <Button size="sm" onClick={handleArchive} variant="outline" className="bg-gray-700 text-gray-200 px-3 text-xs font-medium rounded-md hover:bg-gray-600 hover:text-white h-8 border-gray-600">
-                        <Archive className="w-4 h-4 mr-1" />
-                        Archive
-                      </Button>
-                    </>
-                  )}
-                  {['awaiting_review', 'changes_requested', 'approved'].includes(canonicalState?.key) && (
-                    <>
-                      <Button size="sm" onClick={handleResendForApproval} variant="outline" className="bg-blue-600 text-white border-blue-600 hover:bg-blue-700 hover:text-white px-3 text-xs font-medium rounded-md h-8">
-                        <RotateCw className="w-4 h-4 mr-1" />
-                        Resend
-                      </Button>
-                      <Button size="sm" onClick={handleArchive} variant="outline" className="bg-gray-700 text-gray-200 px-3 text-xs font-medium rounded-md hover:bg-gray-600 hover:text-white h-8 border-gray-600">
-                        <Archive className="w-4 h-4 mr-1" />
-                        Archive
-                      </Button>
-                    </>
-                  )}
-                  {/* Hide / Resume Action Queue — operational overlay, not a workflow change */}
-                  {canonicalState?.key !== 'draft' && canonicalState?.key !== 'archived' && (
-                    isQueueHidden(request) ? (
-                      <Button size="sm" onClick={handleResumeInQueue} variant="outline" className="border-green-600/50 text-green-400 hover:bg-green-600/10 px-3 text-xs font-medium rounded-md h-8">
-                        <Play className="w-4 h-4 mr-1" />
-                        Resume in Queue
-                      </Button>
-                    ) : (
-                      <Button size="sm" onClick={() => setShowHideModal(true)} variant="outline" className="border-gray-600 text-gray-400 hover:bg-gray-800 px-3 text-xs font-medium rounded-md h-8">
-                        <EyeOff className="w-4 h-4 mr-1" />
-                        Later
-                      </Button>
-                    )
-                  )}
-                  {canonicalState?.key === 'archived' && (
-                    <Button size="sm" onClick={() => {
-                      if (confirm('Move this request back to draft?')) {
-                        updateRequestMutation.mutate({ id: requestId, data: { status: 'draft', posted_at: null } });
-                        toast.success('Moved to Drafts');
-                      }
-                    }} variant="outline" className="bg-gray-100 text-gray-900 border-gray-200 hover:bg-gray-200 px-3 text-xs font-medium rounded-md h-8">
-                      <FileText className="w-4 h-4 mr-1" />
-                      Move to Draft
-                    </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    onClick={handleDeleteRequest}
-                    disabled={deleteRequestMutation.isPending}
-                    className="bg-red-600 hover:bg-red-700 text-white border-red-600"
-                  >
-                    {deleteRequestMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="w-4 h-4 mr-1" />
-                    )}
-                    Delete
-                  </Button>
-                </div>
-              )}
+              {/* Hierarchical action bar */}
+              <DetailActionBar
+                canonicalState={canonicalState}
+                request={request}
+                isMobile={isMobile}
+                isDeleting={deleteRequestMutation.isPending}
+                onPostToClient={handlePostToClient}
+                onResend={handleResendForApproval}
+                onArchive={handleArchive}
+                onDelete={handleDeleteRequest}
+                onStartReviewing={() => updateRequestMutation.mutate({
+                  id: requestId,
+                  data: { review_state: 'in_review', review_started_at: new Date().toISOString() }
+                }, { onSuccess: () => toast.success('Now reviewing') })}
+                onStopReviewing={handleFinishReview}
+                onShowLaterModal={() => setShowHideModal(true)}
+                onResumeInQueue={handleResumeInQueue}
+                onMoveToDraft={() => {
+                  if (confirm('Move this request back to draft?')) {
+                    updateRequestMutation.mutate({ id: requestId, data: { status: 'draft', posted_at: null } });
+                    toast.success('Moved to Drafts');
+                  }
+                }}
+              />
 
               {(request.body || request.content_html) && (
                 <div className={cn("bg-gray-800/50 rounded-lg", isMobile ? "p-2" : "p-3")}>

@@ -11,16 +11,16 @@ const STORAGE_KEY = "followup_collapsed_clients";
  */
 const AGE_BUCKETS = [
   { key: 'today', label: 'Today', maxHours: 24 },
-  { key: 'this_week', label: 'This Week', maxHours: 168 },
-  { key: 'over_1_week', label: 'Over One Week', maxHours: 720 },
-  { key: 'over_30_days', label: 'Over Thirty Days', maxHours: Infinity },
+  { key: '1_7_days', label: '1–7 Days', maxHours: 168 },
+  { key: '8_30_days', label: '8–30 Days', maxHours: 720 },
+  { key: '30_plus', label: '30+ Days', maxHours: Infinity },
 ];
 
 const AGE_COLORS = {
   today: 'text-gray-400',
-  this_week: 'text-orange-400/70',
-  over_1_week: 'text-orange-400',
-  over_30_days: 'text-red-400',
+  '1_7_days': 'text-orange-400/70',
+  '8_30_days': 'text-orange-400',
+  '30_plus': 'text-red-400',
 };
 
 /**

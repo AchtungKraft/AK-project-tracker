@@ -88,13 +88,25 @@ export default function ClientPortalHub() {
           await base44.entities.ClientFeedbackRequest.update(request.id, {
             review_state: 'none', review_started_at: null
           });
-          toast.success('Review finished');
+          toast.success('Stopped reviewing');
           break;
         case 'start_review':
           await base44.entities.ClientFeedbackRequest.update(request.id, {
             review_state: 'in_review', review_started_at: new Date().toISOString()
           });
-          toast.success('Marked as In Review');
+          toast.success('Now reviewing');
+          break;
+        case 'post_to_client':
+          try {
+            await base44.functions.invoke('updateRequestStatus', { requestId: request.id, status: 'posted' });
+            base44.functions.invoke('sendNeedsReviewEmail', { requestId: request.id, isRepost: false }).catch(() => {});
+            toast.success('Posted to client');
+          } catch { toast.error('Failed to post'); }
+          break;
+        case 'delete':
+          if (!confirm('Delete this request and all its comments?')) { setIsSavingCardAction(false); return; }
+          await base44.entities.ClientFeedbackRequest.delete(request.id);
+          toast.success('Request deleted');
           break;
         case 'resume':
           await base44.entities.ClientFeedbackRequest.update(request.id, {
@@ -137,7 +149,7 @@ export default function ClientPortalHub() {
       });
       setHideModalRequest(null);
       queryClient.invalidateQueries({ queryKey: ['clientPortalHubData'] });
-      toast.success(resumeDate ? `Removed until ${resumeDate}` : 'Removed from queue');
+      toast.success(resumeDate ? `Deferred until ${resumeDate}` : 'Deferred — will return when resumed');
     } catch (error) {
       toast.error('Failed to remove from queue');
     } finally {
