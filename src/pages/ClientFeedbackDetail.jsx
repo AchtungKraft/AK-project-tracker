@@ -15,7 +15,7 @@ import { NotFoundState, RateLimitState, UnknownErrorState } from "@/components/f
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { getRequestState, getRequestTypeInfo } from "@/components/clientportal/utils";
+import { getRequestTypeInfo } from "@/components/clientportal/utils";
 import { getRequestStateCanonical } from "@/components/clientportal/stateHelpers";
 import { isStructuredReview } from "@/components/clientportal/reviewBehavior";
 import ClientFeedbackThread from "../components/clientportal/ClientFeedbackThread.jsx";
@@ -365,11 +365,6 @@ export default function ClientFeedbackDetail() {
     return extractLinks(request.content_html, request.body, attachmentUrls, request.links);
   }, [request?.content_html, request?.body, request?.links, stableAttachments]);
 
-  // Memoize expensive calculations to prevent re-computation on every render
-  const requestState = useMemo(() => {
-    return request ? getRequestState(request, stableDecisions, stableAttachments) : null;
-  }, [request?.id, request?.posted_at, stableDecisions, stableAttachments]);
-
   // Canonical state key for button logic (not dependent on request.status)
   const canonicalState = useMemo(() => {
     return request ? getRequestStateCanonical(request, stableDecisions, stableAttachments) : null;
@@ -598,42 +593,28 @@ export default function ClientFeedbackDetail() {
                 </div>
               )}
               
-              {/* Identity + Workflow badges — compact row */}
+              {/* Identity badges — what is this request? */}
               <div className={cn(
                 "flex items-center gap-1.5",
                 isMobile ? "overflow-x-auto pb-1 -mx-3 px-3 scrollbar-hide" : "flex-wrap gap-1.5"
               )}>
-                {/* Identity: Request type */}
                 <Badge className={cn("text-xs border shrink-0", getRequestTypeInfo(request.request_type).color)}>
                   {getRequestTypeInfo(request.request_type).label}
                 </Badge>
-                {/* Workflow status */}
-                {requestState && (
-                  <Badge className={cn("flex items-center gap-1 shrink-0", requestState.color)}>
-                    <requestState.icon className="w-3 h-3" />
-                    {requestState.label}
-                  </Badge>
-                )}
-                {/* Operations: reviewing or hidden */}
-                {request.review_state === 'in_review' && (
-                  <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/40 text-xs shrink-0">
-                    Reviewing
-                  </Badge>
-                )}
                 {isQueueHidden(request) && (
                   <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/40 text-xs shrink-0">
                     <EyeOff className="w-3 h-3 mr-1" />
                     {request.queue_resume_date 
-                      ? `Later — returns ${format(new Date(request.queue_resume_date), 'MMM d')}`
-                      : 'Later'}
+                      ? `Set aside — returns ${format(new Date(request.queue_resume_date), 'MMM d')}`
+                      : 'Set aside'}
                   </Badge>
                 )}
               </div>
 
-              {/* Next Action Panel — primary operational read */}
-              <NextActionPanel canonicalState={canonicalState} request={request} isMobile={isMobile} />
+              {/* Next Action — what should happen now? */}
+              <NextActionPanel canonicalState={canonicalState} request={request} comments={stableComments} isMobile={isMobile} />
 
-              {/* Operational metrics */}
+              {/* Operational Summary — important dates */}
               <OperationalSummary request={request} isMobile={isMobile} />
 
               {/* Mobile: Approve/Changes buttons for non-structured-review */}
@@ -742,8 +723,8 @@ export default function ClientFeedbackDetail() {
             </CardContent>
           </Card>
 
-          {/* Review Cycle Summary — compact lifecycle overview above thread */}
-          <ReviewCycleSummary request={request} isMobile={isMobile} />
+          {/* Review Cycle — how has this review progressed? */}
+          <ReviewCycleSummary request={request} comments={stableComments} isMobile={isMobile} />
 
           {/* Comment Composer — positioned above thread */}
           <FeedbackCommentComposer

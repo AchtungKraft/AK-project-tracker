@@ -16,43 +16,43 @@ function deriveNextAction(canonicalState, request) {
   const clientActivity = request.latestClientActivityAt;
   const isHidden = request.queue_hidden;
 
-  // Archived
+  // Archived — no action
   if (key === 'archived') {
     return {
-      owner: 'Resolved',
+      owner: 'No Action',
       ownerColor: 'text-gray-400',
       icon: Archive,
       iconBg: 'bg-gray-500/15',
       headline: 'Archived',
-      detail: 'No action required',
+      detail: 'No further action required.',
     };
   }
 
-  // Draft
+  // Draft — team owns, ready to send
   if (key === 'draft') {
     return {
-      owner: 'AK Action',
+      owner: 'Ready to Send',
       ownerColor: 'text-purple-400',
       icon: Send,
       iconBg: 'bg-purple-500/15',
-      headline: 'Ready to Send',
-      detail: 'Review complete. Post to client when ready.',
+      headline: 'Draft complete',
+      detail: 'Post to client when ready.',
     };
   }
 
-  // Approved
+  // Approved — resolved
   if (key === 'approved') {
     return {
-      owner: 'Resolved',
+      owner: 'Review Complete',
       ownerColor: 'text-green-400',
       icon: CheckCircle2,
       iconBg: 'bg-green-500/15',
-      headline: 'Approved',
-      detail: 'Client has approved — ready to archive or resend',
+      headline: 'Client approved',
+      detail: 'Archive when ready, or resend if needed.',
     };
   }
 
-  // In review by team
+  // Team is actively reviewing
   if (isReviewing) {
     const reviewHours = request.review_started_at
       ? (Date.now() - new Date(request.review_started_at).getTime()) / 3600000
@@ -63,34 +63,34 @@ function deriveNextAction(canonicalState, request) {
     if (reviewStale) {
       detail = `In review for ${Math.floor(reviewHours / 24)}d. Complete or stop reviewing.`;
     } else if (clientComments > 0) {
-      detail = `Client sent ${clientComments} ${clientComments === 1 ? 'reply' : 'replies'}. Review and respond.`;
+      detail = `${clientComments} client ${clientComments === 1 ? 'reply' : 'replies'} to review.`;
     } else {
       detail = clientActivity
         ? `Client last active ${formatRelative(clientActivity)}.`
-        : 'Awaiting team response.';
+        : 'Review in progress.';
     }
     return {
-      owner: 'Active Review',
+      owner: 'Internal Review',
       ownerColor: 'text-blue-400',
       icon: Eye,
       iconBg: 'bg-blue-500/15',
-      headline: reviewStale ? 'Review Stale — Complete or Stop' : 'Under Review',
+      headline: reviewStale ? 'Review stale — complete or stop' : 'Under review by team',
       detail,
     };
   }
 
-  // Client replied — team needs to respond
+  // Client replied — team needs to act
   if (lastActor === 'client') {
     const clientComments = request.clientCommentCount || 0;
     const detail = clientComments > 0
-      ? `Client sent ${clientComments} ${clientComments === 1 ? 'reply' : 'replies'}. Review and respond.`
+      ? `${clientComments} client ${clientComments === 1 ? 'reply' : 'replies'}. Review and respond.`
       : 'Client has responded. Review and respond.';
     return {
-      owner: 'AK Action',
+      owner: 'Internal Review Required',
       ownerColor: 'text-red-400',
       icon: MessageSquare,
       iconBg: 'bg-red-500/15',
-      headline: 'Client Replied — Review Needed',
+      headline: 'Client replied',
       detail,
     };
   }
@@ -102,10 +102,10 @@ function deriveNextAction(canonicalState, request) {
       ownerColor: 'text-amber-400',
       icon: Clock,
       iconBg: 'bg-amber-500/15',
-      headline: 'Changes Requested',
+      headline: 'Changes requested',
       detail: clientActivity
-        ? `Client last active ${formatRelative(clientActivity)}`
-        : 'No client activity yet',
+        ? `Client last active ${formatRelative(clientActivity)}. No internal action required.`
+        : 'No client activity yet. No internal action required.',
     };
   }
 
@@ -113,14 +113,14 @@ function deriveNextAction(canonicalState, request) {
   if (key === 'awaiting_review') {
     if (isHidden) {
       return {
-        owner: 'Later',
+        owner: 'Set Aside',
         ownerColor: 'text-gray-400',
         icon: Clock,
         iconBg: 'bg-gray-500/15',
-        headline: 'Set Aside',
+        headline: 'Removed from queue',
         detail: request.queue_resume_date
-          ? `Will return ${formatRelative(request.queue_resume_date)}`
-          : 'Hidden until manually resumed',
+          ? `Returns ${formatRelative(request.queue_resume_date)}.`
+          : 'Hidden until manually resumed.',
       };
     }
 
@@ -132,23 +132,23 @@ function deriveNextAction(canonicalState, request) {
 
     if (waitDays > 14) {
       return {
-        owner: 'Waiting on Client',
+        owner: 'Follow Up with Client',
         ownerColor: 'text-red-400',
         icon: AlertTriangle,
         iconBg: 'bg-red-500/15',
-        headline: `Client Silent — ${waitDays}d`,
+        headline: `No response for ${waitDays} days`,
         detail: 'Consider following up or escalating.',
       };
     }
 
     if (waitDays > 7) {
       return {
-        owner: 'Waiting on Client',
+        owner: 'Follow Up with Client',
         ownerColor: 'text-orange-400',
         icon: AlertTriangle,
         iconBg: 'bg-orange-500/15',
-        headline: `Client has not responded — ${waitDays}d`,
-        detail: `Last activity ${formatRelative(clientActivity || request.posted_at)}. Consider following up.`,
+        headline: `No response for ${waitDays} days`,
+        detail: 'Consider sending a follow-up.',
       };
     }
 
@@ -157,10 +157,10 @@ function deriveNextAction(canonicalState, request) {
       ownerColor: 'text-amber-400',
       icon: Clock,
       iconBg: 'bg-amber-500/15',
-      headline: 'Waiting on Client',
-      detail: clientActivity
-        ? `Client last active ${formatRelative(clientActivity)}. No internal action required.`
-        : 'No client activity yet. No internal action required.',
+      headline: clientActivity
+        ? `Client last active ${formatRelative(clientActivity)}`
+        : 'No client activity yet',
+      detail: 'No internal action required.',
     };
   }
 
@@ -180,8 +180,34 @@ function formatRelative(dateStr) {
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export default function NextActionPanel({ canonicalState, request, isMobile = false }) {
-  const action = deriveNextAction(canonicalState, request);
+export default function NextActionPanel({ canonicalState, request, comments = [], isMobile = false }) {
+  // Enrich request with client activity data if not already present
+  const enrichedRequest = React.useMemo(() => {
+    if (request?.latestActivityActor) return request; // Already enriched
+    if (!request || comments.length === 0) return request;
+    
+    const clientComments = comments
+      .filter(c => c.is_client_comment || c.author_type === 'client_contact')
+      .sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+    
+    const latestClientDate = clientComments[0]?.created_date || null;
+    const latestComment = comments
+      .filter(c => c.created_date)
+      .sort((a, b) => new Date(b.created_date) - new Date(a.created_date))[0];
+    
+    const latestActor = latestComment
+      ? (latestComment.is_client_comment || latestComment.author_type === 'client_contact' ? 'client' : 'team')
+      : 'team';
+
+    return {
+      ...request,
+      latestActivityActor: latestActor,
+      latestClientActivityAt: latestClientDate,
+      clientCommentCount: clientComments.length,
+    };
+  }, [request, comments]);
+
+  const action = deriveNextAction(canonicalState, enrichedRequest);
   if (!action) return null;
 
   const Icon = action.icon;
@@ -213,44 +239,32 @@ export default function NextActionPanel({ canonicalState, request, isMobile = fa
 }
 
 /**
- * Compact ownership badge for Action Queue cards.
- * Shows who owns the next action in 2 words or less.
+ * GroupBadge for Action Queue cards.
+ * 
+ * Shows the ORGANIZATIONAL GROUP this card belongs to — matches
+ * the column it sits in. This is NOT the same as NextAction ownership.
+ * 
+ * Column answers: "What type of work is this?"
+ * NextAction answers: "What should I do?"
  */
 export function OwnershipBadge({ item }) {
-  const { type, lastActor, request } = item;
-  const isReviewing = request?.review_state === 'in_review';
+  const { type } = item;
 
-  let label, colorClass;
+  // Map attention type → column group label + color
+  const GROUP_MAP = {
+    needs_sending:  { label: 'Draft',         color: 'text-purple-400' },
+    needs_response: { label: 'Client Replied', color: 'text-red-400' },
+    needs_review:   { label: 'In Review',      color: 'text-amber-400' },
+    overdue:        { label: 'Overdue',        color: 'text-red-400' },
+    follow_up:      { label: 'Follow-Up',      color: 'text-orange-400' },
+    approved_recent:{ label: 'Resolved',       color: 'text-green-400' },
+  };
 
-  if (type === 'needs_sending') {
-    label = 'AK: Send';
-    colorClass = 'text-purple-400';
-  } else if (type === 'needs_response') {
-    label = 'Client Replied';
-    colorClass = 'text-red-400';
-  } else if (isReviewing) {
-    label = 'Active Review';
-    colorClass = 'text-blue-400';
-  } else if (type === 'needs_review') {
-    label = 'Active Review';
-    colorClass = 'text-amber-400';
-  } else if (type === 'follow_up') {
-    label = 'Follow-Up';
-    colorClass = 'text-orange-400';
-  } else if (type === 'approved_recent') {
-    label = 'Resolved';
-    colorClass = 'text-green-400';
-  } else if (lastActor === 'client') {
-    label = 'Client Replied';
-    colorClass = 'text-red-400';
-  } else {
-    label = 'Follow-Up';
-    colorClass = 'text-gray-400';
-  }
+  const group = GROUP_MAP[type] || { label: 'Follow-Up', color: 'text-gray-400' };
 
   return (
-    <span className={cn("text-[10px] font-semibold uppercase tracking-wide", colorClass)}>
-      {label}
+    <span className={cn("text-[10px] font-semibold uppercase tracking-wide", group.color)}>
+      {group.label}
     </span>
   );
 }

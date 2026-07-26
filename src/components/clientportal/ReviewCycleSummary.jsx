@@ -3,71 +3,71 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
 /**
- * Compact review lifecycle summary — sits above the timeline.
- * Shows key timestamps at a glance. Informational only — no new data.
+ * Review Cycle — PROGRESSION ONLY
+ * 
+ * Responsibility: "How has this review progressed?"
+ * Shows the sequence of interactions as a visual flow:
+ *   Sent → Viewed → Client Reply → Team Reply
+ * 
+ * Does NOT show: posted date (OperationalSummary), due date
+ * (OperationalSummary), or waiting duration (NextAction).
  */
-export default function ReviewCycleSummary({ request, isMobile = false }) {
+export default function ReviewCycleSummary({ request, comments = [], isMobile = false }) {
   if (!request?.posted_at) return null;
 
-  const items = [];
+  // Derive latest client reply from comments (not always enriched on request)
+  const latestClientReply = request.latestClientActivityAt || (() => {
+    const clientComments = comments
+      .filter(c => c.is_client_comment || c.actor === 'client')
+      .map(c => c.created_date)
+      .filter(Boolean);
+    return clientComments.length > 0
+      ? clientComments.sort((a, b) => new Date(b) - new Date(a))[0]
+      : null;
+  })();
 
-  // Posted
-  items.push({
-    label: "Posted",
-    value: format(new Date(request.posted_at), "MMM d"),
+  // Build steps in chronological order of the review cycle
+  const steps = [];
+
+  steps.push({
+    label: "Sent",
+    date: format(new Date(request.posted_at), "MMM d"),
+    done: true,
   });
 
-  // Client viewed
-  if (request.client_last_viewed_at) {
-    items.push({
-      label: "Viewed",
-      value: format(new Date(request.client_last_viewed_at), "MMM d"),
-    });
-  }
+  steps.push({
+    label: "Client Viewed",
+    date: request.client_last_viewed_at
+      ? format(new Date(request.client_last_viewed_at), "MMM d")
+      : null,
+    done: !!request.client_last_viewed_at,
+  });
 
-  // Last client reply
-  if (request.latestClientActivityAt) {
-    items.push({
-      label: "Client Reply",
-      value: format(new Date(request.latestClientActivityAt), "MMM d"),
-    });
-  }
+  const hasClientReply = !!latestClientReply;
+  steps.push({
+    label: "Client Replied",
+    date: hasClientReply
+      ? format(new Date(latestClientReply), "MMM d")
+      : null,
+    done: hasClientReply,
+  });
 
-  // Last internal reply
-  if (request.last_viewed_by_internal_at) {
-    items.push({
-      label: "Internal Reply",
-      value: format(new Date(request.last_viewed_by_internal_at), "MMM d"),
-    });
-  }
-
-  // Waiting duration
-  const lastActivity = request.latestClientActivityAt || request.client_last_viewed_at || request.posted_at;
-  const waitDays = Math.floor((Date.now() - new Date(lastActivity).getTime()) / 86400000);
-  if (waitDays > 0 && request.status !== 'archived') {
-    items.push({
-      label: "Waiting",
-      value: `${waitDays}d`,
-      highlight: waitDays > 7,
-    });
-  }
-
-  // Due date
-  if (request.due_date) {
-    const dueDate = new Date(request.due_date + 'T12:00:00');
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const daysDiff = Math.floor((dueDate - today) / 86400000);
-    if (daysDiff < 0) {
-      items.push({ label: "Overdue", value: `${Math.abs(daysDiff)}d`, warn: true });
-    } else if (daysDiff === 0) {
-      items.push({ label: "Due", value: "Today", highlight: true });
-    } else {
-      items.push({ label: "Due In", value: `${daysDiff}d` });
+  // Only show team reply step if client has replied first
+  if (hasClientReply && request.last_viewed_by_internal_at) {
+    const internalDate = new Date(request.last_viewed_by_internal_at);
+    const clientDate = new Date(latestClientReply);
+    if (internalDate > clientDate) {
+      steps.push({
+        label: "Team Replied",
+        date: format(internalDate, "MMM d"),
+        done: true,
+      });
     }
   }
 
-  if (items.length <= 1) return null;
+  // Don't render if there's only the "Sent" step — too trivial
+  const completedSteps = steps.filter(s => s.done).length;
+  if (completedSteps <= 1) return null;
 
   return (
     <div className={cn(
@@ -81,17 +81,17 @@ export default function ReviewCycleSummary({ request, isMobile = false }) {
         "flex items-center gap-0 text-xs",
         isMobile ? "flex-wrap gap-y-1" : ""
       )}>
-        {items.map((item, i) => (
-          <React.Fragment key={item.label}>
-            {i > 0 && <span className="text-gray-700 mx-2">·</span>}
+        {steps.map((step, i) => (
+          <React.Fragment key={step.label}>
+            {i > 0 && (
+              <span className={cn("mx-1.5", step.done ? "text-gray-500" : "text-gray-800")}>→</span>
+            )}
             <span className={cn(
               "whitespace-nowrap",
-              item.warn ? "text-red-400 font-medium" :
-              item.highlight ? "text-orange-400 font-medium" :
-              "text-gray-400"
+              step.done ? "text-gray-300" : "text-gray-700"
             )}>
-              <span className="text-gray-500">{item.label}</span>{" "}
-              {item.value}
+              {step.label}
+              {step.date && <span className="text-gray-500 ml-1">{step.date}</span>}
             </span>
           </React.Fragment>
         ))}

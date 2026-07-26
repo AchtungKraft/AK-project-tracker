@@ -4,52 +4,32 @@ import { cn } from "@/lib/utils";
 import { parseLocalDate } from "@/lib/dateUtils";
 
 /**
- * Compact operational summary for a feedback request.
- * Shows key lifecycle timestamps at a glance — only values that exist.
+ * Operational Summary — TIMESTAMPS ONLY
+ * 
+ * Responsibility: "What are the important dates?"
+ * Shows: Posted, Client Viewed, Due date.
+ * 
+ * Does NOT show: waiting duration (NextAction's job),
+ * client reply / internal reply (ReviewCycleSummary's job).
  */
 export default function OperationalSummary({ request, isMobile = false }) {
   if (!request) return null;
 
   const items = [];
 
-  // Posted
+  // Posted date
   if (request.posted_at) {
     items.push({ label: "Posted", value: format(new Date(request.posted_at), "MMM d") });
   }
 
-  // Client viewed
+  // Client last viewed
   if (request.client_last_viewed_at) {
     items.push({ label: "Viewed", value: format(new Date(request.client_last_viewed_at), "MMM d") });
+  } else if (request.posted_at) {
+    items.push({ label: "Viewed", value: "Not yet", muted: true });
   }
 
-  // Last client activity
-  const clientActivityDate = request.latestClientActivityAt || request.client_last_viewed_at;
-  if (clientActivityDate && request.posted_at) {
-    items.push({ label: "Client", value: formatRelativeShort(clientActivityDate) });
-  } else if (request.posted_at && !clientActivityDate) {
-    items.push({ label: "Client", value: "None", muted: true });
-  }
-
-  // Last internal activity
-  if (request.last_viewed_by_internal_at && request.posted_at) {
-    items.push({ label: "Internal", value: formatRelativeShort(request.last_viewed_by_internal_at) });
-  }
-
-  // Waiting duration — only for posted, non-archived requests
-  if (request.posted_at && request.status !== 'archived') {
-    const lastActivity = clientActivityDate || request.posted_at;
-    const days = Math.floor((Date.now() - new Date(lastActivity).getTime()) / 86400000);
-    if (days > 0) {
-      items.push({
-        label: "Waiting",
-        value: `${days}d`,
-        highlight: days > 7,
-        warn: days > 14,
-      });
-    }
-  }
-
-  // Due date — show as "Due In" or "Overdue By"
+  // Due date
   if (request.due_date) {
     const dueDate = parseLocalDate(request.due_date);
     const today = new Date();
@@ -57,23 +37,11 @@ export default function OperationalSummary({ request, isMobile = false }) {
     const daysDiff = differenceInDays(dueDate, today);
 
     if (daysDiff < 0) {
-      items.push({
-        label: "Overdue",
-        value: `${Math.abs(daysDiff)}d`,
-        warn: true,
-      });
+      items.push({ label: "Overdue", value: `${Math.abs(daysDiff)}d`, warn: true });
     } else if (daysDiff === 0) {
-      items.push({
-        label: "Due",
-        value: "Today",
-        highlight: true,
-      });
+      items.push({ label: "Due", value: "Today", highlight: true });
     } else {
-      items.push({
-        label: "Due In",
-        value: `${daysDiff}d`,
-        highlight: daysDiff <= 3,
-      });
+      items.push({ label: "Due", value: format(dueDate, "MMM d"), highlight: daysDiff <= 3 });
     }
   }
 
@@ -101,15 +69,4 @@ export default function OperationalSummary({ request, isMobile = false }) {
       ))}
     </div>
   );
-}
-
-function formatRelativeShort(dateStr) {
-  if (!dateStr) return '';
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const hours = Math.floor(diff / 3600000);
-  if (hours < 1) return '<1h';
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return format(new Date(dateStr), 'MMM d');
 }
