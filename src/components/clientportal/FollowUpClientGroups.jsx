@@ -7,6 +7,40 @@ import AttentionCard from "./AttentionCard";
 const STORAGE_KEY = "followup_collapsed_clients";
 
 /**
+ * Age bucket thresholds (in hours)
+ */
+const AGE_BUCKETS = [
+  { key: 'today', label: 'Today', maxHours: 24 },
+  { key: 'this_week', label: 'This Week', maxHours: 168 },
+  { key: 'over_1_week', label: 'Over One Week', maxHours: 720 },
+  { key: 'over_30_days', label: 'Over Thirty Days', maxHours: Infinity },
+];
+
+const AGE_COLORS = {
+  today: 'text-gray-400',
+  this_week: 'text-orange-400/70',
+  over_1_week: 'text-orange-400',
+  over_30_days: 'text-red-400',
+};
+
+/**
+ * Group items by age bucket based on hours since last activity.
+ */
+function groupByAge(items) {
+  const buckets = AGE_BUCKETS.map(b => ({ ...b, items: [] }));
+  items.forEach(item => {
+    const hours = item.followUpMeta?.hoursSince ?? 0;
+    for (const bucket of buckets) {
+      if (hours < bucket.maxHours) {
+        bucket.items.push(item);
+        break;
+      }
+    }
+  });
+  return buckets.filter(b => b.items.length > 0);
+}
+
+/**
  * Group follow-up items by project name.
  * Returns sorted array of { clientKey, clientName, items, overdueCount, latestActivityAt }.
  */
@@ -25,11 +59,8 @@ function groupByClient(items) {
   });
 
   return Object.values(map).sort((a, b) => {
-    // 1. overdue count DESC
     if (a.overdueCount !== b.overdueCount) return b.overdueCount - a.overdueCount;
-    // 2. total follow-ups DESC
     if (a.items.length !== b.items.length) return b.items.length - a.items.length;
-    // 3. last activity DESC (most recent first)
     return b.latestActivityAt - a.latestActivityAt;
   });
 }
@@ -51,7 +82,8 @@ function saveCollapsedState(state) {
  * Client-collapsible follow-up grouping.
  * Props: items (follow-up attention items), onUpdateDueDate, mineFilter (bool)
  */
-export default function FollowUpClientGroups({ items, onUpdateDueDate, mineFilter = false }) {
+export default function FollowUpClientGroups({ items, onUpdateDueDate, onAction, mineFilter = false }) {
+  const ageBuckets = useMemo(() => groupByAge(items), [items]);
   const clientGroups = useMemo(() => groupByClient(items), [items]);
   const allClientKeys = useMemo(() => clientGroups.map(g => g.clientKey), [clientGroups]);
 
@@ -126,59 +158,78 @@ export default function FollowUpClientGroups({ items, onUpdateDueDate, mineFilte
         </button>
       )}
 
-      {clientGroups.map(group => {
-        const isCollapsed = collapsed[group.clientKey] !== false;
-        const highRiskCount = group.items.filter(i => i.followUpMeta?.riskTier === "high").length;
-
-        return (
-          <div key={group.clientKey} className="border-b border-gray-800/40 last:border-b-0">
-            {/* Client Header */}
-            <button
-              onClick={() => toggleClient(group.clientKey)}
-              className="w-full flex items-center gap-2 px-2 py-2 rounded-md hover:bg-gray-800/40 transition-colors text-left group/client"
-            >
-              {isCollapsed ? (
-                <ChevronRight className="w-3.5 h-3.5 text-gray-500 shrink-0" />
-              ) : (
-                <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-              )}
-              <FolderKanban className="w-3.5 h-3.5 text-orange-400/60 shrink-0" />
-              <span className="text-xs font-semibold text-gray-200 truncate flex-1 min-w-0">
-                {group.clientName}
-              </span>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <Badge className="bg-gray-800 text-gray-400 border-gray-700 text-[10px] px-1.5 py-0">
-                  {group.items.length}
-                </Badge>
-                {group.overdueCount > 0 && (
-                  <Badge className="bg-red-600/20 text-red-400 border-red-600/40 text-[10px] px-1.5 py-0">
-                    {group.overdueCount} overdue
-                  </Badge>
-                )}
-                {highRiskCount > 0 && (
-                  <Badge className="bg-orange-600/20 text-orange-400 border-orange-600/40 text-[10px] px-1.5 py-0">
-                    {highRiskCount} high
-                  </Badge>
-                )}
-              </div>
-            </button>
-
-            {/* Items — only when expanded */}
-            {!isCollapsed && (
-              <div className="pl-2 pb-2 space-y-1.5">
-                {group.items.map(item => (
-                  <AttentionCard
-                    key={item.requestId}
-                    item={item}
-                    onUpdateDueDate={onUpdateDueDate}
-                    muted={item.followUpMeta?.riskTier === "low"}
-                  />
-                ))}
-              </div>
-            )}
+      {/* Age-grouped rendering */}
+      {ageBuckets.map(bucket => (
+        <div key={bucket.key}>
+          {/* Age group header */}
+          <div className="flex items-center gap-2 px-1 pt-2 pb-1">
+            <span className={`text-[10px] font-semibold uppercase tracking-wider ${AGE_COLORS[bucket.key]}`}>
+              {bucket.label}
+            </span>
+            <Badge className="bg-gray-800/60 text-gray-500 border-gray-700/50 text-[10px] px-1 py-0">
+              {bucket.items.length}
+            </Badge>
+            <div className="flex-1 border-t border-gray-800/40" />
           </div>
-        );
-      })}
+
+          {/* Items within this age bucket, grouped by project */}
+          {(() => {
+            const bucketProjects = groupByClient(bucket.items);
+            return bucketProjects.map(group => {
+              const isCollapsed = collapsed[group.clientKey] !== false;
+              const highRiskCount = group.items.filter(i => i.followUpMeta?.riskTier === "high").length;
+
+              return (
+                <div key={`${bucket.key}-${group.clientKey}`} className="border-b border-gray-800/40 last:border-b-0">
+                  <button
+                    onClick={() => toggleClient(group.clientKey)}
+                    className="w-full flex items-center gap-2 px-2 py-2 rounded-md hover:bg-gray-800/40 transition-colors text-left group/client"
+                  >
+                    {isCollapsed ? (
+                      <ChevronRight className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                    )}
+                    <FolderKanban className="w-3.5 h-3.5 text-orange-400/60 shrink-0" />
+                    <span className="text-xs font-semibold text-gray-200 truncate flex-1 min-w-0">
+                      {group.clientName}
+                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Badge className="bg-gray-800 text-gray-400 border-gray-700 text-[10px] px-1.5 py-0">
+                        {group.items.length}
+                      </Badge>
+                      {group.overdueCount > 0 && (
+                        <Badge className="bg-red-600/20 text-red-400 border-red-600/40 text-[10px] px-1.5 py-0">
+                          {group.overdueCount} overdue
+                        </Badge>
+                      )}
+                      {highRiskCount > 0 && (
+                        <Badge className="bg-orange-600/20 text-orange-400 border-orange-600/40 text-[10px] px-1.5 py-0">
+                          {highRiskCount} high
+                        </Badge>
+                      )}
+                    </div>
+                  </button>
+
+                  {!isCollapsed && (
+                    <div className="pl-2 pb-2 space-y-1.5">
+                      {group.items.map(item => (
+                        <AttentionCard
+                          key={item.requestId}
+                          item={item}
+                          onUpdateDueDate={onUpdateDueDate}
+                          onAction={onAction}
+                          muted={item.followUpMeta?.riskTier === "low"}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            });
+          })()}
+        </div>
+      ))}
     </div>
   );
 }

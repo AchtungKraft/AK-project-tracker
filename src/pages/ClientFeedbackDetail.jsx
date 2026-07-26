@@ -309,7 +309,7 @@ export default function ClientFeedbackDetail() {
   const handleHideFromQueue = (resumeDate) => {
     updateRequestMutation.mutate(
       { id: requestId, data: { queue_hidden: true, queue_hidden_at: new Date().toISOString(), queue_resume_date: resumeDate || null } },
-      { onSuccess: () => { setShowHideModal(false); toast.success(resumeDate ? `Hidden until ${resumeDate}` : 'Hidden from Action Queue'); } }
+      { onSuccess: () => { setShowHideModal(false); toast.success(resumeDate ? `Removed until ${resumeDate}` : 'Removed from queue'); } }
     );
   };
 
@@ -619,8 +619,9 @@ export default function ClientFeedbackDetail() {
                 {isQueueHidden(request) && (
                   <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/40 text-xs shrink-0">
                     <EyeOff className="w-3 h-3 mr-1" />
-                    Hidden from Queue
-                    {request.queue_resume_date && <span className="ml-1">• resumes {format(new Date(request.queue_resume_date), 'MMM d')}</span>}
+                    {request.queue_resume_date 
+                      ? `Resume ${format(new Date(request.queue_resume_date), 'MMM d')}`
+                      : 'Hidden Until Resumed'}
                   </Badge>
                 )}
                 {request.due_date && (
@@ -727,12 +728,12 @@ export default function ClientFeedbackDetail() {
                     isQueueHidden(request) ? (
                       <Button size="sm" onClick={handleResumeInQueue} variant="outline" className="w-full h-9 border-green-600/50 text-green-400 text-xs">
                         <Play className="w-3.5 h-3.5 mr-1" />
-                        Resume in Action Queue
+                        Resume in Queue
                       </Button>
                     ) : (
                       <Button size="sm" onClick={() => setShowHideModal(true)} variant="outline" className="w-full h-9 border-gray-600 text-gray-300 text-xs">
                         <EyeOff className="w-3.5 h-3.5 mr-1" />
-                        Hide from Action Queue
+                        Later
                       </Button>
                     )
                   )}
@@ -801,7 +802,7 @@ export default function ClientFeedbackDetail() {
                     ) : (
                       <Button size="sm" onClick={() => setShowHideModal(true)} variant="outline" className="border-gray-600 text-gray-400 hover:bg-gray-800 px-3 text-xs font-medium rounded-md h-8">
                         <EyeOff className="w-4 h-4 mr-1" />
-                        Hide from Queue
+                        Later
                       </Button>
                     )
                   )}

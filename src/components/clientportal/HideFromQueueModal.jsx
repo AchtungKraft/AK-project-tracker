@@ -3,19 +3,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, EyeOff } from "lucide-react";
+import { CalendarIcon, Clock } from "lucide-react";
 import { format, addDays, startOfWeek, addWeeks } from "date-fns";
 import { cn } from "@/lib/utils";
 
 const QUICK_OPTIONS = [
-  { label: "No Resume Date", value: null },
   { label: "Tomorrow", getValue: () => format(addDays(new Date(), 1), 'yyyy-MM-dd') },
   { label: "Next Week", getValue: () => format(startOfWeek(addWeeks(new Date(), 1), { weekStartsOn: 1 }), 'yyyy-MM-dd') },
-  { label: "Custom Date", value: 'custom' },
+  { label: "Choose Date", value: 'custom' },
+  { label: "Remove Until I Resume", value: null },
 ];
 
 export default function HideFromQueueModal({ open, onClose, onConfirm, isSaving }) {
-  const [selectedOption, setSelectedOption] = useState(null); // null = no resume
+  const [selectedOption, setSelectedOption] = useState('tomorrow'); // default to tomorrow
   const [customDate, setCustomDate] = useState(null);
   const [showCalendar, setShowCalendar] = useState(false);
 
@@ -23,7 +23,7 @@ export default function HideFromQueueModal({ open, onClose, onConfirm, isSaving 
     let resumeDate = null;
     if (selectedOption === 'custom' && customDate) {
       resumeDate = format(customDate, 'yyyy-MM-dd');
-    } else if (selectedOption && selectedOption !== 'custom') {
+    } else if (selectedOption && selectedOption !== 'custom' && selectedOption !== 'no_resume') {
       resumeDate = selectedOption;
     }
     onConfirm(resumeDate);
@@ -35,29 +35,33 @@ export default function HideFromQueueModal({ open, onClose, onConfirm, isSaving 
     } else if (opt.getValue) {
       setSelectedOption(opt.getValue());
     } else {
-      setSelectedOption(null);
+      setSelectedOption('no_resume');
     }
   };
+
+  const isConfirmDisabled = isSaving || (selectedOption === 'custom' && !customDate) || !selectedOption;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <EyeOff className="w-5 h-5 text-gray-400" />
-            Hide from Action Queue
+            <Clock className="w-5 h-5 text-gray-400" />
+            Remove from Queue
           </DialogTitle>
           <DialogDescription className="text-gray-400">
-            This request will remain fully active but won't appear in the Action Queue. Optionally set a date to automatically resume.
+            Remove this request from today's operational queue. It will remain fully active within the project and can optionally return automatically on a future date.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-2 py-2">
           {QUICK_OPTIONS.map((opt) => {
-            const optValue = opt.getValue ? opt.getValue() : opt.value;
+            const optValue = opt.getValue ? opt.getValue() : (opt.value === null ? 'no_resume' : opt.value);
             const isSelected = opt.value === 'custom'
               ? selectedOption === 'custom'
-              : selectedOption === optValue;
+              : opt.value === null
+                ? selectedOption === 'no_resume'
+                : selectedOption === optValue;
 
             return (
               <button
@@ -105,6 +109,10 @@ export default function HideFromQueueModal({ open, onClose, onConfirm, isSaving 
           )}
         </div>
 
+        <p className="text-[11px] text-gray-500 px-1">
+          This does not archive the request or affect the client. It only removes it from the daily Action Queue.
+        </p>
+
         <DialogFooter className="gap-2">
           <Button
             variant="outline"
@@ -115,11 +123,11 @@ export default function HideFromQueueModal({ open, onClose, onConfirm, isSaving 
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={isSaving || (selectedOption === 'custom' && !customDate)}
+            disabled={isConfirmDisabled}
             className="bg-gray-700 hover:bg-gray-600 text-white"
           >
-            <EyeOff className="w-4 h-4 mr-1" />
-            Hide
+            <Clock className="w-4 h-4 mr-1" />
+            Remove
           </Button>
         </DialogFooter>
       </DialogContent>

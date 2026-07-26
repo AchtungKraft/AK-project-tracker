@@ -14,7 +14,7 @@ import ActiveReviewGroups from "./ActiveReviewGroups";
 /**
  * A single scrollable board column.
  */
-function BoardColumn({ col, items, onUpdateDueDate, muted = false }) {
+function BoardColumn({ col, items, onUpdateDueDate, onAction, muted = false }) {
   const isFollowUp = col.key === 'follow_up';
   const isDrafts = col.key === 'needs_sending';
   const isClientWaiting = col.key === 'client_waiting';
@@ -32,21 +32,25 @@ function BoardColumn({ col, items, onUpdateDueDate, muted = false }) {
           <DraftClientGroups
             items={items}
             onUpdateDueDate={onUpdateDueDate}
+            onAction={onAction}
           />
         ) : isClientWaiting ? (
           <ClientWaitingGroups
             items={items}
             onUpdateDueDate={onUpdateDueDate}
+            onAction={onAction}
           />
         ) : isActiveReview ? (
           <ActiveReviewGroups
             items={items}
             onUpdateDueDate={onUpdateDueDate}
+            onAction={onAction}
           />
         ) : isFollowUp ? (
           <FollowUpClientGroups
             items={items}
             onUpdateDueDate={onUpdateDueDate}
+            onAction={onAction}
           />
         ) : (
           items.map(item => (
@@ -54,6 +58,7 @@ function BoardColumn({ col, items, onUpdateDueDate, muted = false }) {
               key={item.requestId}
               item={item}
               onUpdateDueDate={onUpdateDueDate}
+              onAction={onAction}
               muted={muted}
             />
           ))
@@ -113,7 +118,8 @@ function ResolvedSection({ items, onUpdateDueDate }) {
  */
 const NeedsAttentionSection = ({ 
   projectGroups,
-  onUpdateDueDate
+  onUpdateDueDate,
+  onCardAction
 }) => {
   const attentionItems = useMemo(() => buildAttentionList(projectGroups), [projectGroups]);
   const columnData = useMemo(() => groupByColumn(attentionItems), [attentionItems]);
@@ -156,6 +162,7 @@ const NeedsAttentionSection = ({
               col={col}
               items={columnData[col.key] || []}
               onUpdateDueDate={onUpdateDueDate}
+              onAction={onCardAction}
               muted={col.key === 'follow_up'}
             />
           ))}

@@ -3,10 +3,11 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { FolderKanban, ChevronRight } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import InlineDueDatePicker from "./InlineDueDatePicker";
 import { ATTENTION_BADGE_CONFIG, getWaitingTimeLabel } from "./attentionHelpers";
 import { Badge } from "@/components/ui/badge";
+import AttentionCardActions from "./AttentionCardActions";
 
 const BORDER_COLORS = {
   needs_response: 'border-l-red-500',
@@ -28,7 +29,7 @@ const RISK_BG = {
   low: 'bg-black/30 border-gray-800',
 };
 
-export default function AttentionCard({ item, onUpdateDueDate, muted = false }) {
+export default function AttentionCard({ item, onUpdateDueDate, onAction, muted = false }) {
   const { request, project, type, isOverdue, lastActor, lastActivityAt } = item;
   const config = ATTENTION_BADGE_CONFIG[type];
   const risk = item.followUpMeta?.riskTier;
@@ -127,6 +128,22 @@ export default function AttentionCard({ item, onUpdateDueDate, muted = false }) 
             {item.isStalled && (
               <span className="text-[10px] text-yellow-400 font-semibold">⚠ Stalled</span>
             )}
+            {/* Operational overlay badges */}
+            {item.isReviewStale && !item.request.queue_hidden && (
+              <Badge className="bg-amber-600/15 text-amber-400 border-amber-500/30 text-[10px] px-1.5 py-0">
+                Stale Review
+              </Badge>
+            )}
+            {item.request.queue_hidden && item.request.queue_resume_date && (
+              <Badge className="bg-gray-600/20 text-gray-400 border-gray-500/30 text-[10px] px-1.5 py-0">
+                Resume {format(new Date(item.request.queue_resume_date), 'MMM d')}
+              </Badge>
+            )}
+            {item.request.queue_hidden && !item.request.queue_resume_date && (
+              <Badge className="bg-gray-600/20 text-gray-400 border-gray-500/30 text-[10px] px-1.5 py-0">
+                Hidden Until Resumed
+              </Badge>
+            )}
           </div>
 
           {/* Title */}
@@ -186,6 +203,9 @@ export default function AttentionCard({ item, onUpdateDueDate, muted = false }) 
                 isOverdue={isOverdue}
                 onDateChange={(date) => onUpdateDueDate(request.id, date)}
               />
+            )}
+            {onAction && (
+              <AttentionCardActions item={item} onAction={onAction} />
             )}
             <Link to={requestUrl} className="shrink-0 flex items-center gap-1">
               <span className="text-xs text-gray-600 hidden group-hover/card:inline transition-opacity">Open</span>

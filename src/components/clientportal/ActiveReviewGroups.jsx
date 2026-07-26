@@ -35,7 +35,7 @@ function saveState(s) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch {}
 }
 
-export default function ActiveReviewGroups({ items, onUpdateDueDate }) {
+export default function ActiveReviewGroups({ items, onUpdateDueDate, onAction }) {
   const groups = useMemo(() => groupByProject(items), [items]);
   const allKeys = useMemo(() => groups.map(g => g.clientKey), [groups]);
 
@@ -144,6 +144,7 @@ export default function ActiveReviewGroups({ items, onUpdateDueDate }) {
                     key={item.requestId}
                     item={item}
                     onUpdateDueDate={onUpdateDueDate}
+                    onAction={onAction}
                   />
                 ))}
               </div>

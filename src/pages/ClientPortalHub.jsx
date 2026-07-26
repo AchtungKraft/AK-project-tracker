@@ -40,6 +40,7 @@ import { useSavedProjectViews } from "@/components/common/useSavedProjectViews";
 import SavedViewsSelector from "@/components/common/SavedViewsSelector";
 import { useFilterState, CLIENT_PORTAL_DEFAULTS } from "@/components/common/useFilterState";
 import NeedsAttentionSection from "@/components/clientportal/NeedsAttentionSection";
+import HideFromQueueModal from "@/components/clientportal/HideFromQueueModal";
 import ClientPortalAdminTab from "@/components/clientportal/ClientPortalAdminTab";
 import ProjectLifecycleCard from "@/components/clientportal/ProjectLifecycleCard";
 import RecentlyApprovedStrip from "@/components/clientportal/RecentlyApprovedStrip";
@@ -60,6 +61,8 @@ export default function ClientPortalHub() {
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [tempFilters, setTempFilters] = useState(null);
   const [sortMode, setSortMode] = useState('due_date');
+  const [hideModalRequest, setHideModalRequest] = useState(null);
+  const [isSavingCardAction, setIsSavingCardAction] = useState(false);
   const [lifecycleQuickFilter, setLifecycleQuickFilter] = useState('all');
   const [boardViewMode, setBoardViewMode] = useState(() => {
     return localStorage.getItem('clientportal_board_view') || 'column';
@@ -76,6 +79,72 @@ export default function ClientPortalHub() {
     setLifecycleQuickFilter(prev => prev === bucket ? 'all' : bucket);
   }, []);
   
+  // Handle card actions from Action Queue inline menus
+  const handleCardAction = useCallback(async (action, request) => {
+    try {
+      setIsSavingCardAction(true);
+      switch (action) {
+        case 'finish_review':
+          await base44.entities.ClientFeedbackRequest.update(request.id, {
+            review_state: 'none', review_started_at: null
+          });
+          toast.success('Review finished');
+          break;
+        case 'start_review':
+          await base44.entities.ClientFeedbackRequest.update(request.id, {
+            review_state: 'in_review', review_started_at: new Date().toISOString()
+          });
+          toast.success('Marked as In Review');
+          break;
+        case 'resume':
+          await base44.entities.ClientFeedbackRequest.update(request.id, {
+            queue_hidden: false, queue_hidden_at: null, queue_resume_date: null
+          });
+          toast.success('Resumed in Action Queue');
+          break;
+        case 'remove_from_queue':
+          setHideModalRequest(request);
+          setIsSavingCardAction(false);
+          return; // Don't invalidate yet — modal handles it
+        case 'archive_draft':
+          await base44.entities.ClientFeedbackRequest.update(request.id, { status: 'archived' });
+          toast.success('Draft archived');
+          break;
+        case 'archive':
+          await base44.entities.ClientFeedbackRequest.update(request.id, { status: 'archived' });
+          toast.success('Request archived');
+          break;
+        default:
+          break;
+      }
+      queryClient.invalidateQueries({ queryKey: ['clientPortalHubData'] });
+    } catch (error) {
+      console.error('Card action error:', error);
+      toast.error('Action failed');
+    } finally {
+      setIsSavingCardAction(false);
+    }
+  }, [queryClient]);
+
+  const handleHideFromQueue = useCallback(async (resumeDate) => {
+    if (!hideModalRequest) return;
+    try {
+      setIsSavingCardAction(true);
+      await base44.entities.ClientFeedbackRequest.update(hideModalRequest.id, {
+        queue_hidden: true,
+        queue_hidden_at: new Date().toISOString(),
+        queue_resume_date: resumeDate || null
+      });
+      setHideModalRequest(null);
+      queryClient.invalidateQueries({ queryKey: ['clientPortalHubData'] });
+      toast.success(resumeDate ? `Removed until ${resumeDate}` : 'Removed from queue');
+    } catch (error) {
+      toast.error('Failed to remove from queue');
+    } finally {
+      setIsSavingCardAction(false);
+    }
+  }, [hideModalRequest, queryClient]);
+
   // Handle due date updates for requests
   const handleUpdateRequestDueDate = useCallback(async (requestId, newDate) => {
     try {
@@ -630,6 +699,7 @@ export default function ClientPortalHub() {
         <NeedsAttentionSection
           projectGroups={attentionProjectGroups}
           onUpdateDueDate={handleUpdateRequestDueDate}
+          onCardAction={handleCardAction}
         />
 
         {/* Main Tabs */}
@@ -915,6 +985,15 @@ export default function ClientPortalHub() {
           </div>
         </MobileFilterSection>
       </MobileFilterDrawer>
+    {/* Remove from Queue Modal */}
+    {hideModalRequest && (
+      <HideFromQueueModal
+        open={!!hideModalRequest}
+        onClose={() => setHideModalRequest(null)}
+        onConfirm={handleHideFromQueue}
+        isSaving={isSavingCardAction}
+      />
+    )}
     </MobileSafeAreaContainer>
-  );
-}
+    );
+    }
