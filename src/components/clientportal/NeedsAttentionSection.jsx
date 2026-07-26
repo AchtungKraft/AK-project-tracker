@@ -22,7 +22,16 @@ function BoardColumn({ col, items, onUpdateDueDate, onAction }) {
 
   return (
     <div className="space-y-2">
-      <AttentionColumnHeader {...col} count={items.length} />
+      <AttentionColumnHeader
+        label={col.label}
+        subtitle={col.subtitle}
+        headerBg={col.headerBg}
+        headerBorder={col.headerBorder}
+        headerText={col.headerText}
+        countBg={col.countBg}
+        countText={col.countText}
+        count={items.length}
+      />
       <div className="max-h-[70vh] overflow-y-auto pr-1 space-y-2 scrollbar-hide">
         {items.length === 0 ? (
           <div className="text-center py-4 text-xs text-gray-600 italic">
@@ -59,7 +68,6 @@ function BoardColumn({ col, items, onUpdateDueDate, onAction }) {
               item={item}
               onUpdateDueDate={onUpdateDueDate}
               onAction={onAction}
-
             />
           ))
         )}
