@@ -194,6 +194,20 @@ function isRecentlyApproved(request, canonicalKey) {
 }
 
 /**
+ * Check if a request is hidden from the Action Queue.
+ * Respects optional resume_date — if the resume date has arrived, the request is no longer hidden.
+ */
+export function isQueueHidden(request) {
+  if (!request.queue_hidden) return false;
+  if (request.queue_resume_date) {
+    const resumeMs = getTime(request.queue_resume_date);
+    // Resume at start of the resume day (UTC midnight)
+    if (resumeMs && resumeMs <= Date.now()) return false;
+  }
+  return true;
+}
+
+/**
  * Build a unified, prioritized attention list.
  * 
  * @param {Array} projectGroups - Output from groupRequestsByProjectAndLifecycle
@@ -212,6 +226,9 @@ export function buildAttentionList(projectGroups) {
     ];
 
     allRequests.forEach(request => {
+      // OPERATIONAL FILTER: Skip requests hidden from Action Queue
+      if (isQueueHidden(request)) return;
+
       // Derive canonical state — single source of truth (NOT request.status)
       const decisions = request.decisions || [];
       const canonicalState = getRequestStateCanonical(request, decisions, []);

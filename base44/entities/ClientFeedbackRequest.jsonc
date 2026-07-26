@@ -77,6 +77,21 @@
       "type": "string",
       "format": "date-time",
       "description": "When the team started reviewing this request"
+    },
+    "queue_hidden": {
+      "type": "boolean",
+      "default": false,
+      "description": "Operational overlay: hidden from Action Queue. Does NOT affect workflow state, client visibility, or canonical lifecycle."
+    },
+    "queue_hidden_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the request was hidden from the Action Queue"
+    },
+    "queue_resume_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Optional date to automatically resume showing in the Action Queue. Null = hidden until manually resumed."
     }
   },
   "required": [

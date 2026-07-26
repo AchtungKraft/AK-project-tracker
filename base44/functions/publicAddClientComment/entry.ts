@@ -167,10 +167,11 @@ Deno.serve(async (req) => {
             createdAttachments.push(...await Promise.all(attachmentPromises));
         }
 
-        // AUTO-REOPEN IF ARCHIVED + CLEAR REVIEW STATE
+        // AUTO-REOPEN IF ARCHIVED + CLEAR REVIEW STATE + AUTO-RESUME IF HIDDEN
         // Must bump posted_at to reset the review cycle so old decisions
         // are excluded from state derivation.
         // Client comments always clear review_state overlay.
+        // Client activity auto-resumes hidden requests (operational overlay).
         const requestUpdateData = {};
         if (request.status === 'archived') {
             requestUpdateData.status = 'posted';
@@ -179,6 +180,11 @@ Deno.serve(async (req) => {
         }
         if (request.review_state === 'in_review') {
             requestUpdateData.review_state = 'none';
+        }
+        if (request.queue_hidden) {
+            requestUpdateData.queue_hidden = false;
+            requestUpdateData.queue_hidden_at = null;
+            requestUpdateData.queue_resume_date = null;
         }
         if (Object.keys(requestUpdateData).length > 0) {
             await base44.asServiceRole.entities.ClientFeedbackRequest.update(request.id, requestUpdateData);

@@ -5,8 +5,8 @@
  * State is determined by posted_at + decisions, NOT request.status.
  * 
  * Rules:
+ * - status === 'archived' → archived (checked FIRST — works for both draft and posted)
  * - No posted_at → draft
- * - archived_at set → archived  (soft check, only if status is also 'archived')
  * - Decisions filtered to AFTER posted_at
  * - Latest valid decision drives state
  * - No valid decisions → awaiting_review
@@ -22,14 +22,15 @@ import { getEventTimestamp, getTime } from "./feedbackTimeline";
  * @returns {{ key: string, label: string }}
  */
 export function getRequestStateCanonical(request, decisions = [], attachments = []) {
+  // Archived: check status field as storage indicator
+  // Checked BEFORE draft so archiving a draft works correctly.
+  if (request.status === 'archived') {
+    return { key: 'archived', label: 'Archived' };
+  }
+
   // Draft: never posted
   if (!request.posted_at) {
     return { key: 'draft', label: 'Draft' };
-  }
-
-  // Archived: check status field as storage indicator
-  if (request.status === 'archived') {
-    return { key: 'archived', label: 'Archived' };
   }
 
   const postedAtMs = getTime(request.posted_at);

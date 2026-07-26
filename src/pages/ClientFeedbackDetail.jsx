@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Loader2, Archive, CheckCircle2, AlertCircle, Plus, ExternalLink, X, Trash2, RotateCw, FileText, Pencil, Upload, Eye, ChevronRight } from "lucide-react";
+import { ArrowLeft, Loader2, Archive, CheckCircle2, AlertCircle, Plus, ExternalLink, X, Trash2, RotateCw, FileText, Pencil, Upload, Eye, EyeOff, ChevronRight, Play } from "lucide-react";
 import useFileUploader from "../components/clientportal/useFileUploader";
 import FileUploadStatusList from "../components/clientportal/FileUploadStatusList";
 import { NotFoundState, RateLimitState, UnknownErrorState } from "@/components/feedback/FeedbackErrorStates";
@@ -28,6 +28,8 @@ import { ClientLinksSection } from "../components/clientportal/ClientLinksCopyBu
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import ImageModal from "../components/ui/ImageModal";
 import EditRequestModal from "../components/clientportal/EditRequestModal.jsx";
+import HideFromQueueModal from "../components/clientportal/HideFromQueueModal.jsx";
+import { isQueueHidden } from "../components/clientportal/attentionHelpers.jsx";
 import { MetadataCardSkeleton, ThreadSkeleton, CommentFormSkeleton } from "../components/clientportal/FeedbackDetailSkeleton.jsx";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import FeedbackCommentComposer from "../components/clientportal/FeedbackCommentComposer.jsx";
@@ -62,6 +64,7 @@ export default function ClientFeedbackDetail() {
   const [galleryImages, setGalleryImages] = useState([]);
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showHideModal, setShowHideModal] = useState(false);
 
   // Track if view has been logged this session to prevent duplicate tracking
   const viewTrackedRef = useRef(false);
@@ -294,6 +297,27 @@ export default function ClientFeedbackDetail() {
         }
       );
     }
+  };
+
+  const handleFinishReview = () => {
+    updateRequestMutation.mutate(
+      { id: requestId, data: { review_state: 'none', review_started_at: null } },
+      { onSuccess: () => toast.success('Review finished') }
+    );
+  };
+
+  const handleHideFromQueue = (resumeDate) => {
+    updateRequestMutation.mutate(
+      { id: requestId, data: { queue_hidden: true, queue_hidden_at: new Date().toISOString(), queue_resume_date: resumeDate || null } },
+      { onSuccess: () => { setShowHideModal(false); toast.success(resumeDate ? `Hidden until ${resumeDate}` : 'Hidden from Action Queue'); } }
+    );
+  };
+
+  const handleResumeInQueue = () => {
+    updateRequestMutation.mutate(
+      { id: requestId, data: { queue_hidden: false, queue_hidden_at: null, queue_resume_date: null } },
+      { onSuccess: () => toast.success('Resumed in Action Queue') }
+    );
   };
 
   // Image/file upload handlers removed — now handled by FeedbackCommentComposer
@@ -592,6 +616,13 @@ export default function ClientFeedbackDetail() {
                     In Review
                   </Badge>
                 )}
+                {isQueueHidden(request) && (
+                  <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/40 text-xs shrink-0">
+                    <EyeOff className="w-3 h-3 mr-1" />
+                    Hidden from Queue
+                    {request.queue_resume_date && <span className="ml-1">• resumes {format(new Date(request.queue_resume_date), 'MMM d')}</span>}
+                  </Badge>
+                )}
                 {request.due_date && (
                   <Badge variant="outline" className="border-gray-600 text-gray-200 shrink-0">
                     Due: {format(new Date(request.due_date), 'MMM d')}
@@ -631,8 +662,21 @@ export default function ClientFeedbackDetail() {
                 <p className="text-xs text-gray-400 italic">Select images below to review</p>
               )}
 
-              {/* Start Review button — workflow overlay, not state change.
-                  Hidden when client acted last (ball is in team's court already). */}
+              {/* Review overlay controls — Start/Finish Review */}
+              {request.review_state === 'in_review' && canonicalState?.key !== 'draft' && canonicalState?.key !== 'archived' && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleFinishReview}
+                  className={cn(
+                    "border-blue-500/50 text-blue-400 hover:bg-blue-500/10",
+                    isMobile ? "w-full h-10" : "h-8 text-xs"
+                  )}
+                >
+                  <CheckCircle2 className="w-4 h-4 mr-1" />
+                  Finish Review
+                </Button>
+              )}
               {request.review_state !== 'in_review' && canonicalState?.key !== 'draft' && canonicalState?.key !== 'archived' && canonicalState?.key !== 'approved' && (
                 <Button
                   size="sm"
@@ -678,9 +722,24 @@ export default function ClientFeedbackDetail() {
                     </Button>
                   )}
                   
+                  {/* Hide / Resume from Action Queue */}
+                  {canonicalState?.key !== 'draft' && canonicalState?.key !== 'archived' && (
+                    isQueueHidden(request) ? (
+                      <Button size="sm" onClick={handleResumeInQueue} variant="outline" className="w-full h-9 border-green-600/50 text-green-400 text-xs">
+                        <Play className="w-3.5 h-3.5 mr-1" />
+                        Resume in Action Queue
+                      </Button>
+                    ) : (
+                      <Button size="sm" onClick={() => setShowHideModal(true)} variant="outline" className="w-full h-9 border-gray-600 text-gray-300 text-xs">
+                        <EyeOff className="w-3.5 h-3.5 mr-1" />
+                        Hide from Action Queue
+                      </Button>
+                    )
+                  )}
+                  
                   {/* Secondary inline row */}
                   <div className="flex gap-2">
-                    {['awaiting_review', 'changes_requested', 'approved'].includes(canonicalState?.key) && (
+                    {(canonicalState?.key === 'draft' || ['awaiting_review', 'changes_requested', 'approved'].includes(canonicalState?.key)) && (
                       <Button 
                         size="sm" 
                         onClick={handleArchive} 
@@ -710,9 +769,15 @@ export default function ClientFeedbackDetail() {
                 /* Desktop action buttons */
                 <div className="flex gap-2 flex-wrap">
                   {canonicalState?.key === 'draft' && (
-                    <Button size="sm" onClick={handlePostToClient} className="bg-blue-600 hover:bg-blue-700">
-                      Post to Client
-                    </Button>
+                    <>
+                      <Button size="sm" onClick={handlePostToClient} className="bg-blue-600 hover:bg-blue-700">
+                        Post to Client
+                      </Button>
+                      <Button size="sm" onClick={handleArchive} variant="outline" className="bg-gray-700 text-gray-200 px-3 text-xs font-medium rounded-md hover:bg-gray-600 hover:text-white h-8 border-gray-600">
+                        <Archive className="w-4 h-4 mr-1" />
+                        Archive
+                      </Button>
+                    </>
                   )}
                   {['awaiting_review', 'changes_requested', 'approved'].includes(canonicalState?.key) && (
                     <>
@@ -725,6 +790,20 @@ export default function ClientFeedbackDetail() {
                         Archive
                       </Button>
                     </>
+                  )}
+                  {/* Hide / Resume Action Queue — operational overlay, not a workflow change */}
+                  {canonicalState?.key !== 'draft' && canonicalState?.key !== 'archived' && (
+                    isQueueHidden(request) ? (
+                      <Button size="sm" onClick={handleResumeInQueue} variant="outline" className="border-green-600/50 text-green-400 hover:bg-green-600/10 px-3 text-xs font-medium rounded-md h-8">
+                        <Play className="w-4 h-4 mr-1" />
+                        Resume in Queue
+                      </Button>
+                    ) : (
+                      <Button size="sm" onClick={() => setShowHideModal(true)} variant="outline" className="border-gray-600 text-gray-400 hover:bg-gray-800 px-3 text-xs font-medium rounded-md h-8">
+                        <EyeOff className="w-4 h-4 mr-1" />
+                        Hide from Queue
+                      </Button>
+                    )
                   )}
                   {canonicalState?.key === 'archived' && (
                     <Button size="sm" onClick={() => {
@@ -999,6 +1078,15 @@ export default function ClientFeedbackDetail() {
           onClose={() => setShowEditModal(false)}
           request={request}
           onSave={handleEditSave}
+          isSaving={updateRequestMutation.isPending}
+        />
+      )}
+
+      {showHideModal && (
+        <HideFromQueueModal
+          open={showHideModal}
+          onClose={() => setShowHideModal(false)}
+          onConfirm={handleHideFromQueue}
           isSaving={updateRequestMutation.isPending}
         />
       )}

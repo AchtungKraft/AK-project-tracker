@@ -186,6 +186,12 @@ Deno.serve(async (req) => {
                 if (request.review_state === 'in_review') {
                     updatePayload.review_state = 'none';
                 }
+                // Auto-resume hidden requests when client acts
+                if (request.queue_hidden) {
+                    updatePayload.queue_hidden = false;
+                    updatePayload.queue_hidden_at = null;
+                    updatePayload.queue_resume_date = null;
+                }
                 updatedRequest = await base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, updatePayload);
                 console.log(`[STATUS UPDATE] Success! Updated request:`, JSON.stringify(updatedRequest));
             } catch (updateError) {
