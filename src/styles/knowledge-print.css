@@ -1,0 +1,629 @@
+/* ============================================
+   BUILD KNOWLEDGE — PRINT STYLESHEET
+   Scoped to .print-procedure container.
+   Does NOT affect other app print views.
+   ============================================ */
+
+/* ── Screen Preview Layout ─────────────────── */
+.print-procedure {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 2.5rem 2rem;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #111;
+  background: #fff;
+  line-height: 1.5;
+}
+
+/* ── Screen-only elements ──────────────────── */
+.print-hide {
+  display: flex;
+}
+
+/* ============================================
+   ARTICLE HEADER
+   ============================================ */
+.print-header {
+  border-bottom: 2px solid #111;
+  padding-bottom: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.print-header-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.print-header-thumb {
+  width: 80px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  flex-shrink: 0;
+}
+
+.print-header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.print-title {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #000;
+  margin: 0;
+}
+
+.print-subsystem {
+  font-size: 11px;
+  color: #555;
+  margin: 2px 0 0 0;
+  letter-spacing: 0.02em;
+}
+
+.print-summary {
+  font-size: 11px;
+  color: #333;
+  margin: 0.5rem 0 0 0;
+  line-height: 1.5;
+}
+
+.print-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 9px;
+  color: #666;
+}
+
+.print-vehicle-tag {
+  padding: 1px 6px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  font-size: 9px;
+  color: #555;
+}
+
+.print-meta-item {
+  white-space: nowrap;
+}
+
+/* ============================================
+   REQUIRED PARTS
+   ============================================ */
+.print-parts-summary {
+  margin-bottom: 1.5rem;
+  break-inside: avoid;
+}
+
+.print-parts-heading {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #555;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 3px;
+  margin: 0 0 6px 0;
+}
+
+.print-parts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 1rem;
+}
+
+.print-parts-item {
+  font-size: 10px;
+  color: #333;
+  line-height: 1.4;
+}
+
+/* ============================================
+   ENTRIES CONTAINER
+   ============================================ */
+.print-entries {
+  /* no extra spacing — entries self-space */
+}
+
+/* ============================================
+   STEP ENTRIES
+   ============================================ */
+.print-step {
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e0e0e0;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.print-step-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.print-step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #111;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.print-step-title-block {
+  flex: 1;
+  min-width: 0;
+}
+
+.print-step-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #000;
+  margin: 0;
+  line-height: 1.3;
+}
+
+/* ============================================
+   BODY CONTENT (shared by step, callout)
+   ============================================ */
+.print-body-content {
+  font-size: 10.5px;
+  color: #222;
+  line-height: 1.5;
+  margin-top: 0.25rem;
+  orphans: 2;
+  widows: 2;
+}
+
+.print-body-content p {
+  margin: 0.3em 0;
+}
+
+.print-body-content ul,
+.print-body-content ol {
+  margin: 0.3em 0 0.3em 1.2em;
+  padding: 0;
+}
+
+.print-body-content li {
+  margin-bottom: 0.15em;
+}
+
+.print-body-content ul {
+  list-style: disc;
+}
+
+.print-body-content ol {
+  list-style: decimal;
+}
+
+.print-body-content a {
+  color: #1a56db;
+  text-decoration: underline;
+  word-break: break-all;
+}
+
+/* Hide inline images in content_html (shown separately in gallery) */
+.print-body-content img {
+  display: none;
+}
+
+.print-body-content blockquote {
+  border-left: 3px solid #999;
+  padding-left: 0.5em;
+  margin: 0.4em 0;
+  color: #444;
+  font-style: italic;
+}
+
+.print-body-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.4em 0;
+  font-size: 10px;
+}
+
+.print-body-content th,
+.print-body-content td {
+  border: 1px solid #ccc;
+  padding: 3px 6px;
+  text-align: left;
+}
+
+.print-body-content th {
+  background: #f5f5f5;
+  font-weight: 600;
+}
+
+.print-body-content code {
+  font-size: 9.5px;
+  background: #f3f3f3;
+  padding: 1px 3px;
+  border-radius: 2px;
+}
+
+.print-body-content pre {
+  font-size: 9px;
+  background: #f5f5f5;
+  padding: 6px 8px;
+  border-radius: 3px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ============================================
+   ENTRY-LEVEL PARTS
+   ============================================ */
+.print-entry-parts {
+  font-size: 9.5px;
+  color: #555;
+  margin-top: 0.3rem;
+}
+
+/* ============================================
+   CALLOUT ENTRIES (note, warning, tip, reference)
+   ============================================ */
+.print-callout {
+  margin-bottom: 1rem;
+  padding: 0.5rem 0.6rem;
+  border-left: 3px solid #999;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.print-callout-note {
+  border-left-color: #888;
+  background: #fafafa;
+}
+
+.print-callout-warning {
+  border-left-color: #333;
+  border-left-width: 4px;
+  background: #f9f9f9;
+}
+
+.print-callout-tip {
+  border-left-color: #aaa;
+  background: #fafafa;
+}
+
+.print-callout-reference {
+  border-left-color: #bbb;
+  background: #fafafa;
+}
+
+.print-callout-label {
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #555;
+  margin-bottom: 0.15rem;
+}
+
+.print-callout-warning .print-callout-label {
+  color: #111;
+}
+
+.print-callout-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #111;
+  margin: 0 0 0.15rem 0;
+  line-height: 1.35;
+}
+
+.print-callout-warning .print-callout-title {
+  font-weight: 700;
+}
+
+/* ============================================
+   MEDIA ENTRIES (compact gallery)
+   ============================================ */
+.print-media-entry {
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.print-media-label {
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #888;
+  margin-bottom: 0.2rem;
+}
+
+.print-media-heading {
+  font-size: 11px;
+  font-weight: 600;
+  color: #222;
+  margin-bottom: 0.35rem;
+}
+
+.print-media-caption {
+  font-size: 9.5px;
+  color: #666;
+  margin-top: 0.25rem;
+  text-align: center;
+  font-style: italic;
+}
+
+/* ============================================
+   IMAGE GALLERY
+   ============================================ */
+.print-image-gallery {
+  margin-top: 0.5rem;
+}
+
+/* Single image — centered, constrained */
+.print-img-single {
+  text-align: center;
+}
+
+.print-img-single .print-img-cell {
+  display: inline-block;
+  max-width: 75%;
+}
+
+/* Two images — side by side */
+.print-img-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+/* 3+ images — two column grid */
+.print-img-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.print-img-cell {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.print-img {
+  width: 100%;
+  max-height: 5in;
+  object-fit: contain;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  display: block;
+}
+
+.print-img-single .print-img {
+  max-height: 5.5in;
+}
+
+.print-img-caption {
+  font-size: 9px;
+  color: #777;
+  text-align: center;
+  margin-top: 0.2rem;
+  grid-column: 1 / -1;
+}
+
+/* ============================================
+   REFERENCE URLS
+   ============================================ */
+.print-reference-url {
+  font-size: 9px;
+  color: #666;
+  margin-top: 0.25rem;
+  word-break: break-all;
+  overflow-wrap: break-word;
+}
+
+.print-reference-label {
+  font-weight: 600;
+  color: #555;
+}
+
+.print-reference-link {
+  color: #1a56db;
+  text-decoration: none;
+}
+
+/* ============================================
+   PHASE HEADINGS
+   ============================================ */
+.print-phase-heading {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #222;
+  border-bottom: 2px solid #333;
+  padding-bottom: 3px;
+  margin: 1.5rem 0 0.75rem 0;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+/* ============================================
+   FOOTER
+   ============================================ */
+.print-footer {
+  margin-top: 2rem;
+  padding-top: 0.5rem;
+  border-top: 2px solid #111;
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  color: #666;
+}
+
+/* ============================================
+   PRINT MEDIA QUERY — Only for actual printing
+   Scoped to .print-procedure
+   ============================================ */
+@media print {
+  /* Hide everything else */
+  body > * {
+    visibility: hidden !important;
+  }
+  body > *:has(.print-procedure) {
+    visibility: visible !important;
+  }
+  .print-procedure,
+  .print-procedure * {
+    visibility: visible !important;
+  }
+
+  /* Screen-only elements */
+  .print-hide {
+    display: none !important;
+  }
+
+  /* Position the print view */
+  .print-procedure {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  /* Page setup */
+  @page {
+    margin: 0.55in 0.6in;
+    size: auto;
+  }
+
+  /* Force white background, dark text */
+  .print-procedure,
+  .print-procedure * {
+    background: white !important;
+    color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Step number keeps its black circle */
+  .print-step-number {
+    background: #111 !important;
+    color: #fff !important;
+  }
+
+  /* Callout backgrounds (subtle, grayscale-safe) */
+  .print-callout-note,
+  .print-callout-tip,
+  .print-callout-reference {
+    background: #f7f7f7 !important;
+  }
+
+  .print-callout-warning {
+    background: #f3f3f3 !important;
+    border-left-color: #222 !important;
+  }
+
+  /* Image print rules */
+  .print-img {
+    max-height: 5in;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .print-img-single .print-img {
+    max-height: 5.5in;
+  }
+
+  .print-img-cell {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Image row — avoid splitting a pair */
+  .print-img-pair {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Step block — keep title with first paragraph */
+  .print-step {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .print-step-header {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  /* Callout — keep together */
+  .print-callout {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Media entry — keep together */
+  .print-media-entry {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Phase heading — keep with next */
+  .print-phase-heading {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  /* Parts summary — keep together */
+  .print-parts-summary {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Orphan / widow control */
+  .print-body-content p {
+    orphans: 2;
+    widows: 2;
+  }
+
+  /* Long URLs — wrap safely */
+  .print-reference-url,
+  .print-body-content a {
+    word-break: break-all;
+    overflow-wrap: break-word;
+  }
+
+  /* Links — don't append href in print (we show them explicitly) */
+  .print-body-content a::after {
+    content: none;
+  }
+
+  /* Footer — always visible at document end */
+  .print-footer {
+    margin-top: 1.5rem;
+  }
+
+  /* Ensure images don't overflow page width */
+  .print-procedure img {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+}
