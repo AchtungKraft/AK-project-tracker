@@ -123,7 +123,14 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
                 {item.status === 'draft' && <span className="text-yellow-500 text-[10px]">Draft</span>}
               </div>
 
-              <h2 className="text-lg font-bold text-white leading-tight">{item.title}</h2>
+              <div className="flex items-start gap-2">
+                <h2 className="text-lg font-bold text-white leading-tight flex-1">{item.title}</h2>
+                <button onClick={() => onEdit(item)}
+                  className="shrink-0 p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-gray-800 transition-colors mt-0.5"
+                  title="Edit Article">
+                  <Pencil className="w-4 h-4" />
+                </button>
+              </div>
               {item.summary && <p className="text-gray-400 text-sm mt-0.5 leading-snug">{item.summary}</p>}
 
               <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-gray-600 flex-wrap">

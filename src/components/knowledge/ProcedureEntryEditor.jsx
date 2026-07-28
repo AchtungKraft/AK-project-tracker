@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, X, Package, Camera, ChevronDown, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import ReactQuill from "react-quill";
 import { ENTRY_TYPE_CONFIG } from "./ProcedureEntryTimeline";
@@ -175,8 +176,17 @@ export default function ProcedureEntryEditor({ procedureId, procedureTitle, exis
         {/* Core fields */}
         <div className="flex-1 overflow-y-auto px-4 space-y-3 pb-4">
           <Input value={form.headline} onChange={e => setForm(f => ({ ...f, headline: e.target.value }))}
-            placeholder={form.entry_type === 'step' ? "What's this step?" : form.entry_type === 'issue' ? "What's the warning?" : 'Quick description...'}
+            placeholder={form.entry_type === 'step' ? "What's this step?" : form.entry_type === 'issue' ? "What's the warning?" : form.entry_type === 'media' ? 'Photo description...' : 'Quick description...'}
             className="bg-gray-900 border-gray-800 text-white text-base h-12" autoFocus />
+
+          {/* Rich-text content — BEFORE photos for Step/Note/Warning */}
+          {form.entry_type !== 'media' && (
+            <div className="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden [&_.ql-toolbar]:bg-gray-900 [&_.ql-toolbar]:border-gray-800 [&_.ql-toolbar]:py-1 [&_.ql-container]:border-gray-800 [&_.ql-editor]:text-gray-200 [&_.ql-editor]:min-h-[240px] [&_.ql-editor]:md:min-h-[280px] [&_.ql-editor]:max-h-[50vh] [&_.ql-editor]:overflow-y-auto [&_.ql-editor]:text-sm [&_.ql-snow_.ql-stroke]:stroke-gray-500 [&_.ql-snow_.ql-fill]:fill-gray-500 [&_.ql-snow_.ql-picker-label]:text-gray-500 [&_.ql-snow_.ql-picker-options]:bg-gray-900 [&_.ql-snow_.ql-picker-options]:border-gray-800 [&_.ql-snow_.ql-picker-item]:text-gray-400 [&_.ql-editor.ql-blank::before]:text-gray-600">
+              <ReactQuill theme="snow" value={form.content_html}
+                onChange={val => setForm(f => ({ ...f, content_html: val }))}
+                modules={QUILL_MODULES} placeholder="Details (optional)..." />
+            </div>
+          )}
 
           {/* Photos with reorder */}
           <div>
@@ -189,7 +199,6 @@ export default function ProcedureEntryEditor({ procedureId, procedureTitle, exis
                       className="absolute -top-1.5 -right-1.5 bg-gray-900 rounded-full p-0.5 border border-gray-700">
                       <X className="w-3 h-3 text-gray-400" />
                     </button>
-                    {/* Reorder arrows */}
                     {form.image_urls.length > 1 && (
                       <div className="absolute bottom-0.5 left-0.5 right-0.5 flex justify-between opacity-0 group-hover:opacity-100 transition-opacity">
                         {i > 0 && (
@@ -207,18 +216,21 @@ export default function ProcedureEntryEditor({ procedureId, procedureTitle, exis
             )}
             <input ref={fileInputRef} type="file" multiple accept="image/*" capture="environment" onChange={handleImageUpload} className="hidden" />
             <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-gray-900 border border-dashed border-gray-700 text-gray-400 active:bg-gray-800 transition-colors">
-              {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}
+              className={cn(
+                "w-full flex items-center justify-center gap-2 rounded-lg border border-dashed border-gray-700 text-gray-400 active:bg-gray-800 transition-colors",
+                form.entry_type === 'media' ? "py-6 bg-gray-900" : "py-2.5 bg-gray-900/60"
+              )}>
+              {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className={form.entry_type === 'media' ? "w-6 h-6" : "w-4 h-4"} />}
               <span className="text-sm">{uploading ? 'Uploading...' : 'Add Photos'}</span>
             </button>
           </div>
 
-          {/* Notes */}
-          {form.entry_type !== 'media' && (
-            <div className="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden [&_.ql-toolbar]:bg-gray-900 [&_.ql-toolbar]:border-gray-800 [&_.ql-toolbar]:py-1 [&_.ql-container]:border-gray-800 [&_.ql-editor]:text-gray-200 [&_.ql-editor]:min-h-[60px] [&_.ql-editor]:text-sm [&_.ql-snow_.ql-stroke]:stroke-gray-500 [&_.ql-snow_.ql-fill]:fill-gray-500 [&_.ql-snow_.ql-picker-label]:text-gray-500 [&_.ql-snow_.ql-picker-options]:bg-gray-900 [&_.ql-snow_.ql-picker-options]:border-gray-800 [&_.ql-snow_.ql-picker-item]:text-gray-400 [&_.ql-editor.ql-blank::before]:text-gray-600">
+          {/* Optional caption editor for Photos type */}
+          {form.entry_type === 'media' && (
+            <div className="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden [&_.ql-toolbar]:bg-gray-900 [&_.ql-toolbar]:border-gray-800 [&_.ql-toolbar]:py-1 [&_.ql-container]:border-gray-800 [&_.ql-editor]:text-gray-200 [&_.ql-editor]:min-h-[80px] [&_.ql-editor]:max-h-[30vh] [&_.ql-editor]:overflow-y-auto [&_.ql-editor]:text-sm [&_.ql-snow_.ql-stroke]:stroke-gray-500 [&_.ql-snow_.ql-fill]:fill-gray-500 [&_.ql-snow_.ql-picker-label]:text-gray-500 [&_.ql-snow_.ql-picker-options]:bg-gray-900 [&_.ql-snow_.ql-picker-options]:border-gray-800 [&_.ql-snow_.ql-picker-item]:text-gray-400 [&_.ql-editor.ql-blank::before]:text-gray-600">
               <ReactQuill theme="snow" value={form.content_html}
                 onChange={val => setForm(f => ({ ...f, content_html: val }))}
-                modules={QUILL_MODULES} placeholder="Details (optional)..." />
+                modules={QUILL_MODULES} placeholder="Caption or details (optional)..." />
             </div>
           )}
 

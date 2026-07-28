@@ -147,23 +147,27 @@ export default function KnowledgeItemEditor({ item, isOpen, onClose, categories 
 
           {/* Cover Photo */}
           <div>
+            <input ref={coverInputRef} type="file" accept="image/*" capture="environment" onChange={handleCoverUpload} className="hidden" />
             {form.cover_image_url ? (
               <div className="relative group">
                 <img src={form.cover_image_url} alt="" className="rounded-lg h-32 w-full object-cover bg-gray-900" />
-                <button onClick={() => setForm(f => ({ ...f, cover_image_url: "" }))}
-                  className="absolute top-2 right-2 bg-black/70 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <X className="w-3.5 h-3.5 text-white" />
-                </button>
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors rounded-lg flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+                  <button onClick={() => coverInputRef.current?.click()} disabled={uploadingCover}
+                    className="px-3 py-1.5 rounded-lg bg-white/20 backdrop-blur text-white text-xs font-medium hover:bg-white/30 transition-colors">
+                    {uploadingCover ? 'Uploading...' : 'Replace'}
+                  </button>
+                  <button onClick={() => setForm(f => ({ ...f, cover_image_url: "" }))}
+                    className="px-3 py-1.5 rounded-lg bg-white/20 backdrop-blur text-white text-xs font-medium hover:bg-red-600/60 transition-colors">
+                    Remove
+                  </button>
+                </div>
               </div>
             ) : (
-              <>
-                <input ref={coverInputRef} type="file" accept="image/*" capture="environment" onChange={handleCoverUpload} className="hidden" />
-                <button onClick={() => coverInputRef.current?.click()} disabled={uploadingCover}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-gray-900 border border-dashed border-gray-800 text-gray-500 active:bg-gray-800 transition-colors">
-                  {uploadingCover ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}
-                  <span className="text-sm">{uploadingCover ? 'Uploading...' : 'Cover Photo'}</span>
-                </button>
-              </>
+              <button onClick={() => coverInputRef.current?.click()} disabled={uploadingCover}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-gray-900 border border-dashed border-gray-800 text-gray-500 active:bg-gray-800 transition-colors">
+                {uploadingCover ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}
+                <span className="text-sm">{uploadingCover ? 'Uploading...' : 'Add Cover Image'}</span>
+              </button>
             )}
           </div>
 

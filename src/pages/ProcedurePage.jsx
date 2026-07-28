@@ -21,6 +21,7 @@ import KnowledgeLegacyContent from "@/components/knowledge/KnowledgeLegacyConten
 import KnowledgeHtmlContent from "@/components/knowledge/KnowledgeHtmlContent";
 import ProcedureExecutionFlow from "@/components/knowledge/ProcedureExecutionFlow";
 import ProcedurePrintView from "@/components/knowledge/ProcedurePrintView";
+import KnowledgeItemEditor from "@/components/knowledge/KnowledgeItemEditor";
 
 const QUICK_ADD = [
   { type: "step", label: "Step", icon: ListOrdered },
@@ -41,6 +42,7 @@ export default function ProcedurePage() {
   const [executionMode, setExecutionMode] = useState(false);
   const [printMode, setPrintMode] = useState(false);
   const [coverLightbox, setCoverLightbox] = useState(false);
+  const [articleEditorOpen, setArticleEditorOpen] = useState(false);
   const duplicateArticle = useArticleDuplicate();
 
   const { data: item, isLoading: itemLoading } = useQuery({
@@ -179,6 +181,10 @@ export default function ProcedurePage() {
 
             {/* Primary actions */}
             <div className="flex items-center gap-1.5 shrink-0">
+              <button onClick={() => setArticleEditorOpen(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-gray-800/60 text-gray-300 hover:text-white active:bg-gray-700 text-sm transition-colors">
+                <Pencil className="w-3.5 h-3.5" /> Edit Article
+              </button>
               {hasEntries && (
                 <button onClick={() => setExecutionMode(true)}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-blue-600 text-white text-sm font-medium active:bg-blue-700 transition-colors">
@@ -386,6 +392,14 @@ export default function ProcedurePage() {
           onClose={() => setPrintMode(false)}
         />
       )}
+
+      {/* Article editor sheet */}
+      <KnowledgeItemEditor
+        item={item}
+        isOpen={articleEditorOpen}
+        onClose={() => setArticleEditorOpen(false)}
+        categories={categories}
+      />
 
       {/* Entry editor sheet */}
       <ProcedureEntryEditor
