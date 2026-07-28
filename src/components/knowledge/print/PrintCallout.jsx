@@ -12,7 +12,8 @@ const CALLOUT_CONFIG = {
 
 /**
  * Non-step entry: note, warning, tip, or reference callout.
- * No checkbox. No step numbering.
+ * Header (label + title) is kept together and attached to first body content.
+ * Body and gallery may break across pages for large entries.
  */
 export default function PrintCallout({ entry, entryParts }) {
   const config = CALLOUT_CONFIG[entry.entry_type] || CALLOUT_CONFIG.note;
@@ -20,10 +21,15 @@ export default function PrintCallout({ entry, entryParts }) {
 
   return (
     <div className={`print-callout ${config.borderClass}`}>
-      <div className="print-callout-label">{config.label}</div>
-      {entry.headline && (
-        <h4 className="print-callout-title">{entry.headline}</h4>
-      )}
+      {/* Header: label + title — kept together, attached to first body content */}
+      <div className="print-callout-header">
+        <div className="print-callout-label">{config.label}</div>
+        {entry.headline && (
+          <h4 className="print-callout-title">{entry.headline}</h4>
+        )}
+      </div>
+
+      {/* Body: may break across pages */}
       {entry.content_html && (
         <div
           className="print-body-content"
@@ -36,6 +42,8 @@ export default function PrintCallout({ entry, entryParts }) {
         </div>
       )}
       {entry.reference_url && <PrintReference url={entry.reference_url} />}
+
+      {/* Gallery: may break between image rows */}
       {images.length > 0 && (
         <PrintImageGallery images={images} caption={null} />
       )}

@@ -161,8 +161,10 @@
    ============================================ */
 .print-header {
   border-bottom: 2px solid #111;
-  padding-bottom: 0.75rem;
-  margin-bottom: 1.5rem;
+  padding-bottom: 0.6rem;
+  margin-bottom: 1.25rem;
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .print-header-top {
@@ -203,7 +205,7 @@
 .print-summary {
   font-size: 11px;
   color: #333;
-  margin: 0.5rem 0 0 0;
+  margin: 0.4rem 0 0 0;
   line-height: 1.5;
 }
 
@@ -212,7 +214,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  margin-top: 0.5rem;
+  margin-top: 0.35rem;
   font-size: 9px;
   color: #666;
 }
@@ -233,7 +235,7 @@
    REQUIRED PARTS
    ============================================ */
 .print-parts-summary {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem;
   break-inside: avoid;
 }
 
@@ -271,11 +273,10 @@
    STEP ENTRIES
    ============================================ */
 .print-step {
-  margin-bottom: 1.25rem;
-  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
   border-bottom: 1px solid #e0e0e0;
-  break-inside: avoid;
-  page-break-inside: avoid;
+  /* NO break-inside: avoid — long steps may span pages */
 }
 
 .print-step-header {
@@ -283,6 +284,8 @@
   align-items: baseline;
   gap: 0.5rem;
   margin-bottom: 0.35rem;
+  break-inside: avoid;
+  page-break-inside: avoid;
   break-after: avoid;
   page-break-after: avoid;
 }
@@ -417,11 +420,18 @@
    CALLOUT ENTRIES (note, warning, tip, reference)
    ============================================ */
 .print-callout {
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
   padding: 0.5rem 0.6rem;
   border-left: 3px solid #999;
+  /* NO break-inside: avoid — large callouts may span pages */
+}
+
+/* Callout header (label + title) kept together and attached to first content */
+.print-callout-header {
   break-inside: avoid;
   page-break-inside: avoid;
+  break-after: avoid;
+  page-break-after: avoid;
 }
 
 .print-callout-note {
@@ -474,10 +484,17 @@
    MEDIA ENTRIES (compact gallery)
    ============================================ */
 .print-media-entry {
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.35rem;
+  /* NO break-inside: avoid — galleries may span pages */
+}
+
+/* Media header kept together and attached to first gallery content */
+.print-media-header {
   break-inside: avoid;
   page-break-inside: avoid;
+  break-after: avoid;
+  page-break-after: avoid;
 }
 
 .print-media-label {
@@ -493,7 +510,7 @@
   font-size: 11px;
   font-weight: 600;
   color: #222;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.25rem;
 }
 
 .print-media-caption {
@@ -508,7 +525,7 @@
    IMAGE GALLERY
    ============================================ */
 .print-image-gallery {
-  margin-top: 0.5rem;
+  margin-top: 0.35rem;
 }
 
 /* Single image — centered, constrained */
@@ -525,16 +542,17 @@
 .print-img-pair {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 6px;
 }
 
-/* 3+ images — two column grid */
+/* 3+ images — two column grid, rows can break between */
 .print-img-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 6px;
 }
 
+/* Individual image cell — kept intact */
 .print-img-cell {
   break-inside: avoid;
   page-break-inside: avoid;
@@ -542,7 +560,7 @@
 
 .print-img {
   width: 100%;
-  max-height: 5in;
+  max-height: 4.2in;
   object-fit: contain;
   border: 1px solid #ddd;
   border-radius: 3px;
@@ -550,7 +568,7 @@
 }
 
 .print-img-single .print-img {
-  max-height: 5.5in;
+  max-height: 4.8in;
 }
 
 .print-img-caption {
@@ -559,6 +577,18 @@
   text-align: center;
   margin-top: 0.2rem;
   grid-column: 1 / -1;
+}
+
+/* ============================================
+   IMAGE ROW — wrapper for paired images
+   A row of 2 images is kept together.
+   ============================================ */
+.print-img-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 /* ============================================
@@ -593,7 +623,7 @@
   color: #222;
   border-bottom: 2px solid #333;
   padding-bottom: 3px;
-  margin: 1.5rem 0 0.75rem 0;
+  margin: 1.25rem 0 0.6rem 0;
   break-after: avoid;
   page-break-after: avoid;
 }
@@ -602,13 +632,15 @@
    FOOTER
    ============================================ */
 .print-footer {
-  margin-top: 2rem;
+  margin-top: 1.25rem;
   padding-top: 0.5rem;
   border-top: 2px solid #111;
   display: flex;
   justify-content: space-between;
   font-size: 9px;
   color: #666;
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 /* ============================================
@@ -628,6 +660,7 @@
     overflow: visible !important;
     width: auto !important;
     height: auto !important;
+    min-height: auto !important;
   }
 
   /* Hide toolbar */
@@ -642,9 +675,10 @@
     padding: 0 !important;
     display: block !important;
     height: auto !important;
+    min-height: auto !important;
   }
 
-  /* Reset paper surface */
+  /* Reset paper surface — no fixed height, let browser paginate */
   .print-preview-paper {
     max-width: none !important;
     width: 100% !important;
@@ -652,9 +686,10 @@
     border-radius: 0 !important;
     background: white !important;
     min-height: auto !important;
+    height: auto !important;
   }
 
-  /* Position the print content */
+  /* Position the print content — continuous flow */
   .print-procedure {
     position: static !important;
     left: auto !important;
@@ -663,6 +698,9 @@
     max-width: none !important;
     padding: 0 !important;
     margin: 0 !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
   }
 
   /* Page setup */
@@ -698,62 +736,108 @@
     border-left-color: #222 !important;
   }
 
-  /* Image print rules */
-  .print-img {
-    max-height: 5in;
+  /* ── BREAK HIERARCHY — Granular, not monolithic ── */
+
+  /* Article header: compact, keep together */
+  .print-header {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
-  .print-img-single .print-img {
-    max-height: 5.5in;
-  }
-
-  .print-img-cell {
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-
-  .print-img-pair {
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-
-  .print-step {
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-
-  .print-step-header {
-    break-after: avoid;
-    page-break-after: avoid;
-  }
-
-  .print-callout {
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-
-  .print-media-entry {
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-
-  .print-phase-heading {
-    break-after: avoid;
-    page-break-after: avoid;
-  }
-
+  /* Parts summary: compact, keep together */
   .print-parts-summary {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
+  /* Phase headings stay with following content */
+  .print-phase-heading {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  /* Steps: allow body/gallery to break across pages */
+  .print-step {
+    /* NOT break-inside: avoid */
+  }
+
+  /* Step header stays with first content */
+  .print-step-header {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  /* Callouts: allow large callouts to span pages */
+  .print-callout {
+    /* NOT break-inside: avoid */
+  }
+
+  /* Callout header stays with first content */
+  .print-callout-header {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  /* Media entries: allow gallery to span pages */
+  .print-media-entry {
+    /* NOT break-inside: avoid */
+  }
+
+  /* Media header stays with first image */
+  .print-media-header {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  /* Image cells: individual images kept intact */
+  .print-img-cell {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Image rows (paired): kept together as a unit */
+  .print-img-row {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Image grids (3+): may break between rows — no break-inside: avoid */
+  .print-img-grid {
+    /* NOT break-inside: avoid */
+  }
+
+  /* Paragraphs: widows/orphans */
   .print-body-content p {
     orphans: 2;
     widows: 2;
   }
 
+  /* Footer: compact, kept together, no forced new page */
+  .print-footer {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-top: 1rem;
+  }
+
+  /* Image sizing for print — adaptive, not fixed */
+  .print-img {
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: 4.2in;
+    object-fit: contain;
+  }
+
+  .print-img-single .print-img {
+    max-height: 4.8in;
+  }
+
+  /* References and links */
   .print-reference-url,
   .print-body-content a {
     word-break: break-all;
@@ -764,10 +848,7 @@
     content: none;
   }
 
-  .print-footer {
-    margin-top: 1.5rem;
-  }
-
+  /* Ensure images don't blow out */
   .print-procedure img {
     max-width: 100% !important;
     height: auto !important;
