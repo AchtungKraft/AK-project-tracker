@@ -61,6 +61,16 @@ function sanitizeHtml(html) {
   // Clean empty style attributes
   clean = clean.replace(/\s+style="\s*"/gi, '');
   
+  // Add rel="noopener noreferrer" and target="_blank" to external links
+  clean = clean.replace(/<a\s([^>]*href="https?:\/\/[^"]*"[^>]*)>/gi, (match, attrs) => {
+    if (!attrs.includes('target=')) attrs += ' target="_blank"';
+    if (!attrs.includes('rel=')) attrs += ' rel="noopener noreferrer"';
+    return `<a ${attrs}>`;
+  });
+  
+  // Block javascript: protocol in href
+  clean = clean.replace(/href\s*=\s*"javascript:[^"]*"/gi, 'href="#"');
+  
   return clean;
 }
 

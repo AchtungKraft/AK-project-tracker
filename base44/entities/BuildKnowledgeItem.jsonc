@@ -31,10 +31,12 @@
         "observation",
         "known_issue",
         "reference",
-        "tip"
+        "tip",
+        "guide",
+        "checklist"
       ],
       "default": "procedure",
-      "description": "Operational post classification for feed filtering"
+      "description": "Canonical format classification for feed filtering"
     },
     "is_pinned": {
       "type": "boolean",

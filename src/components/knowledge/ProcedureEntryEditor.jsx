@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, X, Package, Camera, ChevronDown, ChevronRight } from "lucide-react";
-import { toast } from "sonner";
+import { useToast } from "@/components/ui/use-toast";
 import ReactQuill from "react-quill";
 import { ENTRY_TYPE_CONFIG } from "./ProcedureEntryTimeline";
 import { KNOWLEDGE_QUERY_KEYS } from "./knowledgeHelpers";
@@ -33,6 +33,7 @@ const mapEntryType = (type) => {
  */
 export default function ProcedureEntryEditor({ procedureId, procedureTitle, existingEntryCount, isOpen, onClose, initialEntryType = "step", existingEntry = null, insertAtIndex = null }) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const fileInputRef = useRef(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const isEdit = !!existingEntry;
@@ -75,27 +76,38 @@ export default function ProcedureEntryEditor({ procedureId, procedureTitle, exis
   const [partSearch, setPartSearch] = useState("");
 
   const saveMutation = useMutation({
-    mutationFn: (data) => {
+    mutationFn: async (data) => {
       if (isEdit) {
         return base44.entities.ProcedureEntry.update(existingEntry.id, data);
+      }
+      const targetIndex = insertAtIndex != null ? insertAtIndex : (existingEntryCount || 0);
+      // When inserting at a specific position, shift entries at or after that position
+      if (insertAtIndex != null) {
+        const existing = await base44.entities.ProcedureEntry.filter({ procedure_id: procedureId }, 'order_index');
+        const toShift = existing.filter(e => (e.order_index ?? 0) >= targetIndex);
+        if (toShift.length > 0) {
+          await Promise.all(toShift.map(e =>
+            base44.entities.ProcedureEntry.update(e.id, { order_index: (e.order_index ?? 0) + 1 })
+          ));
+        }
       }
       return base44.entities.ProcedureEntry.create({
         ...data,
         procedure_id: procedureId,
-        order_index: insertAtIndex != null ? insertAtIndex : (existingEntryCount || 0),
+        order_index: targetIndex,
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: KNOWLEDGE_QUERY_KEYS.entries(procedureId) });
       queryClient.invalidateQueries({ queryKey: KNOWLEDGE_QUERY_KEYS.allEntries });
-      toast.success(isEdit ? 'Entry updated' : 'Entry added');
+      toast({ title: isEdit ? 'Entry updated' : 'Entry added' });
       setPartSearch("");
       onClose();
     },
   });
 
   const handleSave = () => {
-    if (!form.headline.trim()) { toast.error("Headline required"); return; }
+    if (!form.headline.trim()) { toast({ title: "Headline required", variant: "destructive" }); return; }
     saveMutation.mutate(form);
   };
 

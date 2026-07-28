@@ -7,8 +7,10 @@ import {
   ArrowLeft, AlertTriangle, Package, ExternalLink,
   ChevronUp, ChevronDown, Crown, Plus, ListOrdered,
   StickyNote, Camera, Settings2, Pencil, Play, FileText,
-  ListChecks, Link2, AlertOctagon, Printer
+  ListChecks, Link2, AlertOctagon, Printer, MoreVertical, Copy, Trash2
 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import useArticleDuplicate from "@/components/knowledge/useArticleDuplicate";
 import { format } from "date-fns";
 import ImageLightbox from "@/components/knowledge/ImageLightbox";
 import ProcedureEntryTimeline from "@/components/knowledge/ProcedureEntryTimeline";
@@ -39,6 +41,7 @@ export default function ProcedurePage() {
   const [executionMode, setExecutionMode] = useState(false);
   const [printMode, setPrintMode] = useState(false);
   const [coverLightbox, setCoverLightbox] = useState(false);
+  const duplicateArticle = useArticleDuplicate();
 
   const { data: item, isLoading: itemLoading } = useQuery({
     queryKey: ['buildKnowledgeItem', procedureId],
@@ -198,6 +201,18 @@ export default function ProcedurePage() {
                   <Settings2 className="w-4 h-4" />
                 </button>
               )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-gray-800 transition-colors">
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="bg-gray-900 border-gray-800 text-gray-200 min-w-[160px]">
+                  <DropdownMenuItem onClick={() => duplicateArticle.mutate(item)} disabled={duplicateArticle.isPending} className="gap-2 text-sm">
+                    <Copy className="w-3.5 h-3.5" /> Duplicate Article
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </div>

@@ -9,12 +9,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Loader2, X, Plus, Image as ImageIcon, Crown, ChevronDown, ChevronRight, Camera } from "lucide-react";
-import { toast } from "sonner";
+import { useToast } from "@/components/ui/use-toast";
 import RelatedPostSuggestions from "./RelatedPostSuggestions";
 import { FORMAT_OPTIONS, KNOWLEDGE_QUERY_KEYS } from "./knowledgeHelpers";
 
 export default function KnowledgeItemEditor({ item, isOpen, onClose, categories }) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const isNew = !item?.id;
   const coverInputRef = useRef(null);
 
@@ -97,13 +98,13 @@ export default function KnowledgeItemEditor({ item, isOpen, onClose, categories 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: KNOWLEDGE_QUERY_KEYS.articles });
       queryClient.invalidateQueries({ queryKey: ['buildKnowledgeItem'] });
-      toast.success(isNew ? 'Article created' : 'Article updated');
+      toast({ title: isNew ? 'Article created' : 'Article updated' });
       onClose();
     },
   });
 
   const handleSave = () => {
-    if (!form.title.trim()) { toast.error("Title is required"); return; }
+    if (!form.title.trim()) { toast({ title: "Title is required", variant: "destructive" }); return; }
     const slug = form.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
     saveMutation.mutate({ ...form, slug, type: form.post_type });
   };

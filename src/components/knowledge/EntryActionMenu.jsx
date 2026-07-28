@@ -3,11 +3,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { MoreVertical, Pencil, ChevronUp, ChevronDown, Trash2, Archive, Plus, Copy, ArchiveRestore } from "lucide-react";
-import { toast } from "sonner";
+import { useToast } from "@/components/ui/use-toast";
 import { KNOWLEDGE_QUERY_KEYS } from "./knowledgeHelpers";
 
 export default function EntryActionMenu({ entry, procedureId, sortedEntries, onEdit, onAddAbove, onAddBelow }) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const idx = sortedEntries.findIndex(e => e.id === entry.id);
   const canMoveUp = idx > 0;
   const canMoveDown = idx < sortedEntries.length - 1;
@@ -33,21 +34,29 @@ export default function EntryActionMenu({ entry, procedureId, sortedEntries, onE
 
   const deleteMutation = useMutation({
     mutationFn: (id) => base44.entities.ProcedureEntry.delete(id),
-    onSuccess: () => { invalidateEntries(); toast.success("Entry removed"); },
+    onSuccess: () => { invalidateEntries(); toast({ title: "Entry removed" }); },
   });
 
   const archiveMutation = useMutation({
     mutationFn: (id) => base44.entities.ProcedureEntry.update(id, { lifecycle_state: "archived" }),
-    onSuccess: () => { invalidateEntries(); toast.success("Entry archived"); },
+    onSuccess: () => { invalidateEntries(); toast({ title: "Entry archived" }); },
   });
 
   const restoreMutation = useMutation({
     mutationFn: (id) => base44.entities.ProcedureEntry.update(id, { lifecycle_state: "active" }),
-    onSuccess: () => { invalidateEntries(); toast.success("Entry restored"); },
+    onSuccess: () => { invalidateEntries(); toast({ title: "Entry restored" }); },
   });
 
   const duplicateMutation = useMutation({
     mutationFn: async () => {
+      // Shift all entries below this one down by 1 to make room
+      const currentOrder = entry.order_index ?? idx;
+      const entriesToShift = sortedEntries.filter(e => (e.order_index ?? 0) > currentOrder);
+      if (entriesToShift.length > 0) {
+        await Promise.all(entriesToShift.map(e =>
+          base44.entities.ProcedureEntry.update(e.id, { order_index: (e.order_index ?? 0) + 1 })
+        ));
+      }
       const newEntry = {
         procedure_id: procedureId,
         headline: `${entry.headline} (copy)`,
@@ -55,14 +64,14 @@ export default function EntryActionMenu({ entry, procedureId, sortedEntries, onE
         content_html: entry.content_html || '',
         image_urls: entry.image_urls || [],
         reference_url: entry.reference_url || '',
-        order_index: (entry.order_index ?? idx) + 0.5,
+        order_index: currentOrder + 1,
         lifecycle_state: 'active',
         part_ids: entry.part_ids || [],
         group_label: entry.group_label || '',
       };
       return base44.entities.ProcedureEntry.create(newEntry);
     },
-    onSuccess: () => { invalidateEntries(); toast.success("Entry duplicated"); },
+    onSuccess: () => { invalidateEntries(); toast({ title: "Entry duplicated" }); },
   });
 
   return (

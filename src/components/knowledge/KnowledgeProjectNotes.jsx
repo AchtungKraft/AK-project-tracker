@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FolderOpen, Plus, Camera } from "lucide-react";
 import { format } from "date-fns";
-import { toast } from "sonner";
+import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 
 const DISCOVERY_STYLES = {
@@ -20,6 +20,7 @@ const DISCOVERY_STYLES = {
 
 export default function KnowledgeProjectNotes({ knowledgeItemId }) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [showAdd, setShowAdd] = useState(false);
   const [newNote, setNewNote] = useState("");
   const [newType, setNewType] = useState("observation");
@@ -50,7 +51,7 @@ export default function KnowledgeProjectNotes({ knowledgeItemId }) {
       setShowAdd(false);
       setNewNote("");
       setSelectedProject("");
-      toast.success("Note added");
+      toast({ title: "Note added" });
     },
   });
 
