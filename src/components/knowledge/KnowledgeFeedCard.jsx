@@ -3,42 +3,15 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Crown, Clock } from "lucide-react";
 import { format } from "date-fns";
+import { FORMAT_CONFIG, getCoverImage, getExcerpt } from "./knowledgeHelpers";
 
-const POST_TYPE_CONFIG = {
-  procedure:   { label: "Procedure", dot: "bg-blue-500" },
-  observation: { label: "Note",      dot: "bg-emerald-500" },
-  known_issue: { label: "Warning",   dot: "bg-amber-500" },
-  reference:   { label: "Reference", dot: "bg-gray-500" },
-  tip:         { label: "Note",      dot: "bg-emerald-500" },
-};
-
-export { POST_TYPE_CONFIG };
-
-function getCoverImage(item) {
-  if (item.cover_image_url) return item.cover_image_url;
-  if (item.image_urls?.length > 0) return item.image_urls[0];
-  if (item.media_urls?.length > 0) return item.media_urls[0];
-  if (item.content_html) {
-    const match = item.content_html.match(/<img[^>]+src="([^"]+)"/);
-    if (match) return match[1];
-  }
-  return null;
-}
-
-function getExcerpt(item) {
-  if (item.summary) return item.summary;
-  if (item.content_html) {
-    const text = item.content_html.replace(/<[^>]*>/g, '').trim();
-    return text.length > 140 ? text.slice(0, 140) + '…' : text;
-  }
-  return null;
-}
-
-export { getCoverImage, getExcerpt };
+// Re-export for backward compatibility
+const POST_TYPE_CONFIG = FORMAT_CONFIG;
+export { POST_TYPE_CONFIG, getCoverImage, getExcerpt };
 
 export default function KnowledgeFeedCard({ item, onItemClick, partLinks, taskLinks, parts, compact, entryCount }) {
   const postType = item.post_type || item.type || 'procedure';
-  const config = POST_TYPE_CONFIG[postType] || POST_TYPE_CONFIG.procedure;
+  const config = FORMAT_CONFIG[postType] || FORMAT_CONFIG.procedure;
   const coverImg = getCoverImage(item);
   const excerpt = getExcerpt(item);
   const imageCount = (item.image_urls?.length || 0) + (item.media_urls?.length || 0);

@@ -16,6 +16,7 @@ import ProcedureEntryEditor from "@/components/knowledge/ProcedureEntryEditor";
 import KnowledgePartLinks from "@/components/knowledge/KnowledgePartLinks";
 import KnowledgeProjectNotes from "@/components/knowledge/KnowledgeProjectNotes";
 import KnowledgeLegacyContent from "@/components/knowledge/KnowledgeLegacyContent";
+import KnowledgeHtmlContent from "@/components/knowledge/KnowledgeHtmlContent";
 import ProcedureExecutionFlow from "@/components/knowledge/ProcedureExecutionFlow";
 import ProcedurePrintView from "@/components/knowledge/ProcedurePrintView";
 
@@ -33,6 +34,7 @@ export default function ProcedurePage() {
   const [entryEditorOpen, setEntryEditorOpen] = useState(false);
   const [entryEditorType, setEntryEditorType] = useState("step");
   const [editingEntry, setEditingEntry] = useState(null);
+  const [insertAtIndex, setInsertAtIndex] = useState(null);
   const [editMode, setEditMode] = useState(false);
   const [executionMode, setExecutionMode] = useState(false);
   const [printMode, setPrintMode] = useState(false);
@@ -100,9 +102,9 @@ export default function ProcedurePage() {
   if (!item) {
     return (
       <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center text-gray-400 p-6">
-        <p className="text-lg mb-2">Procedure not found</p>
+        <p className="text-lg mb-2">Article not found</p>
         <Link to="/buildknowledge" className="text-blue-400 text-sm hover:underline flex items-center gap-1">
-          <ArrowLeft className="w-4 h-4" /> Back to Procedures
+          <ArrowLeft className="w-4 h-4" /> Back to Knowledge
         </Link>
       </div>
     );
@@ -123,6 +125,14 @@ export default function ProcedurePage() {
   const openEntryEditor = (type) => {
     setEditingEntry(null);
     setEntryEditorType(type);
+    setInsertAtIndex(null);
+    setEntryEditorOpen(true);
+  };
+
+  const handleAddAtIndex = (index) => {
+    setEditingEntry(null);
+    setEntryEditorType("step");
+    setInsertAtIndex(index);
     setEntryEditorOpen(true);
   };
 
@@ -265,17 +275,14 @@ export default function ProcedurePage() {
                 procedureId={item.id}
                 editMode={editMode}
                 onEditEntry={handleEditEntry}
+                onAddAtIndex={handleAddAtIndex}
               />
             )}
 
             {showLegacyContent && (
               <div className="mb-6">
                 {hasHtmlContent ? (
-                  <div className="prose prose-sm prose-invert max-w-none text-gray-200
-                    [&_a]:text-blue-400 [&_a]:underline [&_img]:rounded-lg [&_img]:my-3 [&_img]:max-w-full
-                    [&_blockquote]:border-l-red-600 [&_blockquote]:text-gray-400"
-                    dangerouslySetInnerHTML={{ __html: item.content_html }}
-                  />
+                  <KnowledgeHtmlContent html={item.content_html} />
                 ) : (
                   <KnowledgeLegacyContent item={item} />
                 )}
@@ -286,7 +293,7 @@ export default function ProcedurePage() {
               <div className="text-center py-12">
                 <ListOrdered className="w-6 h-6 mx-auto mb-2 text-gray-700" />
                 <p className="text-sm text-gray-500">No steps yet</p>
-                <p className="text-xs text-gray-600 mt-0.5">Add your first step to begin building this procedure</p>
+                <p className="text-xs text-gray-600 mt-0.5">Add your first step to begin building this article</p>
                 <button onClick={() => openEntryEditor("step")}
                   className="mt-4 inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-red-600 text-white text-sm font-medium active:bg-red-700 transition-colors">
                   <Plus className="w-4 h-4" /> Add First Step
@@ -371,9 +378,10 @@ export default function ProcedurePage() {
         procedureTitle={item.title}
         existingEntryCount={entries.length}
         isOpen={entryEditorOpen}
-        onClose={() => { setEntryEditorOpen(false); setEditingEntry(null); }}
+        onClose={() => { setEntryEditorOpen(false); setEditingEntry(null); setInsertAtIndex(null); }}
         initialEntryType={entryEditorType}
         existingEntry={editingEntry}
+        insertAtIndex={insertAtIndex}
       />
     </>
   );

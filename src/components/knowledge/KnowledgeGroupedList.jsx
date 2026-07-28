@@ -106,7 +106,7 @@ export default function KnowledgeGroupedList({ items, categories, onItemClick })
     return (
       <div className="text-center py-16 text-gray-600">
         <FileText className="w-8 h-8 mx-auto mb-2 opacity-30" />
-        <p className="text-sm">No procedures found</p>
+        <p className="text-sm">No articles found</p>
       </div>
     );
   }

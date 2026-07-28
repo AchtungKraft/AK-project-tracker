@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Pencil, ExternalLink, Package, ListChecks, FileText, Image, AlertOctagon, Plus, ListOrdered, StickyNote, AlertTriangle, Camera, Play, Link2, Settings2 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { POST_TYPE_CONFIG } from "./KnowledgeFeedCard";
+import { FORMAT_CONFIG, getCoverImage } from "./knowledgeHelpers";
+import KnowledgeHtmlContent from "./KnowledgeHtmlContent";
 import KnowledgePartLinks from "./KnowledgePartLinks";
 import KnowledgeProjectNotes from "./KnowledgeProjectNotes";
 import KnowledgeLegacyContent from "./KnowledgeLegacyContent";
@@ -14,13 +15,6 @@ import ProcedureEntryTimeline from "./ProcedureEntryTimeline";
 import ProcedureEntryEditor from "./ProcedureEntryEditor";
 import ImageLightbox from "./ImageLightbox";
 import ExecutionModeView from "./ExecutionModeView";
-
-function getCoverImage(item) {
-  if (item.cover_image_url) return item.cover_image_url;
-  if (item.image_urls?.length > 0) return item.image_urls[0];
-  if (item.media_urls?.length > 0) return item.media_urls[0];
-  return null;
-}
 
 const QUICK_ADD = [
   { type: "step", label: "Step", icon: ListOrdered },
@@ -33,6 +27,7 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
   const [entryEditorOpen, setEntryEditorOpen] = useState(false);
   const [entryEditorType, setEntryEditorType] = useState("step");
   const [editingEntry, setEditingEntry] = useState(null);
+  const [insertAtIndex, setInsertAtIndex] = useState(null);
   const [coverLightbox, setCoverLightbox] = useState(false);
   const [executionMode, setExecutionMode] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -74,12 +69,21 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
   const openEntryEditor = (type) => {
     setEditingEntry(null);
     setEntryEditorType(type);
+    setInsertAtIndex(null);
     setEntryEditorOpen(true);
   };
 
   const handleEditEntry = (entry) => {
     setEditingEntry(entry);
     setEntryEditorType(entry.entry_type || 'step');
+    setInsertAtIndex(null);
+    setEntryEditorOpen(true);
+  };
+
+  const handleAddAtIndex = (index) => {
+    setEditingEntry(null);
+    setEntryEditorType("step");
+    setInsertAtIndex(index);
     setEntryEditorOpen(true);
   };
 
@@ -176,18 +180,14 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
                 procedureId={item.id}
                 editMode={editMode}
                 onEditEntry={handleEditEntry}
+                onAddAtIndex={handleAddAtIndex}
               />
             )}
 
             {showLegacyContent && (
               <div className="mb-4">
                 {hasHtmlContent ? (
-                  <div className="prose prose-sm prose-invert max-w-none text-gray-200
-                    [&_a]:text-blue-400 [&_a]:underline [&_img]:rounded-lg [&_img]:my-3 [&_img]:max-w-full
-                    [&_blockquote]:border-l-red-600 [&_blockquote]:text-gray-400
-                    [&_code]:bg-gray-800 [&_code]:text-red-400 [&_code]:px-1 [&_code]:rounded"
-                    dangerouslySetInnerHTML={{ __html: item.content_html }}
-                  />
+                  <KnowledgeHtmlContent html={item.content_html} />
                 ) : (
                   <KnowledgeLegacyContent item={item} />
                 )}
@@ -250,7 +250,7 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
             style={{ paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom))' }}>
             <Button variant="ghost" onClick={onClose} className="text-gray-500 h-11 px-3 text-sm">Close</Button>
             <Button onClick={() => openEntryEditor("step")} className="flex-1 bg-red-600 hover:bg-red-700 gap-1.5 h-11 text-sm">
-              <Plus className="w-4 h-4" /> Add Step
+              <Plus className="w-4 h-4" /> Add Content
             </Button>
             <Button variant="ghost" size="icon" onClick={() => onEdit(item)} className="h-11 w-11 text-gray-600 hover:text-white shrink-0">
               <Pencil className="w-4 h-4" />
@@ -268,9 +268,10 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
         procedureTitle={item.title}
         existingEntryCount={entries.length}
         isOpen={entryEditorOpen}
-        onClose={() => { setEntryEditorOpen(false); setEditingEntry(null); }}
+        onClose={() => { setEntryEditorOpen(false); setEditingEntry(null); setInsertAtIndex(null); }}
         initialEntryType={entryEditorType}
         existingEntry={editingEntry}
+        insertAtIndex={insertAtIndex}
       />
 
       {executionMode && (

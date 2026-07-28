@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Loader2, X, Plus, Image as ImageIcon, Crown, ChevronDown, ChevronRight, Camera } from "lucide-react";
 import { toast } from "sonner";
 import RelatedPostSuggestions from "./RelatedPostSuggestions";
+import { FORMAT_OPTIONS, KNOWLEDGE_QUERY_KEYS } from "./knowledgeHelpers";
 
 export default function KnowledgeItemEditor({ item, isOpen, onClose, categories }) {
   const queryClient = useQueryClient();
@@ -94,8 +95,9 @@ export default function KnowledgeItemEditor({ item, isOpen, onClose, categories 
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['buildKnowledgeItems'] });
-      toast.success(isNew ? 'Procedure created' : 'Procedure updated');
+      queryClient.invalidateQueries({ queryKey: KNOWLEDGE_QUERY_KEYS.articles });
+      queryClient.invalidateQueries({ queryKey: ['buildKnowledgeItem'] });
+      toast.success(isNew ? 'Article created' : 'Article updated');
       onClose();
     },
   });
@@ -128,9 +130,9 @@ export default function KnowledgeItemEditor({ item, isOpen, onClose, categories 
     <Sheet open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent className="bg-gray-950 text-white w-full sm:max-w-lg overflow-y-auto flex flex-col p-0">
         <SheetHeader className="px-4 pt-4 pb-1">
-          <SheetDescription className="sr-only">Create or update a procedure</SheetDescription>
+          <SheetDescription className="sr-only">Create or update a knowledge article</SheetDescription>
           <SheetTitle className="text-white text-base">
-            {isNew ? 'New Procedure' : 'Update Procedure'}
+            {isNew ? 'New Article' : 'Edit Article'}
           </SheetTitle>
         </SheetHeader>
 
@@ -216,11 +218,24 @@ export default function KnowledgeItemEditor({ item, isOpen, onClose, categories 
             rows={2}
             className="bg-gray-900 border-gray-800 text-white resize-none text-sm" />
 
-          {/* Master Procedure toggle */}
+          {/* Format */}
+          <div>
+            <label className="text-[11px] text-gray-600 mb-1 block">Format</label>
+            <div className="flex gap-1.5 flex-wrap">
+              {FORMAT_OPTIONS.map(f => (
+                <button key={f.value} onClick={() => setForm(prev => ({ ...prev, post_type: f.value }))}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs transition-colors ${form.post_type === f.value ? 'bg-gray-700 text-white' : 'bg-gray-900 text-gray-500 hover:text-gray-300'}`}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Master Article + Status */}
           <div className="flex items-center gap-3 py-1">
             <button onClick={() => setForm(f => ({ ...f, is_master_procedure: !f.is_master_procedure, parent_procedure_id: !f.is_master_procedure ? "" : f.parent_procedure_id }))}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors ${form.is_master_procedure ? 'bg-red-900/40 text-red-300' : 'bg-gray-900 text-gray-500'}`}>
-              <Crown className="w-3 h-3" /> Master Procedure
+              <Crown className="w-3 h-3" /> Master Article
             </button>
             <div className="flex gap-1 ml-auto">
               {["draft", "published", "archived"].map(s => (
@@ -313,7 +328,7 @@ export default function KnowledgeItemEditor({ item, isOpen, onClose, categories 
           style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
           <Button variant="ghost" onClick={onClose} className="text-gray-500 h-11 px-3">Cancel</Button>
           <Button onClick={handleSave} disabled={saveMutation.isPending} className="flex-1 bg-red-600 hover:bg-red-700 h-11 text-sm font-medium">
-            {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : (isNew ? 'Create Procedure' : 'Update Procedure')}
+            {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : (isNew ? 'Create Article' : 'Save Changes')}
           </Button>
         </div>
       </SheetContent>

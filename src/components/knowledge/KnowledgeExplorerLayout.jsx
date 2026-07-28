@@ -10,16 +10,16 @@ import { cn } from "@/lib/utils";
 import KnowledgeCategoryTree from "./KnowledgeCategoryTree";
 import KnowledgeBreadcrumb from "./KnowledgeBreadcrumb";
 import KnowledgeGroupedList from "./KnowledgeGroupedList";
-import SubsystemContextPanel from "./SubsystemContextPanel";
 
 const STORAGE_KEY = 'achtung_knowledge_explorer_state';
 
 const POST_TYPE_FILTERS = [
-  { value: "all", label: "All" },
+  { value: "all", label: "All Formats" },
   { value: "procedure", label: "Procedures" },
-  { value: "observation", label: "Notes" },
-  { value: "known_issue", label: "Warnings" },
+  { value: "guide", label: "Guides" },
   { value: "reference", label: "References" },
+  { value: "checklist", label: "Checklists" },
+  { value: "known_issue", label: "Troubleshooting" },
 ];
 
 export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItemCreate }) {
@@ -136,10 +136,12 @@ export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItem
           return false;
         }
       }
-      // Post type filter
+      // Format filter — map legacy values
       if (postTypeFilter !== 'all') {
         const itemPostType = item.post_type || item.type || 'procedure';
-        if (itemPostType !== postTypeFilter) return false;
+        // Map legacy values: observation → guide, tip → guide
+        const normalizedType = itemPostType === 'observation' || itemPostType === 'tip' ? 'guide' : itemPostType;
+        if (normalizedType !== postTypeFilter) return false;
       }
       // Weighted search: title > tags > parts > entry headlines > category > post_type > summary > content
       if (searchTerm) {
@@ -195,14 +197,14 @@ export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItem
         {/* Header */}
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-800/40">
           <div className="flex-1 min-w-0">
-            <h2 className="text-base font-semibold text-white">Procedures</h2>
+            <h2 className="text-base font-semibold text-white">Knowledge Articles</h2>
             <p className="text-[10px] text-gray-600">
               {filteredItems.length} {selectedCategoryId ? 'in subsystem' : 'total'}
               {searchTerm && ` · "${searchTerm}"`}
             </p>
           </div>
           <Button onClick={onItemCreate} size="sm" className="bg-red-600 hover:bg-red-700 gap-1.5 h-10 px-3 text-sm shrink-0">
-            <Plus className="w-4 h-4" /> New
+            <Plus className="w-4 h-4" /> New Article
           </Button>
         </div>
 
@@ -242,7 +244,7 @@ export default function KnowledgeExplorerLayout({ categories, onItemEdit, onItem
                 <Input
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  placeholder="Search procedures, parts..."
+                  placeholder="Search articles, parts..."
                   className="pl-8 bg-gray-900/60 border-gray-800 text-white h-9 text-sm"
                 />
               </div>

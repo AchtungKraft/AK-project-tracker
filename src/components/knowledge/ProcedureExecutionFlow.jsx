@@ -4,6 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, AlertTriangle, Package, ExternalLink, ChevronUp, ChevronDown, Crown, Camera, Plus } from "lucide-react";
 import ImageLightbox from "./ImageLightbox";
+import KnowledgeHtmlContent from "./KnowledgeHtmlContent";
 
 /**
  * Full-page execution flow — service manual experience.
@@ -50,15 +51,7 @@ function ExecutionStep({ entry, stepNumber, parts, onImageClick }) {
       {/* Content */}
       {hasContent && (
         <div className="ml-12 mb-3">
-          <div
-            className="text-gray-300 text-[16px] leading-[1.7]
-              [&_a]:text-blue-400 [&_a]:underline
-              [&_img]:rounded-lg [&_img]:my-3 [&_img]:max-w-full
-              [&_blockquote]:border-l-2 [&_blockquote]:border-gray-600 [&_blockquote]:text-gray-400 [&_blockquote]:pl-3
-              [&_ul]:ml-4 [&_ol]:ml-4 [&_li]:text-gray-300
-              [&_p]:my-1 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
-            dangerouslySetInnerHTML={{ __html: entry.content_html }}
-          />
+          <KnowledgeHtmlContent html={entry.content_html} size="base" />
         </div>
       )}
 
@@ -275,12 +268,9 @@ export default function ProcedureExecutionFlow({ item, entries, categories, onCl
 
           {/* Legacy content fallback */}
           {visible.length === 0 && item.content_html && item.content_html !== '<p><br></p>' && (
-            <div className="mt-4">
-              <div className="prose prose-sm prose-invert max-w-none text-gray-300 text-[15px] leading-relaxed
-                [&_a]:text-blue-400 [&_a]:underline [&_img]:rounded-lg [&_img]:my-3 [&_img]:max-w-full"
-                dangerouslySetInnerHTML={{ __html: item.content_html }}
-              />
-            </div>
+          <div className="mt-4">
+            <KnowledgeHtmlContent html={item.content_html} size="base" />
+          </div>
           )}
 
           {item.reference_url && (

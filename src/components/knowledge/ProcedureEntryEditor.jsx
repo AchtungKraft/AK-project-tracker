@@ -9,6 +9,7 @@ import { Loader2, X, Package, Camera, ChevronDown, ChevronRight } from "lucide-r
 import { toast } from "sonner";
 import ReactQuill from "react-quill";
 import { ENTRY_TYPE_CONFIG } from "./ProcedureEntryTimeline";
+import { KNOWLEDGE_QUERY_KEYS } from "./knowledgeHelpers";
 
 const QUILL_MODULES = {
   toolbar: [['bold', 'italic'], [{ list: 'ordered' }, { list: 'bullet' }], ['link'], ['clean']],
@@ -30,7 +31,7 @@ const mapEntryType = (type) => {
  * Unified Add / Edit entry sheet.
  * Pass `existingEntry` to enter edit mode.
  */
-export default function ProcedureEntryEditor({ procedureId, procedureTitle, existingEntryCount, isOpen, onClose, initialEntryType = "step", existingEntry = null }) {
+export default function ProcedureEntryEditor({ procedureId, procedureTitle, existingEntryCount, isOpen, onClose, initialEntryType = "step", existingEntry = null, insertAtIndex = null }) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -81,12 +82,12 @@ export default function ProcedureEntryEditor({ procedureId, procedureTitle, exis
       return base44.entities.ProcedureEntry.create({
         ...data,
         procedure_id: procedureId,
-        order_index: existingEntryCount || 0,
+        order_index: insertAtIndex != null ? insertAtIndex : (existingEntryCount || 0),
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['procedureEntries', procedureId] });
-      queryClient.invalidateQueries({ queryKey: ['allProcedureEntries'] });
+      queryClient.invalidateQueries({ queryKey: KNOWLEDGE_QUERY_KEYS.entries(procedureId) });
+      queryClient.invalidateQueries({ queryKey: KNOWLEDGE_QUERY_KEYS.allEntries });
       toast.success(isEdit ? 'Entry updated' : 'Entry added');
       setPartSearch("");
       onClose();

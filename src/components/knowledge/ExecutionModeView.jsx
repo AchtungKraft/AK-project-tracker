@@ -7,6 +7,7 @@ import {
   ChevronUp, ChevronDown, Crown
 } from "lucide-react";
 import ImageLightbox from "./ImageLightbox";
+import KnowledgeHtmlContent from "./KnowledgeHtmlContent";
 
 /**
  * ExecutionStepCard — service-manual style, minimal chrome.
@@ -51,15 +52,7 @@ function ExecutionStepCard({ entry, stepNumber, parts, onImageClick, isActive })
       {/* Content — clean prose, no card wrapper */}
       {hasContent && (
         <div className="ml-11 mb-3">
-          <div
-            className="prose prose-sm prose-invert max-w-none text-gray-300 text-[15px] leading-relaxed
-              [&_a]:text-blue-400 [&_a]:underline
-              [&_img]:rounded-lg [&_img]:my-2 [&_img]:max-w-full
-              [&_blockquote]:border-l-2 [&_blockquote]:border-gray-600 [&_blockquote]:text-gray-400 [&_blockquote]:pl-3 [&_blockquote]:ml-0
-              [&_ul]:ml-4 [&_ol]:ml-4 [&_li]:text-gray-300
-              [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
-            dangerouslySetInnerHTML={{ __html: entry.content_html }}
-          />
+          <KnowledgeHtmlContent html={entry.content_html} size="base" />
         </div>
       )}
 
@@ -320,11 +313,7 @@ export default function ExecutionModeView({ item, onClose }) {
             {/* Legacy fallback */}
             {visible.length === 0 && item.content_html && item.content_html !== '<p><br></p>' && (
               <div className="mt-4">
-                <div
-                  className="prose prose-sm prose-invert max-w-none text-gray-300 text-[15px] leading-relaxed
-                    [&_a]:text-blue-400 [&_a]:underline [&_img]:rounded-lg [&_img]:my-3 [&_img]:max-w-full"
-                  dangerouslySetInnerHTML={{ __html: item.content_html }}
-                />
+                <KnowledgeHtmlContent html={item.content_html} size="base" />
               </div>
             )}
 

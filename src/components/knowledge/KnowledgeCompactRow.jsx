@@ -2,34 +2,12 @@ import React from "react";
 import { cn } from "@/lib/utils";
 import { Crown, Pin, AlertTriangle, Camera, ListOrdered, Clock } from "lucide-react";
 import { format } from "date-fns";
-
-const POST_DOT = {
-  procedure:   "bg-blue-500",
-  observation: "bg-emerald-500",
-  known_issue: "bg-amber-500",
-  reference:   "bg-gray-500",
-  tip:         "bg-emerald-500",
-};
-
-function getCoverImage(item) {
-  if (item.cover_image_url) return item.cover_image_url;
-  if (item.image_urls?.length > 0) return item.image_urls[0];
-  if (item.media_urls?.length > 0) return item.media_urls[0];
-  return null;
-}
-
-function getExcerpt(item) {
-  if (item.summary) return item.summary;
-  if (item.content_html) {
-    const text = item.content_html.replace(/<[^>]*>/g, '').trim();
-    return text.length > 120 ? text.slice(0, 120) + '…' : text;
-  }
-  return null;
-}
+import { FORMAT_CONFIG, getCoverImage, getExcerpt } from "./knowledgeHelpers";
 
 export default function KnowledgeCompactRow({ item, onClick, entryCount }) {
   const postType = item.post_type || item.type || 'procedure';
-  const dot = POST_DOT[postType] || POST_DOT.procedure;
+  const config = FORMAT_CONFIG[postType] || FORMAT_CONFIG.procedure;
+  const dot = config.dot;
   const coverImg = getCoverImage(item);
   const excerpt = getExcerpt(item);
   const imageCount = (item.image_urls?.length || 0) + (item.media_urls?.length || 0);

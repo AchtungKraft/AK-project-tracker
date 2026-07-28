@@ -1,6 +1,7 @@
 import React, { useRef } from "react";
 import { format } from "date-fns";
 import { X } from "lucide-react";
+import { sanitizeHtml } from "./KnowledgeHtmlContent";
 
 const ENTRY_TYPE_LABEL = {
   step: "Step",
@@ -136,7 +137,7 @@ export default function ProcedurePrintView({ item, entries, categories, parts, p
                     {entry.content_html && (
                       <div
                         className="print-content text-sm text-gray-700 mt-1 leading-relaxed [&_a]:text-blue-700 [&_a]:underline [&_img]:hidden"
-                        dangerouslySetInnerHTML={{ __html: entry.content_html }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(entry.content_html) }}
                       />
                     )}
 

@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import ImageLightbox from "./ImageLightbox";
 import EntryActionMenu from "./EntryActionMenu";
+import KnowledgeHtmlContent from "./KnowledgeHtmlContent";
 
 export const ENTRY_TYPE_CONFIG = {
   step:      { label: "Step",    icon: ListOrdered,   rail: "bg-blue-600",    accent: "text-blue-400",    bg: "bg-blue-950/10" },
@@ -17,7 +18,7 @@ export const ENTRY_TYPE_CONFIG = {
   media:     { label: "Photos",  icon: Camera,        rail: "bg-gray-600",    accent: "text-gray-400",    bg: "bg-gray-950/10" },
 };
 
-function EntryCard({ entry, stepNumber, parts, onImageClick, compact, editMode, sortedEntries, procedureId, onEdit, dragHandleProps }) {
+function EntryCard({ entry, stepNumber, parts, onImageClick, compact, editMode, sortedEntries, procedureId, onEdit, onAddAtIndex, dragHandleProps }) {
   const entryType = entry.entry_type || 'step';
   const config = ENTRY_TYPE_CONFIG[entryType] || ENTRY_TYPE_CONFIG.step;
   const Icon = config.icon;
@@ -78,11 +79,17 @@ function EntryCard({ entry, stepNumber, parts, onImageClick, compact, editMode, 
           </div>
           {/* Action menu — visible on hover desktop, always on edit mode */}
           {editMode && (
-            <EntryActionMenu entry={entry} procedureId={procedureId} sortedEntries={sortedEntries} onEdit={onEdit} />
+            <EntryActionMenu entry={entry} procedureId={procedureId} sortedEntries={sortedEntries} onEdit={onEdit}
+              onAddAbove={onAddAtIndex ? (e) => { const i = sortedEntries.findIndex(s => s.id === e.id); onAddAtIndex(i); } : undefined}
+              onAddBelow={onAddAtIndex ? (e) => { const i = sortedEntries.findIndex(s => s.id === e.id); onAddAtIndex(i + 1); } : undefined}
+            />
           )}
           {!editMode && (
             <div className="opacity-0 group-hover/entry:opacity-100 transition-opacity">
-              <EntryActionMenu entry={entry} procedureId={procedureId} sortedEntries={sortedEntries} onEdit={onEdit} />
+              <EntryActionMenu entry={entry} procedureId={procedureId} sortedEntries={sortedEntries} onEdit={onEdit}
+                onAddAbove={onAddAtIndex ? (e) => { const i = sortedEntries.findIndex(s => s.id === e.id); onAddAtIndex(i); } : undefined}
+                onAddBelow={onAddAtIndex ? (e) => { const i = sortedEntries.findIndex(s => s.id === e.id); onAddAtIndex(i + 1); } : undefined}
+              />
             </div>
           )}
         </div>
@@ -90,12 +97,7 @@ function EntryCard({ entry, stepNumber, parts, onImageClick, compact, editMode, 
         {/* Content */}
         {hasContent && (
           <div className="mt-1">
-            <div className="text-gray-400 text-sm leading-relaxed
-                [&_a]:text-blue-400 [&_a]:underline [&_img]:rounded-lg [&_img]:my-2 [&_img]:max-w-full
-                [&_ul]:ml-4 [&_ol]:ml-4 [&_li]:text-gray-400
-                [&_p]:my-0.5 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
-              dangerouslySetInnerHTML={{ __html: entry.content_html }}
-            />
+            <KnowledgeHtmlContent html={entry.content_html} className="text-gray-400" />
           </div>
         )}
 
@@ -136,7 +138,7 @@ function EntryCard({ entry, stepNumber, parts, onImageClick, compact, editMode, 
   );
 }
 
-export default function ProcedureEntryTimeline({ procedureId, compact = false, executionMode = false, editMode = false, onEditEntry }) {
+export default function ProcedureEntryTimeline({ procedureId, compact = false, executionMode = false, editMode = false, onEditEntry, onAddAtIndex }) {
   const queryClient = useQueryClient();
   const [lightboxState, setLightboxState] = useState(null);
 
@@ -239,6 +241,7 @@ export default function ProcedureEntryTimeline({ procedureId, compact = false, e
               sortedEntries={visible}
               procedureId={procedureId}
               onEdit={onEditEntry || (() => {})}
+              onAddAtIndex={onAddAtIndex}
               dragHandleProps={dragProvided?.dragHandleProps}
             />
           </div>
