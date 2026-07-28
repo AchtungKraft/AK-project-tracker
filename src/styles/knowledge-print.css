@@ -4,10 +4,146 @@
    Does NOT affect other app print views.
    ============================================ */
 
-/* ── Screen Preview Layout ─────────────────── */
+/* ── Print Root — Portal-based full-viewport layer ──── */
+.knowledge-print-root {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  background: #e5e7eb; /* neutral gray preview background */
+}
+
+/* ── Preview Toolbar ─────────────────────────────────── */
+.print-preview-toolbar {
+  flex-shrink: 0;
+  background: #111827;
+  border-bottom: 1px solid #374151;
+  z-index: 1;
+}
+
+.print-preview-toolbar-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  max-width: 100%;
+}
+
+.print-toolbar-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  color: #9ca3af;
+  background: none;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+}
+
+.print-toolbar-close:hover {
+  color: #fff;
+  background: #374151;
+}
+
+.print-toolbar-close:focus-visible {
+  outline: 2px solid #ef4444;
+  outline-offset: 2px;
+}
+
+.print-toolbar-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.print-toolbar-article-name {
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
+}
+
+.print-toolbar-spacer {
+  flex: 1;
+}
+
+.print-toolbar-print-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.print-toolbar-print-btn:hover {
+  background: #b91c1c;
+}
+
+.print-toolbar-print-btn:focus-visible {
+  outline: 2px solid #ef4444;
+  outline-offset: 2px;
+}
+
+/* ── Scrollable Preview Area ─────────────────────────── */
+.print-preview-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2rem 1rem;
+  display: flex;
+  justify-content: center;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 640px) {
+  .print-preview-scroll {
+    padding: 0.75rem 0.5rem;
+  }
+}
+
+/* ── Paper Preview Surface ───────────────────────────── */
+.print-preview-paper {
+  width: 100%;
+  max-width: 816px; /* ~8.5in at 96dpi */
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.08);
+  min-height: 600px;
+  align-self: flex-start;
+}
+
+@media (max-width: 860px) {
+  .print-preview-paper {
+    max-width: 100%;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
+/* ── Procedure Content ───────────────────────────────── */
 .print-procedure {
-  max-width: 780px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   padding: 2.5rem 2rem;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: #111;
@@ -15,7 +151,7 @@
   line-height: 1.5;
 }
 
-/* ── Screen-only elements ──────────────────── */
+/* ── Screen-only elements ──────────────────────────────── */
 .print-hide {
   display: flex;
 }
@@ -477,35 +613,56 @@
 
 /* ============================================
    PRINT MEDIA QUERY — Only for actual printing
-   Scoped to .print-procedure
    ============================================ */
 @media print {
-  /* Hide everything else */
+  /* Hide ALL body children */
   body > * {
-    visibility: hidden !important;
-  }
-  body > *:has(.print-procedure) {
-    visibility: visible !important;
-  }
-  .print-procedure,
-  .print-procedure * {
-    visibility: visible !important;
-  }
-
-  /* Screen-only elements */
-  .print-hide {
     display: none !important;
   }
 
-  /* Position the print view */
+  /* Reveal only the print root (portal on body) */
+  body > .knowledge-print-root {
+    display: block !important;
+    position: static !important;
+    background: none !important;
+    overflow: visible !important;
+    width: auto !important;
+    height: auto !important;
+  }
+
+  /* Hide toolbar */
+  .print-hide,
+  .print-preview-toolbar {
+    display: none !important;
+  }
+
+  /* Reset preview scroll area */
+  .print-preview-scroll {
+    overflow: visible !important;
+    padding: 0 !important;
+    display: block !important;
+    height: auto !important;
+  }
+
+  /* Reset paper surface */
+  .print-preview-paper {
+    max-width: none !important;
+    width: 100% !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    background: white !important;
+    min-height: auto !important;
+  }
+
+  /* Position the print content */
   .print-procedure {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    max-width: none;
-    padding: 0;
-    margin: 0;
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
   }
 
   /* Page setup */
@@ -557,13 +714,11 @@
     page-break-inside: avoid;
   }
 
-  /* Image row — avoid splitting a pair */
   .print-img-pair {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
-  /* Step block — keep title with first paragraph */
   .print-step {
     break-inside: avoid;
     page-break-inside: avoid;
@@ -574,56 +729,54 @@
     page-break-after: avoid;
   }
 
-  /* Callout — keep together */
   .print-callout {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
-  /* Media entry — keep together */
   .print-media-entry {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
-  /* Phase heading — keep with next */
   .print-phase-heading {
     break-after: avoid;
     page-break-after: avoid;
   }
 
-  /* Parts summary — keep together */
   .print-parts-summary {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
-  /* Orphan / widow control */
   .print-body-content p {
     orphans: 2;
     widows: 2;
   }
 
-  /* Long URLs — wrap safely */
   .print-reference-url,
   .print-body-content a {
     word-break: break-all;
     overflow-wrap: break-word;
   }
 
-  /* Links — don't append href in print (we show them explicitly) */
   .print-body-content a::after {
     content: none;
   }
 
-  /* Footer — always visible at document end */
   .print-footer {
     margin-top: 1.5rem;
   }
 
-  /* Ensure images don't overflow page width */
   .print-procedure img {
     max-width: 100% !important;
     height: auto !important;
   }
+}
+
+/* ============================================
+   BODY CLASS — hides app shell behind print
+   ============================================ */
+body.knowledge-print-active {
+  overflow: hidden !important;
 }

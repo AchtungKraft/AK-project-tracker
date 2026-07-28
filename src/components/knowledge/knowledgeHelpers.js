@@ -182,6 +182,41 @@ export function resolveFormat(item) {
   return item?.post_type || item?.type || 'procedure';
 }
 
+// ─── Entry Count Helper ─────────────────────────────────
+
+/**
+ * Compute human-readable entry counts from raw ProcedureEntry records.
+ * Single source of truth — used by article header, detail drawer,
+ * print header, and feed cards.
+ *
+ * @param {Array} entries — raw ProcedureEntry records (not normalized)
+ * @returns {{ stepCount, noteCount, warningCount, mediaCount, imageCount, totalActiveEntries, displayParts }}
+ */
+export function getKnowledgeEntryCounts(entries = []) {
+  let stepCount = 0, noteCount = 0, warningCount = 0, mediaCount = 0, imageCount = 0;
+  (entries || []).forEach(e => {
+    const lifecycle = e.lifecycle_state || 'active';
+    if (lifecycle === 'archived') return;
+    const type = e.entry_type || 'step';
+    if (type === 'step') stepCount++;
+    else if (type === 'note' || type === 'tip') noteCount++;
+    else if (type === 'issue') warningCount++;
+    else if (type === 'media') mediaCount++;
+    const imgs = e.image_urls || [];
+    imageCount += imgs.length;
+  });
+  const totalActiveEntries = stepCount + noteCount + warningCount + mediaCount;
+
+  // Build display string parts — only non-zero counts
+  const parts = [];
+  if (stepCount > 0) parts.push(`${stepCount} ${stepCount === 1 ? 'Step' : 'Steps'}`);
+  if (noteCount > 0) parts.push(`${noteCount} ${noteCount === 1 ? 'Note' : 'Notes'}`);
+  if (warningCount > 0) parts.push(`${warningCount} ${warningCount === 1 ? 'Warning' : 'Warnings'}`);
+  if (imageCount > 0) parts.push(`${imageCount} ${imageCount === 1 ? 'Image' : 'Images'}`);
+
+  return { stepCount, noteCount, warningCount, mediaCount, imageCount, totalActiveEntries, displayParts: parts };
+}
+
 // ─── Query Key Convention ───────────────────────────────
 export const KNOWLEDGE_QUERY_KEYS = {
   articles: ['buildKnowledgeItems'],

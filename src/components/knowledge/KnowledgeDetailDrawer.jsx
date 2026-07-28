@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Pencil, ExternalLink, Package, ListChecks, FileText, Image, AlertOctagon, Plus, ListOrdered, StickyNote, AlertTriangle, Camera, Play, Link2, Settings2 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { FORMAT_CONFIG, getCoverImage } from "./knowledgeHelpers";
+import { FORMAT_CONFIG, getCoverImage, getKnowledgeEntryCounts } from "./knowledgeHelpers";
 import KnowledgeHtmlContent from "./KnowledgeHtmlContent";
 import KnowledgePartLinks from "./KnowledgePartLinks";
 import KnowledgeProjectNotes from "./KnowledgeProjectNotes";
@@ -137,7 +137,10 @@ export default function KnowledgeDetailDrawer({ item, categories, onClose, onEdi
                 {item.vehicle_tags?.map(tag => (
                   <span key={tag} className="px-1.5 py-0.5 rounded bg-gray-800/60 text-gray-400">{tag}</span>
                 ))}
-                {hasEntries && <span>{entries.length} steps</span>}
+                {hasEntries && (() => {
+                  const counts = getKnowledgeEntryCounts(entries);
+                  return counts.displayParts.length > 0 ? <span>{counts.displayParts.join(' · ')}</span> : null;
+                })()}
                 <span className="ml-auto">{item.updated_date ? format(new Date(item.updated_date), 'MMM d') : ''}</span>
               </div>
 

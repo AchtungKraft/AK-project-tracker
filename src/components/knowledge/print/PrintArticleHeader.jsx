@@ -34,11 +34,6 @@ export default function PrintArticleHeader({ article, subsystemPath, entryCounts
 }
 
 function PrintEntryCounts({ counts }) {
-  const parts = [];
-  if (counts.steps > 0) parts.push(`${counts.steps} Step${counts.steps !== 1 ? 's' : ''}`);
-  if (counts.notes > 0) parts.push(`${counts.notes} Note${counts.notes !== 1 ? 's' : ''}`);
-  if (counts.warnings > 0) parts.push(`${counts.warnings} Warning${counts.warnings !== 1 ? 's' : ''}`);
-  if (counts.images > 0) parts.push(`${counts.images} Image${counts.images !== 1 ? 's' : ''}`);
-  if (parts.length === 0) return null;
-  return <span className="print-meta-item">{parts.join(' · ')}</span>;
+  if (!counts.displayParts?.length) return null;
+  return <span className="print-meta-item">{counts.displayParts.join(' · ')}</span>;
 }

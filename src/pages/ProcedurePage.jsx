@@ -22,6 +22,7 @@ import KnowledgeHtmlContent from "@/components/knowledge/KnowledgeHtmlContent";
 import ProcedureExecutionFlow from "@/components/knowledge/ProcedureExecutionFlow";
 import ProcedurePrintView from "@/components/knowledge/ProcedurePrintView";
 import KnowledgeItemEditor from "@/components/knowledge/KnowledgeItemEditor";
+import { getKnowledgeEntryCounts } from "@/components/knowledge/knowledgeHelpers";
 
 const QUICK_ADD = [
   { type: "step", label: "Step", icon: ListOrdered },
@@ -125,7 +126,7 @@ export default function ProcedurePage() {
   const coverImg = item.cover_image_url || item.image_urls?.[0] || item.media_urls?.[0];
   const supersededBy = item.superseded_by_id ? allItems.find(i => i.id === item.superseded_by_id) : null;
   const parentProcedure = item.parent_procedure_id ? allItems.find(i => i.id === item.parent_procedure_id) : null;
-  const stepCount = entries.filter(e => (e.entry_type || 'step') === 'step').length;
+  const entryCounts = getKnowledgeEntryCounts(entries);
 
   const openEntryEditor = (type) => {
     setEditingEntry(null);
@@ -166,29 +167,31 @@ export default function ProcedurePage() {
       <div className="min-h-screen bg-gray-950">
         {/* Sticky header — procedural, not admin */}
         <div className="sticky top-0 z-40 bg-gray-950/95 backdrop-blur-sm border-b border-gray-800/40">
-          <div className="max-w-3xl mx-auto px-4 py-2.5 flex items-center gap-3">
+          <div className="max-w-3xl mx-auto px-4 py-2.5 flex items-center gap-2 md:gap-3">
             <Link to="/buildknowledge"
               className="p-2 -ml-2 rounded-lg text-gray-500 hover:text-white active:bg-gray-800 transition-colors shrink-0">
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <div className="flex-1 min-w-0">
-              <h1 className="text-sm font-semibold text-white truncate">{item.title}</h1>
-              <div className="flex items-center gap-2 text-[10px] text-gray-600">
-                {cat && <span>{cat.name}{subcat ? ` › ${subcat.name}` : ''}</span>}
-                {hasEntries && <span>· {stepCount} steps</span>}
+              <h1 className="text-sm font-semibold text-white truncate leading-tight">{item.title}</h1>
+              <div className="flex items-center gap-2 text-[10px] text-gray-600 truncate">
+                {cat && <span className="truncate">{cat.name}{subcat ? ` › ${subcat.name}` : ''}</span>}
+                {hasEntries && entryCounts.displayParts.length > 0 && (
+                  <span className="shrink-0">· {entryCounts.displayParts.join(' · ')}</span>
+                )}
               </div>
             </div>
 
-            {/* Primary actions */}
-            <div className="flex items-center gap-1.5 shrink-0">
+            {/* Primary actions — compact, responsive */}
+            <div className="flex items-center gap-1 shrink-0">
               <button onClick={() => setArticleEditorOpen(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-gray-800/60 text-gray-300 hover:text-white active:bg-gray-700 text-sm transition-colors">
-                <Pencil className="w-3.5 h-3.5" /> Edit Article
+                className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-800/60 text-gray-300 hover:text-white active:bg-gray-700 text-sm transition-colors">
+                <Pencil className="w-3.5 h-3.5" /> <span>Edit</span>
               </button>
               {hasEntries && (
                 <button onClick={() => setExecutionMode(true)}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-blue-600 text-white text-sm font-medium active:bg-blue-700 transition-colors">
-                  <Play className="w-3.5 h-3.5" /> Execute
+                  className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-600 text-white text-sm font-medium active:bg-blue-700 transition-colors">
+                  <Play className="w-3.5 h-3.5" /> <span>Execute</span>
                 </button>
               )}
               {hasEntries && (
@@ -214,6 +217,16 @@ export default function ProcedurePage() {
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="bg-gray-900 border-gray-800 text-gray-200 min-w-[160px]">
+                  {/* Mobile-only: Edit Article */}
+                  <DropdownMenuItem onClick={() => setArticleEditorOpen(true)} className="gap-2 text-sm md:hidden">
+                    <Pencil className="w-3.5 h-3.5" /> Edit Article
+                  </DropdownMenuItem>
+                  {/* Mobile-only: Execute */}
+                  {hasEntries && (
+                    <DropdownMenuItem onClick={() => setExecutionMode(true)} className="gap-2 text-sm md:hidden">
+                      <Play className="w-3.5 h-3.5" /> Execute
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={() => duplicateArticle.mutate(item)} disabled={duplicateArticle.isPending} className="gap-2 text-sm">
                     <Copy className="w-3.5 h-3.5" /> Duplicate Article
                   </DropdownMenuItem>
@@ -263,7 +276,9 @@ export default function ProcedurePage() {
               {item.vehicle_tags?.map(tag => (
                 <span key={tag} className="px-1.5 py-0.5 rounded bg-gray-800/60 text-gray-400">{tag}</span>
               ))}
-              {hasEntries && <span>{entries.length} entries · {stepCount} steps</span>}
+              {hasEntries && entryCounts.displayParts.length > 0 && (
+                <span>{entryCounts.displayParts.join(' · ')}</span>
+              )}
               {item.updated_date && <span className="ml-auto">{format(new Date(item.updated_date), 'MMM d, yyyy')}</span>}
             </div>
 
