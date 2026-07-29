@@ -8,10 +8,11 @@ import {
 } from "lucide-react";
 import ImageLightbox from "./ImageLightbox";
 import KnowledgeHtmlContent from "./KnowledgeHtmlContent";
+import KnowledgeStepCard from "./KnowledgeStepCard";
 
 /**
- * ExecutionStepCard — service-manual style, minimal chrome.
- * No card backgrounds, no heavy borders. Clean procedural flow.
+ * ExecutionStepCard — uses shared KnowledgeStepCard for steps,
+ * preserves distinct callout treatment for notes/warnings.
  */
 function ExecutionStepCard({ entry, stepNumber, parts, onImageClick, isActive }) {
   const entryType = entry.entry_type || 'step';
@@ -22,19 +23,29 @@ function ExecutionStepCard({ entry, stepNumber, parts, onImageClick, isActive })
   const entryParts = (entry.part_ids || []).map(id => parts.find(p => p.id === id)).filter(Boolean);
   const lifecycle = entry.lifecycle_state || 'active';
 
+  // Steps use the shared card
+  if (isStep) {
+    return (
+      <div id={`exec-step-${entry.id}`} className="scroll-mt-16">
+        <KnowledgeStepCard
+          stepNumber={stepNumber}
+          entry={entry}
+          parts={parts}
+          onImageClick={onImageClick}
+        />
+      </div>
+    );
+  }
+
+  // Non-step entries keep their compact callout treatment
   return (
     <div id={`exec-step-${entry.id}`} className={cn(
       "scroll-mt-16 transition-colors",
       isWarning && "bg-amber-950/15 rounded-lg -mx-1 px-1 py-1",
       lifecycle === 'critical' && !isWarning && "bg-red-950/10 rounded-lg -mx-1 px-1 py-1"
     )}>
-      {/* Step number + headline */}
       <div className="flex items-start gap-3 mb-2">
-        {isStep ? (
-          <span className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm font-bold text-white shrink-0 mt-0.5">
-            {stepNumber}
-          </span>
-        ) : isWarning ? (
+        {isWarning ? (
           <span className="w-8 h-8 rounded-full bg-amber-600 flex items-center justify-center shrink-0 mt-0.5">
             <AlertTriangle className="w-4 h-4 text-white" />
           </span>
@@ -43,22 +54,20 @@ function ExecutionStepCard({ entry, stepNumber, parts, onImageClick, isActive })
         )}
         <h3 className={cn(
           "font-semibold leading-snug pt-1",
-          isStep ? "text-lg text-white" : isWarning ? "text-base text-amber-200" : "text-base text-gray-200"
+          isWarning ? "text-base text-amber-200" : "text-base text-gray-200"
         )}>
           {entry.headline}
         </h3>
       </div>
 
-      {/* Content — clean prose, no card wrapper */}
       {hasContent && (
         <div className="ml-11 mb-3">
           <KnowledgeHtmlContent html={entry.content_html} size="base" />
         </div>
       )}
 
-      {/* Full-width images — primary execution assets */}
       {images.length > 0 && (
-        <div className={cn("mb-3", images.length === 1 ? "ml-11" : "ml-11")}>
+        <div className="ml-11 mb-3">
           <div className={cn("grid gap-1.5", images.length === 1 ? "" : "grid-cols-2")}>
             {images.map((url, i) => (
               <button key={i} onClick={() => onImageClick(images, i)}
@@ -71,7 +80,6 @@ function ExecutionStepCard({ entry, stepNumber, parts, onImageClick, isActive })
         </div>
       )}
 
-      {/* Parts — subtle chips */}
       {entryParts.length > 0 && (
         <div className="ml-11 mb-2 flex flex-wrap gap-1.5">
           {entryParts.map(part => (
@@ -82,7 +90,6 @@ function ExecutionStepCard({ entry, stepNumber, parts, onImageClick, isActive })
         </div>
       )}
 
-      {/* Reference */}
       {entry.reference_url && (
         <div className="ml-11 mb-2">
           <a href={entry.reference_url} target="_blank" rel="noopener noreferrer"
@@ -265,7 +272,7 @@ export default function ExecutionModeView({ item, onClose }) {
                 <p className="text-sm">No steps in this procedure yet</p>
               </div>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-7">
                 {(() => {
                   let lastGroup = null;
                   return visible.map((entry) => {

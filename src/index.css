@@ -317,6 +317,16 @@ button:focus-visible {
   padding-left: 1.5rem;
 }
 
+/* Tighter list rhythm inside step cards */
+.step-body-content .knowledge-html-content ol,
+.step-body-content .knowledge-html-content ul {
+  margin: 0.2rem 0;
+}
+
+.step-body-content .knowledge-html-content li {
+  margin: 0.1rem 0;
+}
+
 /* Fallback: if ql-indent classes survive (legacy unconverted content),
    render them with indent padding so they're at least visually nested */
 .knowledge-html-content li.ql-indent-1 {

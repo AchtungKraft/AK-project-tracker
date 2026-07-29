@@ -273,17 +273,20 @@
    STEP ENTRIES
    ============================================ */
 .print-step {
-  margin-bottom: 1rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid #e0e0e0;
+  margin-bottom: 1.1rem;
+  padding: 0.5rem 0.6rem 0.6rem 0.6rem;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
   /* NO break-inside: avoid — long steps may span pages */
 }
 
 .print-step-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.5rem;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.4rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid #e5e5e5;
   break-inside: avoid;
   page-break-inside: avoid;
   break-after: avoid;
@@ -294,12 +297,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: #111;
   color: #fff;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
   flex-shrink: 0;
   line-height: 1;
@@ -311,7 +314,7 @@
 }
 
 .print-step-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: #000;
   margin: 0;
@@ -807,6 +810,8 @@
   /* Steps: allow body/gallery to break across pages */
   .print-step {
     /* NOT break-inside: avoid */
+    border: 1px solid #ccc !important;
+    border-radius: 3px;
   }
 
   /* Step header stays with first content */

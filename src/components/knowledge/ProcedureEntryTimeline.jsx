@@ -8,6 +8,7 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import ImageLightbox from "./ImageLightbox";
 import EntryActionMenu from "./EntryActionMenu";
 import KnowledgeHtmlContent from "./KnowledgeHtmlContent";
+import KnowledgeStepCard from "./KnowledgeStepCard";
 
 export const ENTRY_TYPE_CONFIG = {
   step:      { label: "Step",    icon: ListOrdered,   rail: "bg-blue-600",    accent: "text-blue-400",    bg: "bg-blue-950/10" },
@@ -22,31 +23,59 @@ function EntryCard({ entry, stepNumber, parts, onImageClick, compact, editMode, 
   const entryType = entry.entry_type || 'step';
   const config = ENTRY_TYPE_CONFIG[entryType] || ENTRY_TYPE_CONFIG.step;
   const Icon = config.icon;
-  const hasContent = entry.content_html && entry.content_html !== '<p><br></p>';
-  const images = entry.image_urls || [];
   const isStep = entryType === 'step';
   const isWarning = entryType === 'issue';
   const lifecycle = entry.lifecycle_state || 'active';
   const isArchived = lifecycle === 'archived';
   const isCritical = lifecycle === 'critical';
+  const hasContent = entry.content_html && entry.content_html !== '<p><br></p>';
+  const images = entry.image_urls || [];
   const entryParts = (entry.part_ids || []).map(id => parts.find(p => p.id === id)).filter(Boolean);
 
+  const actionMenu = (forceVisible) => (
+    <div className={cn(!forceVisible && "opacity-0 group-hover/step:opacity-100 group-hover/entry:opacity-100 transition-opacity")}>
+      <EntryActionMenu entry={entry} procedureId={procedureId} sortedEntries={sortedEntries} onEdit={onEdit}
+        onAddAbove={onAddAtIndex ? (e) => { const i = sortedEntries.findIndex(s => s.id === e.id); onAddAtIndex(i); } : undefined}
+        onAddBelow={onAddAtIndex ? (e) => { const i = sortedEntries.findIndex(s => s.id === e.id); onAddAtIndex(i + 1); } : undefined}
+      />
+    </div>
+  );
+
+  const dragHandleNode = editMode && dragHandleProps ? (
+    <div {...dragHandleProps} className="flex items-center shrink-0 cursor-grab active:cursor-grabbing touch-manipulation -ml-1">
+      <GripVertical className="w-4 h-4 text-gray-600" />
+    </div>
+  ) : null;
+
+  // ── STEP entries use KnowledgeStepCard ──
+  if (isStep) {
+    return (
+      <div className="group/entry">
+        <KnowledgeStepCard
+          stepNumber={stepNumber}
+          entry={entry}
+          parts={parts}
+          onImageClick={onImageClick}
+          actions={actionMenu(editMode)}
+          dragHandle={dragHandleNode}
+          editMode={editMode}
+          compact={compact}
+        />
+      </div>
+    );
+  }
+
+  // ── NON-STEP entries (note, warning, tip, media, reference) — compact callout ──
   return (
     <div className={cn("relative flex gap-0 group/entry", isArchived && "opacity-35")}>
-      {/* Drag handle — only in edit mode */}
-      {editMode && (
+      {editMode && dragHandleProps && (
         <div {...dragHandleProps} className="flex items-start pt-1 pr-0.5 shrink-0 cursor-grab active:cursor-grabbing touch-manipulation">
           <GripVertical className="w-4 h-4 text-gray-700 group-hover/entry:text-gray-500 transition-colors" />
         </div>
       )}
 
-      {/* Left rail */}
       <div className="flex flex-col items-center shrink-0 w-9 md:w-11">
-        {isStep ? (
-          <span className={cn("w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0", config.rail)}>
-            {stepNumber}
-          </span>
-        ) : isWarning ? (
+        {isWarning ? (
           <span className="w-6 h-6 rounded-full bg-amber-600 flex items-center justify-center shrink-0 mt-0.5">
             <Icon className="w-3 h-3 text-white" />
           </span>
@@ -56,52 +85,30 @@ function EntryCard({ entry, stepNumber, parts, onImageClick, compact, editMode, 
         <div className="flex-1 w-px bg-gray-800/30 min-h-[4px]" />
       </div>
 
-      {/* Content */}
       <div className={cn("flex-1 min-w-0", compact ? "pb-1.5" : "pb-4")}>
-        {/* Headline row with action menu */}
         <div className="flex items-start gap-1">
           <div className="flex-1 min-w-0">
             <h4 className={cn(
               "leading-snug",
-              isStep ? "text-[15px] font-medium text-white" :
-              isWarning ? "text-sm font-medium text-amber-200" :
-              "text-sm text-gray-300"
+              isWarning ? "text-sm font-medium text-amber-200" : "text-sm text-gray-300"
             )}>
               {entry.headline}
             </h4>
-            {(!isStep || isCritical) && (
-              <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-gray-600">
-                {!isStep && <span className={cn("font-medium uppercase tracking-wide", config.accent)}>{config.label}</span>}
-                {isCritical && <span className="text-red-400 font-semibold">CRITICAL</span>}
-                {entry.created_date && <span>{format(new Date(entry.created_date), 'MMM d')}</span>}
-              </div>
-            )}
-          </div>
-          {/* Action menu — visible on hover desktop, always on edit mode */}
-          {editMode && (
-            <EntryActionMenu entry={entry} procedureId={procedureId} sortedEntries={sortedEntries} onEdit={onEdit}
-              onAddAbove={onAddAtIndex ? (e) => { const i = sortedEntries.findIndex(s => s.id === e.id); onAddAtIndex(i); } : undefined}
-              onAddBelow={onAddAtIndex ? (e) => { const i = sortedEntries.findIndex(s => s.id === e.id); onAddAtIndex(i + 1); } : undefined}
-            />
-          )}
-          {!editMode && (
-            <div className="opacity-0 group-hover/entry:opacity-100 transition-opacity">
-              <EntryActionMenu entry={entry} procedureId={procedureId} sortedEntries={sortedEntries} onEdit={onEdit}
-                onAddAbove={onAddAtIndex ? (e) => { const i = sortedEntries.findIndex(s => s.id === e.id); onAddAtIndex(i); } : undefined}
-                onAddBelow={onAddAtIndex ? (e) => { const i = sortedEntries.findIndex(s => s.id === e.id); onAddAtIndex(i + 1); } : undefined}
-              />
+            <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-gray-600">
+              <span className={cn("font-medium uppercase tracking-wide", config.accent)}>{config.label}</span>
+              {isCritical && <span className="text-red-400 font-semibold">CRITICAL</span>}
+              {entry.created_date && <span>{format(new Date(entry.created_date), 'MMM d')}</span>}
             </div>
-          )}
+          </div>
+          {actionMenu(editMode)}
         </div>
 
-        {/* Content */}
         {hasContent && (
           <div className="mt-1">
             <KnowledgeHtmlContent html={entry.content_html} className="text-gray-400" />
           </div>
         )}
 
-        {/* Images */}
         {images.length > 0 && (
           <div className="mt-2">
             <div className={cn("grid gap-1", images.length === 1 ? "" : "grid-cols-2")}>
@@ -115,7 +122,6 @@ function EntryCard({ entry, stepNumber, parts, onImageClick, compact, editMode, 
           </div>
         )}
 
-        {/* Parts */}
         {entryParts.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-1">
             {entryParts.map(part => (
@@ -126,7 +132,6 @@ function EntryCard({ entry, stepNumber, parts, onImageClick, compact, editMode, 
           </div>
         )}
 
-        {/* Reference */}
         {entry.reference_url && (
           <a href={entry.reference_url} target="_blank" rel="noopener noreferrer"
             className="mt-1 inline-flex items-center gap-1 text-[11px] text-blue-400 hover:text-blue-300">
@@ -213,7 +218,7 @@ export default function ProcedureEntryTimeline({ procedureId, compact = false, e
   let lastGroupLabel = null;
 
   const renderEntries = (provided) => (
-    <div ref={provided?.innerRef} {...(provided?.droppableProps || {})} className="relative">
+    <div ref={provided?.innerRef} {...(provided?.droppableProps || {})} className="relative space-y-0">
       {visible.map((entry, index) => {
         const isStep = (entry.entry_type || 'step') === 'step';
         if (isStep) stepCount++;
@@ -224,6 +229,7 @@ export default function ProcedureEntryTimeline({ procedureId, compact = false, e
 
         const cardContent = (dragProvided) => (
           <div ref={dragProvided?.innerRef} {...(dragProvided?.draggableProps || {})}
+            className={cn(isStep && "pb-5")}
             style={dragProvided?.draggableProps?.style}>
             {showGroupHeader && (
               <div className="pt-4 pb-1 ml-9 md:ml-11">
