@@ -1,92 +1,32 @@
 import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
+import normalizeKnowledgeHtml from "./normalizeKnowledgeHtml";
 
 /**
  * Canonical HTML content renderer for Build Knowledge.
  * 
- * ALL knowledge HTML must flow through this component.
+ * ALL knowledge HTML must flow through this component (or normalizeKnowledgeHtml).
  * Provides:
- * - Basic sanitization (strips scripts, event handlers, dangerous attributes)
+ * - Security sanitization (strips scripts, event handlers, dangerous attributes)
+ * - Quill ql-indent-* → true nested list conversion
  * - Consistent typography scoped to knowledge content
+ * - Nested list markers: decimal → lower-alpha → lower-roman → decimal
  * - Responsive images and tables
  * - Long URL wrapping
  * - Empty-paragraph collapse
  */
 
-// Attributes that could execute code
-const DANGEROUS_ATTRS = /\s(on\w+|srcdoc|formaction)\s*=/gi;
-// Script/iframe/object tags
-const DANGEROUS_TAGS = /<\s*(script|iframe|object|embed|applet|form)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>|<\s*(script|iframe|object|embed|applet|form)\b[^>]*\/?>/gi;
-// Style attributes with javascript: or expression()
-const DANGEROUS_STYLES = /javascript\s*:|expression\s*\(/gi;
-// Clean up pasted Word/Docs artifacts
-const WORD_ARTIFACTS = /class="(Mso\w+|ql-\w+)"/gi;
-const EMPTY_SPANS = /<span\s*(?:style="[^"]*")?\s*>([\s\S]*?)<\/span>/gi;
-// Collapse excessive empty paragraphs
-const EMPTY_PARAGRAPHS = /(<p>\s*(?:<br\s*\/?>)?\s*<\/p>\s*){2,}/gi;
-
-function sanitizeHtml(html) {
-  if (!html) return '';
-  
-  let clean = html;
-  
-  // Remove dangerous tags
-  clean = clean.replace(DANGEROUS_TAGS, '');
-  
-  // Remove dangerous attributes
-  clean = clean.replace(DANGEROUS_ATTRS, ' data-removed=');
-  
-  // Remove javascript: in styles
-  clean = clean.replace(DANGEROUS_STYLES, '');
-  
-  // Clean Word/Docs artifacts
-  clean = clean.replace(WORD_ARTIFACTS, '');
-  
-  // Remove font-family and font-size inline styles (paste normalization)
-  clean = clean.replace(/font-family\s*:\s*[^;"]*(;|")/gi, (match) => match.endsWith('"') ? '"' : '');
-  clean = clean.replace(/font-size\s*:\s*[^;"]*(;|")/gi, (match) => match.endsWith('"') ? '"' : '');
-  
-  // Remove background-color inline styles
-  clean = clean.replace(/background-color\s*:\s*[^;"]*(;|")/gi, (match) => match.endsWith('"') ? '"' : '');
-  
-  // Remove color inline styles (except for genuinely needed ones)
-  clean = clean.replace(/(?<!border-)color\s*:\s*[^;"]*(;|")/gi, (match) => match.endsWith('"') ? '"' : '');
-  
-  // Unwrap empty spans (common paste artifact)
-  clean = clean.replace(EMPTY_SPANS, '$1');
-  
-  // Collapse multiple empty paragraphs to one
-  clean = clean.replace(EMPTY_PARAGRAPHS, '<p><br></p>');
-  
-  // Clean empty style attributes
-  clean = clean.replace(/\s+style="\s*"/gi, '');
-  
-  // Add rel="noopener noreferrer" and target="_blank" to external links
-  clean = clean.replace(/<a\s([^>]*href="https?:\/\/[^"]*"[^>]*)>/gi, (match, attrs) => {
-    if (!attrs.includes('target=')) attrs += ' target="_blank"';
-    if (!attrs.includes('rel=')) attrs += ' rel="noopener noreferrer"';
-    return `<a ${attrs}>`;
-  });
-  
-  // Block javascript: protocol in href
-  clean = clean.replace(/href\s*=\s*"javascript:[^"]*"/gi, 'href="#"');
-  
-  return clean;
-}
-
 /**
  * KnowledgeHtmlContent — canonical renderer for all knowledge HTML.
  * 
- * @param {string} html - Raw HTML content
+ * @param {string} html - Raw HTML content (may contain Quill ql-indent classes)
  * @param {string} className - Additional classes
  * @param {string} size - 'sm' | 'base' | 'lg' — controls text size
  */
 export default function KnowledgeHtmlContent({ html, className, size = 'sm' }) {
-  const sanitized = useMemo(() => sanitizeHtml(html), [html]);
+  const normalized = useMemo(() => normalizeKnowledgeHtml(html), [html]);
   
-  if (!sanitized || sanitized === '<p><br></p>' || sanitized.trim() === '') {
-    return null;
-  }
+  if (!normalized) return null;
   
   const sizeClasses = {
     sm: 'text-sm leading-relaxed',
@@ -106,8 +46,6 @@ export default function KnowledgeHtmlContent({ html, className, size = 'sm' }) {
         "[&_a]:text-blue-400 [&_a]:underline [&_a]:break-words",
         // Images — responsive, no overflow
         "[&_img]:rounded-lg [&_img]:my-2 [&_img]:max-w-full [&_img]:h-auto",
-        // Lists
-        "[&_ul]:ml-4 [&_ol]:ml-4 [&_li]:text-gray-300 [&_ul]:list-disc [&_ol]:list-decimal",
         // Headings
         "[&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-white [&_h1]:mt-4 [&_h1]:mb-1",
         "[&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-white [&_h2]:mt-3 [&_h2]:mb-1",
@@ -129,10 +67,10 @@ export default function KnowledgeHtmlContent({ html, className, size = 'sm' }) {
         "overflow-x-hidden break-words",
         className
       )}
-      dangerouslySetInnerHTML={{ __html: sanitized }}
+      dangerouslySetInnerHTML={{ __html: normalized }}
     />
   );
 }
 
-// Export sanitizer for use in print views and other contexts
-export { sanitizeHtml };
+// Export the normalizer for use in print views and other contexts
+export { normalizeKnowledgeHtml as sanitizeHtml };

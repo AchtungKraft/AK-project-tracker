@@ -13,8 +13,20 @@ import { ENTRY_TYPE_CONFIG } from "./ProcedureEntryTimeline";
 import { KNOWLEDGE_QUERY_KEYS } from "./knowledgeHelpers";
 
 const QUILL_MODULES = {
-  toolbar: [['bold', 'italic'], [{ list: 'ordered' }, { list: 'bullet' }], ['link'], ['clean']],
+  toolbar: [
+    ['bold', 'italic'],
+    [{ list: 'ordered' }, { list: 'bullet' }],
+    [{ indent: '-1' }, { indent: '+1' }],
+    ['link'],
+    ['clean'],
+  ],
 };
+
+const QUILL_FORMATS = [
+  'bold', 'italic', 'list', 'indent', 'link',
+  'header', 'blockquote', 'code-block',
+  'image', 'strike', 'underline',
+];
 
 const ENTRY_TYPES = [
   { value: "step", label: "Step" },
@@ -184,7 +196,7 @@ export default function ProcedureEntryEditor({ procedureId, procedureTitle, exis
             <div className="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden [&_.ql-toolbar]:bg-gray-900 [&_.ql-toolbar]:border-gray-800 [&_.ql-toolbar]:py-1 [&_.ql-container]:border-gray-800 [&_.ql-editor]:text-gray-200 [&_.ql-editor]:min-h-[240px] [&_.ql-editor]:md:min-h-[280px] [&_.ql-editor]:max-h-[50vh] [&_.ql-editor]:overflow-y-auto [&_.ql-editor]:text-sm [&_.ql-snow_.ql-stroke]:stroke-gray-500 [&_.ql-snow_.ql-fill]:fill-gray-500 [&_.ql-snow_.ql-picker-label]:text-gray-500 [&_.ql-snow_.ql-picker-options]:bg-gray-900 [&_.ql-snow_.ql-picker-options]:border-gray-800 [&_.ql-snow_.ql-picker-item]:text-gray-400 [&_.ql-editor.ql-blank::before]:text-gray-600">
               <ReactQuill theme="snow" value={form.content_html}
                 onChange={val => setForm(f => ({ ...f, content_html: val }))}
-                modules={QUILL_MODULES} placeholder="Details (optional)..." />
+                modules={QUILL_MODULES} formats={QUILL_FORMATS} placeholder="Details (optional)..." />
             </div>
           )}
 
@@ -230,7 +242,7 @@ export default function ProcedureEntryEditor({ procedureId, procedureTitle, exis
             <div className="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden [&_.ql-toolbar]:bg-gray-900 [&_.ql-toolbar]:border-gray-800 [&_.ql-toolbar]:py-1 [&_.ql-container]:border-gray-800 [&_.ql-editor]:text-gray-200 [&_.ql-editor]:min-h-[80px] [&_.ql-editor]:max-h-[30vh] [&_.ql-editor]:overflow-y-auto [&_.ql-editor]:text-sm [&_.ql-snow_.ql-stroke]:stroke-gray-500 [&_.ql-snow_.ql-fill]:fill-gray-500 [&_.ql-snow_.ql-picker-label]:text-gray-500 [&_.ql-snow_.ql-picker-options]:bg-gray-900 [&_.ql-snow_.ql-picker-options]:border-gray-800 [&_.ql-snow_.ql-picker-item]:text-gray-400 [&_.ql-editor.ql-blank::before]:text-gray-600">
               <ReactQuill theme="snow" value={form.content_html}
                 onChange={val => setForm(f => ({ ...f, content_html: val }))}
-                modules={QUILL_MODULES} placeholder="Caption or details (optional)..." />
+                modules={QUILL_MODULES} formats={QUILL_FORMATS} placeholder="Caption or details (optional)..." />
             </div>
           )}
 

@@ -1,5 +1,5 @@
 import React from "react";
-import { sanitizeHtml } from "../KnowledgeHtmlContent";
+import normalizeKnowledgeHtml from "../normalizeKnowledgeHtml";
 import PrintImageGallery from "./PrintImageGallery";
 import PrintReference from "./PrintReference";
 
@@ -21,7 +21,7 @@ export default function PrintStep({ stepNumber, entry, entryParts }) {
       {entry.content_html && (
         <div
           className="print-body-content"
-          dangerouslySetInnerHTML={{ __html: sanitizeHtml(entry.content_html) }}
+          dangerouslySetInnerHTML={{ __html: normalizeKnowledgeHtml(entry.content_html) }}
         />
       )}
 
