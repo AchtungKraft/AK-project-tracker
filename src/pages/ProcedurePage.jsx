@@ -19,7 +19,7 @@ import KnowledgePartLinks from "@/components/knowledge/KnowledgePartLinks";
 import KnowledgeProjectNotes from "@/components/knowledge/KnowledgeProjectNotes";
 import KnowledgeLegacyContent from "@/components/knowledge/KnowledgeLegacyContent";
 import KnowledgeHtmlContent from "@/components/knowledge/KnowledgeHtmlContent";
-import ProcedureExecutionFlow from "@/components/knowledge/ProcedureExecutionFlow";
+import ExecutionModeView from "@/components/knowledge/ExecutionModeView";
 import ProcedurePrintView from "@/components/knowledge/ProcedurePrintView";
 import KnowledgeItemEditor from "@/components/knowledge/KnowledgeItemEditor";
 import { getKnowledgeEntryCounts } from "@/components/knowledge/knowledgeHelpers";
@@ -148,17 +148,13 @@ export default function ProcedurePage() {
     setEntryEditorOpen(true);
   };
 
-  // Execution mode = full immersive flow, no chrome
+  // Execution mode = focused one-step-at-a-time workflow
   if (executionMode) {
     return (
-      <>
-        <ProcedureExecutionFlow
-          item={item}
-          entries={entries}
-          categories={categories}
-          onClose={() => setExecutionMode(false)}
-        />
-      </>
+      <ExecutionModeView
+        item={item}
+        onClose={() => setExecutionMode(false)}
+      />
     );
   }
 
