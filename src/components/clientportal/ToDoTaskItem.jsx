@@ -10,8 +10,8 @@ import { Trash2, User, Calendar, FolderOpen, Pencil, Save, X, Upload, Loader2, G
 import MoveToGroupPopover from "./MoveToGroupPopover";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function ToDoTaskItem({
   task,
@@ -27,9 +27,51 @@ export default function ToDoTaskItem({
   onOpenDetail,
 }) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+
+  // ── Optimistic completion mutation ──
+  const completionMutation = useMutation({
+    mutationFn: async ({ taskId, nextComplete }) => {
+      await base44.entities.ToDoListTask.update(taskId, {
+        is_complete: nextComplete,
+        completed_at: nextComplete ? new Date().toISOString() : null,
+      });
+      return { taskId, is_complete: nextComplete };
+    },
+    onMutate: async ({ taskId, nextComplete }) => {
+      // Cancel any in-flight refetch so it doesn't overwrite our optimistic value
+      await queryClient.cancelQueries({ queryKey: queryKey });
+      const previous = queryClient.getQueryData(queryKey);
+      // Optimistic: immutable update of the matching task inside the detail cache
+      queryClient.setQueryData(queryKey, (old) => {
+        if (!old || !old.todoTasks) return old;
+        return {
+          ...old,
+          todoTasks: old.todoTasks.map((t) =>
+            t.id === taskId
+              ? { ...t, is_complete: nextComplete, completed_at: nextComplete ? new Date().toISOString() : null }
+              : t
+          ),
+        };
+      });
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      // Roll back to snapshot
+      if (context?.previous) {
+        queryClient.setQueryData(queryKey, context.previous);
+      }
+      toast({ title: "Failed to update task", variant: "destructive" });
+    },
+    onSettled: () => {
+      // Bust the server-side response cache, then reconcile with fresh data.
+      // We replace the queryFn for this single refetch to include bustCache.
+      queryClient.invalidateQueries({ queryKey, exact: true, refetchType: 'active' });
+    },
+  });
 
   // Edit state
   const [editTitle, setEditTitle] = useState("");
@@ -81,26 +123,22 @@ export default function ToDoTaskItem({
     setSaving(false);
     setEditing(false);
     queryClient.invalidateQueries({ queryKey });
-    toast.success("Task updated");
+    toast({ title: "Task updated" });
   };
 
-  const handleToggleComplete = async () => {
-    const newComplete = !task.is_complete;
-    await base44.entities.ToDoListTask.update(task.id, {
-      is_complete: newComplete,
-      completed_at: newComplete ? new Date().toISOString() : null,
-    });
-    queryClient.invalidateQueries({ queryKey });
+  const handleToggleComplete = () => {
+    if (completionMutation.isPending) return;
+    const nextComplete = !task.is_complete;
+    completionMutation.mutate({ taskId: task.id, nextComplete });
   };
 
   const handleDelete = async () => {
     if (!confirm("Delete this task?")) return;
     try {
       await base44.entities.ToDoListTask.delete(task.id);
-      toast.success("Task deleted");
+      toast({ title: "Task deleted" });
     } catch (e) {
-      // Task already deleted — just refresh
-      toast.info("Task was already removed");
+      toast({ title: "Task was already removed" });
     }
     queryClient.invalidateQueries({ queryKey });
   };
@@ -285,10 +323,13 @@ export default function ToDoTaskItem({
         )}
         <div onClick={(e) => e.preventDefault()}>
           <Checkbox
-            checked={task.is_complete}
+            checked={Boolean(task.is_complete)}
             onCheckedChange={handleToggleComplete}
-            disabled={readOnly && !token && !slug}
-            className="mt-0.5 border-gray-600 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
+            disabled={(readOnly && !token && !slug) || completionMutation.isPending}
+            className={cn(
+              "mt-0.5 border-gray-600 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600",
+              completionMutation.isPending && "opacity-50"
+            )}
           />
         </div>
         <div className="flex-1 min-w-0 space-y-1.5">

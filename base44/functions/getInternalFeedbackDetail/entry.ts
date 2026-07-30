@@ -24,7 +24,7 @@ async function fetchWithRetry(fn, { retries = 2, delay = 800 } = {}) {
 
 // ── Short-term response cache (30s TTL) ──────────────────────────────
 const responseCache = new Map();
-function getCached(key, ttl = 30000) {
+function getCached(key, ttl = 3000) {
   const item = responseCache.get(key);
   if (!item) return null;
   if (Date.now() - item.timestamp > ttl) { responseCache.delete(key); return null; }
@@ -495,7 +495,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    let requestId, projectId;
+    let requestId, projectId, bustCache = false;
 
     try {
       const contentType = req.headers.get('content-type');
@@ -503,6 +503,7 @@ Deno.serve(async (req) => {
         const body = await req.json();
         requestId = body.requestId;
         projectId = body.projectId;
+        bustCache = !!body.bustCache;
       }
     } catch (e) {
       const url = new URL(req.url);
@@ -519,6 +520,10 @@ Deno.serve(async (req) => {
 
     // ── Response cache check (30s TTL) ───────────────────────────────
     const cacheKey = `feedbackDetail:${requestId}`;
+    if (bustCache) {
+      responseCache.delete(cacheKey);
+      inflightRequests.delete(cacheKey);
+    }
     const cached = getCached(cacheKey);
     if (cached) {
       console.log(`[getInternalFeedbackDetail] CACHE HIT for ${requestId}`);

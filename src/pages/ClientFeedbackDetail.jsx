@@ -102,8 +102,10 @@ export default function ClientFeedbackDetail() {
   // Single consolidated API call for all feedback detail data
   const { data: feedbackDetail, isLoading: isLoadingDetail, isFetching, error: fetchError, refetch } = useQuery({
     queryKey: ['internalFeedbackDetail', requestId, projectId],
-    queryFn: async ({ signal }) => {
-      const response = await base44.functions.invoke('getInternalFeedbackDetail', { requestId, projectId });
+    queryFn: async ({ signal, meta }) => {
+      const payload = { requestId, projectId };
+      if (meta?.bustCache) payload.bustCache = true;
+      const response = await base44.functions.invoke('getInternalFeedbackDetail', payload);
       // Abort check — if navigated away, don't process stale response
       if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
       const result = response.data;

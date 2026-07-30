@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, FolderPlus, ListChecks, ChevronDown, ChevronUp, Upload, X, Loader2, Calendar } from "lucide-react";
-import { toast } from "sonner";
+import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import TaskGroupHeader from "./TaskGroupHeader";
@@ -26,6 +26,7 @@ export default function ToDoListDisplay({
   onImageClick,
 }) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDetails, setNewTaskDetails] = useState("");
   const [newTaskImages, setNewTaskImages] = useState([]);
@@ -97,7 +98,7 @@ export default function ToDoListDisplay({
     setNewGroupName("");
     setShowNewGroup(false);
     queryClient.invalidateQueries({ queryKey });
-    toast.success("Group created");
+    toast({ title: "Group created" });
   };
 
   const handleRenameGroup = async (groupId, newName) => {
@@ -116,7 +117,7 @@ export default function ToDoListDisplay({
     );
     await base44.entities.TaskGroup.delete(groupId);
     queryClient.invalidateQueries({ queryKey });
-    toast.success("Group deleted");
+    toast({ title: "Group deleted" });
   };
 
   // --- Image upload ---
@@ -165,7 +166,7 @@ export default function ToDoListDisplay({
     setNewTaskAssignee("");
     setShowExpandedForm(false);
     queryClient.invalidateQueries({ queryKey });
-    toast.success("Task added");
+    toast({ title: "Task added" });
   };
 
   const handleKeyDown = (e) => {
