@@ -413,11 +413,23 @@ async function processRequest(base44, requestId, projectId) {
   const projectClientContactIds = new Set(activeAccesses.map(pa => pa.client_contact_id));
   const projectClients = clientContacts.filter(c => projectClientContactIds.has(c.id) && c.active !== false);
 
+  // Build deduplicated client access options with slug, name, contactId
+  const slugSeen = new Set();
+  const clientAccessOptions = [];
   let primaryClientSlug = null;
   for (const access of activeAccesses) {
     const contact = contactMap.get(access.client_contact_id);
-    if (contact?.url_slug) { primaryClientSlug = contact.url_slug; break; }
-    if (access.url_slug && !primaryClientSlug) primaryClientSlug = access.url_slug;
+    const slug = contact?.url_slug || access.url_slug || null;
+    if (!slug) continue;
+    const normalizedSlug = slug.toLowerCase().trim();
+    if (slugSeen.has(normalizedSlug)) continue;
+    slugSeen.add(normalizedSlug);
+    if (!primaryClientSlug) primaryClientSlug = slug;
+    clientAccessOptions.push({
+      slug,
+      name: contact?.name || 'Unknown',
+      contactId: access.client_contact_id,
+    });
   }
 
   // Assignable users from team members
@@ -453,6 +465,7 @@ async function processRequest(base44, requestId, projectId) {
     assignableUsers,
     assignableContacts,
     primaryClientSlug,
+    clientAccessOptions,
     _debug: {
       executionTimeMs: timings.total,
       timings,

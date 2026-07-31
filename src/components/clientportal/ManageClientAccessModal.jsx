@@ -9,13 +9,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, Mail, Loader2, Copy, Pencil, Check, X, Send } from "lucide-react";
 import CommPrefsDisplay from "@/components/clientportal/CommPrefsDisplay";
-import { toast } from "sonner";
+import { useToast } from "@/components/ui/use-toast";
 import { format } from "date-fns";
-import { createPageUrl } from "@/utils";
 import { cn } from "@/lib/utils";
+import { buildPublicClientUrl } from "@/lib/clientPortalUrls";
 
 export default function ManageClientAccessModal({ open, onClose, projectId }) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [showAddClient, setShowAddClient] = useState(false);
   const [newClient, setNewClient] = useState({ name: '', email: '', phone: '', role_title: '', url_slug: '' });
   const [editingSlugId, setEditingSlugId] = useState(null);
@@ -37,7 +38,7 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
     mutationFn: (data) => base44.entities.ClientContact.create(data),
     onSuccess: (newClient) => {
       queryClient.invalidateQueries({ queryKey: ['clientContacts'] });
-      toast.success('Client contact created');
+      toast({ description: 'Client contact created' });
       // Automatically add them to the project with their slug
       handleAddAccessWithClient(newClient);
       setNewClient({ name: '', email: '', phone: '', role_title: '', url_slug: '' });
@@ -49,7 +50,7 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
     mutationFn: ({ id, data }) => base44.entities.ClientContact.update(id, data),
     onSuccess: (updatedClient) => {
       queryClient.invalidateQueries({ queryKey: ['clientContacts'] });
-      toast.success('Client updated');
+      toast({ description: 'Client updated' });
       
       // Update url_slug in all ProjectClientAccess records for this client
       const clientAccesses = projectAccess.filter(a => a.client_contact_id === updatedClient.id);
@@ -64,7 +65,7 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
     mutationFn: (data) => base44.entities.ProjectClientAccess.create(data),
     onSuccess: (newAccess, variables) => {
       queryClient.invalidateQueries({ queryKey: ['projectClientAccess'] });
-      toast.success('Access granted');
+      toast({ description: 'Access granted' });
       // Send welcome email
       base44.functions.invoke('sendWelcomeEmail', {
         clientContactId: variables.client_contact_id,
@@ -78,7 +79,7 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
     mutationFn: ({ id, data }) => base44.entities.ProjectClientAccess.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projectClientAccess'] });
-      toast.success('Access updated');
+      toast({ description: 'Access updated' });
     },
   });
 
@@ -86,7 +87,7 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
     mutationFn: (id) => base44.entities.ProjectClientAccess.update(id, { access_status: 'revoked' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projectClientAccess'] });
-      toast.success('Access revoked');
+      toast({ description: 'Access revoked' });
     },
   });
 
@@ -102,14 +103,14 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
     onSuccess: (response, variables) => {
       const data = response.data;
       if (data.success) {
-        toast.success(`Notification sent via ${data.channels_sent.join(', ')}`);
+        toast({ description: `Notification sent via ${data.channels_sent.join(', ')}` });
         queryClient.invalidateQueries({ queryKey: ['projectClientAccess'] });
       }
       setSendingNotifId(null);
     },
     onError: (error) => {
       const msg = error?.response?.data?.error || error.message;
-      toast.error(msg || 'Failed to send notification');
+      toast({ variant: "destructive", description: msg || 'Failed to send notification' });
       setSendingNotifId(null);
     },
   });
@@ -131,7 +132,7 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
         handleAddAccessWithClient(existingClient);
         setNewClient({ name: '', email: '', phone: '', role_title: '', url_slug: '' });
         setShowAddClient(false);
-        toast.success('Added existing client with matching slug');
+        toast({ description: 'Added existing client with matching slug' });
         return;
       }
     }
@@ -273,8 +274,8 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
                   if (!client) return null;
 
                   const shareUrl = client.url_slug
-                    ? `${window.location.origin}${createPageUrl("ClientProjects")}?slug=${client.url_slug}`
-                    : `${window.location.origin}${createPageUrl("ClientProjects")}?token=${access.share_token}`;
+                    ? buildPublicClientUrl({ type: 'portal', slug: client.url_slug })
+                    : null;
                   
                   return (
                     <div key={access.id} className="bg-gray-800 p-3 rounded-lg space-y-2">
@@ -355,16 +356,19 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
                       <div className="flex flex-col gap-2">
                         <div className="flex items-center gap-2">
                           <Input
-                            value={shareUrl}
+                            value={shareUrl || 'No slug assigned — set a client slug below'}
                             readOnly
                             className="bg-gray-900 border-gray-700 text-white text-xs h-8"
                           />
                           <Button
                             size="sm"
                             variant="outline"
+                            disabled={!shareUrl}
                             onClick={() => {
-                              navigator.clipboard.writeText(shareUrl);
-                              toast.success('Link copied!');
+                              if (shareUrl) {
+                                navigator.clipboard.writeText(shareUrl);
+                                toast({ description: 'Portal link copied' });
+                              }
                             }}
                             className="border-gray-700 whitespace-nowrap h-8 text-xs"
                           >

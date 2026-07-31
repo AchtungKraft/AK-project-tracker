@@ -177,6 +177,7 @@ export default function ClientFeedbackDetail() {
   const assignableUsers = feedbackDetail?.assignableUsers || [];
   const assignableContacts = feedbackDetail?.assignableContacts || [];
   const primaryClientSlug = feedbackDetail?.primaryClientSlug;
+  const clientAccessOptions = feedbackDetail?.clientAccessOptions || [];
 
   // Stabilize array references BEFORE they're used in requestLinks/requestState/canonicalState
   const stableComments = useMemo(() => comments, [JSON.stringify(comments.map(c => c.id + (c.updated_date || '')))]);
@@ -589,16 +590,14 @@ export default function ClientFeedbackDetail() {
           <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
             <CardContent className={cn("space-y-3", isMobile ? "p-3" : "p-4 space-y-4")}>
               {/* Client Links Section - Compact chips on mobile */}
-              {primaryClientSlug && (
-                <div className={cn("border-b border-gray-700/50", isMobile ? "pb-2" : "pb-3")}>
-                  <ClientLinksSection 
-                    slug={primaryClientSlug} 
-                    requestId={requestId} 
-                    projectName={project?.name}
-                    compact={isMobile}
-                  />
-                </div>
-              )}
+              <div className={cn("border-b border-gray-700/50", isMobile ? "pb-2" : "pb-3")}>
+                <ClientLinksSection 
+                  clientAccessOptions={clientAccessOptions}
+                  primaryClientSlug={primaryClientSlug}
+                  requestId={requestId} 
+                  compact={isMobile}
+                />
+              </div>
               
               {/* Identity badges — what is this request? */}
               <div className={cn(
