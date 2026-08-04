@@ -26,6 +26,7 @@ import { TASK_CACHE_KEYS, invalidateProjectCaches } from "./useTaskInteraction";
 import { useTaskInteractionContext } from "./TaskInteractionProvider";
 import TaskCompletionModal from "./TaskCompletionModal";
 import TimeEstimateInput, { formatHours } from "./TimeEstimateInput";
+import TaskWorkLog from "./TaskWorkLog";
 import OperationalStateBadge from "@/components/workflow/OperationalStateBadge";
 import TaskDependencyEditor from "@/components/workflow/TaskDependencyEditor";
 import PhaseSelectorPopover from "@/components/workload/PhaseSelectorPopover";
@@ -360,16 +361,41 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
   );
 
   const completeMutation = useMutation({
-    mutationFn: (actualHours) => {
+    mutationFn: async ({ additionalHours, completionNote }) => {
+      // Create completion time entry if additional hours
+      if (additionalHours != null && additionalHours > 0) {
+        let performerName = 'Unknown';
+        let performerId = task.assigned_team_member_id || null;
+        if (userTeamMember) {
+          performerId = userTeamMember.id;
+          performerName = userTeamMember.full_name;
+        }
+        const today = new Date();
+        const workDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        await base44.entities.TaskTimeEntry.create({
+          task_id: task.id,
+          project_id: task.project_id,
+          hours: additionalHours,
+          work_date: workDate,
+          note: completionNote || 'Task completion',
+          team_member_id: performerId,
+          performed_by_name: performerName,
+          entry_source: 'TASK_COMPLETION',
+        });
+      }
+      // Sync actual_hours from all time entries
+      const allEntries = await base44.entities.TaskTimeEntry.filter({ task_id: task.id });
+      const totalLogged = allEntries.reduce((s, e) => s + (Number(e.hours) || 0), 0);
       const updates = {
         status_id: completedStatus?.id,
         completed_date: new Date().toISOString(),
+        actual_hours: Math.round(totalLogged * 100) / 100,
       };
-      if (actualHours != null) updates.actual_hours = actualHours;
       return base44.entities.Task.update(task.id, updates);
     },
     onSuccess: () => {
       invalidateProjectCaches(queryClient, task?.project_id || projectId);
+      queryClient.invalidateQueries({ queryKey: ['taskTimeEntries'] });
       toast({ title: 'Task completed' });
       setShowCompleteConfirm(false);
       onClose();
@@ -511,21 +537,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           {/* Description — immediately under title, tight to title */}
           {!editing && <DescriptionBlock text={task?.description} />}
 
-          {/* Time tracking display — desktop only (mobile shows in header) */}
-          {!editing && !isMobile && (task?.estimated_hours || task?.actual_hours) && (
-            <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
-              <Clock className="w-3 h-3 shrink-0" />
-              {task.estimated_hours && <span>Est: {formatHours(task.estimated_hours)}</span>}
-              {task.actual_hours && <span>Actual: {formatHours(task.actual_hours)}</span>}
-              {task.estimated_hours && task.actual_hours && (() => {
-                const v = task.actual_hours - task.estimated_hours;
-                if (v === 0) return <span className="text-gray-500">On target</span>;
-                return <span className={v > 0 ? 'text-red-400' : 'text-green-400'}>
-                  {v > 0 ? '+' : ''}{formatHours(Math.abs(v))} {v > 0 ? 'over' : 'under'}
-                </span>;
-              })()}
-            </div>
-          )}
+          {/* Time tracking — removed from header; now shown in Hours & Work Log section */}
 
           {/* Blocking reasons — show specific reasons if blocked */}
           {!editing && task?.blocking_reasons?.length > 0 && (
@@ -542,6 +554,12 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
           {/* ── MOBILE: Execution-first section order ── */}
           {!editing && isMobile && (
             <>
+              {/* Hours & Work Log */}
+              <section className="mb-4">
+                <TaskWorkLog task={task} />
+              </section>
+              <hr className="border-gray-700/50 mb-4" />
+
               {/* Dependencies — only if they exist */}
               {(selectedTasks.length > 0 || successorTasks.length > 0) && (
                 <>
@@ -748,6 +766,11 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
             <>
               <hr className="border-gray-700/50 mb-4" />
 
+              {/* ── HOURS & WORK LOG ── */}
+              <TaskWorkLog task={task} />
+
+              <hr className="border-gray-700/50 my-4" />
+
               {/* ── CHECKLIST ── */}
               {checklistItems.length > 0 ? (
                 <section className="mb-5">
@@ -896,7 +919,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
     <TaskCompletionModal
       isOpen={showCompleteConfirm}
       onClose={() => setShowCompleteConfirm(false)}
-      onConfirm={(actualHours) => completeMutation.mutate(actualHours)}
+      onConfirm={(additionalHours, completionNote) => completeMutation.mutate({ additionalHours, completionNote })}
       task={task}
       isLoading={completeMutation.isPending}
       incompleteChecklistCount={incompleteChecklistCount}

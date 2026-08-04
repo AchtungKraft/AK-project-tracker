@@ -165,6 +165,8 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
     queryClient.invalidateQueries({ queryKey: ['workloadChecklists'] });
     queryClient.invalidateQueries({ queryKey: ['projectBuckets'] });
     queryClient.invalidateQueries({ queryKey: ['kanbanBuckets'] });
+    queryClient.invalidateQueries({ queryKey: ['taskTimeEntries'] });
+    queryClient.invalidateQueries({ queryKey: ['projectTimeEntries'] });
   }, [queryClient]);
 
   const optimisticUpdateAllCaches = useCallback((taskId, updates, mutationTimestamp) => {
@@ -310,24 +312,60 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
 
   const [pendingTimeCompletion, setPendingTimeCompletion] = useState(null);
 
-  const executeCompletion = useCallback(async (task, actualHours = null) => {
+  const executeCompletion = useCallback(async (task, additionalHours = null, completionNote = null) => {
     if (completedStatus) {
       setIsCompletingTask(true);
       try {
+        // Create a completion time entry if additional hours provided
+        if (additionalHours != null && additionalHours > 0) {
+          // Find current user's team member for performer
+          let performerName = 'Unknown';
+          let performerId = task.assigned_team_member_id || null;
+          try {
+            const me = await base44.auth.me();
+            const members = await base44.entities.TeamMember.filter({ user_id: me.id });
+            if (members[0]) {
+              performerId = members[0].id;
+              performerName = members[0].full_name;
+            }
+          } catch {}
+
+          const today = new Date();
+          const workDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+          await base44.entities.TaskTimeEntry.create({
+            task_id: task.id,
+            project_id: task.project_id,
+            hours: additionalHours,
+            work_date: workDate,
+            note: completionNote || 'Task completion',
+            team_member_id: performerId,
+            performed_by_name: performerName,
+            entry_source: 'TASK_COMPLETION',
+          });
+        }
+
+        // Mark task complete (keep actual_hours in sync for legacy)
+        const allEntries = await base44.entities.TaskTimeEntry.filter({ task_id: task.id });
+        const totalLogged = allEntries.reduce((s, e) => s + (Number(e.hours) || 0), 0);
+
         const updates = {
           status_id: completedStatus.id,
           completed_date: new Date().toISOString(),
+          actual_hours: Math.round(totalLogged * 100) / 100,
         };
-        if (actualHours != null) {
-          updates.actual_hours = actualHours;
-        }
         await updateTask(task.id, updates);
+        
+        // Invalidate time entries
+        queryClient.invalidateQueries({ queryKey: ['taskTimeEntries'] });
+        queryClient.invalidateQueries({ queryKey: ['projectTimeEntries'] });
+        
         toast({ title: 'Task completed' });
       } finally {
         setIsCompletingTask(false);
       }
     }
-  }, [completedStatus, updateTask]);
+  }, [completedStatus, updateTask, queryClient]);
 
   /**
    * countUninstalledCommitments
@@ -444,11 +482,11 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
   }, []);
 
   // Time completion modal handlers
-  const confirmTimeCompletion = useCallback(async (actualHours) => {
+  const confirmTimeCompletion = useCallback(async (additionalHours, completionNote) => {
     if (!pendingTimeCompletion) return;
     const { task } = pendingTimeCompletion;
     setPendingTimeCompletion(null);
-    await executeCompletion(task, actualHours);
+    await executeCompletion(task, additionalHours, completionNote);
   }, [pendingTimeCompletion, executeCompletion]);
 
   const cancelTimeCompletion = useCallback(() => {

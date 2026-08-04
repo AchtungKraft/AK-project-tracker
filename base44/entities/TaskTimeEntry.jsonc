@@ -1,0 +1,70 @@
+{
+  "name": "TaskTimeEntry",
+  "type": "object",
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "description": "Reference to Task"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project (denormalized from task for efficient queries)"
+    },
+    "checklist_item_id": {
+      "type": "string",
+      "description": "Optional reference to TaskChecklistItem"
+    },
+    "team_member_id": {
+      "type": "string",
+      "description": "Reference to TeamMember who performed the work"
+    },
+    "performed_by_name": {
+      "type": "string",
+      "description": "Display name snapshot of the performer at time of entry"
+    },
+    "work_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date when the work was performed (local date, no timezone shift)"
+    },
+    "hours": {
+      "type": "number",
+      "description": "Decimal hours worked (e.g. 1.5 = 1h 30m). Must be > 0."
+    },
+    "note": {
+      "type": "string",
+      "description": "Description of work performed during this time entry"
+    },
+    "entry_source": {
+      "type": "string",
+      "enum": [
+        "MANUAL",
+        "TASK_COMPLETION",
+        "LEGACY_MIGRATION",
+        "ADMIN_ADJUSTMENT"
+      ],
+      "default": "MANUAL",
+      "description": "How this entry was created"
+    },
+    "is_legacy_migration": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this entry was created by migrating legacy actual_hours"
+    },
+    "legacy_source_field": {
+      "type": "string",
+      "description": "Which legacy field this was migrated from (e.g. actual_hours)"
+    },
+    "legacy_migration_key": {
+      "type": "string",
+      "description": "Idempotency key for migration: task-hours-migration:{task_id}:{source_field}"
+    }
+  },
+  "required": [
+    "task_id",
+    "project_id",
+    "hours",
+    "work_date",
+    "note"
+  ]
+}

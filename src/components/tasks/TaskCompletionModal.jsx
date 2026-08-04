@@ -3,19 +3,22 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { CheckCircle2, Clock, Loader2 } from "lucide-react";
 import { formatHours } from "./TimeEstimateInput";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import CompletionDependencySummary from "./CompletionDependencySummary";
+import { formatDuration } from "@/lib/estimateUtils";
+import { getTaskLoggedHours } from "@/lib/taskTimeUtils";
 
 /**
  * TaskCompletionModal
  * 
  * Shown when a user completes a task.
- * Collects actual_hours and shows variance vs estimate.
- * Includes compact dependency awareness (informational only).
- * Lightweight and fast — under 3 seconds to complete.
+ * Shows previously logged hours, allows optional additional hours + note.
+ * Creates a time entry instead of overwriting actual_hours.
  */
 export default function TaskCompletionModal({
   isOpen,
@@ -26,20 +29,31 @@ export default function TaskCompletionModal({
   incompleteChecklistCount = 0,
   onOpenTask,
 }) {
-  const [actualHours, setActualHours] = useState("");
+  const [additionalHours, setAdditionalHours] = useState("");
+  const [completionNote, setCompletionNote] = useState("");
   const [leaveWarningTask, setLeaveWarningTask] = useState(null);
 
-  // Pre-fill with estimate if available
+  // Fetch existing time entries
+  const { data: timeEntries = [] } = useQuery({
+    queryKey: ['taskTimeEntries', task?.id],
+    queryFn: () => base44.entities.TaskTimeEntry.filter({ task_id: task?.id }),
+    enabled: !!task?.id && isOpen,
+    staleTime: 5000,
+  });
+
+  const previouslyLogged = useMemo(
+    () => getTaskLoggedHours(task || {}, timeEntries),
+    [task, timeEntries]
+  );
+
+  // Reset form when modal opens
   useEffect(() => {
-    if (isOpen && task?.estimated_hours) {
-      setActualHours(String(task.estimated_hours));
-    } else if (isOpen) {
-      setActualHours("");
-    }
     if (isOpen) {
+      setAdditionalHours("");
+      setCompletionNote("");
       setLeaveWarningTask(null);
     }
-  }, [isOpen, task?.estimated_hours]);
+  }, [isOpen]);
 
   // Fetch project tasks for dependency awareness
   const { data: allProjectTasks = [] } = useQuery({
@@ -60,7 +74,6 @@ export default function TaskCompletionModal({
     return s?.id;
   }, [statuses]);
 
-  // Incomplete prerequisites: tasks this task depends on that aren't complete
   const incompletePrereqs = useMemo(() => {
     if (!task?.dependencies?.length || !allProjectTasks.length) return [];
     return task.dependencies
@@ -68,16 +81,20 @@ export default function TaskCompletionModal({
       .filter(t => t && t.status_id !== completedStatusId);
   }, [task?.dependencies, allProjectTasks, completedStatusId]);
 
-  // Successors: tasks that depend on this task
   const successorTasks = useMemo(() => {
     if (!task?.id || !allProjectTasks.length) return [];
     return allProjectTasks.filter(t => t.id !== task.id && t.dependencies?.includes(task.id));
   }, [task?.id, allProjectTasks]);
 
-  const hasTimeEntry = actualHours !== "" && actualHours !== "0";
+  const parsedAdditional = additionalHours !== "" ? parseFloat(additionalHours) : 0;
+  const finalTotal = previouslyLogged + (isNaN(parsedAdditional) ? 0 : parsedAdditional);
+  const hasEstimate = task?.estimated_hours != null && task?.estimated_hours > 0;
+  const variance = hasEstimate ? finalTotal - task.estimated_hours : null;
+
+  const hasTimeEntry = additionalHours !== "" && additionalHours !== "0";
 
   const handleDependencyTaskClick = (depTask) => {
-    if (hasTimeEntry) {
+    if (hasTimeEntry || completionNote.trim()) {
       setLeaveWarningTask(depTask);
     } else if (onOpenTask) {
       onOpenTask(depTask);
@@ -91,23 +108,14 @@ export default function TaskCompletionModal({
     if (onOpenTask) onOpenTask(t);
   };
 
-  const parsedActual = actualHours !== "" ? parseFloat(actualHours) : null;
-  const hasEstimate = task?.estimated_hours != null && task?.estimated_hours > 0;
-  const variance = hasEstimate && parsedActual != null
-    ? parsedActual - task.estimated_hours
-    : null;
-
   const handleConfirm = () => {
-    onConfirm(parsedActual);
+    // Pass both the additional hours and note for time entry creation
+    const additional = parsedAdditional > 0 ? parsedAdditional : null;
+    const note = completionNote.trim() || null;
+    onConfirm(additional, note);
   };
 
-  const handleUseEstimate = () => {
-    if (task?.estimated_hours) {
-      setActualHours(String(task.estimated_hours));
-    }
-  };
-
-  const QUICK_PRESETS = [0.5, 1, 2, 4, 8];
+  const QUICK_PRESETS = [0.25, 0.5, 1, 2, 4];
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -128,7 +136,6 @@ export default function TaskCompletionModal({
           </div>
         )}
 
-        {/* Dependency awareness — informational only, never blocks */}
         <CompletionDependencySummary
           incompletePrereqs={incompletePrereqs}
           successorTasks={successorTasks}
@@ -136,29 +143,46 @@ export default function TaskCompletionModal({
         />
 
         <div className="space-y-3 mt-1">
-          {/* Estimate display */}
-          {hasEstimate && (
-            <div className="flex items-center gap-2 text-sm text-gray-400">
-              <Clock className="w-3.5 h-3.5" />
-              <span>Estimated: <span className="text-gray-200 font-medium">{formatHours(task.estimated_hours)}</span></span>
+          {/* Hours summary */}
+          <div className="bg-gray-800/60 rounded-lg p-3 space-y-2">
+            {hasEstimate && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-400">Estimated</span>
+                <span className="text-gray-200 font-medium">{formatDuration(task.estimated_hours)}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-400">Previously Logged</span>
+              <span className="text-gray-200 font-medium">
+                {previouslyLogged > 0 ? formatDuration(previouslyLogged) : '0h'}
+              </span>
             </div>
-          )}
+            {parsedAdditional > 0 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-400">Additional</span>
+                <span className="text-blue-300 font-medium">+{formatDuration(parsedAdditional)}</span>
+              </div>
+            )}
+            <div className="border-t border-gray-700 pt-2 flex items-center justify-between text-sm">
+              <span className="text-white font-semibold">Final Total</span>
+              <span className="text-white font-bold">{formatDuration(finalTotal) || '0h'}</span>
+            </div>
+          </div>
 
-          {/* Actual hours input */}
+          {/* Additional hours input */}
           <div>
-            <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">
-              Time Spent (hours)
-            </label>
+            <Label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">
+              Additional Hours (optional)
+            </Label>
             <Input
               type="number"
               step="0.25"
               min="0"
               inputMode="decimal"
-              value={actualHours}
-              onChange={(e) => setActualHours(e.target.value)}
-              placeholder="e.g. 2.5"
+              value={additionalHours}
+              onChange={(e) => setAdditionalHours(e.target.value)}
+              placeholder={previouslyLogged > 0 ? "0 — all work already logged" : "e.g. 2.5"}
               className="bg-gray-800 border-gray-700 text-white h-11 text-lg [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              autoFocus
             />
           </div>
 
@@ -168,9 +192,9 @@ export default function TaskCompletionModal({
               <button
                 key={h}
                 type="button"
-                onClick={() => setActualHours(String(h))}
+                onClick={() => setAdditionalHours(String(h))}
                 className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                  actualHours === String(h)
+                  additionalHours === String(h)
                     ? 'bg-red-600 text-white'
                     : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
                 }`}
@@ -178,20 +202,22 @@ export default function TaskCompletionModal({
                 {formatHours(h)}
               </button>
             ))}
-            {hasEstimate && !QUICK_PRESETS.includes(task.estimated_hours) && (
-              <button
-                type="button"
-                onClick={handleUseEstimate}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                  actualHours === String(task.estimated_hours)
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-blue-900/40 text-blue-300 hover:bg-blue-800/50'
-                }`}
-              >
-                Use Est ({formatHours(task.estimated_hours)})
-              </button>
-            )}
           </div>
+
+          {/* Completion note — required when adding hours */}
+          {parsedAdditional > 0 && (
+            <div>
+              <Label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">
+                Completion Note
+              </Label>
+              <Textarea
+                value={completionNote}
+                onChange={(e) => setCompletionNote(e.target.value)}
+                placeholder="Describe the final work performed..."
+                className="bg-gray-800 border-gray-700 text-white min-h-[60px] text-sm"
+              />
+            </div>
+          )}
 
           {/* Variance display */}
           {variance !== null && (
@@ -201,32 +227,30 @@ export default function TaskCompletionModal({
               Variance: {variance > 0 ? '+' : ''}{formatHours(Math.abs(variance))} {variance > 0 ? 'over' : variance < 0 ? 'under' : 'on target'}
             </div>
           )}
+
+          {/* No additional hours message */}
+          {previouslyLogged > 0 && (!additionalHours || additionalHours === "0") && (
+            <p className="text-xs text-gray-500 text-center">
+              No additional hours will be added. Final: {formatDuration(previouslyLogged)}.
+            </p>
+          )}
         </div>
 
         <div className="flex gap-2 mt-2">
-          <Button
-            variant="outline"
-            onClick={onClose}
-            className="flex-1 border-gray-700"
-            disabled={isLoading}
-          >
+          <Button variant="outline" onClick={onClose} className="flex-1 border-gray-700" disabled={isLoading}>
             Cancel
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={isLoading}
+            disabled={isLoading || (parsedAdditional > 0 && !completionNote.trim())}
             className="flex-1 bg-red-600 hover:bg-red-700"
           >
-            {isLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              'Complete'
-            )}
+            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Complete'}
           </Button>
         </div>
       </DialogContent>
 
-      {/* Leave completion warning — protects unsaved time entry */}
+      {/* Leave completion warning */}
       <AlertDialog open={!!leaveWarningTask} onOpenChange={(open) => { if (!open) setLeaveWarningTask(null); }}>
         <AlertDialogContent className="max-w-xs bg-gray-900 border-red-900/30 text-white">
           <AlertDialogHeader>
