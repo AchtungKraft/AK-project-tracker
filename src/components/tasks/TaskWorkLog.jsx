@@ -267,6 +267,7 @@ function TimeEntryForm({ task, entry, checklistItems, teamMembers, onSaved, onCa
     setSaving(true);
     try {
       const performer = teamMembers.find(m => m.id === form.team_member_id);
+      const checklistItem = form.checklist_item_id ? checklistItems.find(ci => ci.id === form.checklist_item_id) : null;
       const data = {
         task_id: task.id,
         project_id: task.project_id,
@@ -276,6 +277,7 @@ function TimeEntryForm({ task, entry, checklistItems, teamMembers, onSaved, onCa
         team_member_id: form.team_member_id,
         performed_by_name: performer?.full_name || 'Unknown',
         checklist_item_id: form.checklist_item_id || null,
+        checklist_item_name_snapshot: checklistItem?.title || null,
         entry_source: entry ? (entry.entry_source || 'MANUAL') : 'MANUAL',
       };
 
@@ -465,11 +467,19 @@ function TimeEntryRow({ entry, checklistItems, teamMembers, onEdit, onDelete }) 
 
       {/* Checklist item + legacy badge */}
       <div className="flex items-center gap-2 mt-1">
-        {checklist && (
+        {checklist ? (
           <span className="text-[10px] text-blue-400 bg-blue-900/20 px-1.5 py-0.5 rounded">
             {checklist.title}
           </span>
-        )}
+        ) : entry.checklist_item_id && entry.checklist_item_name_snapshot ? (
+          <span className="text-[10px] text-gray-500 bg-gray-800/40 px-1.5 py-0.5 rounded italic">
+            {entry.checklist_item_name_snapshot} (removed)
+          </span>
+        ) : entry.checklist_item_id ? (
+          <span className="text-[10px] text-gray-600 bg-gray-800/30 px-1.5 py-0.5 rounded italic">
+            Removed checklist item
+          </span>
+        ) : null}
         {isLegacy && (
           <span className="text-[9px] text-amber-500/60 bg-amber-900/10 px-1.5 py-0.5 rounded uppercase tracking-wider">
             Migrated

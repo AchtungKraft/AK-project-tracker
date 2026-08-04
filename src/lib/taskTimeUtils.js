@@ -258,5 +258,161 @@ export function validateTimeEntryHours(value) {
   return null;
 }
 
+// ─── Batch Helpers ────────────────────────────────────────────
+
+/**
+ * Build a map of taskId → logged hours from a batch of time entries.
+ * Used by parent components to avoid N+1 queries.
+ *
+ * @param {Array} timeEntries
+ * @returns {Object<string, number>}
+ */
+export function buildLoggedHoursByTaskId(timeEntries) {
+  const map = {};
+  for (const e of timeEntries) {
+    if (e.task_id) {
+      map[e.task_id] = (map[e.task_id] || 0) + (Number(e.hours) || 0);
+    }
+  }
+  for (const k of Object.keys(map)) map[k] = roundHours(map[k]);
+  return map;
+}
+
+/**
+ * Invalidate all TaskTimeEntry-related caches.
+ * Call after add/edit/delete of time entries.
+ *
+ * @param {QueryClient} queryClient
+ * @param {Object} [opts]
+ * @param {string} [opts.taskId]
+ * @param {string} [opts.projectId]
+ */
+export function invalidateTaskTimeCaches(queryClient, { taskId, projectId } = {}) {
+  // Task-specific
+  if (taskId) queryClient.invalidateQueries({ queryKey: ['taskTimeEntries', taskId] });
+  // Project-specific
+  if (projectId) queryClient.invalidateQueries({ queryKey: ['projectTimeEntries', projectId] });
+  // Global
+  queryClient.invalidateQueries({ queryKey: ['taskTimeEntries'] });
+  queryClient.invalidateQueries({ queryKey: ['projectTimeEntries'] });
+  queryClient.invalidateQueries({ queryKey: ['taskTimeEntriesByIds'] });
+}
+
+// ─── CSV Export ───────────────────────────────────────────────
+
+const ENTRY_SOURCE_LABELS = {
+  MANUAL: 'Manual',
+  TASK_COMPLETION: 'Task Completion',
+  LEGACY_MIGRATION: 'Migrated',
+  ADMIN_ADJUSTMENT: 'Admin Adjustment',
+};
+
+/**
+ * Escape a CSV cell value.
+ * Quotes if contains commas/quotes/newlines, escapes internal quotes,
+ * and prefixes formula-dangerous characters.
+ */
+function csvEscape(value) {
+  if (value == null) return '';
+  let s = String(value);
+  // Formula injection prevention
+  if (/^[=+\-@]/.test(s)) s = "'" + s;
+  // Quote if needed
+  if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+/**
+ * Generate a task summary CSV from project labor summary.
+ *
+ * @param {string} projectName
+ * @param {Object} laborSummary - from buildProjectLaborSummary()
+ * @param {Array} tasks
+ * @param {Array} buckets
+ * @param {Array} categories
+ * @param {Array} teamMembers
+ * @returns {string} CSV content
+ */
+export function generateTaskSummaryCSV(projectName, laborSummary, tasks, { buckets = [], categories = [], teamMembers = [] } = {}) {
+  const bucketMap = new Map(buckets.map(b => [b.id, b.name]));
+  const categoryMap = new Map(categories.map(c => [c.id, c.name]));
+  const memberMap = new Map(teamMembers.map(m => [m.id, m.full_name]));
+
+  const headers = ['Project', 'Task', 'Task Status', 'Assignee', 'Phase', 'Category', 'Estimated Hours', 'Logged Hours', 'Variance', 'Time Entry Count', 'First Work Date', 'Latest Work Date'];
+  const rows = [headers.map(csvEscape).join(',')];
+
+  const taskEntries = Object.values(laborSummary.byTask).sort((a, b) => (b.loggedHours || 0) - (a.loggedHours || 0));
+
+  for (const t of taskEntries) {
+    const task = tasks.find(tk => tk.id === t.taskId);
+    const row = [
+      projectName || '',
+      t.taskName || '',
+      t.status === 'completed' ? 'Completed' : 'Open',
+      task ? (memberMap.get(task.assigned_team_member_id) || '') : '',
+      task ? (bucketMap.get(task.kanban_bucket_id) || '') : '',
+      task ? (categoryMap.get(task.category_id) || '') : '',
+      t.estimatedHours || '',
+      t.loggedHours || 0,
+      t.varianceHours != null ? t.varianceHours : '',
+      t.entryCount || 0,
+      '', // First work date — would need entry-level data
+      t.latestWorkDate || '',
+    ];
+    rows.push(row.map(csvEscape).join(','));
+  }
+
+  return rows.join('\n');
+}
+
+/**
+ * Generate a detailed time-entry CSV.
+ *
+ * @param {string} projectName
+ * @param {Array} timeEntries
+ * @param {Array} tasks
+ * @param {Array} buckets
+ * @param {Array} categories
+ * @param {Array} teamMembers
+ * @param {Array} checklistItems
+ * @returns {string} CSV content
+ */
+export function generateTimeEntryCSV(projectName, timeEntries, tasks, { buckets = [], categories = [], teamMembers = [], checklistItems = [] } = {}) {
+  const taskMap = new Map(tasks.map(t => [t.id, t]));
+  const bucketMap = new Map(buckets.map(b => [b.id, b.name]));
+  const categoryMap = new Map(categories.map(c => [c.id, c.name]));
+  const memberMap = new Map(teamMembers.map(m => [m.id, m.full_name]));
+  const checklistMap = new Map(checklistItems.map(ci => [ci.id, ci.title]));
+
+  const headers = ['Project', 'Task', 'Task Status', 'Phase', 'Category', 'Checklist Item', 'Work Date', 'Team Member', 'Hours', 'Work Note', 'Entry Source', 'Created Date'];
+  const rows = [headers.map(csvEscape).join(',')];
+
+  const sorted = [...timeEntries].sort((a, b) => (a.work_date || '').localeCompare(b.work_date || ''));
+
+  for (const e of sorted) {
+    const task = taskMap.get(e.task_id);
+    const isComplete = task?.completed_date;
+    const row = [
+      projectName || '',
+      task?.name || '',
+      isComplete ? 'Completed' : 'Open',
+      task ? (bucketMap.get(task.kanban_bucket_id) || '') : '',
+      task ? (categoryMap.get(task.category_id) || '') : '',
+      e.checklist_item_id ? (checklistMap.get(e.checklist_item_id) || 'Removed item') : '',
+      e.work_date || '',
+      memberMap.get(e.team_member_id) || e.performed_by_name || '',
+      e.hours || 0,
+      e.note || '',
+      ENTRY_SOURCE_LABELS[e.entry_source] || e.entry_source || '',
+      e.created_date ? new Date(e.created_date).toLocaleDateString() : '',
+    ];
+    rows.push(row.map(csvEscape).join(','));
+  }
+
+  return rows.join('\n');
+}
+
 // Re-export formatDuration for convenience
 export { formatDuration } from "./estimateUtils";

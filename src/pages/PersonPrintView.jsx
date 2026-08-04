@@ -11,7 +11,7 @@ import { groupIncompleteByTaskId } from "@/components/tasks/checklistHelpers";
 import { groupTaskPartLinksByTaskId } from "@/utils/taskPartsProgress";
 import { sortTasksByPriority, isUrgentPriority } from "@/utils/taskPrioritySort";
 
-function PersonPrintBucketSection({ section, formatDate, isOverdue, isUrgent, taskPartLinksByTaskId, checklistItemsByTaskId }) {
+function PersonPrintBucketSection({ section, formatDate, isOverdue, isUrgent, taskPartLinksByTaskId, checklistItemsByTaskId, loggedHoursByTaskId = {} }) {
   return (
     <div className="mb-3">
       {section.bucketName && (
@@ -41,6 +41,7 @@ function PersonPrintBucketSection({ section, formatDate, isOverdue, isUrgent, ta
                   ) : <div />}
                   <TaskTimePrintFields
                     estimatedHours={task.estimated_hours}
+                    loggedHours={loggedHoursByTaskId[task.id] || 0}
                     actualHours={task.actual_hours}
                     isCompleted={!!task.completed_date}
                     inline
@@ -111,6 +112,25 @@ export default function PersonPrintView() {
   }, [allMemberTasks, statuses, projects, selectedTypes, statusFilter]);
 
   const taskIds = useMemo(() => activeTasks.map(t => t.id), [activeTasks]);
+
+  // Batch-load time entries for all visible tasks
+  const { data: timeEntriesForPrint = [] } = useQuery({
+    queryKey: ['taskTimeEntriesByIds', 'personPrint', memberId, taskIds],
+    queryFn: () => taskIds.length > 0
+      ? base44.entities.TaskTimeEntry.filter({ task_id: { $in: taskIds } })
+      : Promise.resolve([]),
+    enabled: taskIds.length > 0,
+  });
+
+  const loggedHoursByTaskId = useMemo(() => {
+    const map = {};
+    for (const e of timeEntriesForPrint) {
+      map[e.task_id] = (map[e.task_id] || 0) + (Number(e.hours) || 0);
+    }
+    // Round
+    for (const k of Object.keys(map)) map[k] = Math.round(map[k] * 100) / 100;
+    return map;
+  }, [timeEntriesForPrint]);
 
   const { data: allChecklistItems = [] } = useQuery({
     queryKey: ['taskChecklistItems', 'print', memberId, taskIds],
@@ -280,7 +300,7 @@ export default function PersonPrintView() {
                 </h2>
                 {bucketSections.map((section) => (
                   <PersonPrintBucketSection key={section.bucketId} section={section} formatDate={formatDate} isOverdue={isOverdue} isUrgent={true}
-                    taskPartLinksByTaskId={taskPartLinksByTaskId} checklistItemsByTaskId={checklistItemsByTaskId} />
+                    taskPartLinksByTaskId={taskPartLinksByTaskId} checklistItemsByTaskId={checklistItemsByTaskId} loggedHoursByTaskId={loggedHoursByTaskId} />
                 ))}
               </div>
             ))}
@@ -300,7 +320,7 @@ export default function PersonPrintView() {
                 </h2>
                 {bucketSections.map((section) => (
                   <PersonPrintBucketSection key={section.bucketId} section={section} formatDate={formatDate} isOverdue={isOverdue} isUrgent={false}
-                    taskPartLinksByTaskId={taskPartLinksByTaskId} checklistItemsByTaskId={checklistItemsByTaskId} />
+                    taskPartLinksByTaskId={taskPartLinksByTaskId} checklistItemsByTaskId={checklistItemsByTaskId} loggedHoursByTaskId={loggedHoursByTaskId} />
                 ))}
               </div>
             ))}

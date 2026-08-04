@@ -3,9 +3,10 @@ import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Clock, AlertTriangle, ChevronDown, ChevronRight, Users, Layers } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Clock, AlertTriangle, ChevronDown, ChevronRight, Users, Layers, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { buildProjectLaborSummary } from "@/lib/taskTimeUtils";
+import { buildProjectLaborSummary, generateTaskSummaryCSV, generateTimeEntryCSV } from "@/lib/taskTimeUtils";
 import { formatDuration } from "@/lib/estimateUtils";
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
@@ -177,6 +178,36 @@ export default function ProjectLaborSummary({ project, projectId, tasks = [], bu
         </Collapsible>
       )}
 
+      {/* CSV Export buttons */}
+      {timeEntries.length > 0 && (
+        <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-800/50">
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs border-gray-700 text-gray-400 hover:text-white gap-1.5"
+            onClick={() => downloadCSV(
+              generateTaskSummaryCSV(project?.name, summary, tasks, { buckets, categories, teamMembers }),
+              `${(project?.name || 'project').replace(/[^a-zA-Z0-9]/g, '_')}_labor_summary.csv`
+            )}
+          >
+            <Download className="w-3 h-3" />
+            Summary CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs border-gray-700 text-gray-400 hover:text-white gap-1.5"
+            onClick={() => downloadCSV(
+              generateTimeEntryCSV(project?.name, timeEntries, tasks, { buckets, categories, teamMembers }),
+              `${(project?.name || 'project').replace(/[^a-zA-Z0-9]/g, '_')}_time_entries.csv`
+            )}
+          >
+            <Download className="w-3 h-3" />
+            Detailed CSV
+          </Button>
+        </div>
+      )}
+
       {/* Empty state */}
       {timeEntries.length === 0 && (
         <div className="text-center text-gray-600 py-4 text-sm">
@@ -185,6 +216,18 @@ export default function ProjectLaborSummary({ project, projectId, tasks = [], bu
       )}
     </div>
   );
+}
+
+function downloadCSV(csvContent, filename) {
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function MetricCard({ label, value, accent = false, color }) {

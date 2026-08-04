@@ -9,6 +9,8 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { getNextSortOrder, updateChecklistOrder } from "./checklistHelpers";
 import BulkChecklistImportModal from "./BulkChecklistImportModal";
+import { buildChecklistHoursMap } from "@/lib/taskTimeUtils";
+import { formatDuration } from "@/lib/estimateUtils";
 
 /**
  * Execution-first checklist: checkbox + label only.
@@ -35,6 +37,19 @@ export default function ExecutionChecklistSection({ taskId, variant = "full" }) 
     enabled: !!taskId,
     staleTime: 30000,
   });
+
+  // Fetch time entries for checklist-attributed hours
+  const { data: taskTimeEntries = [] } = useQuery({
+    queryKey: ['taskTimeEntries', taskId],
+    queryFn: () => base44.entities.TaskTimeEntry.filter({ task_id: taskId }),
+    enabled: !!taskId,
+    staleTime: 15000,
+  });
+
+  const checklistHoursMap = useMemo(
+    () => buildChecklistHoursMap(taskTimeEntries),
+    [taskTimeEntries]
+  );
 
   const sortedItems = useMemo(() => {
     const incomplete = items.filter(i => !i.is_complete).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
@@ -240,6 +255,11 @@ export default function ExecutionChecklistSection({ taskId, variant = "full" }) 
                   )}
                 >
                   {item.title}
+                  {checklistHoursMap[item.id] > 0 && (
+                    <span className="ml-1.5 text-[10px] text-blue-400 font-medium">
+                      · {formatDuration(checklistHoursMap[item.id])}
+                    </span>
+                  )}
                 </span>
               )}
               {/* Hover actions: edit, reorder, delete */}
