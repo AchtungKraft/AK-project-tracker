@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { OPERATIONAL_STATE_CONFIG } from "@/components/workflow/useProjectWorkflow";
 import { BLOCKER_TYPE_LABELS } from "./workloadConfig";
 import InlineEstimateEditor from "@/components/tasks/InlineEstimateEditor";
+import CompactTimeDisplay from "@/components/tasks/CompactTimeDisplay";
 import { formatDurationCompact } from "@/lib/estimateUtils";
 
 function parseLocalDate(dateStr) {
@@ -82,6 +83,7 @@ export default function WorkloadTaskRow({
   showOperationalState = false,
   isMobile = false,
   onUpdateEstimate,
+  loggedHours = 0,
 }) {
   const due = parseLocalDate(task.due_date);
   const todayStart = startOfDay(new Date());
@@ -124,6 +126,7 @@ export default function WorkloadTaskRow({
     if (due) mobileMetaParts.push(format(due, "M/d"));
     const estDisplay = formatDurationCompact(task.estimated_hours);
     if (estDisplay) mobileMetaParts.push(estDisplay);
+    if (loggedHours > 0) mobileMetaParts.push(`${formatDurationCompact(loggedHours)} logged`);
   }
 
   return (
@@ -348,6 +351,16 @@ export default function WorkloadTaskRow({
               </span>
             )}
           </span>
+
+          {/* Logged hours — compact display when hours exist */}
+          {loggedHours > 0 && (
+            <CompactTimeDisplay
+              estimatedHours={task.estimated_hours}
+              loggedHours={loggedHours}
+              showEstimate={false}
+              className="hidden lg:flex"
+            />
+          )}
         </>
       )}
     </div>

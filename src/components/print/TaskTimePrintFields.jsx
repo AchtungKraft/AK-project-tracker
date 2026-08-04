@@ -18,26 +18,29 @@ function formatHours(decimal) {
 /**
  * Compact production-style TIME module for printed task sheets.
  *
- * Layout:  TIME  3h  [        ]     (active task — box for handwritten actual)
- *          TIME  3h / 2h 30m        (completed task — both values shown)
- *          TIME  —   [        ]     (no estimate — dash + box)
- *
  * Props:
  *   estimatedHours - decimal number or null
- *   actualHours    - decimal number or null
+ *   loggedHours    - CANONICAL: sum of TaskTimeEntry.hours (preferred)
+ *   actualHours    - DEPRECATED: legacy field, used only as fallback if loggedHours not provided
  *   isCompleted    - boolean
  *   inline         - boolean (default true) — sits in a flex row
+ *
+ * Layout:  TIME  Est 3h · Logged 2h 30m   (completed — both values shown)
+ *          TIME  3h  [        ]            (active task — box for handwritten actual)
+ *          TIME  —   [        ]            (no estimate — dash + box)
  */
-export default function TaskTimePrintFields({ estimatedHours, actualHours, isCompleted = false, inline = true }) {
+export default function TaskTimePrintFields({ estimatedHours, loggedHours, actualHours, isCompleted = false, inline = true }) {
   const estDisplay = formatHours(estimatedHours);
-  const actDisplay = formatHours(actualHours);
+  // Canonical: use loggedHours from time entries; fall back to legacy actualHours
+  const canonicalLogged = loggedHours != null ? loggedHours : actualHours;
+  const logDisplay = formatHours(canonicalLogged);
 
-  const completed = isCompleted && actDisplay;
+  const showLogged = isCompleted && logDisplay;
 
   return (
     <div
       className="flex items-center gap-1 shrink-0 whitespace-nowrap"
-      style={{ width: 140, justifyContent: "flex-end" }}
+      style={{ width: 160, justifyContent: "flex-end" }}
     >
       {/* TIME label */}
       <span
@@ -52,13 +55,25 @@ export default function TaskTimePrintFields({ estimatedHours, actualHours, isCom
         {estDisplay || "—"}
       </span>
 
-      {completed ? (
-        /* Completed: show slash + actual */
+      {showLogged ? (
+        /* Completed: show slash + logged */
         <>
           <span className="text-gray-400" style={{ fontSize: 9 }}>/</span>
           <span className="text-gray-700 font-medium" style={{ fontSize: 10 }}>
-            {actDisplay}
+            {logDisplay}
           </span>
+        </>
+      ) : canonicalLogged > 0 ? (
+        /* Open task with some logged hours: show slash + logged + box */
+        <>
+          <span className="text-gray-400" style={{ fontSize: 9 }}>/</span>
+          <span className="text-gray-500 font-medium" style={{ fontSize: 9 }}>
+            {logDisplay}
+          </span>
+          <span
+            className="inline-block border border-gray-500"
+            style={{ width: 32, height: 14, verticalAlign: "middle" }}
+          />
         </>
       ) : (
         /* Active: bordered handwriting box */

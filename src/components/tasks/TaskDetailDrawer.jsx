@@ -477,15 +477,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
                     <span className="text-sm text-gray-200 text-right">{formatCalendarDate(task.due_date, 'MMM d, yyyy')}</span>
                   </div>
                 )}
-                {(task?.estimated_hours || task?.actual_hours) && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-gray-500 uppercase tracking-wider w-16 shrink-0">Time</span>
-                    <span className="text-sm text-gray-200 flex items-center gap-2">
-                      {task.estimated_hours && <span>Est: {formatHours(task.estimated_hours)}</span>}
-                      {task.actual_hours && <span>Actual: {formatHours(task.actual_hours)}</span>}
-                    </span>
-                  </div>
-                )}
+                {/* Time summary moved to Hours & Work Log section below */}
               </div>
             </>
           ) : !editing ? (

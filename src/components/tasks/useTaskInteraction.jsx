@@ -55,11 +55,16 @@ export function invalidateProjectCaches(queryClient, projectId) {
     queryClient.invalidateQueries({ queryKey: executionKeys.projectChecklists(projectId) });
     queryClient.invalidateQueries({ queryKey: executionKeys.projectWorkflow(projectId) });
     queryClient.invalidateQueries({ queryKey: ['projectTaskComments', projectId] });
+    // Time entry caches — canonical labor data
+    queryClient.invalidateQueries({ queryKey: ['projectTimeEntries', projectId] });
   }
   
   // Global caches used by Global Workload
   queryClient.invalidateQueries({ queryKey: executionKeys.allChecklists() });
   queryClient.invalidateQueries({ queryKey: executionKeys.allPhases() });
+  // Time entry caches
+  queryClient.invalidateQueries({ queryKey: ['taskTimeEntries'] });
+  queryClient.invalidateQueries({ queryKey: ['projectTimeEntries'] });
 }
 
 /**
