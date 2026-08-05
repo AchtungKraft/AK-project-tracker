@@ -92,6 +92,9 @@ export default function TaskCompletionModal({
   const variance = hasEstimate ? finalTotal - task.estimated_hours : null;
 
   const hasTimeEntry = additionalHours !== "" && additionalHours !== "0";
+  const noteRequired = parsedAdditional > 0;
+  const noteTrimmed = completionNote.trim();
+  const noteValid = !noteRequired || noteTrimmed.length > 0;
 
   const handleDependencyTaskClick = (depTask) => {
     if (hasTimeEntry || completionNote.trim()) {
@@ -204,20 +207,24 @@ export default function TaskCompletionModal({
             ))}
           </div>
 
-          {/* Completion note — required when adding hours */}
-          {parsedAdditional > 0 && (
-            <div>
-              <Label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">
-                Completion Note
-              </Label>
-              <Textarea
-                value={completionNote}
-                onChange={(e) => setCompletionNote(e.target.value)}
-                placeholder="Describe the final work performed..."
-                className="bg-gray-800 border-gray-700 text-white min-h-[60px] text-sm"
-              />
-            </div>
-          )}
+          {/* Completion / Work Note — required when adding hours */}
+          <div>
+            <Label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">
+              Completion / Work Note {noteRequired && <span className="text-red-400">*</span>}
+            </Label>
+            <Textarea
+              value={completionNote}
+              onChange={(e) => setCompletionNote(e.target.value)}
+              placeholder="Describe the work completed, issues found, or final outcome..."
+              rows={3}
+              className="bg-gray-800 border-gray-700 text-white min-h-[72px] text-sm resize-y"
+            />
+            {noteRequired && !noteValid && noteTrimmed === '' && additionalHours !== '' && (
+              <p className="text-xs text-red-400 mt-1">
+                A work note is required when logging additional hours.
+              </p>
+            )}
+          </div>
 
           {/* Variance display */}
           {variance !== null && (
@@ -242,7 +249,7 @@ export default function TaskCompletionModal({
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={isLoading || (parsedAdditional > 0 && !completionNote.trim())}
+            disabled={isLoading || !noteValid}
             className="flex-1 bg-red-600 hover:bg-red-700"
           >
             {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Complete'}
