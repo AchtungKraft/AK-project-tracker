@@ -6,20 +6,26 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CheckCircle2, Clock, Loader2, User } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { CheckCircle2, Clock, Loader2, User, CalendarIcon, ListChecks } from "lucide-react";
 import { formatHours } from "./TimeEstimateInput";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import CompletionDependencySummary from "./CompletionDependencySummary";
 import { formatDuration } from "@/lib/estimateUtils";
 import { getTaskLoggedHours } from "@/lib/taskTimeUtils";
+import { parseLocalDate, toDateString, formatCalendarDate } from "@/lib/dateUtils";
+import { todayLocalDateString } from "@/lib/taskCompletion";
 
 /**
  * TaskCompletionModal
- * 
+ *
  * Shown when a user completes a task.
  * Shows previously logged hours, allows optional additional hours + note.
  * Creates a time entry instead of overwriting actual_hours.
+ *
+ * Full payload: { additionalHours, note, workDate, performedByUserId, checklistItemId }
  */
 export default function TaskCompletionModal({
   isOpen,
@@ -34,11 +40,17 @@ export default function TaskCompletionModal({
   const [additionalHours, setAdditionalHours] = useState("");
   const [completionNote, setCompletionNote] = useState("");
   const [performedByUserId, setPerformedByUserId] = useState(null);
+  const [workDate, setWorkDate] = useState(todayLocalDateString());
+  const [checklistItemId, setChecklistItemId] = useState(null);
   const [leaveWarningTask, setLeaveWarningTask] = useState(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+
+  // Current user for permission enforcement
+  const [currentUser, setCurrentUser] = useState(null);
 
   // Fetch team members if not provided via props
   const { data: fetchedTeamMembers = [] } = useQuery({
-    queryKey: ['teamMembers'],
+    queryKey: ["teamMembers"],
     queryFn: () => base44.entities.TeamMember.list(),
     enabled: !propTeamMembers && isOpen,
     staleTime: 60000,
@@ -48,10 +60,18 @@ export default function TaskCompletionModal({
 
   // Fetch existing time entries
   const { data: timeEntries = [] } = useQuery({
-    queryKey: ['taskTimeEntries', task?.id],
+    queryKey: ["taskTimeEntries", task?.id],
     queryFn: () => base44.entities.TaskTimeEntry.filter({ task_id: task?.id }),
     enabled: !!task?.id && isOpen,
     staleTime: 5000,
+  });
+
+  // Fetch checklist items for this task
+  const { data: checklistItems = [] } = useQuery({
+    queryKey: ["taskChecklistItems", task?.id],
+    queryFn: () => base44.entities.TaskChecklistItem.filter({ task_id: task?.id }),
+    enabled: !!task?.id && isOpen,
+    staleTime: 15000,
   });
 
   const previouslyLogged = useMemo(
@@ -59,36 +79,55 @@ export default function TaskCompletionModal({
     [task, timeEntries]
   );
 
-  // Default performer to current user's team member
+  // Determine if user can select other performers (admin only)
+  const canSelectOtherPerformer = currentUser?.role === "admin";
+
+  // The list of performers this user may choose from
+  const availablePerformers = useMemo(() => {
+    if (canSelectOtherPerformer) return activeTeamMembers;
+    // Standard user: only their own team member
+    if (!currentUser) return activeTeamMembers;
+    const myMember = activeTeamMembers.find(m => m.user_id === currentUser.id);
+    return myMember ? [myMember] : activeTeamMembers;
+  }, [activeTeamMembers, canSelectOtherPerformer, currentUser]);
+
+  // Default performer to current user's team member; reset state on open
   useEffect(() => {
     if (isOpen) {
       setAdditionalHours("");
       setCompletionNote("");
       setLeaveWarningTask(null);
-      // Default performer to current user
+      setWorkDate(todayLocalDateString());
+      setChecklistItemId(null);
+      setCalendarOpen(false);
+
       base44.auth.me().then(me => {
+        setCurrentUser(me);
         const myMember = teamMembers.find(m => m.user_id === me.id && m.active);
         setPerformedByUserId(myMember?.id || null);
-      }).catch(() => setPerformedByUserId(null));
+      }).catch(() => {
+        setCurrentUser(null);
+        setPerformedByUserId(null);
+      });
     }
   }, [isOpen, teamMembers]);
 
   // Fetch project tasks for dependency awareness
   const { data: allProjectTasks = [] } = useQuery({
-    queryKey: ['projectTasks', task?.project_id],
+    queryKey: ["projectTasks", task?.project_id],
     queryFn: () => base44.entities.Task.filter({ project_id: task?.project_id }),
     enabled: !!task?.project_id && isOpen,
     staleTime: 30000,
   });
 
   const { data: statuses = [] } = useQuery({
-    queryKey: ['statuses'],
+    queryKey: ["statuses"],
     queryFn: () => base44.entities.StatusList.list(),
     staleTime: 60000,
   });
 
   const completedStatusId = useMemo(() => {
-    const s = statuses.find(s => s.scope === 'Task' && s.active && s.label?.toLowerCase().includes('complete'));
+    const s = statuses.find(s => s.scope === "Task" && s.active && s.label?.toLowerCase().includes("complete"));
     return s?.id;
   }, [statuses]);
 
@@ -135,15 +174,18 @@ export default function TaskCompletionModal({
     const additional = parsedAdditional > 0 ? parsedAdditional : null;
     const note = completionNote.trim() || null;
     const performer = performedByUserId || null;
-    // Pass structured payload to prevent future field omissions
     onConfirm({
       additionalHours: additional,
       note,
+      workDate: workDate || todayLocalDateString(),
       performedByUserId: performer,
+      checklistItemId: checklistItemId || null,
     });
   };
 
   const QUICK_PRESETS = [0.25, 0.5, 1, 2, 4];
+
+  const workDateObj = parseLocalDate(workDate);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -160,7 +202,7 @@ export default function TaskCompletionModal({
 
         {incompleteChecklistCount > 0 && (
           <div className="bg-yellow-900/30 border border-yellow-700/40 rounded-md px-3 py-2 text-sm text-yellow-300">
-            {incompleteChecklistCount} incomplete checklist item{incompleteChecklistCount !== 1 ? 's' : ''} — complete anyway?
+            {incompleteChecklistCount} incomplete checklist item{incompleteChecklistCount !== 1 ? "s" : ""} — complete anyway?
           </div>
         )}
 
@@ -182,7 +224,7 @@ export default function TaskCompletionModal({
             <div className="flex items-center justify-between text-sm">
               <span className="text-gray-400">Previously Logged</span>
               <span className="text-gray-200 font-medium">
-                {previouslyLogged > 0 ? formatDuration(previouslyLogged) : '0h'}
+                {previouslyLogged > 0 ? formatDuration(previouslyLogged) : "0h"}
               </span>
             </div>
             {parsedAdditional > 0 && (
@@ -193,7 +235,7 @@ export default function TaskCompletionModal({
             )}
             <div className="border-t border-gray-700 pt-2 flex items-center justify-between text-sm">
               <span className="text-white font-semibold">Final Total</span>
-              <span className="text-white font-bold">{formatDuration(finalTotal) || '0h'}</span>
+              <span className="text-white font-bold">{formatDuration(finalTotal) || "0h"}</span>
             </div>
           </div>
 
@@ -223,8 +265,8 @@ export default function TaskCompletionModal({
                 onClick={() => setAdditionalHours(String(h))}
                 className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
                   additionalHours === String(h)
-                    ? 'bg-red-600 text-white'
-                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
+                    ? "bg-red-600 text-white"
+                    : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white"
                 }`}
               >
                 {formatHours(h)}
@@ -232,7 +274,109 @@ export default function TaskCompletionModal({
             ))}
           </div>
 
-          {/* Completion / Work Note — required when adding hours */}
+          {/* ── Fields shown when hours > 0 ── */}
+          {parsedAdditional > 0 && (
+            <>
+              {/* Work Date */}
+              <div>
+                <Label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">
+                  Work Date
+                </Label>
+                <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal bg-gray-800 border-gray-700 text-white h-9"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4 text-gray-400" />
+                      {workDate ? formatCalendarDate(workDate, "PPP") : "Select date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={workDateObj}
+                      onSelect={(d) => {
+                        if (d) setWorkDate(toDateString(d));
+                        setCalendarOpen(false);
+                      }}
+                      disabled={(d) => d > new Date()}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Performed By */}
+              <div>
+                <Label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">
+                  Performed By {performerRequired && <span className="text-red-400">*</span>}
+                </Label>
+                <Select value={performedByUserId || ""} onValueChange={setPerformedByUserId}>
+                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white h-9">
+                    <SelectValue placeholder="Select team member">
+                      {performedByUserId
+                        ? teamMembers.find(m => m.id === performedByUserId)?.full_name || "Unknown"
+                        : "Select team member"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availablePerformers.map(m => (
+                      <SelectItem key={m.id} value={m.id} className="text-sm">
+                        <span className="flex items-center gap-2">
+                          <User className="w-3 h-3 text-gray-400" />
+                          {m.full_name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {performerRequired && !performerValid && (
+                  <p className="text-xs text-red-400 mt-1">
+                    A performer is required when logging hours.
+                  </p>
+                )}
+                {!canSelectOtherPerformer && availablePerformers.length === 1 && (
+                  <p className="text-xs text-gray-600 mt-0.5">
+                    Only admins may log time for other team members.
+                  </p>
+                )}
+              </div>
+
+              {/* Checklist Item (optional) */}
+              {checklistItems.length > 0 && (
+                <div>
+                  <Label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">
+                    Checklist Item <span className="text-gray-600">(optional)</span>
+                  </Label>
+                  <Select value={checklistItemId || "__none__"} onValueChange={(v) => setChecklistItemId(v === "__none__" ? null : v)}>
+                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white h-9">
+                      <SelectValue placeholder="None">
+                        {checklistItemId
+                          ? checklistItems.find(i => i.id === checklistItemId)?.title || "Unknown"
+                          : "None"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__" className="text-sm text-gray-400">
+                        None
+                      </SelectItem>
+                      {checklistItems.map(item => (
+                        <SelectItem key={item.id} value={item.id} className="text-sm">
+                          <span className="flex items-center gap-2">
+                            <ListChecks className="w-3 h-3 text-gray-400" />
+                            {item.title}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Completion / Work Note — always shown, required when adding hours */}
           <div>
             <Label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">
               Completion / Work Note {noteRequired && <span className="text-red-400">*</span>}
@@ -244,52 +388,19 @@ export default function TaskCompletionModal({
               rows={3}
               className="bg-gray-800 border-gray-700 text-white min-h-[72px] text-sm resize-y"
             />
-            {noteRequired && !noteValid && noteTrimmed === '' && additionalHours !== '' && (
+            {noteRequired && !noteValid && noteTrimmed === "" && additionalHours !== "" && (
               <p className="text-xs text-red-400 mt-1">
                 A work note is required when logging additional hours.
               </p>
             )}
           </div>
 
-          {/* Performed By selector — shown when additional hours entered */}
-          {parsedAdditional > 0 && (
-            <div>
-              <Label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">
-                Performed By {performerRequired && <span className="text-red-400">*</span>}
-              </Label>
-              <Select value={performedByUserId || ''} onValueChange={setPerformedByUserId}>
-                <SelectTrigger className="bg-gray-800 border-gray-700 text-white h-9">
-                  <SelectValue placeholder="Select team member">
-                    {performedByUserId
-                      ? teamMembers.find(m => m.id === performedByUserId)?.full_name || 'Unknown'
-                      : 'Select team member'}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {activeTeamMembers.map(m => (
-                    <SelectItem key={m.id} value={m.id} className="text-sm">
-                      <span className="flex items-center gap-2">
-                        <User className="w-3 h-3 text-gray-400" />
-                        {m.full_name}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {performerRequired && !performerValid && (
-                <p className="text-xs text-red-400 mt-1">
-                  A performer is required when logging hours.
-                </p>
-              )}
-            </div>
-          )}
-
           {/* Variance display */}
           {variance !== null && (
             <div className={`text-sm font-medium ${
-              variance > 0 ? 'text-red-400' : variance < 0 ? 'text-green-400' : 'text-gray-400'
+              variance > 0 ? "text-red-400" : variance < 0 ? "text-green-400" : "text-gray-400"
             }`}>
-              Variance: {variance > 0 ? '+' : ''}{formatHours(Math.abs(variance))} {variance > 0 ? 'over' : variance < 0 ? 'under' : 'on target'}
+              Variance: {variance > 0 ? "+" : ""}{formatHours(Math.abs(variance))} {variance > 0 ? "over" : variance < 0 ? "under" : "on target"}
             </div>
           )}
 
@@ -310,7 +421,7 @@ export default function TaskCompletionModal({
             disabled={isLoading || !noteValid || !performerValid}
             className="flex-1 bg-red-600 hover:bg-red-700"
           >
-            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Complete'}
+            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Complete"}
           </Button>
         </div>
       </DialogContent>

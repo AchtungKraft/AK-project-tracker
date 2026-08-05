@@ -10,6 +10,7 @@ import {
   shouldApplyMutation,
   getTaskVersion
 } from './taskStateEvents';
+import { executeTaskCompletion } from '@/lib/taskCompletion';
 
 /**
  * TASK CACHE KEYS - Single source of truth for all task-related cache invalidation
@@ -319,67 +320,32 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
 
   const executeCompletion = useCallback(async (task, payload = {}) => {
     if (!completedStatus) return;
-    const { additionalHours = null, note = null, performedByUserId = null } = payload;
+    if (isCompletingTask) return; // double-submit guard
 
     setIsCompletingTask(true);
     try {
-      // Create a completion time entry if additional hours provided
-      if (additionalHours != null && additionalHours > 0) {
-        // Resolve performer name from ID
-        let performerName = 'Unknown';
-        let performerId = performedByUserId;
-        if (performerId) {
-          const members = queryClient.getQueryData(['teamMembers']) || [];
-          const member = members.find(m => m.id === performerId);
-          if (member) performerName = member.full_name;
-        }
-        if (!performerId) {
-          // Fallback: use current user
-          try {
-            const me = await base44.auth.me();
-            const members = await base44.entities.TeamMember.filter({ user_id: me.id });
-            if (members[0]) {
-              performerId = members[0].id;
-              performerName = members[0].full_name;
-            }
-          } catch {}
-        }
+      const currentUser = await base44.auth.me();
+      const members = queryClient.getQueryData(['teamMembers']) || teamMembers;
 
-        const today = new Date();
-        const workDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const result = await executeTaskCompletion(payload, {
+        task,
+        completedStatusId: completedStatus.id,
+        updateTaskFn: updateTask,
+        queryClient,
+        teamMembers: members,
+        currentUser,
+      });
 
-        await base44.entities.TaskTimeEntry.create({
-          task_id: task.id,
-          project_id: task.project_id,
-          hours: additionalHours,
-          work_date: workDate,
-          note: note || 'Task completion',
-          team_member_id: performerId,
-          performed_by_name: performerName,
-          entry_source: 'TASK_COMPLETION',
-        });
+      if (!result.success) {
+        toast({ title: result.error, variant: 'destructive' });
+        return;
       }
 
-      // Mark task complete (keep actual_hours in sync for legacy)
-      const allEntries = await base44.entities.TaskTimeEntry.filter({ task_id: task.id });
-      const totalLogged = allEntries.reduce((s, e) => s + (Number(e.hours) || 0), 0);
-
-      const updates = {
-        status_id: completedStatus.id,
-        completed_date: new Date().toISOString(),
-        actual_hours: Math.round(totalLogged * 100) / 100,
-      };
-      await updateTask(task.id, updates);
-      
-      // Invalidate time entries
-      queryClient.invalidateQueries({ queryKey: ['taskTimeEntries'] });
-      queryClient.invalidateQueries({ queryKey: ['projectTimeEntries'] });
-      
       toast({ title: 'Task completed' });
     } finally {
       setIsCompletingTask(false);
     }
-  }, [completedStatus, updateTask, queryClient]);
+  }, [completedStatus, updateTask, queryClient, teamMembers, isCompletingTask]);
 
   /**
    * countUninstalledCommitments
