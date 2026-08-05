@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 /**
  * Compact labor summary card for the Overview tab.
  * Shows top-level metrics + a link to the full Hours tab.
+ * Uses revised variance model: variance on estimated tasks only.
  */
 export default function LaborSummaryCard({ project, projectId, tasks = [], buckets = [], teamMembers = [], categories = [], onViewFullReport }) {
   const pid = projectId || project?.id;
@@ -31,8 +32,6 @@ export default function LaborSummaryCard({ project, projectId, tasks = [], bucke
     ),
     [project, pid, tasks, timeEntries, teamMembers, buckets, categories]
   );
-
-  const tasksWithHours = Object.values(summary.byTask).filter(t => t.loggedHours > 0).length;
 
   return (
     <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
@@ -57,37 +56,47 @@ export default function LaborSummaryCard({ project, projectId, tasks = [], bucke
         {isLoading ? (
           <div className="text-center text-gray-500 py-4 text-sm">Loading…</div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-gray-800/40 rounded-lg p-3">
-              <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1">Estimated</p>
-              <p className="text-lg font-semibold tabular-nums text-gray-200">
-                {formatDuration(summary.totalEstimated) || "0h"}
-              </p>
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-gray-800/40 rounded-lg p-3">
+                <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1">Estimated</p>
+                <p className="text-lg font-semibold tabular-nums text-gray-200">
+                  {formatDuration(summary.totalEstimatedHours) || "0h"}
+                </p>
+              </div>
+              <div className="bg-gray-800/40 rounded-lg p-3">
+                <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1">Logged</p>
+                <p className="text-lg font-semibold tabular-nums text-white">
+                  {formatDuration(summary.totalLoggedHours) || "0h"}
+                </p>
+              </div>
+              <div className="bg-gray-800/40 rounded-lg p-3">
+                <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1">Unestimated</p>
+                <p className={cn(
+                  "text-lg font-semibold tabular-nums",
+                  summary.unestimatedTaskLoggedHours > 0 ? "text-amber-400" : "text-gray-400"
+                )}>
+                  {formatDuration(summary.unestimatedTaskLoggedHours) || "0h"}
+                </p>
+              </div>
+              <div className="bg-gray-800/40 rounded-lg p-3">
+                <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1">Variance</p>
+                <p className={cn(
+                  "text-lg font-semibold tabular-nums",
+                  summary.varianceOnEstimatedTasks > 0 ? "text-red-400" : summary.varianceOnEstimatedTasks < 0 ? "text-green-400" : "text-gray-400"
+                )}>
+                  {summary.varianceOnEstimatedTasks === 0
+                    ? "On target"
+                    : `${formatDuration(Math.abs(summary.varianceOnEstimatedTasks))} ${summary.varianceOnEstimatedTasks > 0 ? "over" : "under"}`}
+                </p>
+              </div>
             </div>
-            <div className="bg-gray-800/40 rounded-lg p-3">
-              <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1">Logged</p>
-              <p className="text-lg font-semibold tabular-nums text-white">
-                {formatDuration(summary.totalLogged) || "0h"}
+            {summary.unestimatedTaskLoggedHours > 0 && (
+              <p className="text-[10px] text-amber-400/60 mt-2">
+                Includes {formatDuration(summary.unestimatedTaskLoggedHours)} on unestimated tasks
               </p>
-            </div>
-            <div className="bg-gray-800/40 rounded-lg p-3">
-              <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1">Variance</p>
-              <p className={cn(
-                "text-lg font-semibold tabular-nums",
-                summary.totalVariance > 0 ? "text-red-400" : summary.totalVariance < 0 ? "text-green-400" : "text-gray-400"
-              )}>
-                {summary.totalVariance === 0
-                  ? "On target"
-                  : `${formatDuration(Math.abs(summary.totalVariance))} ${summary.totalVariance > 0 ? "over" : "under"}`}
-              </p>
-            </div>
-            <div className="bg-gray-800/40 rounded-lg p-3">
-              <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1">Tasks w/ Hours</p>
-              <p className="text-lg font-semibold tabular-nums text-gray-200">
-                {tasksWithHours} / {tasks.length}
-              </p>
-            </div>
-          </div>
+            )}
+          </>
         )}
       </CardContent>
     </Card>

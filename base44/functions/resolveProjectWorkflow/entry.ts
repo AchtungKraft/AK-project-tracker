@@ -557,16 +557,24 @@ function deriveProjectHealth(phaseRollups, milestoneResults, tasks, statusMap, p
   const currentMilestone = completedMilestones.length > 0 ? completedMilestones[completedMilestones.length - 1] : null;
   const nextMilestone = pendingMilestones.length > 0 ? pendingMilestones[0] : null;
 
-  // Task health
+  // Task health — with estimated/unestimated labor split
   const nonCancelled = tasks.filter(t => !statusMap.cancelledIds.has(t.status_id));
+  const estimatedTasks = nonCancelled.filter(t => (t.estimated_hours || 0) > 0);
+  const unestimatedTasks = nonCancelled.filter(t => !(t.estimated_hours > 0));
+  const hoursEstimated = estimatedTasks.reduce((s, t) => s + (t.estimated_hours || 0), 0);
+  const hoursLoggedEstimatedTasks = Math.round(estimatedTasks.reduce((s, t) => s + (canonicalHoursByTask[t.id] || 0), 0) * 100) / 100;
+  const hoursLoggedUnestimatedTasks = Math.round(unestimatedTasks.reduce((s, t) => s + (canonicalHoursByTask[t.id] || 0), 0) * 100) / 100;
   const health = {
     tasks_ready: tasks.filter(t => t._rs?.state === S.READY).length,
     tasks_blocked: tasks.filter(t => t._rs?.state === S.BLOCKED).length,
     tasks_waiting: tasks.filter(t => [S.WAITING_ON_PARTS, S.WAITING_ON_VENDOR, S.WAITING_ON_CUSTOMER].includes(t._rs?.state)).length,
     tasks_in_progress: tasks.filter(t => t._rs?.state === S.IN_PROGRESS || t._rs?.state === S.REVIEW_REQUIRED).length,
     tasks_completed: tasks.filter(t => t._rs?.state === S.COMPLETED).length,
-    hours_estimated: nonCancelled.reduce((s, t) => s + (t.estimated_hours || 0), 0),
+    hours_estimated: hoursEstimated,
     hours_actual: canonicalTotalHours,
+    hours_logged_estimated_tasks: hoursLoggedEstimatedTasks,
+    hours_logged_unestimated_tasks: hoursLoggedUnestimatedTasks,
+    hours_variance_estimated_tasks: Math.round((hoursLoggedEstimatedTasks - hoursEstimated) * 100) / 100,
     hours_remaining: nonCancelled.filter(t => !statusMap.doneIds.has(t.status_id)).reduce((s, t) => s + Math.max((t.estimated_hours || 0) - (canonicalHoursByTask[t.id] || 0), 0), 0),
   };
 

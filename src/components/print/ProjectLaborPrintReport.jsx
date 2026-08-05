@@ -1,21 +1,34 @@
 import React from "react";
 import { formatDuration } from "@/lib/estimateUtils";
+import { ESTIMATE_STATUS_LABELS } from "@/lib/taskTimeUtils";
+
+const TASK_FILTER_LABELS = {
+  with_hours: 'Tasks With Logged Hours',
+  all: 'All Tasks',
+  missing_estimates: 'Tasks Missing Estimates',
+  over_estimate: 'Tasks Over Estimate',
+  completed: 'Completed Tasks',
+  open: 'Open Tasks',
+};
 
 /**
  * ProjectLaborPrintReport — printable project labor summary.
- *
- * @param {Object} project
- * @param {Object} laborSummary - from buildProjectLaborSummary()
- * @param {Array} timeEntries - raw entries for detail rows
- * @param {Array} tasks
- * @param {Array} teamMembers
+ * Uses revised canonical labor summary with estimated/unestimated split.
  */
-export default function ProjectLaborPrintReport({ project, laborSummary, timeEntries = [], tasks = [], teamMembers = [] }) {
+export default function ProjectLaborPrintReport({ project, laborSummary, timeEntries = [], tasks = [], teamMembers = [], taskFilter = 'with_hours' }) {
   if (!laborSummary) return null;
 
-  const taskEntries = Object.values(laborSummary.byTask)
-    .filter(t => t.loggedHours > 0 || t.estimatedHours)
-    .sort((a, b) => (b.loggedHours || 0) - (a.loggedHours || 0));
+  const allTaskEntries = Object.values(laborSummary.byTask);
+  const filteredTaskEntries = allTaskEntries.filter(t => {
+    switch (taskFilter) {
+      case 'with_hours': return t.loggedHours > 0;
+      case 'missing_estimates': return t.estimateStatus === 'missing_estimate';
+      case 'over_estimate': return t.estimateStatus === 'over_estimate';
+      case 'completed': return t.status === 'completed';
+      case 'open': return t.status === 'open';
+      default: return true;
+    }
+  }).sort((a, b) => (b.loggedHours || 0) - (a.loggedHours || 0));
 
   const memberEntries = Object.values(laborSummary.byTeamMember).sort((a, b) => b.hours - a.hours);
 
@@ -32,24 +45,33 @@ export default function ProjectLaborPrintReport({ project, laborSummary, timeEnt
         <p style={{ fontSize: 10, color: "#999", margin: "2px 0 0" }}>
           Generated {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
         </p>
+        <p style={{ fontSize: 9, color: "#aaa", margin: "2px 0 0" }}>
+          Task Scope: {TASK_FILTER_LABELS[taskFilter] || taskFilter}
+        </p>
       </div>
 
       {/* Summary */}
       <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 16 }}>
         <tbody>
-          <SummaryRow label="Estimated Hours" value={fmt(laborSummary.totalEstimated)} />
-          <SummaryRow label="Logged Hours" value={fmt(laborSummary.totalLogged)} bold />
+          <SummaryRow label="Estimated Hours" value={fmt(laborSummary.totalEstimatedHours)} />
+          <SummaryRow label="Total Logged Hours" value={fmt(laborSummary.totalLoggedHours)} bold />
+          <SummaryRow label="Logged on Estimated Tasks" value={fmt(laborSummary.estimatedTaskLoggedHours)} />
           <SummaryRow
-            label="Variance"
-            value={laborSummary.totalVariance === 0
-              ? "On target"
-              : `${fmt(Math.abs(laborSummary.totalVariance))} ${laborSummary.totalVariance > 0 ? "over" : "under"}`
-            }
-            color={laborSummary.totalVariance > 0 ? "#dc2626" : laborSummary.totalVariance < 0 ? "#16a34a" : "#666"}
+            label="Unestimated Logged Hours"
+            value={fmt(laborSummary.unestimatedTaskLoggedHours)}
+            color={laborSummary.unestimatedTaskLoggedHours > 0 ? "#d97706" : "#666"}
           />
-          <SummaryRow label="Completed Task Hours" value={fmt(laborSummary.completedTaskLogged)} />
-          <SummaryRow label="Open Task Hours" value={fmt(laborSummary.openTaskLogged)} />
-          <SummaryRow label="Tasks Missing Estimates" value={String(laborSummary.missingEstimates)} />
+          <SummaryRow
+            label="Variance on Estimated Work"
+            value={laborSummary.varianceOnEstimatedTasks === 0
+              ? "On target"
+              : `${fmt(Math.abs(laborSummary.varianceOnEstimatedTasks))} ${laborSummary.varianceOnEstimatedTasks > 0 ? "over" : "under"}`
+            }
+            color={laborSummary.varianceOnEstimatedTasks > 0 ? "#dc2626" : laborSummary.varianceOnEstimatedTasks < 0 ? "#16a34a" : "#666"}
+          />
+          <SummaryRow label="Completed Task Hours" value={fmt(laborSummary.completedTaskLoggedHours)} />
+          <SummaryRow label="Open Task Hours" value={fmt(laborSummary.openTaskLoggedHours)} />
+          <SummaryRow label="Tasks Missing Estimates" value={String(laborSummary.unestimatedTaskCount)} />
           <SummaryRow label="Completed w/o Hours" value={String(laborSummary.completedZeroHours)} />
         </tbody>
       </table>
@@ -63,9 +85,11 @@ export default function ProjectLaborPrintReport({ project, laborSummary, timeEnt
           <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 16 }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #ddd" }}>
-                <th style={{ textAlign: "left", fontSize: 9, fontWeight: 600, color: "#999", padding: "2px 4px", textTransform: "uppercase" }}>Name</th>
-                <th style={{ textAlign: "right", fontSize: 9, fontWeight: 600, color: "#999", padding: "2px 4px", textTransform: "uppercase" }}>Hours</th>
-                <th style={{ textAlign: "right", fontSize: 9, fontWeight: 600, color: "#999", padding: "2px 4px", textTransform: "uppercase" }}>Entries</th>
+                <TH align="left">Name</TH>
+                <TH align="right">Total</TH>
+                <TH align="right">Estimated Tasks</TH>
+                <TH align="right">Unestimated</TH>
+                <TH align="right">Entries</TH>
               </tr>
             </thead>
             <tbody>
@@ -73,6 +97,10 @@ export default function ProjectLaborPrintReport({ project, laborSummary, timeEnt
                 <tr key={m.memberId} style={{ borderBottom: "1px solid #eee" }}>
                   <td style={{ padding: "3px 4px" }}>{m.memberName}</td>
                   <td style={{ padding: "3px 4px", textAlign: "right", fontWeight: 500 }}>{fmt(m.hours)}</td>
+                  <td style={{ padding: "3px 4px", textAlign: "right", color: "#666" }}>{fmt(m.estimatedTaskHours)}</td>
+                  <td style={{ padding: "3px 4px", textAlign: "right", color: m.unestimatedTaskHours > 0 ? "#d97706" : "#999" }}>
+                    {m.unestimatedTaskHours > 0 ? fmt(m.unestimatedTaskHours) : "—"}
+                  </td>
                   <td style={{ padding: "3px 4px", textAlign: "right", color: "#999" }}>{m.entryCount}</td>
                 </tr>
               ))}
@@ -82,7 +110,7 @@ export default function ProjectLaborPrintReport({ project, laborSummary, timeEnt
       )}
 
       {/* Task Detail Table */}
-      {taskEntries.length > 0 && (
+      {filteredTaskEntries.length > 0 && (
         <>
           <h2 style={{ fontSize: 13, fontWeight: 700, margin: "16px 0 6px", borderBottom: "1px solid #ccc", paddingBottom: 4 }}>
             Hours by Task
@@ -90,15 +118,16 @@ export default function ProjectLaborPrintReport({ project, laborSummary, timeEnt
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #ddd" }}>
-                <th style={{ textAlign: "left", fontSize: 9, fontWeight: 600, color: "#999", padding: "2px 4px", textTransform: "uppercase" }}>Task</th>
-                <th style={{ textAlign: "center", fontSize: 9, fontWeight: 600, color: "#999", padding: "2px 4px", textTransform: "uppercase" }}>Status</th>
-                <th style={{ textAlign: "right", fontSize: 9, fontWeight: 600, color: "#999", padding: "2px 4px", textTransform: "uppercase" }}>Est</th>
-                <th style={{ textAlign: "right", fontSize: 9, fontWeight: 600, color: "#999", padding: "2px 4px", textTransform: "uppercase" }}>Logged</th>
-                <th style={{ textAlign: "right", fontSize: 9, fontWeight: 600, color: "#999", padding: "2px 4px", textTransform: "uppercase" }}>Var</th>
+                <TH align="left">Task</TH>
+                <TH align="center">Status</TH>
+                <TH align="right">Est</TH>
+                <TH align="right">Logged</TH>
+                <TH align="right">Variance</TH>
+                <TH align="right">Est. Status</TH>
               </tr>
             </thead>
             <tbody>
-              {taskEntries.map(t => (
+              {filteredTaskEntries.map(t => (
                 <tr key={t.taskId} style={{ borderBottom: "1px solid #eee", breakInside: "avoid" }}>
                   <td style={{ padding: "3px 4px", maxWidth: 200 }}>{t.taskName}</td>
                   <td style={{ padding: "3px 4px", textAlign: "center", color: t.status === "completed" ? "#16a34a" : "#999" }}>
@@ -116,6 +145,14 @@ export default function ProjectLaborPrintReport({ project, laborSummary, timeEnt
                     color: t.varianceHours == null ? "#ccc" : t.varianceHours > 0 ? "#dc2626" : t.varianceHours < 0 ? "#16a34a" : "#666",
                   }}>
                     {t.varianceHours == null ? "—" : t.varianceHours === 0 ? "0" : `${t.varianceHours > 0 ? '+' : ''}${fmt(Math.abs(t.varianceHours))}`}
+                  </td>
+                  <td style={{
+                    padding: "3px 4px",
+                    textAlign: "right",
+                    fontSize: 9,
+                    color: t.estimateStatus === 'missing_estimate' ? '#d97706' : t.estimateStatus === 'over_estimate' ? '#dc2626' : '#999',
+                  }}>
+                    {ESTIMATE_STATUS_LABELS[t.estimateStatus] || ''}
                   </td>
                 </tr>
               ))}
@@ -135,6 +172,14 @@ function SummaryRow({ label, value, bold = false, color }) {
         {value}
       </td>
     </tr>
+  );
+}
+
+function TH({ children, align = "left" }) {
+  return (
+    <th style={{ textAlign: align, fontSize: 9, fontWeight: 600, color: "#999", padding: "2px 4px", textTransform: "uppercase" }}>
+      {children}
+    </th>
   );
 }
 
