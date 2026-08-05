@@ -192,20 +192,9 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
 
     setIsCompletingTask(true);
     try {
-      const currentUser = await base44.auth.me();
-
-      const updateTaskFn = async (taskId, data) => {
-        const mutationTimestamp = Date.now();
-        await updateTaskMutation.mutateAsync({ id: taskId, data, mutationTimestamp });
-      };
-
       const result = await executeTaskCompletion(payload, {
         task,
-        completedStatusId: completedStatus.id,
-        updateTaskFn,
         queryClient,
-        teamMembers,
-        currentUser,
       });
 
       if (!result.success) {
@@ -213,11 +202,13 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
         return;
       }
 
+      // Also invalidate local task caches managed by this hook
+      invalidateProjectCaches(queryClient, projectId);
       toast({ title: 'Task completed' });
     } finally {
       setIsCompletingTask(false);
     }
-  }, [completedStatus, updateTaskMutation, teamMembers, queryClient, isCompletingTask]);
+  }, [completedStatus, queryClient, projectId, isCompletingTask]);
 
   const countUninstalledCommitments = useCallback(async (task) => {
     const links = await base44.entities.TaskPartLink.filter({ task_id: task.id });

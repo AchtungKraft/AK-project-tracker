@@ -324,16 +324,9 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
 
     setIsCompletingTask(true);
     try {
-      const currentUser = await base44.auth.me();
-      const members = queryClient.getQueryData(['teamMembers']) || teamMembers;
-
       const result = await executeTaskCompletion(payload, {
         task,
-        completedStatusId: completedStatus.id,
-        updateTaskFn: updateTask,
         queryClient,
-        teamMembers: members,
-        currentUser,
       });
 
       if (!result.success) {
@@ -341,11 +334,13 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
         return;
       }
 
+      // Also invalidate local task caches managed by this hook
+      invalidateAllTaskCaches();
       toast({ title: 'Task completed' });
     } finally {
       setIsCompletingTask(false);
     }
-  }, [completedStatus, updateTask, queryClient, teamMembers, isCompletingTask]);
+  }, [completedStatus, queryClient, isCompletingTask]);
 
   /**
    * countUninstalledCommitments

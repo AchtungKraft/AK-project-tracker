@@ -376,17 +376,21 @@ export default function TaskCompletionModal({
             </>
           )}
 
-          {/* Completion / Work Note — always shown, required when adding hours */}
+          {/* Completion / Work Note */}
           <div>
             <Label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">
-              Completion / Work Note {noteRequired && <span className="text-red-400">*</span>}
+              {parsedAdditional > 0 ? "Completion / Work Note" : "Completion Note"} {noteRequired && <span className="text-red-400">*</span>}
+              {parsedAdditional <= 0 && <span className="text-gray-600 normal-case tracking-normal ml-1">(optional — saved as comment)</span>}
             </Label>
             <Textarea
               value={completionNote}
               onChange={(e) => setCompletionNote(e.target.value)}
-              placeholder="Describe the work completed, issues found, or final outcome..."
-              rows={3}
-              className="bg-gray-800 border-gray-700 text-white min-h-[72px] text-sm resize-y"
+              placeholder={parsedAdditional > 0
+                ? "Describe the work completed, issues found, or final outcome..."
+                : "Optional note — will be saved as a task comment..."
+              }
+              rows={parsedAdditional > 0 ? 3 : 2}
+              className="bg-gray-800 border-gray-700 text-white min-h-[56px] text-sm resize-y"
             />
             {noteRequired && !noteValid && noteTrimmed === "" && additionalHours !== "" && (
               <p className="text-xs text-red-400 mt-1">
