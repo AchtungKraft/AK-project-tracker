@@ -166,6 +166,18 @@
         },
         "hours_actual": {
           "type": "number"
+        },
+        "hours_logged_estimated_tasks": {
+          "type": "number",
+          "description": "Logged hours on tasks that have estimates"
+        },
+        "hours_logged_unestimated_tasks": {
+          "type": "number",
+          "description": "Logged hours on tasks without estimates"
+        },
+        "hours_variance_estimated_tasks": {
+          "type": "number",
+          "description": "Variance on estimated work only (logged on estimated tasks - estimated)"
         }
       },
       "description": "Denormalized workflow health snapshot \u2014 set by resolver"

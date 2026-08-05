@@ -914,7 +914,7 @@ Deno.serve(async (req) => {
       }
       // Compare workflow_health object
       const oldHealth = project.workflow_health || {};
-      const healthKeys = ['tasks_ready', 'tasks_blocked', 'tasks_waiting', 'tasks_in_progress', 'tasks_completed', 'hours_remaining', 'hours_estimated', 'hours_actual'];
+      const healthKeys = ['tasks_ready', 'tasks_blocked', 'tasks_waiting', 'tasks_in_progress', 'tasks_completed', 'hours_remaining', 'hours_estimated', 'hours_actual', 'hours_logged_estimated_tasks', 'hours_logged_unestimated_tasks', 'hours_variance_estimated_tasks'];
       for (const hk of healthKeys) {
         if ((oldHealth[hk] || 0) !== (ph.health[hk] || 0)) { projectChanged = true; break; }
       }
