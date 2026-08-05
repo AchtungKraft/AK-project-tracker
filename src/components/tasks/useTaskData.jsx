@@ -182,24 +182,66 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
   const [pendingUninstalledPartsCompletion, setPendingUninstalledPartsCompletion] = useState(null);
   const [pendingTimeCompletion, setPendingTimeCompletion] = useState(null);
 
-  const executeCompletion = useCallback(async (task, actualHours = null) => {
-    if (completedStatus) {
-      const mutationTimestamp = Date.now();
-      const updates = {
+  const executeCompletion = useCallback(async (task, payload = {}) => {
+    if (!completedStatus) return;
+    const { additionalHours = null, note = null, performedByUserId = null } = payload;
+
+    // Step 1: Create TaskTimeEntry when hours > 0
+    if (additionalHours != null && additionalHours > 0) {
+      let performerName = 'Unknown';
+      let performerId = performedByUserId;
+      if (performerId) {
+        const member = teamMembers.find(m => m.id === performerId);
+        if (member) performerName = member.full_name;
+      }
+      if (!performerId) {
+        try {
+          const me = await base44.auth.me();
+          const member = teamMembers.find(m => m.user_id === me.id);
+          if (member) { performerId = member.id; performerName = member.full_name; }
+        } catch {}
+      }
+
+      const today = new Date();
+      const workDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+      await base44.entities.TaskTimeEntry.create({
+        task_id: task.id,
+        project_id: task.project_id,
+        hours: additionalHours,
+        work_date: workDate,
+        note: note || 'Task completion',
+        team_member_id: performerId,
+        performed_by_name: performerName,
+        entry_source: 'TASK_COMPLETION',
+      });
+    }
+
+    // Step 2: Recalculate canonical actual_hours from all entries
+    const allEntries = await base44.entities.TaskTimeEntry.filter({ task_id: task.id });
+    const totalLogged = allEntries.reduce((s, e) => s + (Number(e.hours) || 0), 0);
+
+    // Step 3: Mark task complete
+    const mutationTimestamp = Date.now();
+    await updateTaskMutation.mutateAsync({
+      id: task.id,
+      data: {
         status_id: completedStatus.id,
         completed_date: new Date().toISOString(),
-      };
-      if (actualHours != null) {
-        updates.actual_hours = actualHours;
-      }
-      await updateTaskMutation.mutateAsync({
-        id: task.id,
-        data: updates,
-        mutationTimestamp,
-      });
-      toast({ title: 'Task completed' });
+        actual_hours: Math.round(totalLogged * 100) / 100,
+      },
+      mutationTimestamp,
+    });
+
+    // Step 4: Invalidate time entry caches
+    queryClient.invalidateQueries({ queryKey: ['taskTimeEntries'] });
+    queryClient.invalidateQueries({ queryKey: ['projectTimeEntries'] });
+    if (task.project_id) {
+      queryClient.invalidateQueries({ queryKey: ['projectTimeEntries', task.project_id] });
     }
-  }, [completedStatus, updateTaskMutation]);
+
+    toast({ title: 'Task completed' });
+  }, [completedStatus, updateTaskMutation, teamMembers, queryClient]);
 
   const countUninstalledCommitments = useCallback(async (task) => {
     const links = await base44.entities.TaskPartLink.filter({ task_id: task.id });
@@ -247,12 +289,12 @@ export function useTaskData({ scope = 'all', projectId = null, priorityOnly = fa
     setPendingUninstalledPartsCompletion(null);
   }, []);
 
-  // Time completion modal handlers
-  const confirmTimeCompletion = useCallback(async (actualHours) => {
+  // Time completion modal handlers — accepts structured payload from TaskCompletionModal
+  const confirmTimeCompletion = useCallback(async (payload) => {
     if (!pendingTimeCompletion) return;
     const { task } = pendingTimeCompletion;
     setPendingTimeCompletion(null);
-    await executeCompletion(task, actualHours);
+    await executeCompletion(task, payload);
   }, [pendingTimeCompletion, executeCompletion]);
 
   const cancelTimeCompletion = useCallback(() => {

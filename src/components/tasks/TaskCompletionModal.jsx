@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { CheckCircle2, Clock, Loader2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CheckCircle2, Clock, Loader2, User } from "lucide-react";
 import { formatHours } from "./TimeEstimateInput";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
@@ -28,10 +29,22 @@ export default function TaskCompletionModal({
   isLoading = false,
   incompleteChecklistCount = 0,
   onOpenTask,
+  teamMembers: propTeamMembers,
 }) {
   const [additionalHours, setAdditionalHours] = useState("");
   const [completionNote, setCompletionNote] = useState("");
+  const [performedByUserId, setPerformedByUserId] = useState(null);
   const [leaveWarningTask, setLeaveWarningTask] = useState(null);
+
+  // Fetch team members if not provided via props
+  const { data: fetchedTeamMembers = [] } = useQuery({
+    queryKey: ['teamMembers'],
+    queryFn: () => base44.entities.TeamMember.list(),
+    enabled: !propTeamMembers && isOpen,
+    staleTime: 60000,
+  });
+  const teamMembers = propTeamMembers || fetchedTeamMembers;
+  const activeTeamMembers = useMemo(() => teamMembers.filter(m => m.active), [teamMembers]);
 
   // Fetch existing time entries
   const { data: timeEntries = [] } = useQuery({
@@ -46,14 +59,19 @@ export default function TaskCompletionModal({
     [task, timeEntries]
   );
 
-  // Reset form when modal opens
+  // Default performer to current user's team member
   useEffect(() => {
     if (isOpen) {
       setAdditionalHours("");
       setCompletionNote("");
       setLeaveWarningTask(null);
+      // Default performer to current user
+      base44.auth.me().then(me => {
+        const myMember = teamMembers.find(m => m.user_id === me.id && m.active);
+        setPerformedByUserId(myMember?.id || null);
+      }).catch(() => setPerformedByUserId(null));
     }
-  }, [isOpen]);
+  }, [isOpen, teamMembers]);
 
   // Fetch project tasks for dependency awareness
   const { data: allProjectTasks = [] } = useQuery({
@@ -93,8 +111,10 @@ export default function TaskCompletionModal({
 
   const hasTimeEntry = additionalHours !== "" && additionalHours !== "0";
   const noteRequired = parsedAdditional > 0;
+  const performerRequired = parsedAdditional > 0;
   const noteTrimmed = completionNote.trim();
   const noteValid = !noteRequired || noteTrimmed.length > 0;
+  const performerValid = !performerRequired || !!performedByUserId;
 
   const handleDependencyTaskClick = (depTask) => {
     if (hasTimeEntry || completionNote.trim()) {
@@ -112,10 +132,15 @@ export default function TaskCompletionModal({
   };
 
   const handleConfirm = () => {
-    // Pass both the additional hours and note for time entry creation
     const additional = parsedAdditional > 0 ? parsedAdditional : null;
     const note = completionNote.trim() || null;
-    onConfirm(additional, note);
+    const performer = performedByUserId || null;
+    // Pass structured payload to prevent future field omissions
+    onConfirm({
+      additionalHours: additional,
+      note,
+      performedByUserId: performer,
+    });
   };
 
   const QUICK_PRESETS = [0.25, 0.5, 1, 2, 4];
@@ -226,6 +251,39 @@ export default function TaskCompletionModal({
             )}
           </div>
 
+          {/* Performed By selector — shown when additional hours entered */}
+          {parsedAdditional > 0 && (
+            <div>
+              <Label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">
+                Performed By {performerRequired && <span className="text-red-400">*</span>}
+              </Label>
+              <Select value={performedByUserId || ''} onValueChange={setPerformedByUserId}>
+                <SelectTrigger className="bg-gray-800 border-gray-700 text-white h-9">
+                  <SelectValue placeholder="Select team member">
+                    {performedByUserId
+                      ? teamMembers.find(m => m.id === performedByUserId)?.full_name || 'Unknown'
+                      : 'Select team member'}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {activeTeamMembers.map(m => (
+                    <SelectItem key={m.id} value={m.id} className="text-sm">
+                      <span className="flex items-center gap-2">
+                        <User className="w-3 h-3 text-gray-400" />
+                        {m.full_name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {performerRequired && !performerValid && (
+                <p className="text-xs text-red-400 mt-1">
+                  A performer is required when logging hours.
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Variance display */}
           {variance !== null && (
             <div className={`text-sm font-medium ${
@@ -249,7 +307,7 @@ export default function TaskCompletionModal({
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={isLoading || !noteValid}
+            disabled={isLoading || !noteValid || !performerValid}
             className="flex-1 bg-red-600 hover:bg-red-700"
           >
             {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Complete'}

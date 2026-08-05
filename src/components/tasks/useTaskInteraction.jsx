@@ -317,15 +317,24 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
 
   const [pendingTimeCompletion, setPendingTimeCompletion] = useState(null);
 
-  const executeCompletion = useCallback(async (task, additionalHours = null, completionNote = null) => {
-    if (completedStatus) {
-      setIsCompletingTask(true);
-      try {
-        // Create a completion time entry if additional hours provided
-        if (additionalHours != null && additionalHours > 0) {
-          // Find current user's team member for performer
-          let performerName = 'Unknown';
-          let performerId = task.assigned_team_member_id || null;
+  const executeCompletion = useCallback(async (task, payload = {}) => {
+    if (!completedStatus) return;
+    const { additionalHours = null, note = null, performedByUserId = null } = payload;
+
+    setIsCompletingTask(true);
+    try {
+      // Create a completion time entry if additional hours provided
+      if (additionalHours != null && additionalHours > 0) {
+        // Resolve performer name from ID
+        let performerName = 'Unknown';
+        let performerId = performedByUserId;
+        if (performerId) {
+          const members = queryClient.getQueryData(['teamMembers']) || [];
+          const member = members.find(m => m.id === performerId);
+          if (member) performerName = member.full_name;
+        }
+        if (!performerId) {
+          // Fallback: use current user
           try {
             const me = await base44.auth.me();
             const members = await base44.entities.TeamMember.filter({ user_id: me.id });
@@ -334,41 +343,41 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
               performerName = members[0].full_name;
             }
           } catch {}
-
-          const today = new Date();
-          const workDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-
-          await base44.entities.TaskTimeEntry.create({
-            task_id: task.id,
-            project_id: task.project_id,
-            hours: additionalHours,
-            work_date: workDate,
-            note: completionNote || 'Task completion',
-            team_member_id: performerId,
-            performed_by_name: performerName,
-            entry_source: 'TASK_COMPLETION',
-          });
         }
 
-        // Mark task complete (keep actual_hours in sync for legacy)
-        const allEntries = await base44.entities.TaskTimeEntry.filter({ task_id: task.id });
-        const totalLogged = allEntries.reduce((s, e) => s + (Number(e.hours) || 0), 0);
+        const today = new Date();
+        const workDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-        const updates = {
-          status_id: completedStatus.id,
-          completed_date: new Date().toISOString(),
-          actual_hours: Math.round(totalLogged * 100) / 100,
-        };
-        await updateTask(task.id, updates);
-        
-        // Invalidate time entries
-        queryClient.invalidateQueries({ queryKey: ['taskTimeEntries'] });
-        queryClient.invalidateQueries({ queryKey: ['projectTimeEntries'] });
-        
-        toast({ title: 'Task completed' });
-      } finally {
-        setIsCompletingTask(false);
+        await base44.entities.TaskTimeEntry.create({
+          task_id: task.id,
+          project_id: task.project_id,
+          hours: additionalHours,
+          work_date: workDate,
+          note: note || 'Task completion',
+          team_member_id: performerId,
+          performed_by_name: performerName,
+          entry_source: 'TASK_COMPLETION',
+        });
       }
+
+      // Mark task complete (keep actual_hours in sync for legacy)
+      const allEntries = await base44.entities.TaskTimeEntry.filter({ task_id: task.id });
+      const totalLogged = allEntries.reduce((s, e) => s + (Number(e.hours) || 0), 0);
+
+      const updates = {
+        status_id: completedStatus.id,
+        completed_date: new Date().toISOString(),
+        actual_hours: Math.round(totalLogged * 100) / 100,
+      };
+      await updateTask(task.id, updates);
+      
+      // Invalidate time entries
+      queryClient.invalidateQueries({ queryKey: ['taskTimeEntries'] });
+      queryClient.invalidateQueries({ queryKey: ['projectTimeEntries'] });
+      
+      toast({ title: 'Task completed' });
+    } finally {
+      setIsCompletingTask(false);
     }
   }, [completedStatus, updateTask, queryClient]);
 
@@ -486,12 +495,12 @@ export function useTaskInteraction({ projectId = null, priorityOnly = false } = 
     setPendingUninstalledPartsCompletion(null);
   }, []);
 
-  // Time completion modal handlers
-  const confirmTimeCompletion = useCallback(async (additionalHours, completionNote) => {
+  // Time completion modal handlers — accepts structured payload from TaskCompletionModal
+  const confirmTimeCompletion = useCallback(async (payload) => {
     if (!pendingTimeCompletion) return;
     const { task } = pendingTimeCompletion;
     setPendingTimeCompletion(null);
-    await executeCompletion(task, additionalHours, completionNote);
+    await executeCompletion(task, payload);
   }, [pendingTimeCompletion, executeCompletion]);
 
   const cancelTimeCompletion = useCallback(() => {
