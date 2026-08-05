@@ -14,6 +14,7 @@ import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 import ManageBucketsModal from "@/components/project/ManageBucketsModal";
 import { sortTasksByPriority } from "@/utils/taskPrioritySort";
 import { groupProjectsByType } from "@/utils/projectTypeGroups";
+import { buildLoggedHoursByTaskId } from "@/lib/taskTimeUtils";
 
 function resolveCategoryName(catId, categories) {
   const cat = categories.find(c => c.id === catId);
@@ -41,8 +42,13 @@ export default function PriorityExecutionView({
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  // ── Task IDs (sorted for stable query keys) ──
+  const taskIds = useMemo(() => {
+    const ids = tasks.map(t => t.id);
+    return [...ids].sort();
+  }, [tasks]);
+
   // ── Checklist data ──
-  const taskIds = useMemo(() => tasks.map(t => t.id), [tasks]);
   const { data: allChecklistItems = [] } = useQuery({
     queryKey: ['executionChecklist', taskIds],
     queryFn: () => taskIds.length > 0
@@ -50,6 +56,21 @@ export default function PriorityExecutionView({
       : [],
     enabled: taskIds.length > 0,
   });
+
+  // ── Batch-load time entries for all visible tasks ──
+  const { data: allTimeEntries = [] } = useQuery({
+    queryKey: ['taskTimeEntriesByIds', 'priorityExecution', taskIds],
+    queryFn: () => taskIds.length > 0
+      ? base44.entities.TaskTimeEntry.filter({ task_id: { $in: taskIds } })
+      : [],
+    enabled: taskIds.length > 0,
+    staleTime: 15000,
+  });
+
+  const loggedHoursByTaskId = useMemo(
+    () => buildLoggedHoursByTaskId(allTimeEntries),
+    [allTimeEntries]
+  );
 
   const checklistByTaskId = useMemo(() => {
     const map = {};
@@ -269,6 +290,7 @@ export default function PriorityExecutionView({
                           assigneeName={teamMap[task.assigned_team_member_id]}
                           teamMembers={teamMembers}
                           checklistItems={checklistByTaskId[task.id] || []}
+                          loggedHours={loggedHoursByTaskId[task.id] || 0}
                           onToggleComplete={onToggleComplete}
                           onToggleChecklistItem={handleToggleChecklistItem}
                           onUpdateChecklistTitle={handleUpdateChecklistTitle}

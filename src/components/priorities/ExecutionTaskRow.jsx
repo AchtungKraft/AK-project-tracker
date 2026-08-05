@@ -7,12 +7,14 @@ import { Flame, CalendarDays, User, Pencil, Trash2, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isUrgentPriority } from "@/utils/taskPrioritySort";
 import InlineEstimateEditor from "@/components/tasks/InlineEstimateEditor";
+import CompactTimeDisplay from "@/components/tasks/CompactTimeDisplay";
 
 export default function ExecutionTaskRow({
   task,
   assigneeName,
   teamMembers = [],
   checklistItems,
+  loggedHours = 0,
   onToggleComplete,
   onToggleChecklistItem,
   onUpdateChecklistTitle,
@@ -165,9 +167,14 @@ export default function ExecutionTaskRow({
           {assigneeName || "—"}
         </div>
 
-        {/* Estimated hours — inline editor on desktop */}
+        {/* Logged / Estimated hours — compact display on desktop */}
         <span className="hidden md:block shrink-0 mt-0.5" onClick={e => e.stopPropagation()}>
-          {updateTaskMutation ? (
+          {loggedHours > 0 ? (
+            <CompactTimeDisplay
+              estimatedHours={task.estimated_hours}
+              loggedHours={loggedHours}
+            />
+          ) : updateTaskMutation ? (
             <InlineEstimateEditor
               value={task.estimated_hours}
               onSave={(hours) => new Promise((resolve, reject) => {

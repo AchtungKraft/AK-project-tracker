@@ -242,8 +242,8 @@ function phaseMetrics(bucket, tasks, statusMap) {
   const wv = pt.filter(t => t._rs?.state === S.WAITING_ON_VENDOR);
   const wc = pt.filter(t => t._rs?.state === S.WAITING_ON_CUSTOMER);
   const est = nonCancelled.reduce((s, t) => s + (t.estimated_hours || 0), 0);
-  const act = nonCancelled.reduce((s, t) => s + (t.actual_hours || 0), 0);
-  const rem = nonCancelled.filter(t => !statusMap.doneIds.has(t.status_id)).reduce((s, t) => s + Math.max((t.estimated_hours || 0) - (t.actual_hours || 0), 0), 0);
+  const act = nonCancelled.reduce((s, t) => s + (t._canonicalHours || 0), 0);
+  const rem = nonCancelled.filter(t => !statusMap.doneIds.has(t.status_id)).reduce((s, t) => s + Math.max((t.estimated_hours || 0) - (t._canonicalHours || 0), 0), 0);
   const reqNonCancelled = req.filter(t => !statusMap.cancelledIds.has(t.status_id));
   const reqDone = reqNonCancelled.filter(t => statusMap.doneIds.has(t.status_id)).length;
   const pct = reqNonCancelled.length > 0 ? Math.round((reqDone / reqNonCancelled.length) * 100) : 0;
@@ -511,7 +511,7 @@ function resolveMilestones(milestones, phaseMap, taskMap, statusMap, projectId) 
 }
 
 // ── Project Health & Current/Next Phase ──
-function deriveProjectHealth(phaseRollups, milestoneResults, tasks, statusMap, projectId) {
+function deriveProjectHealth(phaseRollups, milestoneResults, tasks, statusMap, projectId, canonicalHoursByTask = {}, canonicalTotalHours = 0) {
   const orderedPhases = [...phaseRollups].sort((a, b) => (a.order || 0) - (b.order || 0));
 
   // Active phases = all phases with status ACTIVE
@@ -566,8 +566,8 @@ function deriveProjectHealth(phaseRollups, milestoneResults, tasks, statusMap, p
     tasks_in_progress: tasks.filter(t => t._rs?.state === S.IN_PROGRESS || t._rs?.state === S.REVIEW_REQUIRED).length,
     tasks_completed: tasks.filter(t => t._rs?.state === S.COMPLETED).length,
     hours_estimated: nonCancelled.reduce((s, t) => s + (t.estimated_hours || 0), 0),
-    hours_actual: nonCancelled.reduce((s, t) => s + (t.actual_hours || 0), 0),
-    hours_remaining: nonCancelled.filter(t => !statusMap.doneIds.has(t.status_id)).reduce((s, t) => s + Math.max((t.estimated_hours || 0) - (t.actual_hours || 0), 0), 0),
+    hours_actual: canonicalTotalHours,
+    hours_remaining: nonCancelled.filter(t => !statusMap.doneIds.has(t.status_id)).reduce((s, t) => s + Math.max((t.estimated_hours || 0) - (canonicalHoursByTask[t.id] || 0), 0), 0),
   };
 
   // Workflow completion check
@@ -658,7 +658,7 @@ Deno.serve(async (req) => {
           waitingOnVendorCount: pt.filter(t => t.operational_state === S.WAITING_ON_VENDOR).length,
           waitingOnCustomerCount: pt.filter(t => t.operational_state === S.WAITING_ON_CUSTOMER).length,
           estimatedHours: nonCancelled.reduce((s, t) => s + (t.estimated_hours || 0), 0),
-          actualHours: nonCancelled.reduce((s, t) => s + (t.actual_hours || 0), 0),
+          actualHours: nonCancelled.reduce((s, t) => s + (t.actual_hours || 0), 0), // Read mode uses persisted values
           remainingHours: nonCancelled.filter(t => t.operational_state !== S.COMPLETED).reduce((s, t) => s + Math.max((t.estimated_hours || 0) - (t.actual_hours || 0), 0), 0),
           completionPercent: reqNonCancelled.length > 0 ? Math.round((reqDone / reqNonCancelled.length) * 100) : 0,
         };
@@ -698,7 +698,7 @@ Deno.serve(async (req) => {
 
     // ── MODE: RESOLVE — full recalculation ──
     const resolveStart = Date.now();
-    const [tasks, buckets, statusList, tpLinks, scs, fbReqs, commits, parts, milestones] = await Promise.all([
+    const [tasks, buckets, statusList, tpLinks, scs, fbReqs, commits, parts, milestones, timeEntries] = await Promise.all([
       base44.asServiceRole.entities.Task.filter({ project_id }),
       base44.asServiceRole.entities.ProjectKanbanBucket.filter({ project_id }),
       base44.asServiceRole.entities.StatusList.list(),
@@ -708,7 +708,22 @@ Deno.serve(async (req) => {
       base44.asServiceRole.entities.PartCommitment.filter({ project_id }),
       base44.asServiceRole.entities.Part.list('-created_date', 500),
       base44.asServiceRole.entities.ProjectMilestone.filter({ project_id }),
+      base44.asServiceRole.entities.TaskTimeEntry.filter({ project_id }),
     ]);
+
+    // Build canonical hours_actual from time entries (single sum, no N+1)
+    const canonicalHoursByTask = {};
+    for (const e of timeEntries) {
+      if (e.task_id) {
+        canonicalHoursByTask[e.task_id] = (canonicalHoursByTask[e.task_id] || 0) + (Number(e.hours) || 0);
+      }
+    }
+    const canonicalTotalHours = Math.round(timeEntries.reduce((s, e) => s + (Number(e.hours) || 0), 0) * 100) / 100;
+
+    // Attach canonical hours to each task for phase metrics
+    for (const t of tasks) {
+      t._canonicalHours = Math.round((canonicalHoursByTask[t.id] || 0) * 100) / 100;
+    }
 
     const { map: statusMap, warnings: statusWarnings } = buildStatusMapping(statusList);
     const taskMap = new Map(); tasks.forEach(t => taskMap.set(t.id, t));
@@ -800,7 +815,7 @@ Deno.serve(async (req) => {
     warnings.push(...msWarnings);
 
     // ── Project Health ──
-    const projectHealthData = deriveProjectHealth(phaseRollups, milestoneResults, tasks, statusMap, project_id);
+    const projectHealthData = deriveProjectHealth(phaseRollups, milestoneResults, tasks, statusMap, project_id, canonicalHoursByTask, canonicalTotalHours);
 
     // ── Persist ──
     let tasksChanged = 0;
@@ -935,7 +950,7 @@ Deno.serve(async (req) => {
         tasksChanged, tasksUnchanged, phasesChanged, milestonesChanged,
         stateDistribution, warnings,
         resolvedAt: now, resolveTimeMs: resolveTime,
-        entityReads: 10, entityWrites: tasksChanged + phasesChanged + milestonesChanged + phaseTransitions.length + (projectChanged ? 1 : 0),
+        entityReads: 11, entityWrites: tasksChanged + phasesChanged + milestonesChanged + phaseTransitions.length + (projectChanged ? 1 : 0),
         depsCleaned: tasks.filter(t => t._cleanedDeps !== undefined).length,
         phaseTransitions: phaseTransitions.length,
       },

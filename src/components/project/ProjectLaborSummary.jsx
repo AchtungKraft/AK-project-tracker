@@ -4,9 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Clock, AlertTriangle, ChevronDown, ChevronRight, Users, Layers, Download } from "lucide-react";
+import { Clock, AlertTriangle, ChevronDown, ChevronRight, Users, Layers, Download, Printer } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buildProjectLaborSummary, generateTaskSummaryCSV, generateTimeEntryCSV } from "@/lib/taskTimeUtils";
+import ProjectLaborPrintReport from "@/components/print/ProjectLaborPrintReport";
 import { formatDuration } from "@/lib/estimateUtils";
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
@@ -178,7 +179,7 @@ export default function ProjectLaborSummary({ project, projectId, tasks = [], bu
         </Collapsible>
       )}
 
-      {/* CSV Export buttons */}
+      {/* CSV Export + Print buttons */}
       {timeEntries.length > 0 && (
         <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-800/50">
           <Button
@@ -205,6 +206,15 @@ export default function ProjectLaborSummary({ project, projectId, tasks = [], bu
             <Download className="w-3 h-3" />
             Detailed CSV
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs border-gray-700 text-gray-400 hover:text-white gap-1.5"
+            onClick={() => printLaborReport(project, summary, timeEntries, tasks, teamMembers)}
+          >
+            <Printer className="w-3 h-3" />
+            Print Labor Report
+          </Button>
         </div>
       )}
 
@@ -216,6 +226,27 @@ export default function ProjectLaborSummary({ project, projectId, tasks = [], bu
       )}
     </div>
   );
+}
+
+function printLaborReport(project, laborSummary, timeEntries, tasks, teamMembers) {
+  import('react-dom/server').then(({ renderToString }) => {
+    const html = renderToString(
+      <ProjectLaborPrintReport
+        project={project}
+        laborSummary={laborSummary}
+        timeEntries={timeEntries}
+        tasks={tasks}
+        teamMembers={teamMembers}
+      />
+    );
+    const printWindow = window.open('', '_blank', 'width=800,height=600');
+    if (!printWindow) return;
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Labor Report — ${project?.name || 'Project'}</title>
+      <style>body{margin:24px;font-family:system-ui,sans-serif;font-size:11px;color:#333}
+      @media print{body{margin:12px}}</style></head><body>${html}</body></html>`);
+    printWindow.document.close();
+    setTimeout(() => printWindow.print(), 300);
+  });
 }
 
 function downloadCSV(csvContent, filename) {
