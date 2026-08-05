@@ -26,7 +26,7 @@ import ProjectCalendarView from "./ProjectCalendarView";
 import PriorityExecutionView from "../priorities/PriorityExecutionView";
 import ShopPriorityView from "../priorities/ShopPriorityView";
 import ProjectWorkloadView from "./ProjectWorkloadView";
-import ProjectLaborSummary from "./ProjectLaborSummary";
+import LaborSummaryCard from "./LaborSummaryCard";
 import { useTaskData } from "../tasks/useTaskData";
 import TaskDetailDrawer from "../tasks/TaskDetailDrawer";
 import PriorityRemoveConfirm from "../tasks/PriorityRemoveConfirm";
@@ -44,7 +44,7 @@ import {
   CollapsibleTrigger as WorkflowCollapsibleTrigger,
 } from "@/components/ui/collapsible";
 
-export default function ProjectOverview({ project, projectId, sharedData = {} }) {
+export default function ProjectOverview({ project, projectId, sharedData = {}, onNavigateToHours }) {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const [editing, setEditing] = useState(false);
@@ -545,34 +545,16 @@ export default function ProjectOverview({ project, projectId, sharedData = {} })
           />
         )}
 
-        {/* Project Labor Summary — collapsible */}
-        <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
-          <Collapsible>
-            <CollapsibleTrigger asChild>
-              <CardHeader className="border-b border-red-900/30 p-4 cursor-pointer hover:bg-gray-900/30 transition-colors">
-                <div className="flex items-center gap-2">
-                  <ChevronRight className="w-4 h-4 text-gray-400 group-data-[state=open]:hidden" />
-                  <CardTitle className="text-white text-base flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-gray-400" />
-                    Labor Summary
-                  </CardTitle>
-                </div>
-              </CardHeader>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <CardContent className="p-4">
-                <ProjectLaborSummary
-                  project={project}
-                  projectId={projectId}
-                  tasks={allProjectTasks}
-                  buckets={projectBuckets}
-                  teamMembers={teamMembers}
-                  categories={categories}
-                />
-              </CardContent>
-            </CollapsibleContent>
-          </Collapsible>
-        </Card>
+        {/* Compact Labor Summary — links to full Hours tab */}
+        <LaborSummaryCard
+          project={project}
+          projectId={projectId}
+          tasks={allProjectTasks}
+          buckets={projectBuckets}
+          teamMembers={teamMembers}
+          categories={categories}
+          onViewFullReport={onNavigateToHours}
+        />
 
         {/* Recent Journal Entries Grid */}
         <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">

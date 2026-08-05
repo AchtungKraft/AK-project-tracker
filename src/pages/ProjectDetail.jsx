@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Menu, LayoutGrid, ListChecks, Layers, BookOpen, Users, Loader2, Edit2, Package, Truck, FileText, MapPin } from "lucide-react";
+import { ArrowLeft, Menu, LayoutGrid, ListChecks, Layers, BookOpen, Users, Loader2, Edit2, Package, Truck, FileText, MapPin, Clock } from "lucide-react";
 import EditProjectModal from "../components/dashboard/EditProjectModal";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DropdownMenu,
@@ -23,6 +24,7 @@ import ProjectPurchaseOrders from "../components/project/ProjectPurchaseOrders";
 import ProjectServicesSection from "../components/supply/ProjectServicesSection";
 import ProjectPagesTab from "../components/clientpages/ProjectPagesTab";
 import ProjectStoragePanel from "../components/project/ProjectStoragePanel";
+import ProjectLaborSummary from "../components/project/ProjectLaborSummary";
 
 // Stable query defaults for reference data (rarely changes)
 const REF_DATA_OPTS = { staleTime: 60000, gcTime: 300000, retry: 1, refetchOnWindowFocus: false, refetchOnReconnect: false };
@@ -41,6 +43,19 @@ export default function ProjectDetail() {
   const [activeTab, setActiveTab] = useState(tabParam);
   const [showEditModal, setShowEditModal] = useState(false);
 
+  // Push tab changes to URL so browser Back/Forward works
+  const handleTabChange = (newTab) => {
+    setActiveTab(newTab);
+    const params = new URLSearchParams(location.search);
+    if (newTab === 'overview') {
+      params.delete('tab');
+    } else {
+      params.set('tab', newTab);
+    }
+    const newUrl = `${location.pathname}?${params.toString()}`;
+    window.history.pushState({}, '', newUrl);
+  };
+
   const handleBack = () => {
     if (window.history.length > 1) {
       navigate(-1);
@@ -51,10 +66,21 @@ export default function ProjectDetail() {
     }
   };
 
+  // Sync tab state from URL on mount and when URL params change
   useEffect(() => {
     const newTab = urlParams.get('tab') || 'overview';
     setActiveTab(newTab);
   }, [urlParams]);
+
+  // Handle browser Back/Forward for tab changes pushed via pushState
+  useEffect(() => {
+    const onPopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      setActiveTab(params.get('tab') || 'overview');
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   const { data: project, isLoading } = useQuery({
     queryKey: ['project', projectId],
@@ -91,8 +117,8 @@ export default function ProjectDetail() {
     ...REF_DATA_OPTS,
   });
 
-  // Task data — only fetch when on overview or tasks tab
-  const needsTaskData = activeTab === 'overview' || activeTab === 'tasks';
+  // Task data — only fetch when on overview, tasks, or hours tab
+  const needsTaskData = activeTab === 'overview' || activeTab === 'tasks' || activeTab === 'hours';
   const { data: projectTasks = [] } = useQuery({
     queryKey: ['projectTasks', projectId],
     queryFn: () => base44.entities.Task.filter({ project_id: projectId }),
@@ -202,7 +228,7 @@ export default function ProjectDetail() {
           </Button>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           {/* Desktop Tabs */}
           <TabsList className="hidden md:flex bg-black/40 border border-gray-700 p-1 h-auto">
             <TabsTrigger 
@@ -265,6 +291,13 @@ export default function ProjectDetail() {
               <MapPin className="w-4 h-4" />
               Storage
             </TabsTrigger>
+            <TabsTrigger 
+              value="hours"
+              className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
+            >
+              <Clock className="w-4 h-4" />
+              Hours
+            </TabsTrigger>
           </TabsList>
 
           {/* Mobile Hamburger Menu */}
@@ -281,25 +314,26 @@ export default function ProjectDetail() {
                     {activeTab === 'purchaseorders' && <><Package className="w-4 h-4" /> Purchase Orders</>}
                     {activeTab === 'pages' && <><FileText className="w-4 h-4" /> Pages</>}
                     {activeTab === 'storage' && <><MapPin className="w-4 h-4" /> Storage</>}
+                    {activeTab === 'hours' && <><Clock className="w-4 h-4" /> Hours</>}
                   </span>
                   <Menu className="w-4 h-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56 bg-gray-900 border-gray-700">
                 <DropdownMenuItem 
-                  onClick={() => setActiveTab('overview')}
+                  onClick={() => handleTabChange('overview')}
                   className={`gap-2 ${activeTab === 'overview' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
                 >
                   <LayoutGrid className="w-4 h-4" /> Overview
                 </DropdownMenuItem>
                 <DropdownMenuItem 
-                  onClick={() => setActiveTab('journal')}
+                  onClick={() => handleTabChange('journal')}
                   className={`gap-2 ${activeTab === 'journal' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
                 >
                   <BookOpen className="w-4 h-4" /> Journal
                 </DropdownMenuItem>
                 <DropdownMenuItem 
-                  onClick={() => setActiveTab('clientportal')}
+                  onClick={() => handleTabChange('clientportal')}
                   className={`gap-2 ${activeTab === 'clientportal' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
                 >
                   <Users className="w-4 h-4" /> Client Portal
@@ -311,35 +345,41 @@ export default function ProjectDetail() {
                   <Layers className="w-4 h-4" /> Supply
                 </DropdownMenuItem>
                 <DropdownMenuItem 
-                  onClick={() => setActiveTab('services')}
+                  onClick={() => handleTabChange('services')}
                   className={`gap-2 ${activeTab === 'services' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
                 >
                   <Truck className="w-4 h-4" /> Services
                 </DropdownMenuItem>
                 <DropdownMenuItem 
-                  onClick={() => setActiveTab('purchaseorders')}
+                  onClick={() => handleTabChange('purchaseorders')}
                   className={`gap-2 ${activeTab === 'purchaseorders' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
                 >
                   <Package className="w-4 h-4" /> POs
                 </DropdownMenuItem>
                 <DropdownMenuItem 
-                   onClick={() => setActiveTab('pages')}
+                   onClick={() => handleTabChange('pages')}
                    className={`gap-2 ${activeTab === 'pages' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
                  >
                    <FileText className="w-4 h-4" /> Pages
                  </DropdownMenuItem>
                  <DropdownMenuItem 
-                   onClick={() => setActiveTab('storage')}
+                   onClick={() => handleTabChange('storage')}
                    className={`gap-2 ${activeTab === 'storage' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
                  >
                    <MapPin className="w-4 h-4" /> Storage
+                 </DropdownMenuItem>
+                 <DropdownMenuItem 
+                   onClick={() => handleTabChange('hours')}
+                   className={`gap-2 ${activeTab === 'hours' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
+                 >
+                   <Clock className="w-4 h-4" /> Hours
                  </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
           </div>
 
           <TabsContent value="overview" className={isMobile ? 'mt-3' : 'mt-6'}>
-            <ProjectOverview project={project} projectId={projectId} sharedData={sharedData} />
+            <ProjectOverview project={project} projectId={projectId} sharedData={sharedData} onNavigateToHours={() => handleTabChange('hours')} />
           </TabsContent>
 
           <TabsContent value="tasks" className={isMobile ? 'mt-3' : 'mt-6'}>
@@ -368,6 +408,27 @@ export default function ProjectDetail() {
 
           <TabsContent value="storage" className={isMobile ? 'mt-3' : 'mt-6'}>
             <ProjectStoragePanel projectId={projectId} projectName={project?.name} />
+          </TabsContent>
+
+          <TabsContent value="hours" className={isMobile ? 'mt-3' : 'mt-6'}>
+            <Card className="bg-black/40 backdrop-blur-xl border border-red-900/30">
+              <CardHeader className="border-b border-red-900/30 p-4">
+                <CardTitle className="text-white text-base flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-gray-400" />
+                  Hours Report
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4">
+                <ProjectLaborSummary
+                  project={project}
+                  projectId={projectId}
+                  tasks={projectTasks}
+                  buckets={projectBuckets}
+                  teamMembers={teamMembers}
+                  categories={categories}
+                />
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
