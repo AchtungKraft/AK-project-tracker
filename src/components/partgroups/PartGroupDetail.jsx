@@ -274,6 +274,7 @@ export default function PartGroupDetail({ groupId, onBack }) {
       {showAddParts && (
         <AddPartsToGroupModal
           groupId={groupId}
+          groupName={group?.name}
           existingPartIds={items.map(i => i.part_id)}
           onClose={() => {
             setShowAddParts(false);
