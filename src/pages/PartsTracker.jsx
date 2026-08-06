@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, List, RefreshCw, Package } from "lucide-react";
+import { MapPin, List, RefreshCw, Package, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
 import PartsMasterList from "../components/parts/PartsMasterList";
@@ -8,6 +8,8 @@ import InventoryLocations from "../components/inventory/InventoryLocations";
 import InventoryManagement from "../components/inventory/InventoryManagement";
 import PartModal from "../components/parts/PartModal";
 import MobileSafeAreaContainer from "@/components/mobile/MobileSafeAreaContainer";
+import PartGroupsList from "@/components/partgroups/PartGroupsList";
+import PartGroupDetail from "@/components/partgroups/PartGroupDetail";
 
 export default function PartsTracker() {
   const queryClient = useQueryClient();
@@ -20,15 +22,18 @@ export default function PartsTracker() {
   const urlLocationId = urlParams.get('location') || null;
 
   const [activeTab, setActiveTab] = useState(urlTab);
+  const [selectedGroupId, setSelectedGroupId] = useState(null);
 
   // Sync tab to URL
   const handleTabChange = (tab) => {
     setActiveTab(tab);
+    setSelectedGroupId(null);
     const url = new URL(window.location);
     url.searchParams.set('tab', tab);
     if (tab !== 'locations') {
       url.searchParams.delete('location');
     }
+    url.searchParams.delete('group');
     window.history.replaceState({}, '', url);
   };
 
@@ -96,6 +101,11 @@ export default function PartsTracker() {
                   <MapPin className="w-4 h-4" />
                   <span>LOCATIONS</span>
                 </TabsTrigger>
+                <TabsTrigger value="groups" className="gap-1.5 flex-shrink-0 text-xs md:text-sm px-3 md:px-4">
+                  <Layers className="w-4 h-4" />
+                  <span className="hidden sm:inline">PARTS GROUPS</span>
+                  <span className="sm:hidden">GROUPS</span>
+                </TabsTrigger>
               </TabsList>
             </div>
 
@@ -112,6 +122,21 @@ export default function PartsTracker() {
                 onPartClick={handlePartClick}
                 urlLocationId={urlLocationId}
               />
+            </TabsContent>
+
+            <TabsContent value="groups" className="mt-4">
+              <div className="bg-black/20 rounded-lg border border-red-900/30 md:h-[calc(100vh-12rem)] md:overflow-hidden flex flex-col">
+                {selectedGroupId ? (
+                  <PartGroupDetail
+                    groupId={selectedGroupId}
+                    onBack={() => setSelectedGroupId(null)}
+                  />
+                ) : (
+                  <PartGroupsList
+                    onGroupClick={(group) => setSelectedGroupId(group.id)}
+                  />
+                )}
+              </div>
             </TabsContent>
           </Tabs>
           </div>

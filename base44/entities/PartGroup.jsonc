@@ -1,0 +1,72 @@
+{
+  "name": "PartGroup",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Parts Group name \u2014 primary identifier"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of what this group covers"
+    },
+    "group_code": {
+      "type": "string",
+      "description": "Optional internal identifier code"
+    },
+    "image_url": {
+      "type": "string",
+      "description": "Optional representative image URL"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ACTIVE",
+        "DRAFT",
+        "ARCHIVED"
+      ],
+      "default": "DRAFT",
+      "description": "Group lifecycle status"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "Mechanical",
+        "Electrical",
+        "Interior",
+        "Exterior",
+        "HVAC",
+        "Engine Management",
+        "Suspension",
+        "Brakes",
+        "Standard Installation",
+        "Other"
+      ],
+      "description": "Optional high-level category"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Internal notes about this group"
+    },
+    "instructions": {
+      "type": "string",
+      "description": "Installation or usage instructions"
+    },
+    "created_by_name": {
+      "type": "string",
+      "description": "Display name of user who created the group"
+    },
+    "archived_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the group was archived"
+    },
+    "archived_by": {
+      "type": "string",
+      "description": "User who archived the group"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}
