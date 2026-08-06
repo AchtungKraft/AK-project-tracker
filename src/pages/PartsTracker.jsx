@@ -92,6 +92,11 @@ export default function PartsTracker() {
                   <span className="hidden sm:inline">PARTS CATALOG</span>
                   <span className="sm:hidden">CATALOG</span>
                 </TabsTrigger>
+                <TabsTrigger value="groups" className="gap-1.5 flex-shrink-0 text-xs md:text-sm px-3 md:px-4">
+                  <Layers className="w-4 h-4" />
+                  <span className="hidden sm:inline">PARTS GROUPS</span>
+                  <span className="sm:hidden">GROUPS</span>
+                </TabsTrigger>
                 <TabsTrigger value="inventory" className="gap-1.5 flex-shrink-0 text-xs md:text-sm px-3 md:px-4">
                   <Package className="w-4 h-4" />
                   <span className="hidden sm:inline">INVENTORY</span>
@@ -100,11 +105,6 @@ export default function PartsTracker() {
                 <TabsTrigger value="locations" className="gap-1.5 flex-shrink-0 text-xs md:text-sm px-3 md:px-4">
                   <MapPin className="w-4 h-4" />
                   <span>LOCATIONS</span>
-                </TabsTrigger>
-                <TabsTrigger value="groups" className="gap-1.5 flex-shrink-0 text-xs md:text-sm px-3 md:px-4">
-                  <Layers className="w-4 h-4" />
-                  <span className="hidden sm:inline">PARTS GROUPS</span>
-                  <span className="sm:hidden">GROUPS</span>
                 </TabsTrigger>
               </TabsList>
             </div>
