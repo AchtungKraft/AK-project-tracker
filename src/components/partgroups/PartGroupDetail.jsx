@@ -24,6 +24,7 @@ import PartGroupCategoryFilter from "./PartGroupCategoryFilter";
 import { buildPartGroupPrintHTML } from "./partGroupPrint";
 import { openPrintWindow } from "@/components/parts/print/printHelpers";
 import PartGroupPrintModal from "./PartGroupPrintModal";
+import PartModal from "@/components/parts/PartModal";
 import { preparePartGroupSections } from "./partGroupSections";
 
 const STATUS_COLORS = {
@@ -43,6 +44,7 @@ export default function PartGroupDetail({ groupId, onBack }) {
   const [groupPartsBy, setGroupPartsBy] = useState("section");
   const [sortPartsBy, setSortPartsBy] = useState("manual");
   const [showPrintOptions, setShowPrintOptions] = useState(false);
+  const [viewPartId, setViewPartId] = useState(null);
 
   const { vendorsMap, categories } = useReferenceData();
   const catLookups = useMemo(() => buildCategoryLookups(categories), [categories]);
@@ -355,6 +357,7 @@ export default function PartGroupDetail({ groupId, onBack }) {
                             catLookups={catLookups}
                             onUpdate={(updates) => handleUpdateItem(item.id, updates)}
                             onRemove={() => handleRemoveItem(item.id)}
+                            onViewPart={setViewPartId}
                           />
                         ))}
                         {/* Optional divider + items */}
@@ -376,6 +379,7 @@ export default function PartGroupDetail({ groupId, onBack }) {
                                 catLookups={catLookups}
                                 onUpdate={(updates) => handleUpdateItem(item.id, updates)}
                                 onRemove={() => handleRemoveItem(item.id)}
+                                onViewPart={setViewPartId}
                               />
                             ))}
                           </>
@@ -430,6 +434,18 @@ export default function PartGroupDetail({ groupId, onBack }) {
           onPrint={(reportType, opts) => {
             handlePrint(reportType, opts);
             setShowPrintOptions(false);
+          }}
+        />
+      )}
+
+      {viewPartId && (
+        <PartModal
+          partId={viewPartId}
+          onClose={() => {
+            setViewPartId(null);
+            // Refresh parts data so any edits propagate to the group view
+            queryClient.invalidateQueries({ queryKey: ["parts"] });
+            queryClient.invalidateQueries({ queryKey: ["partsInventoryView"] });
           }}
         />
       )}

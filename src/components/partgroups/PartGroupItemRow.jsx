@@ -3,14 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Package, Trash2, MoreVertical, Check, X } from "lucide-react";
+import { Package, Trash2, MoreVertical, Check, X, Eye } from "lucide-react";
 import { formatCurrency } from "@/components/supply/pricingHelpers";
 import { getCategoryPathLabel } from "@/lib/categoryTreeHelpers";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 
-export default function PartGroupItemRow({ item, sections, vendorsMap, catLookups, onUpdate, onRemove }) {
+export default function PartGroupItemRow({ item, sections, vendorsMap, catLookups, onUpdate, onRemove, onViewPart }) {
   const { part, inv, unitCost, extCost } = item;
   const [editingQty, setEditingQty] = useState(false);
   const [qtyValue, setQtyValue] = useState(String(item.quantity || 1));
@@ -32,7 +32,11 @@ export default function PartGroupItemRow({ item, sections, vendorsMap, catLookup
     <div className="flex flex-col md:flex-row md:items-center gap-2 p-2.5 bg-gray-900/30 rounded-lg border border-gray-800 hover:border-gray-700 transition-all group/item">
       {/* Part Info */}
       <div className="flex items-center gap-2.5 flex-1 min-w-0">
-        <div className="w-10 h-10 flex-shrink-0 bg-gray-800 rounded overflow-hidden">
+        <button
+          onClick={() => onViewPart?.(item.part_id)}
+          className="w-10 h-10 flex-shrink-0 bg-gray-800 rounded overflow-hidden hover:ring-1 hover:ring-red-500/50 transition-all cursor-pointer"
+          title="View Part Details"
+        >
           {featuredPhoto ? (
             <img src={featuredPhoto} alt="" className="w-full h-full object-cover" />
           ) : (
@@ -40,10 +44,16 @@ export default function PartGroupItemRow({ item, sections, vendorsMap, catLookup
               <Package className="w-4 h-4 text-gray-600" />
             </div>
           )}
-        </div>
+        </button>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm text-white font-medium truncate">{part.part_name}</span>
+            <button
+              onClick={() => onViewPart?.(item.part_id)}
+              className="text-sm text-white font-medium truncate hover:text-red-400 transition-colors cursor-pointer text-left"
+              title="View Part Details"
+            >
+              {part.part_name}
+            </button>
             {item.is_optional && (
               <Badge variant="outline" className="border-yellow-600 text-yellow-400 text-[10px] px-1 py-0">Optional</Badge>
             )}
@@ -141,6 +151,10 @@ export default function PartGroupItemRow({ item, sections, vendorsMap, catLookup
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem onClick={() => onViewPart?.(item.part_id)} className="cursor-pointer text-xs">
+              <Eye className="w-3.5 h-3.5 mr-2" /> View Part
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => onUpdate({ is_optional: !item.is_optional })} className="cursor-pointer text-xs">
               {item.is_optional ? "Mark as Required" : "Mark as Optional"}
             </DropdownMenuItem>
