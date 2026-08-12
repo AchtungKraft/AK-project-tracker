@@ -26,43 +26,40 @@ export default function CategoryTree({
     return map;
   }, [categories]);
 
-  // Calculate part counts for each category (including descendants)
-  const categoryCounts = useMemo(() => {
-    const counts = {};
+  // Calculate part counts for each category
+  // directCounts = parts assigned directly to this category
+  // subtreeCounts = parts in this category + all descendants (used for sidebar badges)
+  const { directCounts, subtreeCounts } = useMemo(() => {
+    const direct = {};
     
-    // Direct counts - match by category string name or part_category_id
+    // Direct counts - match by part_category_id or legacy category string
     parts.forEach(part => {
       let categoryId = part.part_category_id;
-      
-      // If no part_category_id, try to match by category string name
       if (!categoryId && part.category) {
         categoryId = categoryNameToId[part.category.toLowerCase()];
       }
-      
       if (categoryId) {
-        counts[categoryId] = (counts[categoryId] || 0) + 1;
+        direct[categoryId] = (direct[categoryId] || 0) + 1;
       }
     });
 
-    // Recursive count for parent categories
+    // Subtree counts via post-order traversal
+    const subtree = {};
     const addDescendantCounts = (categoryId) => {
       const children = categories.filter(c => c.parent_id === categoryId);
-      let totalCount = counts[categoryId] || 0;
-      
+      let totalCount = direct[categoryId] || 0;
       children.forEach(child => {
         totalCount += addDescendantCounts(child.id);
       });
-      
-      counts[categoryId] = totalCount;
+      subtree[categoryId] = totalCount;
       return totalCount;
     };
 
-    // Calculate for all root categories
     categories.filter(c => !c.parent_id).forEach(cat => {
       addDescendantCounts(cat.id);
     });
 
-    return counts;
+    return { directCounts: direct, subtreeCounts: subtree };
   }, [parts, categories, categoryNameToId]);
 
   // Filter categories based on search
@@ -80,10 +77,11 @@ export default function CategoryTree({
     const hasChildren = children.length > 0;
     const isExpanded = expandedCategories[category.id];
     const isSelected = selectedCategoryId === category.id;
-    const partCount = categoryCounts[category.id] || 0;
+    const partCount = subtreeCounts[category.id] || 0;
     const isEmpty = partCount === 0;
 
-    // Hide empty categories if toggle is off
+    // Hide empty categories if toggle is off — uses subtree count so parent with
+    // 0 direct parts but descendant parts remains visible
     if (isEmpty && !showEmptyCategories && !searchTerm) return null;
 
     return (
@@ -102,10 +100,8 @@ export default function CategoryTree({
           onClick={() => {
             if (!isEmpty) {
               onCategorySelect(category.id);
-              // Auto-expand to show this category's path
-              if (hasChildren && !isExpanded) {
-                onToggleExpand(category.id);
-              }
+              // onCategorySelect already handles auto-expansion of ancestors
+              // Do not also toggle here — it would undo the expansion
             }
           }}
           title={isEmpty ? "No parts in this category" : undefined}

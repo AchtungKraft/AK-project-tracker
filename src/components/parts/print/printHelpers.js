@@ -43,13 +43,16 @@ export function getVehicle(part, maps) {
 
 export function getCategoryPath(catId, catMap) {
   if (!catId) return "";
-  const cat = catMap.get(catId);
-  if (!cat) return "";
-  if (cat.parent_id) {
-    const parent = catMap.get(cat.parent_id);
-    if (parent) return `${parent.name} › ${cat.name}`;
+  const path = [];
+  let cur = catId;
+  const visited = new Set();
+  while (cur && catMap.get(cur) && !visited.has(cur)) {
+    visited.add(cur);
+    const cat = catMap.get(cur);
+    path.unshift(cat.name);
+    cur = cat.parent_id;
   }
-  return cat.name;
+  return path.join(" › ");
 }
 
 export function buildLocationPath(locationId, locationMap) {
@@ -93,43 +96,41 @@ export function getCompactSource(part, maps, vendorSources) {
 }
 
 export function buildCategoryGroups(parts, catMap, categories) {
-  const parentCats = categories.filter(c => !c.parent_id);
-  const subCatsByParent = new Map();
+  // Build children-by-parent lookup
+  const childrenByParent = new Map();
   for (const cat of categories) {
-    if (cat.parent_id) {
-      if (!subCatsByParent.has(cat.parent_id)) subCatsByParent.set(cat.parent_id, []);
-      subCatsByParent.get(cat.parent_id).push(cat);
-    }
+    const pid = cat.parent_id || "__root__";
+    if (!childrenByParent.has(pid)) childrenByParent.set(pid, []);
+    childrenByParent.get(pid).push(cat);
+  }
+  // Sort children within each parent
+  for (const [, children] of childrenByParent) {
+    children.sort((a, b) => {
+      if (a.sort_order != null && b.sort_order != null) return a.sort_order - b.sort_order;
+      return (a.name || "").localeCompare(b.name || "");
+    });
   }
 
   const groups = [];
   const usedParts = new Set();
 
-  const sortedParents = [...parentCats].sort((a, b) => {
-    if (a.sort_order != null && b.sort_order != null) return a.sort_order - b.sort_order;
-    return (a.name || "").localeCompare(b.name || "");
-  });
-
-  for (const parent of sortedParents) {
-    const subs = subCatsByParent.get(parent.id) || [];
-    const sortedSubs = [...subs].sort((a, b) => {
-      if (a.sort_order != null && b.sort_order != null) return a.sort_order - b.sort_order;
-      return (a.name || "").localeCompare(b.name || "");
-    });
-
-    const directParts = parts.filter(p => p.part_category_id === parent.id);
+  // Recursive walk — emits a group for each category that has direct parts
+  const walkCategory = (cat) => {
+    const catPath = getCategoryPath(cat.id, catMap);
+    const directParts = parts.filter(p => p.part_category_id === cat.id);
     if (directParts.length > 0) {
-      groups.push({ parentName: parent.name, subName: null, parts: directParts });
+      groups.push({ parentName: catPath, subName: null, parts: directParts });
       directParts.forEach(p => usedParts.add(p.id));
     }
-
-    for (const sub of sortedSubs) {
-      const subParts = parts.filter(p => p.part_category_id === sub.id);
-      if (subParts.length > 0) {
-        groups.push({ parentName: parent.name, subName: sub.name, parts: subParts });
-        subParts.forEach(p => usedParts.add(p.id));
-      }
+    const children = childrenByParent.get(cat.id) || [];
+    for (const child of children) {
+      walkCategory(child);
     }
+  };
+
+  const roots = childrenByParent.get("__root__") || [];
+  for (const root of roots) {
+    walkCategory(root);
   }
 
   const uncategorized = parts.filter(p => !usedParts.has(p.id));

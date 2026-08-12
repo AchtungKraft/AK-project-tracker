@@ -72,6 +72,21 @@ export function getAllDescendantIds(categoryId, childrenByParentId) {
 }
 
 /**
+ * Get all IDs in a category's subtree (the category itself + all descendants).
+ * Returns an Array of IDs. Convenience wrapper around getAllDescendantIds.
+ * Canonical helper — use this everywhere for subtree membership checks.
+ */
+export function getCategorySubtreeIds(categoryId, childrenByParentId) {
+  return Array.from(getAllDescendantIds(categoryId, childrenByParentId));
+}
+
+/**
+ * Recursive full-path label: "MECHANICAL / EFI SYSTEM / WIRING HARNESS".
+ * Walks all ancestors — not limited to 2 levels.
+ * (Already implemented by getCategoryPathLabel above.)
+ */
+
+/**
  * Check whether `potentialAncestorId` is an ancestor of (or equal to) `categoryId`.
  * Used for cycle prevention: a category cannot be moved under its own descendant.
  */

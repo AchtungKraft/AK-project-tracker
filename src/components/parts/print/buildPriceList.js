@@ -29,25 +29,15 @@ export function buildPriceList({
     : `All Categories · ${parts.length} Part${parts.length !== 1 ? "s" : ""}`;
   const filterNote = searchTerm ? `Search: "${searchTerm}"` : null;
 
-  let currentParent = null;
   let globalIdx = 0;
   let sectionsHTML = "";
 
   for (let gi = 0; gi < groups.length; gi++) {
     const group = groups[gi];
-    const isNewParent = group.parentName !== currentParent;
-    currentParent = group.parentName;
-
-    if (isNewParent) {
-      sectionsHTML += `<div class="category-group"><h2 class="cat-heading">${esc(group.parentName.toUpperCase())}</h2>`;
-    }
-
-    const subLabel = group.subName || (group.parentName === "UNCATEGORIZED" ? null : "General");
-    const headingText = subLabel || group.parentName;
     const partCount = group.parts.length;
 
-    sectionsHTML += `<div class="subcategory-group">
-      <h3 class="subcat-heading">${esc(headingText)} <span class="part-count">· ${partCount} Part${partCount !== 1 ? "s" : ""}</span></h3>`;
+    sectionsHTML += `<div class="category-group">
+      <h2 class="cat-heading">${esc(group.parentName.toUpperCase())} <span class="part-count">· ${partCount} Part${partCount !== 1 ? "s" : ""}</span></h2>`;
 
     sectionsHTML += renderPriceListHeader({ includeImages, includeVehicle, isGroupContext: false });
 
@@ -67,11 +57,6 @@ export function buildPriceList({
     }
 
     sectionsHTML += `</tbody></table></div>`;
-
-    const nextGroup = groups[gi + 1];
-    if (!nextGroup || nextGroup.parentName !== currentParent) {
-      sectionsHTML += `</div>`;
-    }
   }
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Price List</title>

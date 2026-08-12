@@ -38,24 +38,14 @@ export function buildIllustratedCatalog({
     ? `<div class="image-warning">Note: ${parts.length - partsWithImages} of ${parts.length} parts do not have images. Those parts will display a placeholder.</div>`
     : "";
 
-  let currentParent = null;
   let cardsHTML = "";
 
   for (let gi = 0; gi < groups.length; gi++) {
     const group = groups[gi];
-    const isNewParent = group.parentName !== currentParent;
-    currentParent = group.parentName;
-
-    if (isNewParent) {
-      cardsHTML += `<div class="category-group"><h2 class="cat-heading">${esc(group.parentName.toUpperCase())}</h2>`;
-    }
-
-    const subLabel = group.subName || (group.parentName === "UNCATEGORIZED" ? null : "General");
-    const headingText = subLabel || group.parentName;
     const partCount = group.parts.length;
 
-    cardsHTML += `<div class="subcategory-group">
-      <h3 class="subcat-heading">${esc(headingText)} <span class="part-count">· ${partCount} Part${partCount !== 1 ? "s" : ""}</span></h3>`;
+    cardsHTML += `<div class="category-group">
+      <h2 class="cat-heading">${esc(group.parentName.toUpperCase())} <span class="part-count">· ${partCount} Part${partCount !== 1 ? "s" : ""}</span></h2>`;
 
     for (const part of group.parts) {
       const inv = inventoryViewMap?.get(part.id);
@@ -113,12 +103,7 @@ export function buildIllustratedCatalog({
       });
     }
 
-    cardsHTML += `</div>`; // close subcategory
-
-    const nextGroup = groups[gi + 1];
-    if (!nextGroup || nextGroup.parentName !== currentParent) {
-      cardsHTML += `</div>`; // close category-group
-    }
+    cardsHTML += `</div>`; // close category-group
   }
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Illustrated Catalog</title>

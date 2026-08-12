@@ -162,59 +162,53 @@ export default function PartsListView({
     return null;
   };
 
-  // Group parts hierarchically by category
+  // Group parts hierarchically by category — recursive to arbitrary depth
   const buildHierarchicalGroups = () => {
     if (!showGrouping) {
       return [{ label: 'All Parts', parts, color: '#6B7280', children: [] }];
     }
 
-    const parentCategories = categories
-      .filter(c => !c.parent_id && c.active)
-      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    // Build a group node for a category: direct parts + recursive children
+    const buildGroupNode = (cat) => {
+      const directParts = parts.filter(p => getPartCategoryId(p) === cat.id);
+      const childCats = categories
+        .filter(c => c.parent_id === cat.id && c.active)
+        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+      const children = [];
+      for (const child of childCats) {
+        const childGroup = buildGroupNode(child);
+        if (childGroup) children.push(childGroup);
+      }
+
+      if (directParts.length > 0 || children.length > 0) {
+        return {
+          label: cat.name,
+          parts: directParts,
+          color: cat.color || '#6B7280',
+          children,
+        };
+      }
+      return null;
+    };
 
     const groups = [];
 
     // Group for parts with no category
     const noCategoryParts = parts.filter(p => !getPartCategoryId(p));
     if (noCategoryParts.length > 0) {
-      groups.push({
-        label: 'No Category',
-        parts: noCategoryParts,
-        color: '#6B7280',
-        children: []
-      });
+      groups.push({ label: 'No Category', parts: noCategoryParts, color: '#6B7280', children: [] });
     }
 
-    // Build hierarchy for each parent category
-    parentCategories.forEach(parent => {
-      const childCategories = categories
-        .filter(c => c.parent_id === parent.id && c.active)
-        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    // Build hierarchy from root categories
+    const rootCategories = categories
+      .filter(c => !c.parent_id && c.active)
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
-      const parentParts = parts.filter(p => getPartCategoryId(p) === parent.id);
-      const children = [];
-
-      childCategories.forEach(child => {
-        const childParts = parts.filter(p => getPartCategoryId(p) === child.id);
-        if (childParts.length > 0) {
-          children.push({
-            label: child.name,
-            parts: childParts,
-            color: child.color || parent.color || '#6B7280',
-            children: []
-          });
-        }
-      });
-
-      if (parentParts.length > 0 || children.length > 0) {
-        groups.push({
-          label: parent.name,
-          parts: parentParts,
-          color: parent.color || '#6B7280',
-          children
-        });
-      }
-    });
+    for (const root of rootCategories) {
+      const group = buildGroupNode(root);
+      if (group) groups.push(group);
+    }
 
     return groups;
   };
@@ -416,10 +410,13 @@ export default function PartsListView({
     );
   };
 
+  // Recursive count of all parts in a group and its descendants
+  const countGroupParts = (g) => g.parts.length + g.children.reduce((sum, child) => sum + countGroupParts(child), 0);
+
   const renderGroup = (group, level = 0) => {
     const groupKey = `${level}-${group.label}`;
     const isExpanded = expandedGroups[groupKey] !== false;
-    const totalParts = group.parts.length + group.children.reduce((sum, child) => sum + child.parts.length, 0);
+    const totalParts = countGroupParts(group);
 
     return (
       <div key={groupKey} className={level > 0 ? 'ml-4' : ''}>

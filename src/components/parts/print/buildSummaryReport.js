@@ -28,25 +28,15 @@ export function buildSummaryReport({
   const totalCost = parts.reduce((s, p) => s + (p.cost || 0), 0);
   const totalRetail = parts.reduce((s, p) => s + getPartRetailEffectiveSafe(p).value, 0);
 
-  let currentParent = null;
   let globalIdx = 0;
   let sectionsHTML = "";
 
   for (let gi = 0; gi < groups.length; gi++) {
     const group = groups[gi];
-    const isNewParent = group.parentName !== currentParent;
-    currentParent = group.parentName;
-
-    if (isNewParent) {
-      sectionsHTML += `<div class="category-group"><h2 class="cat-heading">${esc(group.parentName.toUpperCase())}</h2>`;
-    }
-
-    const subLabel = group.subName || (group.parentName === "UNCATEGORIZED" ? null : "General");
     const partCount = group.parts.length;
-    const headingText = subLabel || group.parentName;
 
-    sectionsHTML += `<div class="subcategory-group">
-      <h3 class="subcat-heading">${esc(headingText)} <span class="part-count">· ${partCount} Part${partCount !== 1 ? "s" : ""}</span></h3>`;
+    sectionsHTML += `<div class="category-group">
+      <h2 class="cat-heading">${esc(group.parentName.toUpperCase())} <span class="part-count">· ${partCount} Part${partCount !== 1 ? "s" : ""}</span></h2>`;
 
     sectionsHTML += renderSummaryHeader({
       includeCost,
@@ -97,12 +87,7 @@ export function buildSummaryReport({
       </tr></tfoot>`;
     }
 
-    sectionsHTML += `</table></div>`; // close subcategory-group
-
-    const nextGroup = groups[gi + 1];
-    if (!nextGroup || nextGroup.parentName !== currentParent) {
-      sectionsHTML += `</div>`; // close category-group
-    }
+    sectionsHTML += `</table></div>`; // close category-group
   }
 
   let stripHTML = `<div class="summary-strip">
