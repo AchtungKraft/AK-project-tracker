@@ -48,6 +48,8 @@ export function buildPartGroupPrintHTML({
   let bodyHTML = "";
   if (reportType === "illustrated") {
     bodyHTML = buildIllustratedBody(reportSections, opts, vendorsMap, catLookups, groupReportBy);
+  } else if (reportType === "priceList") {
+    bodyHTML = buildPriceListBody(reportSections, opts, catLookups, groupReportBy);
   } else if (reportType === "compact") {
     bodyHTML = buildCompactBody(reportSections, opts, catLookups, groupReportBy);
   } else {
@@ -58,6 +60,7 @@ export function buildPartGroupPrintHTML({
 <style>
   ${baseStyles()}
   ${reportType === "illustrated" ? illustratedStyles() : tableStyles()}
+  ${reportType === "priceList" ? priceListStyles() : ''}
 </style>
 </head><body>
   ${headerHTML("Parts Group", subtitle, null, ts)}
@@ -189,6 +192,45 @@ function buildIllustratedBody(sections, opts, vendorsMap, catLookups, groupRepor
   return html;
 }
 
+// ─── PRICE LIST REPORT ──────────────────────────────────────
+function buildPriceListBody(sections, opts, catLookups, groupReportBy) {
+  let html = "";
+  let globalIdx = 0;
+  for (const [sectionName, sectionItems] of sections) {
+    if (sections.length > 1) {
+      html += `<h3 class="subcat-heading" style="margin-top:12px;">${esc(sectionName.toUpperCase())} <span class="part-count">· ${sectionItems.length}</span></h3>`;
+    }
+    html += `<table class="parts-table"><thead><tr>
+      ${opts.includeImages ? '<th class="col-img"></th>' : ''}
+      <th>Part</th>
+      <th>Part Number</th>
+      <th style="text-align:center">Qty</th>
+      <th>Req/Opt</th>
+      <th style="text-align:right">Retail</th>
+    </tr></thead><tbody>`;
+    for (const item of sectionItems) {
+      globalIdx++;
+      const { part } = item;
+      const retail = part.retail_override || part.retail_matrix_price || 0;
+      const extRetail = retail * (item.quantity || 1);
+      const img = opts.includeImages ? (part.featured_photo || part.photos?.[0]) : null;
+      html += `<tr class="${globalIdx % 2 === 0 ? "even" : "odd"}">
+        ${opts.includeImages ? `<td class="img-cell">${img ? `<img src="${esc(img)}" class="row-thumb" onerror="this.style.display='none'" />` : '<div class="thumb-placeholder"></div>'}</td>` : ''}
+        <td>
+          <div class="part-name">${esc(part.part_name)}</div>
+          ${opts.includeDescriptions && part.notes ? `<div class="small" style="max-width:300px;">${esc(part.notes.substring(0, 100))}${part.notes.length > 100 ? "…" : ""}</div>` : ''}
+        </td>
+        <td class="part-num">${part.vendor_part_number ? esc(part.vendor_part_number) : "—"}</td>
+        <td class="center qty">${item.quantity || 1}</td>
+        <td class="small">${item.is_optional ? '<span style="color:#b45309;">Optional</span>' : "Required"}</td>
+        <td class="money" style="font-weight:600;">${formatCurrency(extRetail)}</td>
+      </tr>`;
+    }
+    html += `</tbody></table>`;
+  }
+  return html;
+}
+
 // ─── COMPACT LIST REPORT ─────────────────────────────────────
 function buildCompactBody(sections, opts, catLookups, groupReportBy) {
   let html = "";
@@ -242,6 +284,10 @@ function tableStyles() {
   .qty { font-weight: 600; font-size: 8.5pt; }
   .estimate-note { font-size: 7.5pt; color: #888; font-style: italic; margin-top: 12px; }
   .compact-table .part-name { font-size: 8.5pt; }
+  .col-img { width: 50px; }
+  .img-cell { width: 50px; padding: 4px !important; }
+  .row-thumb { width: 42px; height: 42px; object-fit: contain; border-radius: 3px; display: block; }
+  .thumb-placeholder { width: 42px; height: 42px; background: #f0f0f0; border: 1px solid #e0e0e0; border-radius: 3px; }
   @media print {
     .parts-table tr { page-break-inside: avoid; }
     thead { display: table-header-group; }
@@ -263,4 +309,10 @@ function illustratedStyles() {
   .ill-note { font-size: 7pt; color: #3b82f6; margin-top: 2px; }
   .estimate-note { font-size: 7.5pt; color: #888; font-style: italic; margin-top: 12px; }
   @media print { .ill-card { break-inside: avoid; } }`;
+}
+
+function priceListStyles() {
+  return `
+  .parts-table td { vertical-align: middle; }
+  `;
 }

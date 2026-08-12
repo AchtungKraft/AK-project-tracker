@@ -1,64 +1,21 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { FileText, BookOpen, DollarSign } from "lucide-react";
+import { CATALOG_REPORT_CONFIGS, loadSavedPrintOptions, savePrintOptions } from "./sharedPrintConfig";
 
 const STORAGE_KEY = "ak_print_options";
 
-function loadSaved() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch { return {}; }
-}
-
-function saveOptions(opts) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(opts)); } catch {}
-}
-
-const REPORT_CONFIGS = {
-  summary: {
-    label: "Summary Report",
-    description: "Dense table for operations, inventory review, and purchasing meetings.",
-    icon: FileText,
-    defaults: { includeCost: true, includeRetail: true, includeGroupTotals: true },
-    options: [
-      { key: "includeCost", label: "Include Cost" },
-      { key: "includeRetail", label: "Include Retail" },
-      { key: "includeGroupTotals", label: "Include Group Totals" },
-    ],
-  },
-  illustrated: {
-    label: "Illustrated Catalog",
-    description: "Visual cards with thumbnails, locations, and vendor sources for technicians.",
-    icon: BookOpen,
-    defaults: { includeImages: true, includeVendorSources: true, includeLocations: true, includeNotes: true },
-    options: [
-      { key: "includeImages", label: "Include Images" },
-      { key: "includeVendorSources", label: "Include Vendor Sources" },
-      { key: "includeLocations", label: "Include Inventory Locations" },
-      { key: "includeNotes", label: "Include Notes" },
-    ],
-  },
-  priceList: {
-    label: "Price List",
-    description: "Client-facing retail price list. No internal costs, inventory, or vendor data.",
-    icon: DollarSign,
-    defaults: { includeImages: true, includeDescriptions: true, includeVehicle: false },
-    options: [
-      { key: "includeImages", label: "Include Images" },
-      { key: "includeDescriptions", label: "Include Descriptions" },
-      { key: "includeVehicle", label: "Include Vehicle Compatibility" },
-    ],
-  },
-};
-
+/**
+ * Print options modal for Parts Catalog.
+ * Consumes shared report config from sharedPrintConfig.js.
+ * reportType is passed in — the caller owns report type selection.
+ */
 export default function PrintOptionsModal({ reportType, onClose, onPrint }) {
-  const config = REPORT_CONFIGS[reportType];
+  const config = CATALOG_REPORT_CONFIGS[reportType];
   const [opts, setOpts] = useState(() => {
-    const saved = loadSaved();
+    const saved = loadSavedPrintOptions(STORAGE_KEY);
     return { ...config.defaults, ...(saved[reportType] || {}) };
   });
 
@@ -67,9 +24,9 @@ export default function PrintOptionsModal({ reportType, onClose, onPrint }) {
   };
 
   const handlePrint = () => {
-    const allSaved = loadSaved();
+    const allSaved = loadSavedPrintOptions(STORAGE_KEY);
     allSaved[reportType] = opts;
-    saveOptions(allSaved);
+    savePrintOptions(STORAGE_KEY, allSaved);
     onPrint(opts);
     onClose();
   };
@@ -88,15 +45,15 @@ export default function PrintOptionsModal({ reportType, onClose, onPrint }) {
         </DialogHeader>
 
         <div className="space-y-3 py-3">
-          {config.options.map(opt => (
-            <div key={opt.key} className="flex items-center gap-3">
+          {config.toggles.map(toggle => (
+            <div key={toggle.key} className="flex items-center gap-3">
               <Checkbox
-                id={opt.key}
-                checked={opts[opt.key] ?? config.defaults[opt.key]}
-                onCheckedChange={() => handleToggle(opt.key)}
+                id={toggle.key}
+                checked={opts[toggle.key] ?? config.defaults[toggle.key]}
+                onCheckedChange={() => handleToggle(toggle.key)}
               />
-              <Label htmlFor={opt.key} className="text-sm text-gray-200 cursor-pointer">
-                {opt.label}
+              <Label htmlFor={toggle.key} className="text-sm text-gray-200 cursor-pointer">
+                {toggle.label}
               </Label>
             </div>
           ))}
