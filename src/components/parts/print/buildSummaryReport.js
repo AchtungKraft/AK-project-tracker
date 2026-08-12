@@ -3,10 +3,11 @@ import {
   getTimestamp, baseStyles, headerHTML, footerHTML,
   formatCurrency, getPartRetailEffectiveSafe, PART_TYPE_LABELS,
 } from "./printHelpers";
+import { renderSummaryRow, renderSummaryHeader, summaryCSS } from "./sharedPrintRenderers";
 
 /**
  * Summary Report — dense table, category-grouped, no images.
- * Columns: #, Part, Preferred Vendor, Cost?, Retail?, Demand, On Hand
+ * Uses shared renderSummaryRow for visual parity with Parts Group summary.
  */
 export function buildSummaryReport({
   parts, categories, vendors, makes, models, years,
@@ -27,11 +28,6 @@ export function buildSummaryReport({
   const totalCost = parts.reduce((s, p) => s + (p.cost || 0), 0);
   const totalRetail = parts.reduce((s, p) => s + getPartRetailEffectiveSafe(p).value, 0);
 
-  // Compute column count for colspans
-  let colCount = 5; // #, Part, Vendor, Demand, On Hand
-  if (includeCost) colCount++;
-  if (includeRetail) colCount++;
-
   let currentParent = null;
   let globalIdx = 0;
   let sectionsHTML = "";
@@ -42,13 +38,6 @@ export function buildSummaryReport({
     currentParent = group.parentName;
 
     if (isNewParent) {
-      if (gi > 0) {
-        // check if previous group had different parent — close it
-        const prevParent = groups[gi - 1].parentName;
-        if (prevParent !== group.parentName) {
-          // parent already closed below
-        }
-      }
       sectionsHTML += `<div class="category-group"><h2 class="cat-heading">${esc(group.parentName.toUpperCase())}</h2>`;
     }
 
@@ -59,16 +48,11 @@ export function buildSummaryReport({
     sectionsHTML += `<div class="subcategory-group">
       <h3 class="subcat-heading">${esc(headingText)} <span class="part-count">· ${partCount} Part${partCount !== 1 ? "s" : ""}</span></h3>`;
 
-    // Table
-    sectionsHTML += `<table class="parts-table"><thead><tr>
-      <th class="col-num">#</th>
-      <th>Part</th>
-      <th>Preferred Vendor</th>
-      ${includeCost ? '<th style="text-align:right">Cost</th>' : ""}
-      ${includeRetail ? '<th style="text-align:right">Retail</th>' : ""}
-      <th style="text-align:center">Demand</th>
-      <th style="text-align:center">On Hand</th>
-    </tr></thead><tbody>`;
+    sectionsHTML += renderSummaryHeader({
+      includeCost,
+      includeRetail,
+      isGroupContext: false,
+    });
 
     let groupDemand = 0, groupOnHand = 0, groupCost = 0, groupRetail = 0;
 
@@ -85,25 +69,24 @@ export function buildSummaryReport({
       groupCost += (part.cost || 0);
       groupRetail += retail;
 
-      sectionsHTML += `<tr class="${globalIdx % 2 === 0 ? "even" : "odd"}">
-        <td class="num">${globalIdx}</td>
-        <td>
-          <div class="part-name">${esc(part.part_name)}</div>
-          ${part.vendor_part_number ? `<div class="part-num">Part #: ${esc(part.vendor_part_number)}</div>` : ""}
-          ${part.part_type && part.part_type !== "PURCHASED_VENDOR" ? `<div class="part-type">${PART_TYPE_LABELS[part.part_type] || part.part_type}</div>` : ""}
-        </td>
-        <td class="small">${source}</td>
-        ${includeCost ? `<td class="money">${formatCurrency(part.cost || 0)}</td>` : ""}
-        ${includeRetail ? `<td class="money">${formatCurrency(retail)}</td>` : ""}
-        <td class="center qty">${demand}</td>
-        <td class="center qty">${onHand}</td>
-      </tr>`;
+      sectionsHTML += renderSummaryRow({
+        name: part.part_name,
+        partNumber: part.vendor_part_number,
+        partType: part.part_type,
+        source,
+        cost: part.cost || 0,
+        retail,
+        demand,
+        stock: onHand,
+      }, globalIdx, { includeCost, includeRetail, isGroupContext: false });
     }
 
     sectionsHTML += `</tbody>`;
 
-    // Group footer
     if (includeGroupTotals) {
+      let colCount = 3; // #, Part, Vendor
+      if (includeCost) colCount++;
+      if (includeRetail) colCount++;
       sectionsHTML += `<tfoot><tr class="group-footer">
         <td colspan="2" class="gf-label">${partCount} Part${partCount !== 1 ? "s" : ""}</td>
         <td></td>
@@ -116,14 +99,12 @@ export function buildSummaryReport({
 
     sectionsHTML += `</table></div>`; // close subcategory-group
 
-    // Close category group
     const nextGroup = groups[gi + 1];
     if (!nextGroup || nextGroup.parentName !== currentParent) {
       sectionsHTML += `</div>`; // close category-group
     }
   }
 
-  // Summary strip
   let stripHTML = `<div class="summary-strip">
     <span>Parts: <strong>${parts.length}</strong></span>`;
   if (includeCost) stripHTML += `<span>Total Cost: <strong>${formatCurrency(totalCost)}</strong></span>`;
@@ -133,25 +114,7 @@ export function buildSummaryReport({
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Summary Report</title>
 <style>
   ${baseStyles()}
-  .parts-table { width: 100%; border-collapse: collapse; font-size: 8pt; margin-bottom: 2px; }
-  .parts-table th { background: #1a1a1a; color: #fff; padding: 5px 5px; text-align: left; font-weight: 600; font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; }
-  .parts-table td { padding: 4px 5px; border-bottom: 1px solid #e5e5e5; vertical-align: top; }
-  .parts-table tr.even td { background: #fafafa; }
-  .parts-table tr.odd td { background: #fff; }
-  .col-num { width: 24px; }
-  .num { text-align: center; color: #999; font-size: 7pt; }
-  .part-name { font-weight: 700; font-size: 9pt; color: #111; }
-  .part-num { font-family: 'SF Mono', 'Courier New', monospace; font-size: 7pt; color: #777; margin-top: 1px; }
-  .part-type { font-size: 7pt; color: #dc2626; font-weight: 500; margin-top: 1px; }
-  .small { font-size: 7.5pt; color: #444; }
-  .money { text-align: right; font-family: 'SF Mono', 'Courier New', monospace; font-size: 8pt; white-space: nowrap; }
-  .center { text-align: center; }
-  .qty { font-weight: 600; font-size: 8.5pt; }
-  .source-extra { color: #999; font-size: 7pt; }
-  .group-footer td { border-top: 2px solid #ccc; border-bottom: none; background: #f5f5f5 !important; padding: 4px 5px; }
-  .gf-label { font-size: 8pt; font-weight: 600; color: #555; }
-  .gf-val { font-weight: 700; color: #111; }
-  @media print { .parts-table tr { page-break-inside: avoid; } }
+  ${summaryCSS()}
 </style>
 </head><body>
   ${headerHTML("Parts Catalog", subtitle, filterNote, ts)}

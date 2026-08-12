@@ -3,10 +3,11 @@ import {
   getTimestamp, baseStyles, headerHTML, footerHTML,
   formatCurrency, getPartRetailEffectiveSafe,
 } from "./printHelpers";
+import { renderPriceListRow, renderPriceListHeader, priceListCSS } from "./sharedPrintRenderers";
 
 /**
- * Price List — client-facing. No cost, no inventory, no vendor names, no internal data.
- * Columns: Part, Part Number, Retail. Optional: thumbnail, vehicle, description.
+ * Price List — client-facing. No cost, no inventory, no vendor names.
+ * Uses shared renderPriceListRow for visual parity with Parts Group price list.
  */
 export function buildPriceList({
   parts, categories, vendors, makes, models, years,
@@ -48,33 +49,21 @@ export function buildPriceList({
     sectionsHTML += `<div class="subcategory-group">
       <h3 class="subcat-heading">${esc(headingText)} <span class="part-count">· ${partCount} Part${partCount !== 1 ? "s" : ""}</span></h3>`;
 
-    sectionsHTML += `<table class="price-table"><thead><tr>
-      ${includeImages ? '<th class="col-img"></th>' : ""}
-      <th>Part</th>
-      <th>Part Number</th>
-      ${includeVehicle ? '<th>Vehicle</th>' : ""}
-      <th style="text-align:right">Retail</th>
-    </tr></thead><tbody>`;
+    sectionsHTML += renderPriceListHeader({ includeImages, includeVehicle, isGroupContext: false });
 
     for (const part of group.parts) {
       globalIdx++;
       const { value: retail } = getPartRetailEffectiveSafe(part);
-      const imgUrl = includeImages ? (part.featured_photo || (part.photos && part.photos[0]) || null) : null;
       const vehicle = includeVehicle ? getVehicle(part, maps) : null;
 
-      sectionsHTML += `<tr class="${globalIdx % 2 === 0 ? "even" : "odd"}">
-        ${includeImages ? `<td class="img-cell">${imgUrl
-          ? `<img src="${esc(imgUrl)}" class="row-thumb" onerror="this.style.display='none'" />`
-          : `<div class="thumb-placeholder"></div>`
-        }</td>` : ""}
-        <td>
-          <div class="pl-name">${esc(part.part_name)}</div>
-          ${includeDescriptions && part.notes ? `<div class="pl-desc">${esc(part.notes.substring(0, 120))}${part.notes.length > 120 ? "…" : ""}</div>` : ""}
-        </td>
-        <td class="pl-pn">${part.vendor_part_number ? esc(part.vendor_part_number) : "—"}</td>
-        ${includeVehicle ? `<td class="small">${vehicle ? esc(vehicle) : "—"}</td>` : ""}
-        <td class="money">${formatCurrency(retail)}</td>
-      </tr>`;
+      sectionsHTML += renderPriceListRow({
+        name: part.part_name,
+        partNumber: part.vendor_part_number,
+        image: part.featured_photo || (part.photos && part.photos[0]) || null,
+        notes: part.notes,
+        vehicle,
+        retail,
+      }, globalIdx, { includeImages, includeDescriptions, includeVehicle, isGroupContext: false });
     }
 
     sectionsHTML += `</tbody></table></div>`;
@@ -88,24 +77,7 @@ export function buildPriceList({
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Price List</title>
 <style>
   ${baseStyles()}
-  @page { size: portrait; margin: 0.6in; }
-  .price-table { width: 100%; border-collapse: collapse; font-size: 9pt; margin-bottom: 4px; }
-  .price-table th { background: #1a1a1a; color: #fff; padding: 6px 6px; text-align: left; font-weight: 600; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.3px; }
-  .price-table td { padding: 6px 6px; border-bottom: 1px solid #e5e5e5; vertical-align: middle; }
-  .price-table tr.even td { background: #fafafa; }
-  .price-table tr.odd td { background: #fff; }
-  .col-img { width: 50px; }
-  .img-cell { width: 50px; padding: 4px !important; }
-  .row-thumb { width: 42px; height: 42px; object-fit: contain; border-radius: 3px; display: block; }
-  .thumb-placeholder { width: 42px; height: 42px; background: #f0f0f0; border: 1px solid #e0e0e0; border-radius: 3px; }
-  .pl-name { font-weight: 700; font-size: 9.5pt; color: #111; }
-  .pl-desc { font-size: 7.5pt; color: #777; margin-top: 2px; max-width: 360px; }
-  .pl-pn { font-family: 'SF Mono', 'Courier New', monospace; font-size: 8pt; color: #555; }
-  .money { text-align: right; font-family: 'SF Mono', 'Courier New', monospace; font-size: 9pt; font-weight: 600; white-space: nowrap; }
-  .small { font-size: 8pt; color: #555; }
-  @media print {
-    .price-table tr { page-break-inside: avoid; }
-  }
+  ${priceListCSS()}
 </style>
 </head><body>
   ${headerHTML("Price List", subtitle, filterNote, ts)}
