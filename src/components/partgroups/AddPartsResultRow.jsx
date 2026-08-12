@@ -3,6 +3,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Package } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getCategoryPathLabel, buildCategoryLookups } from "@/lib/categoryTreeHelpers";
 
 export default function AddPartsResultRow({ part, isSelected, isExisting, inventoryData, vendorsMap, categories, onToggle }) {
   const photo = part.featured_photo || part.photos?.[0];
@@ -10,16 +11,12 @@ export default function AddPartsResultRow({ part, isSelected, isExisting, invent
   const onHand = inventoryData?.physical_stock ?? null;
   const demand = inventoryData?.required_total ?? null;
 
-  // Build category path label
+  // Build category path label — full recursive path
   const catLabel = React.useMemo(() => {
     if (!part.part_category_id || !categories?.length) return null;
-    const cat = categories.find(c => c.id === part.part_category_id);
-    if (!cat) return null;
-    if (cat.parent_id) {
-      const parent = categories.find(c => c.id === cat.parent_id);
-      return parent ? `${parent.name} / ${cat.name}` : cat.name;
-    }
-    return cat.name;
+    const { byId } = buildCategoryLookups(categories);
+    if (!byId[part.part_category_id]) return null;
+    return getCategoryPathLabel(part.part_category_id, byId);
   }, [part.part_category_id, categories]);
 
   return (

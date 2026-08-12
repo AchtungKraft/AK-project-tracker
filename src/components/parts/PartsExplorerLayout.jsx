@@ -19,6 +19,7 @@ import { useReferenceData, ReferenceDataGate } from "@/components/common/useRefe
 import { operationalDataConfig } from "@/components/common/queryConfig";
 import { buildSummaryReport, buildIllustratedCatalog, buildPriceList, openPrintWindow } from "./PartsListPrintView";
 import PrintOptionsModal from "./print/PrintOptionsModal";
+import { buildCategoryLookups, getCategoryPathLabel } from "@/lib/categoryTreeHelpers";
 
 const EXPLORER_STORAGE_KEY = 'achtung_parts_explorer_state';
 
@@ -259,14 +260,11 @@ export default function PartsExplorerLayout({ onPartClick }) {
   // Print suite state
   const [printReportType, setPrintReportType] = useState(null);
 
+  const categoryByIdMap = useMemo(() => buildCategoryLookups(categories).byId, [categories]);
+
   const getCategoryLabel = () => {
-    const selectedCat = selectedCategoryId ? categories.find(c => c.id === selectedCategoryId) : null;
-    if (!selectedCat) return null;
-    if (selectedCat.parent_id) {
-      const parent = categories.find(c => c.id === selectedCat.parent_id);
-      return parent ? `${parent.name} › ${selectedCat.name}` : selectedCat.name;
-    }
-    return selectedCat.name;
+    if (!selectedCategoryId || !categoryByIdMap[selectedCategoryId]) return null;
+    return getCategoryPathLabel(selectedCategoryId, categoryByIdMap, " › ");
   };
 
   const handlePrintReport = (reportType) => {
