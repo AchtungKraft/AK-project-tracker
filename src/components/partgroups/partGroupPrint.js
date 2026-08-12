@@ -9,6 +9,7 @@ import {
   renderSummaryRow, renderSummaryHeader, summaryCSS,
   renderSectionHeading,
 } from "@/components/parts/print/sharedPrintRenderers";
+import { preparePartGroupSections } from "./partGroupSections";
 
 /**
  * Builds a print-ready HTML report for a single Parts Group.
@@ -16,9 +17,12 @@ import {
  *
  * PRICING SAFETY: pricingMode controls ALL pricing output.
  * When RETAIL_ONLY, zero cost values appear in the generated HTML.
+ *
+ * ORDERING: Required items always before Optional within every group.
+ * Subtotals per group when grouped by category or section.
  */
 export function buildPartGroupPrintHTML({
-  group, enrichedItems, sections, summary, vendorsMap,
+  group, enrichedItems, sections: _legacySections, summary, vendorsMap,
   inventoryViewMap, catLookups,
   reportType = "summary", printOptions = {},
 }) {
@@ -76,8 +80,14 @@ export function buildPartGroupPrintHTML({
     ? `<div style="margin-bottom:12px;padding:8px;background:#f0f7ff;border:1px solid #c8ddf5;border-radius:4px;font-size:8.5pt;color:#333;"><strong>Instructions:</strong> ${esc(group.instructions)}</div>`
     : "";
 
-  // Build sections from enrichedItems
-  const reportSections = buildReportSections(enrichedItems, groupReportBy, catLookups);
+  // Build sections using shared helper (Required-first ordering + subtotals)
+  const preparedSections = preparePartGroupSections({
+    items: enrichedItems,
+    groupBy: groupReportBy,
+    sortBy: "manual", // print always uses stored sort_order
+    catLookups,
+    vendorsMap,
+  });
 
   // Normalize items to shared PrintPart model
   const normalizePart = (item) => {
@@ -111,17 +121,17 @@ export function buildPartGroupPrintHTML({
   let reportCSS = "";
 
   if (reportType === "illustrated") {
-    reportCSS = illustratedCSS();
-    bodyHTML = buildIllustratedBody(reportSections, opts, normalizePart, pricingMode);
+    reportCSS = illustratedCSS() + groupSubtotalCSS();
+    bodyHTML = buildIllustratedBody(preparedSections, opts, normalizePart, pricingMode);
   } else if (reportType === "priceList") {
-    reportCSS = priceListCSS();
-    bodyHTML = buildPriceListBody(reportSections, opts, normalizePart, pricingMode);
+    reportCSS = priceListCSS() + groupSubtotalCSS();
+    bodyHTML = buildPriceListBody(preparedSections, opts, normalizePart, pricingMode);
   } else if (reportType === "compact") {
-    reportCSS = summaryCSS();
-    bodyHTML = buildCompactBody(reportSections, opts, catLookups, enrichedItems, pricingMode);
+    reportCSS = summaryCSS() + groupSubtotalCSS();
+    bodyHTML = buildCompactBody(preparedSections, opts, catLookups, pricingMode);
   } else {
-    reportCSS = summaryCSS();
-    bodyHTML = buildSummaryBody(reportSections, opts, normalizePart, groupReportBy, pricingMode);
+    reportCSS = summaryCSS() + groupSubtotalCSS();
+    bodyHTML = buildSummaryBody(preparedSections, opts, normalizePart, groupReportBy, pricingMode);
   }
 
   // Footer note — only show pricing note when pricing is displayed
@@ -183,38 +193,101 @@ function groupFooterHTML(ts) {
   </div>`;
 }
 
-function buildReportSections(enrichedItems, groupReportBy, catLookups) {
-  if (groupReportBy === "category") {
-    const map = new Map();
-    for (const item of enrichedItems) {
-      const catId = item.part?.part_category_id;
-      const label = catId && catLookups?.byId?.[catId]
-        ? getCategoryPathLabel(catId, catLookups.byId) : "Uncategorized";
-      if (!map.has(label)) map.set(label, []);
-      map.get(label).push(item);
+// ─── CSS for Optional dividers & group subtotals ────────────────────────
+function groupSubtotalCSS() {
+  return `
+  .optional-divider {
+    display: flex; align-items: center; gap: 8px;
+    margin: 8px 0 6px 0; padding: 3px 0;
+    font-size: 7.5pt; font-weight: 600; color: #b45309;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    break-after: avoid; page-break-after: avoid;
+  }
+  .optional-divider::before {
+    content: ''; flex: 0 0 3px; height: 3px; background: #d97706; border-radius: 2px;
+  }
+  .optional-divider::after {
+    content: ''; flex: 1; height: 1px; background: #e5e0d5;
+  }
+  .group-subtotal {
+    margin: 6px 0 14px 0; padding: 6px 10px;
+    background: #f5f5f0; border: 1px solid #e0ddd5; border-radius: 4px;
+    font-size: 8pt; color: #444;
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  .group-subtotal .gs-row {
+    display: flex; justify-content: space-between; align-items: baseline; padding: 1px 0;
+  }
+  .group-subtotal .gs-row.gs-total {
+    border-top: 1px solid #ccc; margin-top: 2px; padding-top: 3px;
+    font-weight: 700; color: #111;
+  }
+  .group-subtotal .gs-label { font-size: 7.5pt; color: #666; }
+  .group-subtotal .gs-label.gs-opt { color: #b45309; }
+  .group-subtotal .gs-val { font-family: 'SF Mono', 'Courier New', monospace; font-size: 8.5pt; font-weight: 600; }
+  .group-subtotal .gs-meta { font-size: 7.5pt; color: #888; }
+  `;
+}
+
+// ─── OPTIONAL DIVIDER HTML ──────────────────────────────────────────────
+function optionalDividerHTML(count) {
+  return `<div class="optional-divider"><span>Optional · ${count}</span></div>`;
+}
+
+// ─── GROUP SUBTOTAL HTML ────────────────────────────────────────────────
+function groupSubtotalHTML(section, pricingMode) {
+  const { pricing, counts } = section;
+  const hasCost = showCost(pricingMode);
+  const hasRetail = showRetail(pricingMode);
+  const hasAny = showAnyPricing(pricingMode);
+
+  let rows = "";
+
+  if (hasAny && (hasCost || hasRetail)) {
+    // Required/Optional breakdown
+    if (counts.optional > 0) {
+      if (hasCost) {
+        rows += `<div class="gs-row"><span class="gs-label">Required Cost</span><span class="gs-val">${formatCurrency(pricing.requiredCost)}</span></div>`;
+        rows += `<div class="gs-row"><span class="gs-label gs-opt">Optional Cost</span><span class="gs-val">${formatCurrency(pricing.optionalCost)}</span></div>`;
+      }
+      if (hasRetail) {
+        rows += `<div class="gs-row"><span class="gs-label">Required Retail</span><span class="gs-val">${formatCurrency(pricing.requiredRetail)}</span></div>`;
+        rows += `<div class="gs-row"><span class="gs-label gs-opt">Optional Retail</span><span class="gs-val">${formatCurrency(pricing.optionalRetail)}</span></div>`;
+      }
+      // Subtotal
+      if (hasCost) {
+        rows += `<div class="gs-row gs-total"><span class="gs-label">Subtotal Cost</span><span class="gs-val">${formatCurrency(pricing.subtotalCost)}</span></div>`;
+      }
+      if (hasRetail) {
+        rows += `<div class="gs-row gs-total"><span class="gs-label">Subtotal Retail</span><span class="gs-val">${formatCurrency(pricing.subtotalRetail)}</span></div>`;
+      }
+    } else {
+      // No optional — just subtotal
+      if (hasCost) {
+        rows += `<div class="gs-row gs-total"><span class="gs-label">Subtotal Cost</span><span class="gs-val">${formatCurrency(pricing.subtotalCost)}</span></div>`;
+      }
+      if (hasRetail) {
+        rows += `<div class="gs-row gs-total"><span class="gs-label">Subtotal Retail</span><span class="gs-val">${formatCurrency(pricing.subtotalRetail)}</span></div>`;
+      }
     }
-    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+  } else {
+    // No pricing — show parts/qty only
+    rows += `<div class="gs-row"><span class="gs-meta">Parts: ${counts.total} · Qty: ${counts.totalQty}</span></div>`;
   }
-  if (groupReportBy === "none") {
-    return [["All Parts", enrichedItems]];
-  }
-  const sectionMap = new Map();
-  for (const item of enrichedItems) {
-    const section = item.section_name || "General Parts";
-    if (!sectionMap.has(section)) sectionMap.set(section, []);
-    sectionMap.get(section).push(item);
-  }
-  return Array.from(sectionMap.entries());
+
+  return `<div class="group-subtotal">${rows}</div>`;
 }
 
 // ─── ILLUSTRATED (uses shared full-width card) ──────────────────────────
 function buildIllustratedBody(sections, opts, normalizePart, pricingMode) {
   let html = "";
-  for (const [sectionName, sectionItems] of sections) {
+  for (const section of sections) {
     if (sections.length > 1) {
-      html += renderSectionHeading(sectionName, sectionItems.length);
+      const extra = `Qty ${section.counts.totalQty}`;
+      html += renderSectionHeading(section.label, section.counts.total, extra);
     }
-    for (const item of sectionItems) {
+    // Required items first
+    for (const item of section.requiredItems) {
       html += renderIllustratedCard(normalizePart(item), {
         includeImages: opts.includeImages !== false,
         includeNotes: opts.includeNotes !== false,
@@ -222,6 +295,23 @@ function buildIllustratedBody(sections, opts, normalizePart, pricingMode) {
         isGroupContext: true,
         pricingMode,
       });
+    }
+    // Optional divider + items
+    if (section.optionalItems.length > 0) {
+      html += optionalDividerHTML(section.optionalItems.length);
+      for (const item of section.optionalItems) {
+        html += renderIllustratedCard(normalizePart(item), {
+          includeImages: opts.includeImages !== false,
+          includeNotes: opts.includeNotes !== false,
+          includeSource: opts.includeSource !== false,
+          isGroupContext: true,
+          pricingMode,
+        });
+      }
+    }
+    // Group subtotal
+    if (sections.length > 1) {
+      html += groupSubtotalHTML(section, pricingMode);
     }
   }
   return html;
@@ -231,16 +321,18 @@ function buildIllustratedBody(sections, opts, normalizePart, pricingMode) {
 function buildPriceListBody(sections, opts, normalizePart, pricingMode) {
   let html = "";
   let globalIdx = 0;
-  for (const [sectionName, sectionItems] of sections) {
+  for (const section of sections) {
     if (sections.length > 1) {
-      html += renderSectionHeading(sectionName, sectionItems.length);
+      const extra = `Qty ${section.counts.totalQty}`;
+      html += renderSectionHeading(section.label, section.counts.total, extra);
     }
     html += renderPriceListHeader({
       includeImages: !!opts.includeImages,
       isGroupContext: true,
       pricingMode,
     });
-    for (const item of sectionItems) {
+    // Required rows
+    for (const item of section.requiredItems) {
       globalIdx++;
       html += renderPriceListRow(normalizePart(item), globalIdx, {
         includeImages: !!opts.includeImages,
@@ -249,7 +341,27 @@ function buildPriceListBody(sections, opts, normalizePart, pricingMode) {
         pricingMode,
       });
     }
+    // Optional divider row inside table
+    if (section.optionalItems.length > 0) {
+      const colCount = 3 + (opts.includeImages ? 1 : 0) + (showCost(pricingMode) ? 1 : 0) + (showRetail(pricingMode) ? 1 : 0);
+      html += `<tr><td colspan="${colCount}" style="padding:4px 6px;border-bottom:none;">`;
+      html += `<div class="optional-divider" style="margin:2px 0;"><span>Optional · ${section.optionalItems.length}</span></div>`;
+      html += `</td></tr>`;
+      for (const item of section.optionalItems) {
+        globalIdx++;
+        html += renderPriceListRow(normalizePart(item), globalIdx, {
+          includeImages: !!opts.includeImages,
+          includeDescriptions: !!opts.includeDescriptions,
+          isGroupContext: true,
+          pricingMode,
+        });
+      }
+    }
     html += `</tbody></table>`;
+    // Group subtotal
+    if (sections.length > 1) {
+      html += groupSubtotalHTML(section, pricingMode);
+    }
   }
   return html;
 }
@@ -260,24 +372,11 @@ function buildSummaryBody(sections, opts, normalizePart, groupReportBy, pricingM
   let globalIdx = 0;
   const showCategory = groupReportBy !== "category";
 
-  for (const [sectionName, sectionItems] of sections) {
+  for (const section of sections) {
     if (sections.length > 1) {
       html += `<div class="subcategory-group">`;
-      // Section heading — show cost or retail subtotal depending on mode
-      const hasCost = showCost(pricingMode);
-      const hasRetail = showRetail(pricingMode);
-      let sectionExtra = "";
-      if (hasRetail) {
-        const sectionRetail = sectionItems.reduce((s, i) => {
-          const r = i.part?.retail_override || i.part?.retail_matrix_price || 0;
-          return s + r * (i.quantity || 1);
-        }, 0);
-        sectionExtra = formatCurrency(sectionRetail);
-      } else if (hasCost) {
-        const sectionCost = sectionItems.reduce((s, i) => s + (i.extCost || 0), 0);
-        sectionExtra = formatCurrency(sectionCost);
-      }
-      html += renderSectionHeading(sectionName, sectionItems.length, sectionExtra);
+      const extra = `Qty ${section.counts.totalQty}`;
+      html += renderSectionHeading(section.label, section.counts.total, extra);
     }
 
     html += renderSummaryHeader({
@@ -290,11 +389,10 @@ function buildSummaryBody(sections, opts, normalizePart, groupReportBy, pricingM
       pricingMode,
     });
 
-    for (const item of sectionItems) {
+    // Required rows
+    for (const item of section.requiredItems) {
       globalIdx++;
-      const p = normalizePart(item);
-      if (showCategory) p._showCategory = true;
-      html += renderSummaryRow(p, globalIdx, {
+      html += renderSummaryRow(normalizePart(item), globalIdx, {
         includeSource: opts.includeSource !== false,
         includeStock: opts.includeStock !== false,
         includeDemand: opts.includeDemand !== false,
@@ -303,22 +401,50 @@ function buildSummaryBody(sections, opts, normalizePart, groupReportBy, pricingM
         pricingMode,
       });
     }
+
+    // Optional divider row inside table
+    if (section.optionalItems.length > 0) {
+      const colCount = 3 + (showCategory ? 1 : 0) + (opts.includeSource !== false ? 1 : 0)
+        + (showCost(pricingMode) ? 2 : 0) + (showRetail(pricingMode) ? 2 : 0)
+        + (opts.includeDemand !== false ? 1 : 0) + (opts.includeStock !== false ? 1 : 0)
+        + (opts.includeNotes !== false ? 1 : 0);
+      html += `<tr><td colspan="${colCount}" style="padding:4px 5px;border-bottom:none;">`;
+      html += `<div class="optional-divider" style="margin:2px 0;"><span>Optional · ${section.optionalItems.length}</span></div>`;
+      html += `</td></tr>`;
+      for (const item of section.optionalItems) {
+        globalIdx++;
+        html += renderSummaryRow(normalizePart(item), globalIdx, {
+          includeSource: opts.includeSource !== false,
+          includeStock: opts.includeStock !== false,
+          includeDemand: opts.includeDemand !== false,
+          includeNotes: opts.includeNotes !== false,
+          isGroupContext: true,
+          pricingMode,
+        });
+      }
+    }
+
     html += `</tbody></table>`;
-    if (sections.length > 1) html += `</div>`;
+
+    // Group subtotal
+    if (sections.length > 1) {
+      html += groupSubtotalHTML(section, pricingMode);
+      html += `</div>`;
+    }
   }
   return html;
 }
 
 // ─── COMPACT LIST (group-specific, no catalog equivalent) ───────────────
-function buildCompactBody(sections, opts, catLookups, enrichedItems, pricingMode) {
+function buildCompactBody(sections, opts, catLookups, pricingMode) {
   const hasCost = showCost(pricingMode);
   const hasRetail = showRetail(pricingMode);
 
   let html = "";
   let globalIdx = 0;
-  for (const [sectionName, sectionItems] of sections) {
+  for (const section of sections) {
     if (sections.length > 1) {
-      html += renderSectionHeading(sectionName, sectionItems.length);
+      html += renderSectionHeading(section.label, section.counts.total);
     }
     html += `<table class="parts-table compact-table"><thead><tr>
       <th class="col-num">#</th>
@@ -332,7 +458,8 @@ function buildCompactBody(sections, opts, catLookups, enrichedItems, pricingMode
       ${hasRetail ? '<th style="text-align:right">Retail</th>' : ''}
       ${hasRetail ? '<th style="text-align:right">Ext Retail</th>' : ''}
     </tr></thead><tbody>`;
-    for (const item of sectionItems) {
+
+    const renderCompactRow = (item) => {
       globalIdx++;
       const { part } = item;
       const catPath = opts.includeCategory !== false && part.part_category_id && catLookups?.byId?.[part.part_category_id]
@@ -340,7 +467,7 @@ function buildCompactBody(sections, opts, catLookups, enrichedItems, pricingMode
       const unitCost = item.unitCost || 0;
       const unitRetail = part.retail_override || part.retail_matrix_price || 0;
       const qty = item.quantity || 1;
-      html += `<tr class="${globalIdx % 2 === 0 ? "even" : "odd"}">
+      return `<tr class="${globalIdx % 2 === 0 ? "even" : "odd"}">
         <td class="num">${globalIdx}</td>
         <td><div class="part-name">${esc(part.part_name)}</div></td>
         ${opts.includePartNumber !== false ? `<td class="part-num">${part.vendor_part_number ? esc(part.vendor_part_number) : "—"}</td>` : ''}
@@ -352,8 +479,31 @@ function buildCompactBody(sections, opts, catLookups, enrichedItems, pricingMode
         ${hasRetail ? `<td class="money">${formatCurrency(unitRetail)}</td>` : ''}
         ${hasRetail ? `<td class="money" style="font-weight:600;">${formatCurrency(unitRetail * qty)}</td>` : ''}
       </tr>`;
+    };
+
+    // Required rows
+    for (const item of section.requiredItems) {
+      html += renderCompactRow(item);
     }
+
+    // Optional divider row inside table
+    if (section.optionalItems.length > 0) {
+      const colCount = 4 + (opts.includePartNumber !== false ? 1 : 0)
+        + (opts.includeCategory !== false ? 1 : 0)
+        + (hasCost ? 2 : 0) + (hasRetail ? 2 : 0);
+      html += `<tr><td colspan="${colCount}" style="padding:4px 5px;border-bottom:none;">`;
+      html += `<div class="optional-divider" style="margin:2px 0;"><span>Optional · ${section.optionalItems.length}</span></div>`;
+      html += `</td></tr>`;
+      for (const item of section.optionalItems) {
+        html += renderCompactRow(item);
+      }
+    }
+
     html += `</tbody></table>`;
+    // Group subtotal
+    if (sections.length > 1) {
+      html += groupSubtotalHTML(section, pricingMode);
+    }
   }
   return html;
 }

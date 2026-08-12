@@ -24,6 +24,7 @@ import PartGroupCategoryFilter from "./PartGroupCategoryFilter";
 import { buildPartGroupPrintHTML } from "./partGroupPrint";
 import { openPrintWindow } from "@/components/parts/print/printHelpers";
 import PartGroupPrintModal from "./PartGroupPrintModal";
+import { preparePartGroupSections } from "./partGroupSections";
 
 const STATUS_COLORS = {
   ACTIVE: "bg-green-600",
@@ -111,53 +112,16 @@ export default function PartGroupDetail({ groupId, onBack }) {
     return getCategoryPathLabel(filterCategoryId, catLookups.byId);
   }, [filterCategoryId, catLookups]);
 
-  // Sort items
-  const sortedItems = useMemo(() => {
-    if (sortPartsBy === "manual") return filteredItems;
-    return [...filteredItems].sort((a, b) => {
-      switch (sortPartsBy) {
-        case "name": return (a.part?.part_name || "").localeCompare(b.part?.part_name || "");
-        case "part_number": return (a.part?.vendor_part_number || "").localeCompare(b.part?.vendor_part_number || "");
-        case "category": {
-          const pathA = a.part?.part_category_id ? (getCategoryPathLabel(a.part.part_category_id, catLookups.byId) || "") : "zzz";
-          const pathB = b.part?.part_category_id ? (getCategoryPathLabel(b.part.part_category_id, catLookups.byId) || "") : "zzz";
-          return pathA.localeCompare(pathB);
-        }
-        case "required": return (a.is_optional ? 1 : 0) - (b.is_optional ? 1 : 0);
-        case "cost": return (b.unitCost || 0) - (a.unitCost || 0);
-        case "source": {
-          const vA = vendorsMap?.[a.part?.default_vendor_id]?.vendor_name || "zzz";
-          const vB = vendorsMap?.[b.part?.default_vendor_id]?.vendor_name || "zzz";
-          return vA.localeCompare(vB);
-        }
-        default: return 0;
-      }
+  // Prepare sections using shared helper — Required-first ordering + subtotals
+  const preparedSections = useMemo(() => {
+    return preparePartGroupSections({
+      items: filteredItems,
+      groupBy: groupPartsBy,
+      sortBy: sortPartsBy,
+      catLookups,
+      vendorsMap,
     });
-  }, [filteredItems, sortPartsBy, catLookups, vendorsMap]);
-
-  // Group items by selected dimension
-  const sections = useMemo(() => {
-    if (groupPartsBy === "none") return [["All Parts", sortedItems]];
-    if (groupPartsBy === "category") {
-      const map = new Map();
-      for (const item of sortedItems) {
-        const catId = item.part?.part_category_id;
-        const label = catId && catLookups.byId[catId]
-          ? getCategoryPathLabel(catId, catLookups.byId) : "Uncategorized";
-        if (!map.has(label)) map.set(label, []);
-        map.get(label).push(item);
-      }
-      return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
-    }
-    // Default: section
-    const sectionMap = new Map();
-    for (const item of sortedItems) {
-      const section = item.section_name || "General Parts";
-      if (!sectionMap.has(section)) sectionMap.set(section, []);
-      sectionMap.get(section).push(item);
-    }
-    return Array.from(sectionMap.entries());
-  }, [sortedItems, groupPartsBy, catLookups]);
+  }, [filteredItems, groupPartsBy, sortPartsBy, catLookups, vendorsMap]);
 
   // Summary stats
   const summary = useMemo(() => {
@@ -199,7 +163,6 @@ export default function PartGroupDetail({ groupId, onBack }) {
     const html = buildPartGroupPrintHTML({
       group,
       enrichedItems,
-      sections,
       summary,
       vendorsMap,
       inventoryViewMap,
@@ -365,34 +328,69 @@ export default function PartGroupDetail({ groupId, onBack }) {
             </div>
           ) : (
             <div className="space-y-4">
-              {sections.map(([sectionName, sectionItems]) => {
-                const isExpanded = expandedSections[sectionName] !== false;
-                const sectionCost = sectionItems.reduce((s, i) => s + i.extCost, 0);
+              {preparedSections.map((section) => {
+                const isExpanded = expandedSections[section.key] !== false;
+                const sectionNames = preparedSections.map(s => s.key).filter(n => n !== "General Parts");
                 return (
-                  <div key={sectionName}>
-                    {sections.length > 1 && (
+                  <div key={section.key}>
+                    {preparedSections.length > 1 && (
                       <button
-                        onClick={() => toggleSection(sectionName)}
+                        onClick={() => toggleSection(section.key)}
                         className="flex items-center gap-2 w-full p-2 mb-2 bg-gray-900/50 rounded-lg border border-gray-700 hover:border-gray-600 transition-colors"
                       >
                         {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
-                        <span className="text-sm font-semibold text-white flex-1 text-left uppercase tracking-wide">{sectionName}</span>
-                        <span className="text-xs text-gray-400">{sectionItems.length} parts · {formatCurrency(sectionCost)}</span>
+                        <span className="text-sm font-semibold text-white flex-1 text-left uppercase tracking-wide">{section.label}</span>
+                        <span className="text-xs text-gray-400">{section.counts.total} parts · {formatCurrency(section.pricing.subtotalCost)}</span>
                       </button>
                     )}
                     {isExpanded && (
                       <div className="space-y-1.5">
-                        {sectionItems.map(item => (
+                        {/* Required items first */}
+                        {section.requiredItems.map(item => (
                           <PartGroupItemRow
                             key={item.id}
                             item={item}
-                            sections={sections.map(([name]) => name).filter(n => n !== "General Parts")}
+                            sections={sectionNames}
                             vendorsMap={vendorsMap}
                             catLookups={catLookups}
                             onUpdate={(updates) => handleUpdateItem(item.id, updates)}
                             onRemove={() => handleRemoveItem(item.id)}
                           />
                         ))}
+                        {/* Optional divider + items */}
+                        {section.optionalItems.length > 0 && (
+                          <>
+                            <div className="flex items-center gap-2 py-1 mt-1">
+                              <div className="w-1 h-1 rounded-full bg-yellow-600" />
+                              <span className="text-[10px] font-semibold uppercase tracking-wider text-yellow-600">
+                                Optional · {section.optionalItems.length}
+                              </span>
+                              <div className="flex-1 h-px bg-yellow-900/20" />
+                            </div>
+                            {section.optionalItems.map(item => (
+                              <PartGroupItemRow
+                                key={item.id}
+                                item={item}
+                                sections={sectionNames}
+                                vendorsMap={vendorsMap}
+                                catLookups={catLookups}
+                                onUpdate={(updates) => handleUpdateItem(item.id, updates)}
+                                onRemove={() => handleRemoveItem(item.id)}
+                              />
+                            ))}
+                          </>
+                        )}
+                        {/* Group subtotal footer (when grouped) */}
+                        {preparedSections.length > 1 && (
+                          <div className="flex items-center justify-between px-3 py-1.5 mt-1 bg-gray-900/40 rounded border border-gray-800 text-xs">
+                            <span className="text-gray-500">
+                              {section.counts.total} parts · Qty {section.counts.totalQty}
+                            </span>
+                            <span className="text-gray-300 font-mono font-semibold">
+                              Subtotal {formatCurrency(section.pricing.subtotalCost)}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
