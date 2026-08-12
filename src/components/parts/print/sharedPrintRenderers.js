@@ -2,6 +2,10 @@
  * Shared print row/table renderers used by BOTH Parts Catalog and Parts Group reports.
  * Ensures visual parity: same HTML structure, same CSS classes, same typography.
  *
+ * PRICING MODEL: All renderers consume pricingMode via showCost/showRetail helpers.
+ * When pricingMode = RETAIL_ONLY, NO cost values are rendered into HTML at all.
+ * When pricingMode = COST_ONLY, NO retail values are rendered into HTML at all.
+ *
  * Each renderer accepts a normalized PrintPart object:
  * {
  *   id, name, partNumber, image, categoryPath, notes, vehicle,
@@ -14,6 +18,7 @@
  */
 
 import { esc, formatCurrency, PART_TYPE_LABELS } from "./printHelpers";
+import { showCost, showRetail, showAnyPricing, PRICING_MODES } from "./sharedPrintConfig";
 
 // ─── ILLUSTRATED CARD (full-width, one per part) ────────────────────────
 export function renderIllustratedCard(p, opts = {}) {
@@ -22,10 +27,14 @@ export function renderIllustratedCard(p, opts = {}) {
     includeNotes = true,
     includeLocations = false,
     includeVendorSources = false,
-    includeCost = true,
     includeSource = true,
     isGroupContext = false,
+    pricingMode = PRICING_MODES.BOTH,
   } = opts;
+
+  const hasCost = showCost(pricingMode);
+  const hasRetail = showRetail(pricingMode);
+  const hasAnyPricing = showAnyPricing(pricingMode);
 
   const imgUrl = includeImages ? p.image : null;
 
@@ -34,15 +43,19 @@ export function renderIllustratedCard(p, opts = {}) {
   if (isGroupContext) {
     invRows += `<div class="inv-row"><span class="inv-label">Qty</span><span class="inv-val">${p.quantity || 1}</span></div>`;
     invRows += `<div class="inv-row"><span class="inv-label">${p.requiredOptional === "Optional" ? '<span style="color:#b45309;">Optional</span>' : 'Required'}</span><span class="inv-val"></span></div>`;
-    if (includeCost) {
+    if (hasCost) {
       invRows += `<div class="inv-row price"><span class="inv-label">Cost</span><span class="inv-val">${formatCurrency(p.cost || 0)}</span></div>`;
       invRows += `<div class="inv-row price"><span class="inv-label">Ext Cost</span><span class="inv-val">${formatCurrency(p.extCost || 0)}</span></div>`;
+    }
+    if (hasRetail) {
+      invRows += `<div class="inv-row price"><span class="inv-label">Retail</span><span class="inv-val">${formatCurrency(p.retail || 0)}</span></div>`;
+      invRows += `<div class="inv-row price"><span class="inv-label">Ext Retail</span><span class="inv-val">${formatCurrency(p.extRetail || 0)}</span></div>`;
     }
   } else {
     if (p.demand != null) invRows += `<div class="inv-row"><span class="inv-label">Demand</span><span class="inv-val">${p.demand}</span></div>`;
     if (p.stock != null) invRows += `<div class="inv-row"><span class="inv-label">On Hand</span><span class="inv-val">${p.stock}</span></div>`;
-    invRows += `<div class="inv-row price"><span class="inv-label">Cost</span><span class="inv-val">${formatCurrency(p.cost || 0)}</span></div>`;
-    invRows += `<div class="inv-row price"><span class="inv-label">Retail</span><span class="inv-val">${formatCurrency(p.retail || 0)}</span></div>`;
+    if (hasCost) invRows += `<div class="inv-row price"><span class="inv-label">Cost</span><span class="inv-val">${formatCurrency(p.cost || 0)}</span></div>`;
+    if (hasRetail) invRows += `<div class="inv-row price"><span class="inv-label">Retail</span><span class="inv-val">${formatCurrency(p.retail || 0)}</span></div>`;
   }
 
   let cardHTML = `<div class="part-card">
@@ -60,7 +73,7 @@ export function renderIllustratedCard(p, opts = {}) {
         ${includeSource && p.source ? `<div class="card-meta"><span class="ml">${isGroupContext ? "Source:" : "Preferred Vendor:"}</span> ${esc(p.source)}</div>` : ""}
         ${p.otherSources ? `<div class="card-meta"><span class="ml">Other Sources:</span> ${p.otherSources}</div>` : ""}
       </div>
-      <div class="card-inv">${invRows}</div>
+      ${hasAnyPricing || isGroupContext ? `<div class="card-inv">${invRows}</div>` : ""}
     </div>
     ${includeNotes && (p.notes || p.groupNotes) ? `<div class="card-notes">${p.notes ? `<span class="ml">Notes:</span> ${esc(p.notes)}` : ""}${p.groupNotes ? `${p.notes ? "<br/>" : ""}<span class="ml">Group Notes:</span> ${esc(p.groupNotes)}` : ""}</div>` : ""}`;
 
@@ -78,12 +91,12 @@ export function renderIllustratedCard(p, opts = {}) {
     cardHTML += `<div class="card-section">
       <div class="cs-label">Vendor Sources</div>
       <table class="src-table"><thead><tr>
-        <th>Vendor</th><th>SKU</th><th style="text-align:right">Cost</th><th>Lead Time</th><th>Pref</th><th>URL</th>
+        <th>Vendor</th><th>SKU</th>${hasCost ? '<th style="text-align:right">Cost</th>' : ''}<th>Lead Time</th><th>Pref</th><th>URL</th>
       </tr></thead><tbody>
       ${p.vendorSources.map(s => `<tr>
         <td>${esc(s.vendorName)}</td>
         <td class="mono">${s.sku ? esc(s.sku) : "—"}</td>
-        <td class="money">${s.cost != null ? formatCurrency(s.cost) : "—"}</td>
+        ${hasCost ? `<td class="money">${s.cost != null ? formatCurrency(s.cost) : "—"}</td>` : ''}
         <td>${s.leadTime != null ? `${s.leadTime}d` : "—"}</td>
         <td>${s.preferred ? "★" : ""}</td>
         <td class="small url-cell">${s.url ? esc(s.url) : ""}</td>
@@ -113,7 +126,7 @@ export function illustratedCSS() {
   .card-type { font-size: 7.5pt; color: #dc2626; font-weight: 500; }
   .card-meta { font-size: 8pt; color: #444; margin-top: 1px; }
   .ml { color: #888; }
-  .card-inv { width: 110px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px; padding-left: 10px; border-left: 1px solid #e5e5e5; }
+  .card-inv { width: 130px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px; padding-left: 10px; border-left: 1px solid #e5e5e5; }
   .inv-row { display: flex; justify-content: space-between; font-size: 8.5pt; }
   .inv-label { color: #777; font-size: 7.5pt; }
   .inv-val { font-weight: 700; color: #111; }
@@ -139,9 +152,17 @@ export function illustratedCSS() {
 
 // ─── PRICE LIST TABLE ROW ───────────────────────────────────────────────
 export function renderPriceListRow(p, idx, opts = {}) {
-  const { includeImages = true, includeDescriptions = true, includeVehicle = false, isGroupContext = false } = opts;
+  const {
+    includeImages = true,
+    includeDescriptions = true,
+    includeVehicle = false,
+    isGroupContext = false,
+    pricingMode = PRICING_MODES.RETAIL_ONLY,
+  } = opts;
+
+  const hasCost = showCost(pricingMode);
+  const hasRetail = showRetail(pricingMode);
   const imgUrl = includeImages ? p.image : null;
-  const retail = isGroupContext ? (p.extRetail || 0) : (p.retail || 0);
 
   return `<tr class="${idx % 2 === 0 ? "even" : "odd"}">
     ${includeImages ? `<td class="img-cell">${imgUrl
@@ -156,13 +177,23 @@ export function renderPriceListRow(p, idx, opts = {}) {
     ${isGroupContext ? `<td class="center qty">${p.quantity || 1}</td>` : ""}
     ${isGroupContext ? `<td class="small">${p.requiredOptional === "Optional" ? '<span style="color:#b45309;">Optional</span>' : "Required"}</td>` : ""}
     ${includeVehicle ? `<td class="small">${p.vehicle ? esc(p.vehicle) : "—"}</td>` : ""}
-    <td class="money">${formatCurrency(retail)}</td>
+    ${hasCost ? `<td class="money">${formatCurrency(isGroupContext ? (p.extCost || 0) : (p.cost || 0))}</td>` : ""}
+    ${hasRetail ? `<td class="money">${formatCurrency(isGroupContext ? (p.extRetail || 0) : (p.retail || 0))}</td>` : ""}
   </tr>`;
 }
 
 // ─── PRICE LIST TABLE HEADER ────────────────────────────────────────────
 export function renderPriceListHeader(opts = {}) {
-  const { includeImages = true, includeVehicle = false, isGroupContext = false } = opts;
+  const {
+    includeImages = true,
+    includeVehicle = false,
+    isGroupContext = false,
+    pricingMode = PRICING_MODES.RETAIL_ONLY,
+  } = opts;
+
+  const hasCost = showCost(pricingMode);
+  const hasRetail = showRetail(pricingMode);
+
   return `<table class="price-table"><thead><tr>
     ${includeImages ? '<th class="col-img"></th>' : ""}
     <th>Part</th>
@@ -170,7 +201,8 @@ export function renderPriceListHeader(opts = {}) {
     ${isGroupContext ? '<th style="text-align:center">Qty</th>' : ""}
     ${isGroupContext ? '<th>Req/Opt</th>' : ""}
     ${includeVehicle ? '<th>Vehicle</th>' : ""}
-    <th style="text-align:right">Retail</th>
+    ${hasCost ? '<th style="text-align:right">Cost</th>' : ""}
+    ${hasRetail ? '<th style="text-align:right">Retail</th>' : ""}
   </tr></thead><tbody>`;
 }
 
@@ -201,7 +233,17 @@ export function priceListCSS() {
 
 // ─── SUMMARY TABLE ROW ─────────────────────────────────────────────────
 export function renderSummaryRow(p, idx, opts = {}) {
-  const { includeCost = true, includeRetail = true, isGroupContext = false, includeSource = true, includeStock = true, includeDemand = true, includeNotes = false } = opts;
+  const {
+    isGroupContext = false,
+    includeSource = true,
+    includeStock = true,
+    includeDemand = true,
+    includeNotes = false,
+    pricingMode = PRICING_MODES.BOTH,
+  } = opts;
+
+  const hasCost = showCost(pricingMode);
+  const hasRetail = showRetail(pricingMode);
 
   return `<tr class="${idx % 2 === 0 ? "even" : "odd"}">
     <td class="num">${idx}</td>
@@ -215,9 +257,10 @@ export function renderSummaryRow(p, idx, opts = {}) {
     ${isGroupContext ? `<td class="small">${p.requiredOptional === "Optional" ? '<span style="color:#b45309;">Optional</span>' : "Required"}</td>` : ""}
     ${!isGroupContext && includeSource ? `<td class="small">${p.source ? esc(p.source) : "—"}</td>` : ""}
     ${isGroupContext && includeSource ? `<td class="small">${p.source ? esc(p.source) : "—"}</td>` : ""}
-    ${includeCost ? `<td class="money">${formatCurrency(p.cost || 0)}</td>` : ""}
-    ${isGroupContext && includeCost ? `<td class="money" style="font-weight:600;">${formatCurrency(p.extCost || 0)}</td>` : ""}
-    ${includeRetail ? `<td class="money">${formatCurrency(isGroupContext ? (p.extRetail || 0) : (p.retail || 0))}</td>` : ""}
+    ${hasCost ? `<td class="money">${formatCurrency(p.cost || 0)}</td>` : ""}
+    ${isGroupContext && hasCost ? `<td class="money" style="font-weight:600;">${formatCurrency(p.extCost || 0)}</td>` : ""}
+    ${hasRetail ? `<td class="money">${formatCurrency(isGroupContext ? (p.retail || 0) : (p.retail || 0))}</td>` : ""}
+    ${isGroupContext && hasRetail ? `<td class="money" style="font-weight:600;">${formatCurrency(p.extRetail || 0)}</td>` : ""}
     ${includeDemand ? `<td class="center qty">${p.demand ?? "—"}</td>` : ""}
     ${includeStock ? `<td class="center qty">${p.stock ?? "—"}</td>` : ""}
     ${isGroupContext && includeNotes ? `<td class="small" style="max-width:120px;word-wrap:break-word;">${p.groupNotes ? esc(p.groupNotes) : ""}</td>` : ""}
@@ -226,7 +269,18 @@ export function renderSummaryRow(p, idx, opts = {}) {
 
 // ─── SUMMARY TABLE HEADER ───────────────────────────────────────────────
 export function renderSummaryHeader(opts = {}) {
-  const { includeCost = true, includeRetail = true, isGroupContext = false, includeSource = true, includeStock = true, includeDemand = true, includeNotes = false, showCategory = false } = opts;
+  const {
+    isGroupContext = false,
+    includeSource = true,
+    includeStock = true,
+    includeDemand = true,
+    includeNotes = false,
+    showCategory = false,
+    pricingMode = PRICING_MODES.BOTH,
+  } = opts;
+
+  const hasCost = showCost(pricingMode);
+  const hasRetail = showRetail(pricingMode);
 
   return `<table class="parts-table"><thead><tr>
     <th class="col-num">#</th>
@@ -236,9 +290,10 @@ export function renderSummaryHeader(opts = {}) {
     ${isGroupContext ? '<th>Req/Opt</th>' : ''}
     ${!isGroupContext ? '<th>Preferred Vendor</th>' : ''}
     ${isGroupContext && includeSource ? '<th>Source</th>' : ''}
-    ${includeCost ? '<th style="text-align:right">Cost</th>' : ''}
-    ${isGroupContext && includeCost ? '<th style="text-align:right">Ext Cost</th>' : ''}
-    ${includeRetail ? '<th style="text-align:right">Retail</th>' : ''}
+    ${hasCost ? '<th style="text-align:right">Cost</th>' : ''}
+    ${isGroupContext && hasCost ? '<th style="text-align:right">Ext Cost</th>' : ''}
+    ${hasRetail ? '<th style="text-align:right">Retail</th>' : ''}
+    ${isGroupContext && hasRetail ? '<th style="text-align:right">Ext Retail</th>' : ''}
     ${includeDemand ? '<th style="text-align:center">Demand</th>' : ''}
     ${includeStock ? '<th style="text-align:center">On Hand</th>' : ''}
     ${isGroupContext && includeNotes ? '<th>Notes</th>' : ''}

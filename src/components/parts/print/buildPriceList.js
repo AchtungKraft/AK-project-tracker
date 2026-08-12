@@ -4,9 +4,10 @@ import {
   formatCurrency, getPartRetailEffectiveSafe,
 } from "./printHelpers";
 import { renderPriceListRow, renderPriceListHeader, priceListCSS } from "./sharedPrintRenderers";
+import { PRICING_MODES } from "./sharedPrintConfig";
 
 /**
- * Price List — client-facing. No cost, no inventory, no vendor names.
+ * Price List — client-facing. Pricing controlled by pricingMode.
  * Uses shared renderPriceListRow for visual parity with Parts Group price list.
  */
 export function buildPriceList({
@@ -18,6 +19,7 @@ export function buildPriceList({
     includeImages = true,
     includeDescriptions = true,
     includeVehicle = false,
+    pricingMode = PRICING_MODES.RETAIL_ONLY,
   } = options;
 
   const maps = buildLookupMaps({ categories, vendors, makes, models, years });
@@ -39,7 +41,7 @@ export function buildPriceList({
     sectionsHTML += `<div class="category-group">
       <h2 class="cat-heading">${esc(group.parentName.toUpperCase())} <span class="part-count">· ${partCount} Part${partCount !== 1 ? "s" : ""}</span></h2>`;
 
-    sectionsHTML += renderPriceListHeader({ includeImages, includeVehicle, isGroupContext: false });
+    sectionsHTML += renderPriceListHeader({ includeImages, includeVehicle, isGroupContext: false, pricingMode });
 
     for (const part of group.parts) {
       globalIdx++;
@@ -53,7 +55,8 @@ export function buildPriceList({
         notes: part.notes,
         vehicle,
         retail,
-      }, globalIdx, { includeImages, includeDescriptions, includeVehicle, isGroupContext: false });
+        cost: part.cost || 0,
+      }, globalIdx, { includeImages, includeDescriptions, includeVehicle, isGroupContext: false, pricingMode });
     }
 
     sectionsHTML += `</tbody></table></div>`;

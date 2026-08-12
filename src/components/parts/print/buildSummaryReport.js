@@ -4,10 +4,12 @@ import {
   formatCurrency, getPartRetailEffectiveSafe, PART_TYPE_LABELS,
 } from "./printHelpers";
 import { renderSummaryRow, renderSummaryHeader, summaryCSS } from "./sharedPrintRenderers";
+import { showCost, showRetail, PRICING_MODES } from "./sharedPrintConfig";
 
 /**
  * Summary Report — dense table, category-grouped, no images.
  * Uses shared renderSummaryRow for visual parity with Parts Group summary.
+ * Pricing controlled by pricingMode.
  */
 export function buildSummaryReport({
   parts, categories, vendors, makes, models, years,
@@ -15,7 +17,11 @@ export function buildSummaryReport({
   categoryLabel = null, searchTerm = "",
   options = {},
 }) {
-  const { includeCost = true, includeRetail = true, includeGroupTotals = true } = options;
+  const pricingMode = options.pricingMode || PRICING_MODES.BOTH;
+  const includeGroupTotals = options.includeGroupTotals !== false;
+  const hasCost = showCost(pricingMode);
+  const hasRetail = showRetail(pricingMode);
+
   const maps = buildLookupMaps({ categories, vendors, makes, models, years });
   const ts = getTimestamp();
   const groups = buildCategoryGroups(parts, maps.catMap, categories);
@@ -25,8 +31,8 @@ export function buildSummaryReport({
     : `All Categories · ${parts.length} Part${parts.length !== 1 ? "s" : ""}`;
   const filterNote = searchTerm ? `Search: "${searchTerm}"` : null;
 
-  const totalCost = parts.reduce((s, p) => s + (p.cost || 0), 0);
-  const totalRetail = parts.reduce((s, p) => s + getPartRetailEffectiveSafe(p).value, 0);
+  const totalCost = hasCost ? parts.reduce((s, p) => s + (p.cost || 0), 0) : 0;
+  const totalRetail = hasRetail ? parts.reduce((s, p) => s + getPartRetailEffectiveSafe(p).value, 0) : 0;
 
   let globalIdx = 0;
   let sectionsHTML = "";
@@ -39,9 +45,8 @@ export function buildSummaryReport({
       <h2 class="cat-heading">${esc(group.parentName.toUpperCase())} <span class="part-count">· ${partCount} Part${partCount !== 1 ? "s" : ""}</span></h2>`;
 
     sectionsHTML += renderSummaryHeader({
-      includeCost,
-      includeRetail,
       isGroupContext: false,
+      pricingMode,
     });
 
     let groupDemand = 0, groupOnHand = 0, groupCost = 0, groupRetail = 0;
@@ -68,20 +73,17 @@ export function buildSummaryReport({
         retail,
         demand,
         stock: onHand,
-      }, globalIdx, { includeCost, includeRetail, isGroupContext: false });
+      }, globalIdx, { isGroupContext: false, pricingMode });
     }
 
     sectionsHTML += `</tbody>`;
 
     if (includeGroupTotals) {
-      let colCount = 3; // #, Part, Vendor
-      if (includeCost) colCount++;
-      if (includeRetail) colCount++;
       sectionsHTML += `<tfoot><tr class="group-footer">
         <td colspan="2" class="gf-label">${partCount} Part${partCount !== 1 ? "s" : ""}</td>
         <td></td>
-        ${includeCost ? `<td class="money gf-val">${formatCurrency(groupCost)}</td>` : ""}
-        ${includeRetail ? `<td class="money gf-val">${formatCurrency(groupRetail)}</td>` : ""}
+        ${hasCost ? `<td class="money gf-val">${formatCurrency(groupCost)}</td>` : ""}
+        ${hasRetail ? `<td class="money gf-val">${formatCurrency(groupRetail)}</td>` : ""}
         <td class="center gf-val">${groupDemand}</td>
         <td class="center gf-val">${groupOnHand}</td>
       </tr></tfoot>`;
@@ -92,8 +94,8 @@ export function buildSummaryReport({
 
   let stripHTML = `<div class="summary-strip">
     <span>Parts: <strong>${parts.length}</strong></span>`;
-  if (includeCost) stripHTML += `<span>Total Cost: <strong>${formatCurrency(totalCost)}</strong></span>`;
-  if (includeRetail) stripHTML += `<span>Total Retail: <strong>${formatCurrency(totalRetail)}</strong></span>`;
+  if (hasCost) stripHTML += `<span>Total Cost: <strong>${formatCurrency(totalCost)}</strong></span>`;
+  if (hasRetail) stripHTML += `<span>Total Retail: <strong>${formatCurrency(totalRetail)}</strong></span>`;
   stripHTML += `</div>`;
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Summary Report</title>

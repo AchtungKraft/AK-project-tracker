@@ -4,10 +4,12 @@ import {
   formatCurrency, getPartRetailEffectiveSafe, PART_TYPE_LABELS,
 } from "./printHelpers";
 import { renderIllustratedCard, illustratedCSS } from "./sharedPrintRenderers";
+import { PRICING_MODES } from "./sharedPrintConfig";
 
 /**
  * Illustrated Catalog — one full-width card per part with thumbnail, all locations, all sources.
  * Uses shared renderIllustratedCard for visual parity with Parts Group illustrated.
+ * Pricing controlled by pricingMode.
  */
 export function buildIllustratedCatalog({
   parts, categories, vendors, makes, models, years,
@@ -20,6 +22,7 @@ export function buildIllustratedCatalog({
     includeVendorSources = true,
     includeLocations = true,
     includeNotes = true,
+    pricingMode = PRICING_MODES.BOTH,
   } = options;
 
   const maps = buildLookupMaps({ categories, vendors, makes, models, years });
@@ -100,6 +103,7 @@ export function buildIllustratedCatalog({
         includeLocations,
         includeVendorSources,
         isGroupContext: false,
+        pricingMode,
       });
     }
 
