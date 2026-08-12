@@ -7,14 +7,16 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft, Plus, Printer, Edit, Package, Layers,
-  ChevronDown, ChevronRight, Trash2, GripVertical,
+  ChevronDown, ChevronRight, Trash2, GripVertical, Filter, X,
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency, getPartRetailEffectiveSafe } from "@/components/supply/pricingHelpers";
+import { buildCategoryLookups, getCategoryPathLabel, getAllDescendantIds } from "@/lib/categoryTreeHelpers";
 import { useReferenceData } from "@/components/common/useReferenceData";
 import PartGroupFormModal from "./PartGroupFormModal";
 import AddPartsToGroupModal from "./AddPartsToGroupModal";
 import PartGroupItemRow from "./PartGroupItemRow";
+import PartGroupCategoryFilter from "./PartGroupCategoryFilter";
 import { buildPartGroupPrintHTML } from "./partGroupPrint";
 import { openPrintWindow } from "@/components/parts/print/printHelpers";
 
@@ -30,8 +32,11 @@ export default function PartGroupDetail({ groupId, onBack }) {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddParts, setShowAddParts] = useState(false);
   const [expandedSections, setExpandedSections] = useState({});
+  const [filterCategoryId, setFilterCategoryId] = useState(null);
+  const [showCategoryFilter, setShowCategoryFilter] = useState(false);
 
-  const { vendorsMap } = useReferenceData();
+  const { vendorsMap, categories } = useReferenceData();
+  const catLookups = useMemo(() => buildCategoryLookups(categories), [categories]);
 
   const { data: group, isLoading: groupLoading } = useQuery({
     queryKey: ["partGroup", groupId],
@@ -82,16 +87,32 @@ export default function PartGroupDetail({ groupId, onBack }) {
       .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   }, [items, partsMap, inventoryViewMap]);
 
+  // Filter by category (recursive)
+  const filteredItems = useMemo(() => {
+    if (!filterCategoryId) return enrichedItems;
+    const catIds = getAllDescendantIds(filterCategoryId, catLookups.childrenByParentId);
+    return enrichedItems.filter(item => {
+      const pcId = item.part?.part_category_id;
+      return pcId && catIds.has(pcId);
+    });
+  }, [enrichedItems, filterCategoryId, catLookups]);
+
+  // Active filter label
+  const filterLabel = useMemo(() => {
+    if (!filterCategoryId || !catLookups.byId[filterCategoryId]) return null;
+    return getCategoryPathLabel(filterCategoryId, catLookups.byId);
+  }, [filterCategoryId, catLookups]);
+
   // Group by section
   const sections = useMemo(() => {
     const sectionMap = new Map();
-    for (const item of enrichedItems) {
+    for (const item of filteredItems) {
       const section = item.section_name || "General Parts";
       if (!sectionMap.has(section)) sectionMap.set(section, []);
       sectionMap.get(section).push(item);
     }
     return Array.from(sectionMap.entries());
-  }, [enrichedItems]);
+  }, [filteredItems]);
 
   // Summary stats
   const summary = useMemo(() => {
@@ -137,6 +158,7 @@ export default function PartGroupDetail({ groupId, onBack }) {
       summary,
       vendorsMap,
       inventoryViewMap,
+      catLookups,
     });
     openPrintWindow(html);
   };
@@ -202,6 +224,33 @@ export default function PartGroupDetail({ groupId, onBack }) {
         )}
       </div>
 
+      {/* Category Filter Strip */}
+      {enrichedItems.length > 0 && (
+        <div className="px-3 py-1.5 bg-gray-900/30 border-b border-gray-800/50 flex items-center gap-2">
+          <Button
+            variant={showCategoryFilter ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setShowCategoryFilter(!showCategoryFilter)}
+            className="h-7 text-xs gap-1.5"
+          >
+            <Filter className="w-3 h-3" />
+            {filterLabel ? "Filtered" : "Filter by Category"}
+          </Button>
+          {filterLabel && (
+            <div className="flex items-center gap-1.5 text-xs text-gray-400">
+              <span className="text-gray-600">→</span>
+              <span className="truncate max-w-[300px]" title={filterLabel}>{filterLabel}</span>
+              <button onClick={() => setFilterCategoryId(null)} className="text-gray-500 hover:text-red-400 shrink-0">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+          {filterCategoryId && (
+            <span className="text-[11px] text-gray-500 ml-auto">{filteredItems.length} of {enrichedItems.length} parts</span>
+          )}
+        </div>
+      )}
+
       {/* Summary Strip */}
       <div className="px-3 py-2 bg-gray-900/50 border-b border-red-900/20 flex flex-wrap gap-4 text-xs">
         <div><span className="text-gray-500">Parts:</span> <span className="text-white font-semibold">{summary.uniqueParts}</span></div>
@@ -213,52 +262,71 @@ export default function PartGroupDetail({ groupId, onBack }) {
         <div><span className="text-gray-500">Total Est:</span> <span className="text-white font-mono font-semibold">{formatCurrency(summary.totalCost)}</span></div>
       </div>
 
-      {/* Parts List */}
-      <div className="flex-1 overflow-y-auto p-3">
-        {enrichedItems.length === 0 ? (
-          <div className="text-center py-16">
-            <Package className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-            <p className="text-gray-400 mb-2">This Parts Group does not contain any parts yet.</p>
-            <Button onClick={() => setShowAddParts(true)} size="sm" className="bg-red-600 hover:bg-red-700 gap-2 mt-2">
-              <Plus className="w-4 h-4" /> Add Parts
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {sections.map(([sectionName, sectionItems]) => {
-              const isExpanded = expandedSections[sectionName] !== false;
-              const sectionCost = sectionItems.reduce((s, i) => s + i.extCost, 0);
-              return (
-                <div key={sectionName}>
-                  {sections.length > 1 && (
-                    <button
-                      onClick={() => toggleSection(sectionName)}
-                      className="flex items-center gap-2 w-full p-2 mb-2 bg-gray-900/50 rounded-lg border border-gray-700 hover:border-gray-600 transition-colors"
-                    >
-                      {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
-                      <span className="text-sm font-semibold text-white flex-1 text-left uppercase tracking-wide">{sectionName}</span>
-                      <span className="text-xs text-gray-400">{sectionItems.length} parts · {formatCurrency(sectionCost)}</span>
-                    </button>
-                  )}
-                  {isExpanded && (
-                    <div className="space-y-1.5">
-                      {sectionItems.map(item => (
-                        <PartGroupItemRow
-                          key={item.id}
-                          item={item}
-                          sections={sections.map(([name]) => name).filter(n => n !== "General Parts")}
-                          vendorsMap={vendorsMap}
-                          onUpdate={(updates) => handleUpdateItem(item.id, updates)}
-                          onRemove={() => handleRemoveItem(item.id)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+      {/* Parts List with optional category filter panel */}
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        {showCategoryFilter && (
+          <PartGroupCategoryFilter
+            enrichedItems={enrichedItems}
+            categories={categories}
+            catLookups={catLookups}
+            selectedCategoryId={filterCategoryId}
+            onSelect={setFilterCategoryId}
+            onClose={() => setShowCategoryFilter(false)}
+          />
         )}
+        <div className={cn("flex-1 overflow-y-auto p-3", showCategoryFilter && "border-l border-gray-800")}>
+          {enrichedItems.length === 0 ? (
+            <div className="text-center py-16">
+              <Package className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+              <p className="text-gray-400 mb-2">This Parts Group does not contain any parts yet.</p>
+              <Button onClick={() => setShowAddParts(true)} size="sm" className="bg-red-600 hover:bg-red-700 gap-2 mt-2">
+                <Plus className="w-4 h-4" /> Add Parts
+              </Button>
+            </div>
+          ) : filteredItems.length === 0 ? (
+            <div className="text-center py-16">
+              <Filter className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+              <p className="text-gray-400 text-sm">No parts match this category filter.</p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => setFilterCategoryId(null)}>Clear Filter</Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {sections.map(([sectionName, sectionItems]) => {
+                const isExpanded = expandedSections[sectionName] !== false;
+                const sectionCost = sectionItems.reduce((s, i) => s + i.extCost, 0);
+                return (
+                  <div key={sectionName}>
+                    {sections.length > 1 && (
+                      <button
+                        onClick={() => toggleSection(sectionName)}
+                        className="flex items-center gap-2 w-full p-2 mb-2 bg-gray-900/50 rounded-lg border border-gray-700 hover:border-gray-600 transition-colors"
+                      >
+                        {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                        <span className="text-sm font-semibold text-white flex-1 text-left uppercase tracking-wide">{sectionName}</span>
+                        <span className="text-xs text-gray-400">{sectionItems.length} parts · {formatCurrency(sectionCost)}</span>
+                      </button>
+                    )}
+                    {isExpanded && (
+                      <div className="space-y-1.5">
+                        {sectionItems.map(item => (
+                          <PartGroupItemRow
+                            key={item.id}
+                            item={item}
+                            sections={sections.map(([name]) => name).filter(n => n !== "General Parts")}
+                            vendorsMap={vendorsMap}
+                            catLookups={catLookups}
+                            onUpdate={(updates) => handleUpdateItem(item.id, updates)}
+                            onRemove={() => handleRemoveItem(item.id)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {showEditModal && (

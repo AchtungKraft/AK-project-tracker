@@ -5,11 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Package, Trash2, MoreVertical, Check, X } from "lucide-react";
 import { formatCurrency } from "@/components/supply/pricingHelpers";
+import { getCategoryPathLabel } from "@/lib/categoryTreeHelpers";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 
-export default function PartGroupItemRow({ item, sections, vendorsMap, onUpdate, onRemove }) {
+export default function PartGroupItemRow({ item, sections, vendorsMap, catLookups, onUpdate, onRemove }) {
   const { part, inv, unitCost, extCost } = item;
   const [editingQty, setEditingQty] = useState(false);
   const [qtyValue, setQtyValue] = useState(String(item.quantity || 1));
@@ -18,6 +19,8 @@ export default function PartGroupItemRow({ item, sections, vendorsMap, onUpdate,
   const onHand = inv?.physical_stock ?? null;
   const demand = inv?.required_total ?? null;
   const featuredPhoto = part.featured_photo || part.photos?.[0];
+  const catLabel = part.part_category_id && catLookups?.byId?.[part.part_category_id]
+    ? getCategoryPathLabel(part.part_category_id, catLookups.byId) : null;
 
   const saveQty = () => {
     const num = parseFloat(qtyValue);
@@ -45,9 +48,14 @@ export default function PartGroupItemRow({ item, sections, vendorsMap, onUpdate,
               <Badge variant="outline" className="border-yellow-600 text-yellow-400 text-[10px] px-1 py-0">Optional</Badge>
             )}
           </div>
-          {part.vendor_part_number && (
-            <div className="text-[11px] text-gray-500 font-mono truncate">{part.vendor_part_number}</div>
-          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            {part.vendor_part_number && (
+              <span className="text-[11px] text-gray-500 font-mono">{part.vendor_part_number}</span>
+            )}
+            {catLabel && (
+              <span className="text-[10px] text-gray-500 truncate max-w-[180px]" title={catLabel}>{catLabel}</span>
+            )}
+          </div>
           {item.notes && (
             <div className="text-[11px] text-blue-400 truncate mt-0.5">📝 {item.notes}</div>
           )}

@@ -1,12 +1,13 @@
 import {
   esc, getTimestamp, baseStyles, headerHTML, footerHTML, formatCurrency,
 } from "@/components/parts/print/printHelpers";
+import { getCategoryPathLabel } from "@/lib/categoryTreeHelpers";
 
 /**
  * Builds a print-ready HTML report for a single Parts Group.
  * Reuses the Ächtung Kraft print architecture.
  */
-export function buildPartGroupPrintHTML({ group, enrichedItems, sections, summary, vendorsMap, inventoryViewMap }) {
+export function buildPartGroupPrintHTML({ group, enrichedItems, sections, summary, vendorsMap, inventoryViewMap, catLookups }) {
   const ts = getTimestamp();
 
   const subtitle = [
@@ -51,6 +52,7 @@ export function buildPartGroupPrintHTML({ group, enrichedItems, sections, summar
     sectionsHTML += `<table class="parts-table"><thead><tr>
       <th class="col-num">#</th>
       <th>Part</th>
+      <th>Category</th>
       <th style="text-align:center">Qty</th>
       <th>Req/Opt</th>
       <th>Source</th>
@@ -68,12 +70,16 @@ export function buildPartGroupPrintHTML({ group, enrichedItems, sections, summar
       const onHand = inv?.physical_stock ?? "—";
       const demand = inv?.required_total ?? "—";
 
+      const catPath = part.part_category_id && catLookups?.byId?.[part.part_category_id]
+        ? getCategoryPathLabel(part.part_category_id, catLookups.byId) : "";
+
       sectionsHTML += `<tr class="${globalIdx % 2 === 0 ? "even" : "odd"}">
         <td class="num">${globalIdx}</td>
         <td>
           <div class="part-name">${esc(part.part_name)}</div>
           ${part.vendor_part_number ? `<div class="part-num">${esc(part.vendor_part_number)}</div>` : ""}
         </td>
+        <td class="small" style="max-width:160px;word-wrap:break-word;">${catPath ? esc(catPath) : "—"}</td>
         <td class="center qty">${item.quantity || 1}</td>
         <td class="small">${item.is_optional ? '<span style="color:#b45309;">Optional</span>' : "Required"}</td>
         <td class="small">${vendor ? esc(vendor.vendor_name) : "—"}</td>

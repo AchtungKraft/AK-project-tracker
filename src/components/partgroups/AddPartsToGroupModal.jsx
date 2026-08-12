@@ -17,6 +17,7 @@ import {
 import { useReferenceData } from "@/components/common/useReferenceData";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { operationalDataConfig } from "@/components/common/queryConfig";
+import { buildCategoryLookups, getCategoryPath, getAllDescendantIds as getDescendantIds } from "@/lib/categoryTreeHelpers";
 import CategoryTree from "@/components/parts/CategoryTree";
 import PartsBreadcrumb from "@/components/parts/PartsBreadcrumb";
 import AddPartsResultRow from "./AddPartsResultRow";
@@ -63,22 +64,13 @@ export default function AddPartsToGroupModal({ groupId, groupName, existingPartI
 
   const existingSet = useMemo(() => new Set(existingPartIds), [existingPartIds]);
 
-  // Category helpers — same as PartsExplorerLayout
+  // Shared category lookups — canonical helpers from categoryTreeHelpers
+  const catLookups = useMemo(() => buildCategoryLookups(categories), [categories]);
+
   const categoryNameToId = useMemo(() => {
     const map = {};
     categories.forEach(cat => { if (cat.name) map[cat.name.toLowerCase()] = cat.id; });
     return map;
-  }, [categories]);
-
-  const getAllDescendantIds = useCallback((catId) => {
-    const desc = new Set();
-    const queue = [catId];
-    while (queue.length) {
-      const cur = queue.shift();
-      desc.add(cur);
-      categories.forEach(c => { if (c.parent_id === cur && !desc.has(c.id)) queue.push(c.id); });
-    }
-    return desc;
   }, [categories]);
 
   const getPartCategoryId = useCallback((part) => {
@@ -87,19 +79,11 @@ export default function AddPartsToGroupModal({ groupId, groupName, existingPartI
     return null;
   }, [categoryNameToId]);
 
-  // Build category breadcrumb path
+  // Build category breadcrumb path using shared helper
   const categoryPath = useMemo(() => {
     if (!selectedCategoryId || !categories.length) return [];
-    const path = [];
-    let cur = selectedCategoryId;
-    while (cur) {
-      const cat = categories.find(c => c.id === cur);
-      if (!cat) break;
-      path.unshift({ id: cat.id, name: cat.name, color: cat.color });
-      cur = cat.parent_id;
-    }
-    return path;
-  }, [selectedCategoryId, categories]);
+    return getCategoryPath(selectedCategoryId, catLookups.byId);
+  }, [selectedCategoryId, categories, catLookups]);
 
   // Filtered parts (search + category, excluding archived)
   const filtered = useMemo(() => {
@@ -119,7 +103,7 @@ export default function AddPartsToGroupModal({ groupId, groupName, existingPartI
     }
 
     if (selectedCategoryId) {
-      const catIds = getAllDescendantIds(selectedCategoryId);
+      const catIds = getDescendantIds(selectedCategoryId, catLookups.childrenByParentId);
       result = result.filter(p => {
         const pcId = getPartCategoryId(p);
         return pcId && catIds.has(pcId);
@@ -127,7 +111,7 @@ export default function AddPartsToGroupModal({ groupId, groupName, existingPartI
     }
 
     return result;
-  }, [parts, search, selectedCategoryId, getAllDescendantIds, getPartCategoryId]);
+  }, [parts, search, selectedCategoryId, catLookups, getPartCategoryId]);
 
   // Separate existing vs selectable for display
   const { selectableParts, existingInView } = useMemo(() => {
@@ -353,7 +337,7 @@ export default function AddPartsToGroupModal({ groupId, groupName, existingPartI
                       isExisting={existingSet.has(part.id)}
                       inventoryData={inventoryMap[part.id]}
                       vendorsMap={vendorsMap}
-                      categories={categories}
+                      catLookups={catLookups}
                       onToggle={() => toggle(part.id)}
                     />
                   ))}

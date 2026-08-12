@@ -3,21 +3,19 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Package } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getCategoryPathLabel, buildCategoryLookups } from "@/lib/categoryTreeHelpers";
+import { getCategoryPathLabel } from "@/lib/categoryTreeHelpers";
 
-export default function AddPartsResultRow({ part, isSelected, isExisting, inventoryData, vendorsMap, categories, onToggle }) {
+export default function AddPartsResultRow({ part, isSelected, isExisting, inventoryData, vendorsMap, catLookups, onToggle }) {
   const photo = part.featured_photo || part.photos?.[0];
   const vendor = vendorsMap?.[part.default_vendor_id];
   const onHand = inventoryData?.physical_stock ?? null;
   const demand = inventoryData?.required_total ?? null;
 
-  // Build category path label — full recursive path
+  // Full recursive category path label using shared lookups
   const catLabel = React.useMemo(() => {
-    if (!part.part_category_id || !categories?.length) return null;
-    const { byId } = buildCategoryLookups(categories);
-    if (!byId[part.part_category_id]) return null;
-    return getCategoryPathLabel(part.part_category_id, byId);
-  }, [part.part_category_id, categories]);
+    if (!part.part_category_id || !catLookups?.byId?.[part.part_category_id]) return null;
+    return getCategoryPathLabel(part.part_category_id, catLookups.byId);
+  }, [part.part_category_id, catLookups]);
 
   return (
     <label
@@ -55,7 +53,7 @@ export default function AddPartsResultRow({ part, isSelected, isExisting, invent
             <span className="text-[11px] text-gray-500 font-mono">{part.vendor_part_number}</span>
           )}
           {catLabel && (
-            <span className="text-[10px] text-gray-500 truncate max-w-[140px]">{catLabel}</span>
+            <span className="text-[10px] text-gray-500 truncate max-w-[200px]" title={catLabel}>{catLabel}</span>
           )}
           {vendor && (
             <span className="text-[10px] text-gray-500 truncate max-w-[100px]">· {vendor.vendor_name}</span>
