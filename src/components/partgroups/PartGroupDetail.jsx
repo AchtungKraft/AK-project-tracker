@@ -8,7 +8,11 @@ import { cn } from "@/lib/utils";
 import {
   ArrowLeft, Plus, Printer, Edit, Package, Layers,
   ChevronDown, ChevronRight, Trash2, GripVertical, Filter, X,
+  ArrowUpDown, Group,
 } from "lucide-react";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency, getPartRetailEffectiveSafe } from "@/components/supply/pricingHelpers";
 import { buildCategoryLookups, getCategoryPathLabel, getAllDescendantIds } from "@/lib/categoryTreeHelpers";
@@ -19,6 +23,7 @@ import PartGroupItemRow from "./PartGroupItemRow";
 import PartGroupCategoryFilter from "./PartGroupCategoryFilter";
 import { buildPartGroupPrintHTML } from "./partGroupPrint";
 import { openPrintWindow } from "@/components/parts/print/printHelpers";
+import PartGroupPrintModal from "./PartGroupPrintModal";
 
 const STATUS_COLORS = {
   ACTIVE: "bg-green-600",
@@ -34,6 +39,9 @@ export default function PartGroupDetail({ groupId, onBack }) {
   const [expandedSections, setExpandedSections] = useState({});
   const [filterCategoryId, setFilterCategoryId] = useState(null);
   const [showCategoryFilter, setShowCategoryFilter] = useState(false);
+  const [groupPartsBy, setGroupPartsBy] = useState("section");
+  const [sortPartsBy, setSortPartsBy] = useState("manual");
+  const [showPrintOptions, setShowPrintOptions] = useState(false);
 
   const { vendorsMap, categories } = useReferenceData();
   const catLookups = useMemo(() => buildCategoryLookups(categories), [categories]);
@@ -103,16 +111,53 @@ export default function PartGroupDetail({ groupId, onBack }) {
     return getCategoryPathLabel(filterCategoryId, catLookups.byId);
   }, [filterCategoryId, catLookups]);
 
-  // Group by section
+  // Sort items
+  const sortedItems = useMemo(() => {
+    if (sortPartsBy === "manual") return filteredItems;
+    return [...filteredItems].sort((a, b) => {
+      switch (sortPartsBy) {
+        case "name": return (a.part?.part_name || "").localeCompare(b.part?.part_name || "");
+        case "part_number": return (a.part?.vendor_part_number || "").localeCompare(b.part?.vendor_part_number || "");
+        case "category": {
+          const pathA = a.part?.part_category_id ? (getCategoryPathLabel(a.part.part_category_id, catLookups.byId) || "") : "zzz";
+          const pathB = b.part?.part_category_id ? (getCategoryPathLabel(b.part.part_category_id, catLookups.byId) || "") : "zzz";
+          return pathA.localeCompare(pathB);
+        }
+        case "required": return (a.is_optional ? 1 : 0) - (b.is_optional ? 1 : 0);
+        case "cost": return (b.unitCost || 0) - (a.unitCost || 0);
+        case "source": {
+          const vA = vendorsMap?.[a.part?.default_vendor_id]?.vendor_name || "zzz";
+          const vB = vendorsMap?.[b.part?.default_vendor_id]?.vendor_name || "zzz";
+          return vA.localeCompare(vB);
+        }
+        default: return 0;
+      }
+    });
+  }, [filteredItems, sortPartsBy, catLookups, vendorsMap]);
+
+  // Group items by selected dimension
   const sections = useMemo(() => {
+    if (groupPartsBy === "none") return [["All Parts", sortedItems]];
+    if (groupPartsBy === "category") {
+      const map = new Map();
+      for (const item of sortedItems) {
+        const catId = item.part?.part_category_id;
+        const label = catId && catLookups.byId[catId]
+          ? getCategoryPathLabel(catId, catLookups.byId) : "Uncategorized";
+        if (!map.has(label)) map.set(label, []);
+        map.get(label).push(item);
+      }
+      return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+    }
+    // Default: section
     const sectionMap = new Map();
-    for (const item of filteredItems) {
+    for (const item of sortedItems) {
       const section = item.section_name || "General Parts";
       if (!sectionMap.has(section)) sectionMap.set(section, []);
       sectionMap.get(section).push(item);
     }
     return Array.from(sectionMap.entries());
-  }, [filteredItems]);
+  }, [sortedItems, groupPartsBy, catLookups]);
 
   // Summary stats
   const summary = useMemo(() => {
@@ -150,7 +195,7 @@ export default function PartGroupDetail({ groupId, onBack }) {
     queryClient.invalidateQueries({ queryKey: ["partGroupItems"] });
   };
 
-  const handlePrint = () => {
+  const handlePrint = (reportType, opts) => {
     const html = buildPartGroupPrintHTML({
       group,
       enrichedItems,
@@ -159,6 +204,8 @@ export default function PartGroupDetail({ groupId, onBack }) {
       vendorsMap,
       inventoryViewMap,
       catLookups,
+      reportType,
+      printOptions: opts,
     });
     openPrintWindow(html);
   };
@@ -210,7 +257,7 @@ export default function PartGroupDetail({ groupId, onBack }) {
             <Button onClick={() => setShowEditModal(true)} variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
               <Edit className="w-3.5 h-3.5" /> Edit
             </Button>
-            <Button onClick={handlePrint} variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+            <Button onClick={() => setShowPrintOptions(true)} variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
               <Printer className="w-3.5 h-3.5" /> Print
             </Button>
             <Button onClick={() => setShowAddParts(true)} size="sm" className="bg-red-600 hover:bg-red-700 h-8 gap-1.5 text-xs">
@@ -224,9 +271,9 @@ export default function PartGroupDetail({ groupId, onBack }) {
         )}
       </div>
 
-      {/* Category Filter Strip */}
+      {/* Controls Strip */}
       {enrichedItems.length > 0 && (
-        <div className="px-3 py-1.5 bg-gray-900/30 border-b border-gray-800/50 flex items-center gap-2">
+        <div className="px-3 py-1.5 bg-gray-900/30 border-b border-gray-800/50 flex items-center gap-2 flex-wrap">
           <Button
             variant={showCategoryFilter ? "secondary" : "ghost"}
             size="sm"
@@ -234,17 +281,44 @@ export default function PartGroupDetail({ groupId, onBack }) {
             className="h-7 text-xs gap-1.5"
           >
             <Filter className="w-3 h-3" />
-            {filterLabel ? "Filtered" : "Filter by Category"}
+            {filterLabel ? "Filtered" : "Filter"}
           </Button>
           {filterLabel && (
             <div className="flex items-center gap-1.5 text-xs text-gray-400">
               <span className="text-gray-600">→</span>
-              <span className="truncate max-w-[300px]" title={filterLabel}>{filterLabel}</span>
+              <span className="truncate max-w-[200px]" title={filterLabel}>{filterLabel}</span>
               <button onClick={() => setFilterCategoryId(null)} className="text-gray-500 hover:text-red-400 shrink-0">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
           )}
+          <div className="h-4 w-px bg-gray-700 mx-1 hidden sm:block" />
+          <Select value={groupPartsBy} onValueChange={setGroupPartsBy}>
+            <SelectTrigger className="w-[130px] h-7 bg-transparent border-gray-700 text-white text-[11px] hidden sm:flex">
+              <Group className="w-3 h-3 mr-1 text-gray-500" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="section">Group: Section</SelectItem>
+              <SelectItem value="category">Group: Category</SelectItem>
+              <SelectItem value="none">No Grouping</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={sortPartsBy} onValueChange={setSortPartsBy}>
+            <SelectTrigger className="w-[120px] h-7 bg-transparent border-gray-700 text-white text-[11px] hidden sm:flex">
+              <ArrowUpDown className="w-3 h-3 mr-1 text-gray-500" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="manual">Sort: Manual</SelectItem>
+              <SelectItem value="name">Sort: Name</SelectItem>
+              <SelectItem value="part_number">Sort: Part #</SelectItem>
+              <SelectItem value="category">Sort: Category</SelectItem>
+              <SelectItem value="required">Sort: Req/Opt</SelectItem>
+              <SelectItem value="source">Sort: Source</SelectItem>
+              <SelectItem value="cost">Sort: Cost</SelectItem>
+            </SelectContent>
+          </Select>
           {filterCategoryId && (
             <span className="text-[11px] text-gray-500 ml-auto">{filteredItems.length} of {enrichedItems.length} parts</span>
           )}
@@ -348,6 +422,16 @@ export default function PartGroupDetail({ groupId, onBack }) {
             setShowAddParts(false);
             queryClient.invalidateQueries({ queryKey: ["partGroupItems", groupId] });
             queryClient.invalidateQueries({ queryKey: ["partGroupItems"] });
+          }}
+        />
+      )}
+
+      {showPrintOptions && (
+        <PartGroupPrintModal
+          onClose={() => setShowPrintOptions(false)}
+          onPrint={(reportType, opts) => {
+            handlePrint(reportType, opts);
+            setShowPrintOptions(false);
           }}
         />
       )}

@@ -17,6 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import { Loader2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import PartPricingFields from "./PartPricingFields";
+import RecursiveCategorySelect from "./RecursiveCategorySelect";
 
 const buildPartPayload = (formData) => ({
   part_name: formData.part_name,
@@ -202,19 +203,11 @@ export default function AddPartModal({ onClose }) {
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label className="text-gray-400">Category</Label>
-              <Select
-                value={formData.part_category_id}
-                onValueChange={(value) => setFormData({ ...formData, part_category_id: value })}
-              >
-                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                  <SelectValue placeholder="Select..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {activeCategories.map(cat => (
-                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <RecursiveCategorySelect
+                categories={categories}
+                value={formData.part_category_id || ''}
+                onChange={(catId) => setFormData({ ...formData, part_category_id: catId })}
+              />
             </div>
             <div className="space-y-2">
               <Label className="text-gray-400">Vendor</Label>

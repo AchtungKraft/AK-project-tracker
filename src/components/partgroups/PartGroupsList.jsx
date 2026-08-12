@@ -31,6 +31,7 @@ export default function PartGroupsList({ onGroupClick }) {
   const [statusFilter, setStatusFilter] = useState("active");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [sortBy, setSortBy] = useState("updated");
+  const [groupBy, setGroupBy] = useState("none");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editGroup, setEditGroup] = useState(null);
 
@@ -84,22 +85,40 @@ export default function PartGroupsList({ onGroupClick }) {
     }
 
     // Sort
-    if (sortBy === "name") {
-      result = [...result].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-    } else {
-      result = [...result].sort((a, b) =>
-        new Date(b.updated_date || b.created_date || 0) - new Date(a.updated_date || a.created_date || 0)
-      );
-    }
+    result = [...result].sort((a, b) => {
+      const statsA = groupStats.get(a.id) || { count: 0, totalQty: 0 };
+      const statsB = groupStats.get(b.id) || { count: 0, totalQty: 0 };
+      switch (sortBy) {
+        case "name": return (a.name || "").localeCompare(b.name || "");
+        case "name_desc": return (b.name || "").localeCompare(a.name || "");
+        case "category": return (a.category || "zzz").localeCompare(b.category || "zzz");
+        case "parts": return (statsB.count) - (statsA.count);
+        default: return new Date(b.updated_date || b.created_date || 0) - new Date(a.updated_date || a.created_date || 0);
+      }
+    });
 
     return result;
-  }, [groups, statusFilter, categoryFilter, search, sortBy]);
+  }, [groups, statusFilter, categoryFilter, search, sortBy, groupStats]);
 
   const usedCategories = useMemo(() => {
     const cats = new Set();
     groups.forEach(g => { if (g.category) cats.add(g.category); });
     return [...cats].sort();
   }, [groups]);
+
+  // Group results by selected dimension
+  const groupedResults = useMemo(() => {
+    if (groupBy === "none") return [{ heading: null, items: filtered }];
+    const map = new Map();
+    for (const g of filtered) {
+      const key = groupBy === "category" ? (g.category || "Uncategorized") : (g.status || "DRAFT");
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(g);
+    }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([heading, items]) => ({ heading, items }));
+  }, [filtered, groupBy]);
 
   const handleArchive = async (group) => {
     const isArchived = group.status === "ARCHIVED";
@@ -210,7 +229,20 @@ export default function PartGroupsList({ onGroupClick }) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="updated">Recently Updated</SelectItem>
-              <SelectItem value="name">Name A-Z</SelectItem>
+              <SelectItem value="name">Name A–Z</SelectItem>
+              <SelectItem value="name_desc">Name Z–A</SelectItem>
+              <SelectItem value="category">Group Category</SelectItem>
+              <SelectItem value="parts">Part Count</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={groupBy} onValueChange={setGroupBy}>
+            <SelectTrigger className="w-[120px] h-8 bg-gray-900/50 border-gray-700 text-white text-xs hidden sm:flex">
+              <SelectValue placeholder="Group By" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">No Grouping</SelectItem>
+              <SelectItem value="category">Group Category</SelectItem>
+              <SelectItem value="status">Status</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -233,7 +265,16 @@ export default function PartGroupsList({ onGroupClick }) {
             )}
           </div>
         ) : (
-          filtered.map(group => {
+          groupedResults.map(({ heading, items: sectionGroups }) => (
+          <div key={heading || "__all"}>
+            {heading && (
+              <div className="flex items-center gap-2 py-2 px-1 mb-1 border-b border-gray-700/50">
+                <span className="text-xs font-semibold text-gray-300 uppercase tracking-wide">{heading}</span>
+                <span className="text-[10px] text-gray-500">{sectionGroups.length}</span>
+              </div>
+            )}
+            <div className="space-y-2">
+          {sectionGroups.map(group => {
             const stats = groupStats.get(group.id) || { count: 0, totalQty: 0 };
             return (
               <div
@@ -317,7 +358,10 @@ export default function PartGroupsList({ onGroupClick }) {
                 </div>
               </div>
             );
-          })
+          })}
+            </div>
+          </div>
+          ))
         )}
       </div>
 

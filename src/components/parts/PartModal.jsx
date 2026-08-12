@@ -30,6 +30,8 @@ import PartJournalSection from "./PartJournalSection";
 import PartProjectUsageSection from "./PartProjectUsageSection";
 import PartVendorSourcesSection from "./PartVendorSourcesSection";
 import LocationSelect from "@/components/common/LocationSelect";
+import RecursiveCategorySelect from "./RecursiveCategorySelect";
+import { getCategoryPathLabel } from "@/lib/categoryTreeHelpers";
 import AdjustInventoryModal from "../inventory/AdjustInventoryModal";
 import AddToBuildModal from "./AddToBuildModal";
 // forceAppRefresh removed — PartModal now uses targeted invalidation only
@@ -789,8 +791,8 @@ export default function PartModal({ part, partId, onClose }) {
         {category && (
           <div>
             <p className="text-xs text-gray-400 mb-1">Category</p>
-            <Badge style={{ backgroundColor: category.color || '#3B82F6' }} className="text-white">
-              {category.name}
+            <Badge style={{ backgroundColor: category.color || '#3B82F6' }} className="text-white" title={(() => { try { return getCategoryPathLabel(formData.part_category_id, Object.fromEntries(categories.map(c => [c.id, c]))); } catch { return category.name; } })()}>
+              {(() => { try { return getCategoryPathLabel(formData.part_category_id, Object.fromEntries(categories.map(c => [c.id, c]))); } catch { return category.name; } })()}
             </Badge>
           </div>
         )}
@@ -1158,30 +1160,11 @@ export default function PartModal({ part, partId, onClose }) {
               + New
             </button>
           </Label>
-          <Select
-            value={formData.part_category_id || 'none'}
-            onValueChange={(value) => setFormData({ ...formData, part_category_id: value === 'none' ? '' : value })}
-          >
-            <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-              <SelectValue placeholder="Select..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              {activeCategories.filter(c => !c.parent_id).map(parent => {
-              const children = activeCategories.filter(c => c.parent_id === parent.id);
-              return [
-                <SelectItem key={parent.id} value={parent.id}>
-                  <span style={{ color: parent.color }}>{parent.name}</span>
-                </SelectItem>,
-                ...children.map(child => (
-                  <SelectItem key={child.id} value={child.id}>
-                    <span className="pl-4" style={{ color: child.color }}>↳ {child.name}</span>
-                  </SelectItem>
-                ))
-              ];
-              })}
-            </SelectContent>
-          </Select>
+          <RecursiveCategorySelect
+            categories={categories}
+            value={formData.part_category_id || ''}
+            onChange={(catId) => setFormData({ ...formData, part_category_id: catId })}
+          />
         </div>
 
         <div>
