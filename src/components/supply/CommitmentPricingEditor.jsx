@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import {
   Dialog,
@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Loader2, DollarSign, RotateCcw, Lock, AlertTriangle, Calculator, Pencil } from "lucide-react";
-import { toast } from "sonner";
+import { useToast } from "@/components/ui/use-toast";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { refreshForGenericSupply } from "@/components/supply/tieredSupplyRefresh";
 import { useQueryClient } from "@tanstack/react-query";
@@ -22,15 +22,25 @@ import { CostModeBadge, RetailModeBadge } from "@/components/supply/PricingModeB
 
 /**
  * CommitmentPricingEditor - Modal for editing cost/retail on a commitment
- * Supports manual override + reset to PO / matrix
- * PHASE: Retail mode control (Matrix vs Manual)
+ * 
+ * CANONICAL PRICING RULES:
+ * - In MATRIX mode, retail is always freshly computed from the current cost via computeRetailFromMatrix.
+ * - In MANUAL mode, the user sets retail directly; matrix is not consulted.
+ * - Save always persists: unit_cost_snapshot, unit_retail_snapshot, retail_override flag, and derived totals.
+ * - "Use Matrix Pricing" recalculates retail from current effective cost, clears retail_override.
+ * - "Reset to PO Cost" syncs cost from PO, then recalculates retail if in matrix mode.
+ * - All changes update the PartCommitment entity directly — this is PROJECT pricing, not Part master.
  */
 export default function CommitmentPricingEditor({ commitment, open, onClose, onSuccess }) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [unitCost, setUnitCost] = useState(String(commitment?.unit_cost_snapshot ?? commitment?.unit_cost ?? 0));
   const [unitRetail, setUnitRetail] = useState(String(commitment?.unit_retail_snapshot ?? commitment?.unit_retail ?? 0));
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [matrixLoading, setMatrixLoading] = useState(false);
+  const [matrixError, setMatrixError] = useState(null);
+  const [matrixTierLabel, setMatrixTierLabel] = useState(null);
   
   // Retail mode: 'matrix' = auto from markup matrix, 'manual' = editable
   const isRetailManual = commitment?.retail_override === true;
@@ -43,13 +53,45 @@ export default function CommitmentPricingEditor({ commitment, open, onClose, onS
   const reqTotal = commitment?.required_total ?? 0;
   const margin = retailVal > 0 ? ((retailVal - costVal) / retailVal * 100).toFixed(1) : null;
 
+  // CANONICAL: Compute matrix retail from current cost whenever cost changes in matrix mode
+  const computeMatrixRetail = useCallback(async (cost) => {
+    if (cost <= 0) {
+      setMatrixError('Cost must be > 0 for matrix pricing');
+      return;
+    }
+    setMatrixLoading(true);
+    setMatrixError(null);
+    try {
+      const result = await base44.functions.invoke("computeRetailFromMatrix", { cost });
+      if (result.success) {
+        setUnitRetail(String(result.retail_matrix_price));
+        setMatrixTierLabel(result.tier_label);
+        setMatrixError(null);
+      } else {
+        setMatrixError(result.error || 'Matrix computation failed');
+      }
+    } catch (err) {
+      setMatrixError(err.message);
+    } finally {
+      setMatrixLoading(false);
+    }
+  }, []);
+
+  // When switching to matrix mode or when cost changes in matrix mode, recompute retail
+  useEffect(() => {
+    if (retailMode === 'matrix' && costVal > 0) {
+      computeMatrixRetail(costVal);
+    }
+  }, [retailMode, costVal, computeMatrixRetail]);
+
   const handleSavePricing = async () => {
     setSaving(true);
+    const finalRetail = parseFloat(unitRetail) || 0;
     const updates = {
       unit_cost_snapshot: costVal,
       planned_cost_total: costVal * reqTotal,
-      unit_retail_snapshot: retailVal,
-      planned_retail_total: retailVal * reqTotal,
+      unit_retail_snapshot: finalRetail,
+      planned_retail_total: finalRetail * reqTotal,
     };
 
     // Set override flags based on mode
@@ -61,16 +103,18 @@ export default function CommitmentPricingEditor({ commitment, open, onClose, onS
     updates.retail_override = retailMode === 'manual';
 
     // Compute margin
-    if (retailVal > 0) {
-      updates.margin_pct = Math.round(((retailVal - costVal) / retailVal) * 10000) / 100;
+    if (finalRetail > 0) {
+      updates.margin_pct = Math.round(((finalRetail - costVal) / finalRetail) * 10000) / 100;
+    } else {
+      updates.margin_pct = 0;
     }
 
     // Pricing integrity
-    if (costVal > 0 && retailVal > 0 && retailVal >= costVal) {
+    if (costVal > 0 && finalRetail > 0 && finalRetail >= costVal) {
       updates.pricing_integrity_status = updates.retail_override ? 'overridden_retail' : 'ok';
-    } else if (costVal > 0 && retailVal > 0 && retailVal < costVal) {
+    } else if (costVal > 0 && finalRetail > 0 && finalRetail < costVal) {
       updates.pricing_integrity_status = 'margin_negative';
-    } else if (costVal > 0 && retailVal <= 0) {
+    } else if (costVal > 0 && finalRetail <= 0) {
       updates.pricing_integrity_status = 'missing_retail';
     } else if (costVal <= 0) {
       updates.pricing_integrity_status = 'missing_cost';
@@ -78,7 +122,7 @@ export default function CommitmentPricingEditor({ commitment, open, onClose, onS
 
     try {
       await base44.entities.PartCommitment.update(commitment.id, updates);
-      toast.success("Manual override active — pricing updated");
+      toast({ title: "Pricing updated", description: `Cost: ${formatCurrencyUSD(costVal)} · Retail: ${formatCurrencyUSD(finalRetail)}` });
       await refreshForGenericSupply(queryClient, {
         partIds: commitment.part_id ? [commitment.part_id] : [],
         projectIds: commitment.project_id ? [commitment.project_id] : [],
@@ -87,7 +131,7 @@ export default function CommitmentPricingEditor({ commitment, open, onClose, onS
       onSuccess?.();
       onClose();
     } catch (err) {
-      toast.error("Failed to update pricing: " + err.message);
+      toast({ title: "Failed to update pricing", description: err.message, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -96,54 +140,38 @@ export default function CommitmentPricingEditor({ commitment, open, onClose, onS
   const handleSyncFromPO = async () => {
     setSyncing(true);
     try {
-      // IMPORTANT: Clear override FIRST so sync won't skip due to active override
-      await base44.entities.PartCommitment.update(commitment.id, {
-        cost_override: false,
-      });
-      // Then trigger cost sync from PO lines
-      await base44.functions.invoke("syncPOCostToCommitment", {
+      // Clear cost override so sync can write
+      await base44.entities.PartCommitment.update(commitment.id, { cost_override: false });
+      // Sync cost from PO lines
+      const syncResult = await base44.functions.invoke("syncPOCostToCommitment", {
         commitment_id: commitment.id,
-        skip_retail_update: false,
+        skip_retail_update: true, // We handle retail ourselves below
       });
-      toast.success("Cost override cleared — synced from PO");
+      // Get the synced cost
+      const syncedItem = syncResult.synced?.[0];
+      const newCost = syncedItem?.new_cost ?? costVal;
+      setUnitCost(String(newCost));
+      // If in matrix mode, the useEffect will auto-recompute retail from new cost
+      if (retailMode !== 'matrix') {
+        // Manual mode: cost changed but retail stays — just update the display
+      }
+      toast({ title: "Cost synced from PO", description: `New cost: ${formatCurrencyUSD(newCost)}` });
       await refreshForGenericSupply(queryClient, {
         partIds: commitment.part_id ? [commitment.part_id] : [],
         projectIds: commitment.project_id ? [commitment.project_id] : [],
         commitmentIds: [commitment.id],
       });
-      onSuccess?.();
-      onClose();
     } catch (err) {
-      toast.error("Sync failed: " + err.message);
+      toast({ title: "Sync failed", description: err.message, variant: "destructive" });
     } finally {
       setSyncing(false);
     }
   };
 
-  const handleResetRetail = async () => {
-    setSyncing(true);
-    try {
-      // Sync from PO handles retail recalc from matrix
-      await base44.functions.invoke("syncPOCostToCommitment", {
-        commitment_id: commitment.id,
-        skip_retail_update: false,
-      });
-      await base44.entities.PartCommitment.update(commitment.id, {
-        retail_override: false,
-      });
-      toast.success("Retail reset from matrix");
-      await refreshForGenericSupply(queryClient, {
-        partIds: commitment.part_id ? [commitment.part_id] : [],
-        projectIds: commitment.project_id ? [commitment.project_id] : [],
-        commitmentIds: [commitment.id],
-      });
-      onSuccess?.();
-      onClose();
-    } catch (err) {
-      toast.error("Reset failed: " + err.message);
-    } finally {
-      setSyncing(false);
-    }
+  const handleUseMatrixPricing = async () => {
+    setRetailMode('matrix');
+    // The useEffect triggered by retailMode change will compute fresh matrix retail
+    // User still needs to click Save to persist
   };
 
   if (!commitment) return null;
@@ -157,7 +185,7 @@ export default function CommitmentPricingEditor({ commitment, open, onClose, onS
             Edit Pricing
           </DialogTitle>
           <DialogDescription className="text-gray-400">
-            {commitment.part?.part_name || "Commitment"} × {reqTotal}
+            {commitment.part?.part_name || commitment.part_name || "Commitment"} × {reqTotal}
           </DialogDescription>
         </DialogHeader>
 
@@ -232,8 +260,21 @@ export default function CommitmentPricingEditor({ commitment, open, onClose, onS
           <div>
             <Label className="text-gray-300 text-xs">Unit Retail</Label>
             {retailMode === 'matrix' ? (
-              <div className="mt-1 px-3 py-2 bg-blue-900/10 border border-blue-800/30 rounded text-sm text-blue-300 font-mono">
-                {formatCurrencyUSD(retailVal)} <span className="text-[10px] text-blue-400/60 ml-1">(auto from matrix)</span>
+              <div className="mt-1 px-3 py-2 bg-blue-900/10 border border-blue-800/30 rounded text-sm font-mono">
+                {matrixLoading ? (
+                  <span className="text-blue-400 flex items-center gap-2">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Computing…
+                  </span>
+                ) : matrixError ? (
+                  <span className="text-red-400 text-xs">{matrixError}</span>
+                ) : (
+                  <span className="text-blue-300">
+                    {formatCurrencyUSD(retailVal)}
+                    <span className="text-[10px] text-blue-400/60 ml-1">
+                      (matrix{matrixTierLabel ? ` · ${matrixTierLabel}` : ''})
+                    </span>
+                  </span>
+                )}
               </div>
             ) : (
               <div className="relative mt-1">
@@ -290,15 +331,12 @@ export default function CommitmentPricingEditor({ commitment, open, onClose, onS
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setRetailMode('matrix');
-                  handleResetRetail();
-                }}
-                disabled={isLocked || syncing}
+                onClick={handleUseMatrixPricing}
+                disabled={isLocked || syncing || matrixLoading}
                 className="border-blue-700 text-blue-300 text-xs gap-1"
               >
                 <Calculator className="w-3 h-3" />
-                {syncing ? "Resetting..." : "Use Matrix Pricing"}
+                Use Matrix Pricing
               </Button>
             </div>
           </div>
@@ -308,7 +346,7 @@ export default function CommitmentPricingEditor({ commitment, open, onClose, onS
           <Button variant="outline" onClick={onClose} className="border-gray-600">Cancel</Button>
           <Button
             onClick={handleSavePricing}
-            disabled={saving || isLocked}
+            disabled={saving || isLocked || matrixLoading}
             className="bg-emerald-600 hover:bg-emerald-700"
           >
             {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <DollarSign className="w-4 h-4 mr-2" />}

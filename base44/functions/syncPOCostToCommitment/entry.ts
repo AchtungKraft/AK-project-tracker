@@ -190,20 +190,22 @@ async function syncCosts(base44, actorEmail, commitmentIds, skipRetailUpdate = f
     }
 
     // ══════════════════════════════════════════════════════════════
-    // PHASE 4: RETAIL STAYS FIXED (quoted price)
-    // When PO cost changes, retail NEVER recalculates.
-    // Retail = what you sold. Cost = what you actually paid. Margin = reality.
-    // Only exception: retail is $0 (missing) — then we compute from matrix.
+    // RETAIL RECALCULATION RULES:
+    // 1. If retail_override=true → retail is manual, never touch it — only recalc margin
+    // 2. If retail_override=false AND retail > 0 → retail was from matrix snapshot, recalculate from new cost
+    // 3. If retail is $0 (missing) → compute initial retail from matrix
+    // When skip_retail_update=true, skip all retail changes (only sync cost)
     // ══════════════════════════════════════════════════════════════
     const currentRetail = commitment.unit_retail_snapshot ?? 0;
+    const isManualRetail = commitment.retail_override === true;
     let retailUpdated = false;
     
     if (costChanged) {
-      if (currentRetail > 0) {
-        // Retail exists and is frozen — only recalculate margin
+      if (isManualRetail && currentRetail > 0) {
+        // Manual override — never touch retail, only recalculate margin
         updates.margin_pct = Math.round(((currentRetail - weightedAvgCost) / currentRetail) * 10000) / 100;
       } else if (!skipRetailUpdate && matrixTiers && matrixTiers.length > 0) {
-        // Retail is $0 (missing) — compute initial retail from matrix
+        // Matrix mode (or missing retail) — compute fresh retail from new cost
         const retailResult = computeRetailFromTiers(weightedAvgCost, matrixTiers);
         if (retailResult) {
           updates.unit_retail_snapshot = retailResult.retail;
@@ -213,6 +215,9 @@ async function syncCosts(base44, actorEmail, commitmentIds, skipRetailUpdate = f
             : 0;
           retailUpdated = true;
         }
+      } else if (currentRetail > 0) {
+        // skip_retail_update=true or no matrix tiers — just recalc margin
+        updates.margin_pct = Math.round(((currentRetail - weightedAvgCost) / currentRetail) * 10000) / 100;
       }
     }
 

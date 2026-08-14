@@ -276,8 +276,8 @@ export function PSMItemRow({
   const { part, vendor, allowed, categoryObj } = commitment;
   const isOrderingContext = tab === 'buy';
 
-  // Canonical financials
-  const cost = commitment.planned_cost_total ?? 0;
+  // Canonical financials — use actual cost total when PO cost differs from planned
+  const cost = commitment.actual_cost_total ?? commitment.planned_cost_total ?? 0;
   const revenue = commitment.planned_retail_total ?? 0;
   const margin = revenue - cost;
   const toOrder = commitment.to_order_qty ?? 0;
@@ -456,8 +456,8 @@ export function PSMItemRow({
 
           {/* Financial Detail */}
           <div className="flex flex-wrap gap-4 text-xs font-mono text-gray-400">
-            <span>Unit Cost: <span className="text-gray-300">${(commitment.unit_cost ?? 0).toFixed(2)}</span></span>
-            <span>Unit Retail: <span className="text-gray-300">${(commitment.unit_retail ?? 0).toFixed(2)}</span></span>
+            <span>Unit Cost: <span className="text-gray-300">{formatCurrencyUSD(commitment.unit_cost ?? commitment.unit_cost_snapshot ?? 0)}</span></span>
+            <span>Unit Retail: <span className="text-gray-300">{formatCurrencyUSD(commitment.unit_retail ?? commitment.unit_retail_snapshot ?? 0)}</span></span>
             <span>Expected Profit: <span className={margin >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(margin)}</span></span>
             {(commitment.actual_margin ?? 0) !== 0 && Math.abs((commitment.actual_margin ?? 0) - margin) > 0.01 && (
               <span>Current Profit: <span className={(commitment.actual_margin ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(commitment.actual_margin ?? 0)}</span></span>
