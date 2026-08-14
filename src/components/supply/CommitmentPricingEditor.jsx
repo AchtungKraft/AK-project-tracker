@@ -140,12 +140,10 @@ export default function CommitmentPricingEditor({ commitment, open, onClose, onS
     try {
       await base44.entities.PartCommitment.update(commitment.id, updates);
       toast({ title: "Pricing updated", description: `Cost: ${formatCurrencyUSD(costVal)} · Retail: ${formatCurrencyUSD(finalRetail)}` });
-      await refreshForGenericSupply(queryClient, {
-        partIds: commitment.part_id ? [commitment.part_id] : [],
-        projectIds: commitment.project_id ? [commitment.project_id] : [],
-        commitmentIds: [commitment.id],
-      });
-      // Pass saved pricing fields so parent can optimistically patch query cache
+      // NOTE: Do NOT call refreshForGenericSupply here — it refetches
+      // projectSupplyView which returns stale backend-cached data (15s TTL)
+      // and overwrites the parent's optimistic cache patch. The parent's
+      // onSuccess handler patches the query cache directly with saved values.
       onSuccess?.({
         commitmentId: commitment.id,
         unit_cost: costVal,

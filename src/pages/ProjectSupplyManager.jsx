@@ -1327,11 +1327,12 @@ export default function ProjectSupplyManager() {
               commitment={freshCommitment}
               open={true}
               onClose={() => setPricingEditorId(null)}
-              onSuccess={async (savedFields) => {
+              onSuccess={(savedFields) => {
                 setPricingEditorId(null);
-                // Refresh first, then patch — the backend may serve stale
-                // cached data (15s TTL), so the optimistic patch must win.
-                await handleModalSuccess();
+                // Pricing-only save: patch the query cache directly instead
+                // of invalidating+refetching. The backend has a 15s cache that
+                // would return stale data, and invalidation triggers background
+                // refetches that race with our patch. Direct patch is authoritative.
                 if (savedFields?.commitmentId) {
                   queryClient.setQueriesData(
                     { queryKey: ['projectSupplyView', projectId] },
