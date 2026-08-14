@@ -23,6 +23,13 @@ import { CostModeBadge, RetailModeBadge } from "@/components/supply/PricingModeB
 /**
  * CommitmentPricingEditor - Modal for editing cost/retail on a commitment
  * 
+ * EDIT SESSION LIFECYCLE:
+ * - Parent mounts this component with a unique `key` per edit session.
+ * - useState initializers read from the commitment prop ONCE at mount.
+ * - No render-time or effect-based state synchronization from props.
+ * - Background query refetches cannot overwrite an in-progress user edit.
+ * - Save persists, refreshes queries, and closes — next Edit Pricing remounts fresh.
+ *
  * CANONICAL PRICING RULES:
  * - In MATRIX mode, retail is always freshly computed from the current cost via computeRetailFromMatrix.
  * - In MANUAL mode, the user sets retail directly; matrix is not consulted.
@@ -34,32 +41,26 @@ import { CostModeBadge, RetailModeBadge } from "@/components/supply/PricingModeB
 export default function CommitmentPricingEditor({ commitment, open, onClose, onSuccess }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [unitCost, setUnitCost] = useState(String(commitment?.unit_cost_snapshot ?? commitment?.unit_cost ?? 0));
-  const [unitRetail, setUnitRetail] = useState(String(commitment?.unit_retail_snapshot ?? commitment?.unit_retail ?? 0));
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SESSION INITIALIZATION — runs exactly once per mount (per key).
+  // Parent guarantees a new key for each Edit Pricing action.
+  // ═══════════════════════════════════════════════════════════════════
+  const [unitCost, setUnitCost] = useState(() => 
+    String(commitment?.unit_cost_snapshot ?? commitment?.unit_cost ?? 0)
+  );
+  const [unitRetail, setUnitRetail] = useState(() => 
+    String(commitment?.unit_retail_snapshot ?? commitment?.unit_retail ?? 0)
+  );
+  const [retailMode, setRetailMode] = useState(() => 
+    commitment?.retail_override === true ? 'manual' : 'matrix'
+  );
+
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [matrixLoading, setMatrixLoading] = useState(false);
   const [matrixError, setMatrixError] = useState(null);
   const [matrixTierLabel, setMatrixTierLabel] = useState(null);
-  
-  // Retail mode: 'matrix' = auto from markup matrix, 'manual' = editable
-  const isRetailManual = commitment?.retail_override === true;
-  const [retailMode, setRetailMode] = useState(isRetailManual ? 'manual' : 'matrix');
-
-  // SESSION SYNC: Re-initialize all form state when the commitment identity
-  // or its pricing snapshot changes (new edit session or refreshed data).
-  // Track by commitment ID + override flags + pricing snapshots.
-  const commitmentKey = `${commitment?.id}|${commitment?.retail_override}|${commitment?.cost_override}|${commitment?.unit_cost_snapshot ?? commitment?.unit_cost}|${commitment?.unit_retail_snapshot ?? commitment?.unit_retail}`;
-  const [lastCommitmentKey, setLastCommitmentKey] = useState(commitmentKey);
-
-  if (commitmentKey !== lastCommitmentKey) {
-    setLastCommitmentKey(commitmentKey);
-    setUnitCost(String(commitment?.unit_cost_snapshot ?? commitment?.unit_cost ?? 0));
-    setUnitRetail(String(commitment?.unit_retail_snapshot ?? commitment?.unit_retail ?? 0));
-    setRetailMode(commitment?.retail_override === true ? 'manual' : 'matrix');
-    setMatrixError(null);
-    setMatrixTierLabel(null);
-  }
 
   const isLocked = ['invoiced', 'paid'].includes(commitment?.billing_status);
   const hasPO = (commitment?.order_line_item_ids || []).length > 0 || (commitment?.qty_ordered ?? 0) > 0;
@@ -145,7 +146,6 @@ export default function CommitmentPricingEditor({ commitment, open, onClose, onS
         commitmentIds: [commitment.id],
       });
       onSuccess?.();
-      onClose();
     } catch (err) {
       toast({ title: "Failed to update pricing", description: err.message, variant: "destructive" });
     } finally {
@@ -169,9 +169,6 @@ export default function CommitmentPricingEditor({ commitment, open, onClose, onS
       const newCost = syncedItem?.new_cost ?? costVal;
       setUnitCost(String(newCost));
       // If in matrix mode, the useEffect will auto-recompute retail from new cost
-      if (retailMode !== 'matrix') {
-        // Manual mode: cost changed but retail stays — just update the display
-      }
       toast({ title: "Cost synced from PO", description: `New cost: ${formatCurrencyUSD(newCost)}` });
       await refreshForGenericSupply(queryClient, {
         partIds: commitment.part_id ? [commitment.part_id] : [],

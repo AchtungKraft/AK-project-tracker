@@ -580,12 +580,17 @@ Deno.serve(async (req) => {
 
           order_line_item_ids: c.order_line_item_ids || [],
 
+          cost_override: c.cost_override || false,
+          retail_override: c.retail_override || false,
+
           _raw: {
             commitment_status: c.commitment_status,
             billing_status: c.billing_status,
             requires_prepay: c.requires_prepay,
             prepay_satisfied_at: c.prepay_satisfied_at,
             order_line_item_ids: c.order_line_item_ids,
+            cost_override: c.cost_override || false,
+            retail_override: c.retail_override || false,
           },
 
           integrity: (() => {

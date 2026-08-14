@@ -167,8 +167,9 @@ export default function ProjectSupplyManager() {
   // Blocked items resolution state
   const [blockedItems, setBlockedItems] = useState(null);
   
-  // Pricing editor state
-  const [pricingEditorCommitment, setPricingEditorCommitment] = useState(null);
+  // Pricing editor state — stores commitment ID + session counter for clean remount
+  const [pricingEditorId, setPricingEditorId] = useState(null);
+  const [pricingSessionCounter, setPricingSessionCounter] = useState(0);
   
   // Backfill modal state
   const [showBackfillModal, setShowBackfillModal] = useState(false);
@@ -423,9 +424,9 @@ export default function ProjectSupplyManager() {
         // CANONICAL: order_line_item_ids promoted to top-level — no _raw fallback
         order_line_item_ids: item.order_line_item_ids || [],
         
-        // Override flags for pricing
-        cost_override: item._raw?.cost_override || false,
-        retail_override: item._raw?.retail_override || false,
+        // Override flags for pricing — from top-level view model (not _raw)
+        cost_override: item.cost_override || false,
+        retail_override: item.retail_override || false,
         unit_cost_snapshot: item.unit_cost,
         unit_retail_snapshot: item.unit_retail,
         
@@ -493,7 +494,16 @@ export default function ProjectSupplyManager() {
   const guardedSetDeltaOrderCommitment = useCallback((incoming) => openModal('Delta Order', setDeltaOrderCommitment, incoming), [openModal]);
   const guardedSetCancelModal = useCallback((incoming) => openModal('Cancel', setCancelModal, incoming), [openModal]);
   const guardedSetRemoveCreditModal = useCallback((incoming) => openModal('Remove Credit', setRemoveCreditModal, incoming), [openModal]);
-  const guardedSetPricingEditor = useCallback((incoming) => openModal('Pricing Editor', setPricingEditorCommitment, incoming), [openModal]);
+  const guardedSetPricingEditor = useCallback((incoming) => {
+    const resolved = resolveCanonicalCommitment(incoming, enrichedCommitments);
+    if (!resolved) {
+      console.warn('[ModalGuard:PricingEditor] Rejected — no canonical match:', incoming?.id || incoming);
+      return;
+    }
+    // Store only the ID — derive fresh commitment at render time
+    setPricingEditorId(resolved.id);
+    setPricingSessionCounter(prev => prev + 1);
+  }, [enrichedCommitments]);
   const guardedSetResolveNeedTarget = useCallback((incoming) => openModal('Resolve Need', setResolveNeedTarget, incoming), [openModal]);
 
   // Filter commitments for each tab - using CANONICAL fields from read model
@@ -1306,17 +1316,22 @@ export default function ProjectSupplyManager() {
         tab={activeTab}
       />
 
-      {/* Pricing Editor Modal */}
-      {pricingEditorCommitment && (
-        <SafeRenderBoundary context="Pricing Modal">
-          <CommitmentPricingEditor
-           commitment={pricingEditorCommitment}
-           open={!!pricingEditorCommitment}
-           onClose={() => setPricingEditorCommitment(null)}
-           onSuccess={() => { setPricingEditorCommitment(null); handleModalSuccess(); }}
-          />
-        </SafeRenderBoundary>
-      )}
+      {/* Pricing Editor Modal — derives commitment from latest query data */}
+      {pricingEditorId && (() => {
+        const freshCommitment = enrichedCommitments.find(c => c.id === pricingEditorId);
+        if (!freshCommitment) return null;
+        return (
+          <SafeRenderBoundary context="Pricing Modal">
+            <CommitmentPricingEditor
+              key={`pricing-${pricingEditorId}-${pricingSessionCounter}`}
+              commitment={freshCommitment}
+              open={true}
+              onClose={() => setPricingEditorId(null)}
+              onSuccess={() => { setPricingEditorId(null); handleModalSuccess(); }}
+            />
+          </SafeRenderBoundary>
+        );
+      })()}
 
       {/* Backfill PO Costs Modal */}
       <BackfillPOCostsModal
