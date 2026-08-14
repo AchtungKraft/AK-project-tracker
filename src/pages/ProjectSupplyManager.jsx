@@ -1327,11 +1327,11 @@ export default function ProjectSupplyManager() {
               commitment={freshCommitment}
               open={true}
               onClose={() => setPricingEditorId(null)}
-              onSuccess={(savedFields) => {
+              onSuccess={async (savedFields) => {
                 setPricingEditorId(null);
-                // Optimistically patch the supply view cache so the next editor
-                // session sees the saved overrides even if the backend cache
-                // hasn't expired yet (15s TTL).
+                // Refresh first, then patch — the backend may serve stale
+                // cached data (15s TTL), so the optimistic patch must win.
+                await handleModalSuccess();
                 if (savedFields?.commitmentId) {
                   queryClient.setQueriesData(
                     { queryKey: ['projectSupplyView', projectId] },
@@ -1354,7 +1354,6 @@ export default function ProjectSupplyManager() {
                     }
                   );
                 }
-                handleModalSuccess();
               }}
             />
           </SafeRenderBoundary>
