@@ -7,6 +7,7 @@
 
 import { isRequestOverdue } from './lifecycleHelpers';
 import { getTime } from './feedbackTimeline';
+import { isExcludedFromQueue } from './queueEligibility';
 
 /**
  * Priority levels (lower = higher priority)
@@ -195,16 +196,11 @@ function isRecentlyApproved(request, canonicalKey) {
 
 /**
  * Check if a request is hidden from the Action Queue.
- * Respects optional resume_date — if the resume date has arrived, the request is no longer hidden.
+ * DELEGATES to the canonical queueEligibility helper.
+ * Kept for backward compatibility — existing UI code imports this.
  */
 export function isQueueHidden(request) {
-  if (!request.queue_hidden) return false;
-  if (request.queue_resume_date) {
-    const resumeMs = getTime(request.queue_resume_date);
-    // Resume at start of the resume day (UTC midnight)
-    if (resumeMs && resumeMs <= Date.now()) return false;
-  }
-  return true;
+  return isExcludedFromQueue(request);
 }
 
 /**
@@ -226,8 +222,9 @@ export function buildAttentionList(projectGroups) {
     ];
 
     allRequests.forEach(request => {
-      // OPERATIONAL FILTER: Skip requests hidden from Action Queue
-      if (isQueueHidden(request)) return;
+      // CANONICAL ELIGIBILITY: Skip requests excluded from Action Queue
+      // This covers archived, deferred (queue_hidden with future resume), etc.
+      if (isExcludedFromQueue(request)) return;
 
       // Use pre-computed canonical state from enriched request (buildOperationalViewModel)
       const canonicalState = request.canonicalState;
@@ -289,11 +286,12 @@ function classifyRequest(request, project, canonicalState) {
 
   // HIGHEST PRIORITY: Team explicitly marked "in_review" → ALWAYS show in Active Review.
   // This override beats all other classification (client-waiting, approved, follow-up).
-  // The team's deliberate action to flag something for review must never be silently dropped.
+  // BUT archived requests are already excluded by isExcludedFromQueue above.
   if (request.review_state === 'in_review') {
     type = 'needs_review';
   }
-  // Handle archived-with-client-response (exception case)
+  // Handle archived-with-client-response (exception case) —
+  // only reachable if the request passed eligibility (not archived).
   else if (request.isArchivedWithClientResponse) {
     type = 'needs_response';
   }

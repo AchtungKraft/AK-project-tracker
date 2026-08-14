@@ -192,8 +192,8 @@ export default function ClientFeedbackDetail() {
     mutationFn: ({ id, data }) => base44.entities.ClientFeedbackRequest.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
-      // Soft-invalidate hub queries — mark stale but don't force refetch
-      queryClient.invalidateQueries({ queryKey: ['clientPortalHubData'], refetchType: 'none' });
+      // Actively invalidate hub data so navigating back shows fresh state
+      queryClient.invalidateQueries({ queryKey: ['clientPortalHubData'] });
     }
   });
 
@@ -292,9 +292,11 @@ export default function ClientFeedbackDetail() {
 
   const handleArchive = () => {
     if (confirm('Archive this request?')) {
-      // Archive is an internal-only action - NO email is sent to clients
+      // Archive is an internal-only action - NO email is sent to clients.
+      // Clear review_state and queue_hidden so the archived request doesn't
+      // linger in Active Review or deferred state if later unarchived.
       updateRequestMutation.mutate(
-        { id: requestId, data: { status: 'archived' } },
+        { id: requestId, data: { status: 'archived', review_state: 'none', review_started_at: null, queue_hidden: false, queue_hidden_at: null, queue_resume_date: null } },
         {
           onSuccess: () => {
             toast.success('Request archived');

@@ -119,11 +119,11 @@ export default function ClientPortalHub() {
           setIsSavingCardAction(false);
           return; // Don't invalidate yet — modal handles it
         case 'archive_draft':
-          await base44.entities.ClientFeedbackRequest.update(request.id, { status: 'archived' });
+          await base44.entities.ClientFeedbackRequest.update(request.id, { status: 'archived', review_state: 'none', review_started_at: null, queue_hidden: false, queue_hidden_at: null, queue_resume_date: null });
           toast.success('Draft archived');
           break;
         case 'archive':
-          await base44.entities.ClientFeedbackRequest.update(request.id, { status: 'archived' });
+          await base44.entities.ClientFeedbackRequest.update(request.id, { status: 'archived', review_state: 'none', review_started_at: null, queue_hidden: false, queue_hidden_at: null, queue_resume_date: null });
           toast.success('Request archived');
           break;
         default:

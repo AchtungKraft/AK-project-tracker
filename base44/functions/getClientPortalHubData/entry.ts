@@ -60,8 +60,13 @@ Deno.serve(async (req) => {
             updated_date: r.updated_date,
             project_id: r.project_id,
             review_state: r.review_state,
+            review_started_at: r.review_started_at,
             client_last_viewed_at: r.client_last_viewed_at,
             last_viewed_by_internal_at: r.last_viewed_by_internal_at,
+            // Queue disposition fields — required for Action Queue eligibility
+            queue_hidden: r.queue_hidden || false,
+            queue_hidden_at: r.queue_hidden_at || null,
+            queue_resume_date: r.queue_resume_date || null,
         }));
 
         // Comments: Hub only needs request_id for counting, and basic fields for state derivation
