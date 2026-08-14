@@ -1327,7 +1327,35 @@ export default function ProjectSupplyManager() {
               commitment={freshCommitment}
               open={true}
               onClose={() => setPricingEditorId(null)}
-              onSuccess={() => { setPricingEditorId(null); handleModalSuccess(); }}
+              onSuccess={(savedFields) => {
+                setPricingEditorId(null);
+                // Optimistically patch the supply view cache so the next editor
+                // session sees the saved overrides even if the backend cache
+                // hasn't expired yet (15s TTL).
+                if (savedFields?.commitmentId) {
+                  queryClient.setQueriesData(
+                    { queryKey: ['projectSupplyView', projectId] },
+                    (old) => {
+                      if (!old?.items) return old;
+                      return {
+                        ...old,
+                        items: old.items.map(item =>
+                          item.commitment_id === savedFields.commitmentId
+                            ? {
+                                ...item,
+                                unit_cost: savedFields.unit_cost,
+                                unit_retail: savedFields.unit_retail,
+                                cost_override: savedFields.cost_override,
+                                retail_override: savedFields.retail_override,
+                              }
+                            : item
+                        ),
+                      };
+                    }
+                  );
+                }
+                handleModalSuccess();
+              }}
             />
           </SafeRenderBoundary>
         );

@@ -145,7 +145,14 @@ export default function CommitmentPricingEditor({ commitment, open, onClose, onS
         projectIds: commitment.project_id ? [commitment.project_id] : [],
         commitmentIds: [commitment.id],
       });
-      onSuccess?.();
+      // Pass saved pricing fields so parent can optimistically patch query cache
+      onSuccess?.({
+        commitmentId: commitment.id,
+        unit_cost: costVal,
+        unit_retail: finalRetail,
+        cost_override: updates.cost_override ?? commitment.cost_override ?? false,
+        retail_override: updates.retail_override,
+      });
     } catch (err) {
       toast({ title: "Failed to update pricing", description: err.message, variant: "destructive" });
     } finally {
