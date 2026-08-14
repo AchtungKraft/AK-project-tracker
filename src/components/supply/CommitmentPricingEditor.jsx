@@ -46,6 +46,21 @@ export default function CommitmentPricingEditor({ commitment, open, onClose, onS
   const isRetailManual = commitment?.retail_override === true;
   const [retailMode, setRetailMode] = useState(isRetailManual ? 'manual' : 'matrix');
 
+  // SESSION SYNC: Re-initialize all form state when the commitment identity
+  // or its pricing snapshot changes (new edit session or refreshed data).
+  // Track by commitment ID + override flags + pricing snapshots.
+  const commitmentKey = `${commitment?.id}|${commitment?.retail_override}|${commitment?.cost_override}|${commitment?.unit_cost_snapshot ?? commitment?.unit_cost}|${commitment?.unit_retail_snapshot ?? commitment?.unit_retail}`;
+  const [lastCommitmentKey, setLastCommitmentKey] = useState(commitmentKey);
+
+  if (commitmentKey !== lastCommitmentKey) {
+    setLastCommitmentKey(commitmentKey);
+    setUnitCost(String(commitment?.unit_cost_snapshot ?? commitment?.unit_cost ?? 0));
+    setUnitRetail(String(commitment?.unit_retail_snapshot ?? commitment?.unit_retail ?? 0));
+    setRetailMode(commitment?.retail_override === true ? 'manual' : 'matrix');
+    setMatrixError(null);
+    setMatrixTierLabel(null);
+  }
+
   const isLocked = ['invoiced', 'paid'].includes(commitment?.billing_status);
   const hasPO = (commitment?.order_line_item_ids || []).length > 0 || (commitment?.qty_ordered ?? 0) > 0;
   const costVal = parseFloat(unitCost) || 0;
