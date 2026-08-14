@@ -293,10 +293,13 @@ export default function ClientFeedbackDetail() {
   const handleArchive = () => {
     if (confirm('Archive this request?')) {
       // Archive is an internal-only action - NO email is sent to clients.
-      // Clear review_state and queue_hidden so the archived request doesn't
-      // linger in Active Review or deferred state if later unarchived.
+      // Only set status to archived. The canonical queue helper (queueEligibility)
+      // treats archived as a stronger exclusion than any operational overlay, so we
+      // deliberately preserve review_state, review_started_at, queue_hidden_at, and
+      // queue_resume_date as historical metadata. If the request is later unarchived,
+      // these fields retain context about what was happening when it was archived.
       updateRequestMutation.mutate(
-        { id: requestId, data: { status: 'archived', review_state: 'none', review_started_at: null, queue_hidden: false, queue_hidden_at: null, queue_resume_date: null } },
+        { id: requestId, data: { status: 'archived' } },
         {
           onSuccess: () => {
             toast.success('Request archived');
