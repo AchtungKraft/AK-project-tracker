@@ -456,8 +456,8 @@ export function PSMItemRow({
 
           {/* Financial Detail */}
           <div className="flex flex-wrap gap-4 text-xs font-mono text-gray-400">
-            <span>Unit Cost: <span className="text-gray-300">{formatCurrencyUSD(commitment.unit_cost ?? commitment.unit_cost_snapshot ?? 0)}</span></span>
-            <span>Unit Retail: <span className="text-gray-300">{formatCurrencyUSD(commitment.unit_retail ?? commitment.unit_retail_snapshot ?? 0)}</span></span>
+            <span>Unit Cost: <span className="text-gray-300">{formatCurrencyUSD(commitment.unit_cost_snapshot ?? 0)}</span></span>
+            <span>Unit Retail: <span className="text-gray-300">{formatCurrencyUSD(commitment.unit_retail_snapshot ?? 0)}</span></span>
             <span>Expected Profit: <span className={margin >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(margin)}</span></span>
             {(commitment.actual_margin ?? 0) !== 0 && Math.abs((commitment.actual_margin ?? 0) - margin) > 0.01 && (
               <span>Current Profit: <span className={(commitment.actual_margin ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(commitment.actual_margin ?? 0)}</span></span>

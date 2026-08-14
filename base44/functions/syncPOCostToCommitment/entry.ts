@@ -190,22 +190,33 @@ async function syncCosts(base44, actorEmail, commitmentIds, skipRetailUpdate = f
     }
 
     // ══════════════════════════════════════════════════════════════
-    // RETAIL RECALCULATION RULES:
-    // 1. If retail_override=true → retail is manual, never touch it — only recalc margin
-    // 2. If retail_override=false AND retail > 0 → retail was from matrix snapshot, recalculate from new cost
-    // 3. If retail is $0 (missing) → compute initial retail from matrix
-    // When skip_retail_update=true, skip all retail changes (only sync cost)
+    // RETAIL LIFECYCLE RULES (PASSIVE PO COST SYNC):
+    //
+    // This function is a PASSIVE cost synchronization — it runs when PO costs
+    // change due to receipts, freight allocation, landed cost updates, etc.
+    //
+    // RULE: Passive PO sync NEVER changes project retail.
+    //   - Retail is a client/project price established at commitment creation.
+    //   - Changing cost legitimately changes margin, but retail stays frozen.
+    //   - Only EXPLICIT user actions (Edit Pricing → "Use Matrix Pricing")
+    //     may recalculate retail.
+    //
+    // EXCEPTION: If retail is $0 (missing), compute initial retail from matrix.
+    //   This covers commitments created before pricing was fully configured.
+    //
+    // 1. retail_override=true (manual)  → retail stays, recalc margin only
+    // 2. retail_override=false (matrix) → retail stays, recalc margin only
+    // 3. retail is $0 (missing)         → compute initial retail from matrix
     // ══════════════════════════════════════════════════════════════
     const currentRetail = commitment.unit_retail_snapshot ?? 0;
-    const isManualRetail = commitment.retail_override === true;
     let retailUpdated = false;
     
     if (costChanged) {
-      if (isManualRetail && currentRetail > 0) {
-        // Manual override — never touch retail, only recalculate margin
+      if (currentRetail > 0) {
+        // Retail already established — preserve it, only recalculate margin
         updates.margin_pct = Math.round(((currentRetail - weightedAvgCost) / currentRetail) * 10000) / 100;
       } else if (!skipRetailUpdate && matrixTiers && matrixTiers.length > 0) {
-        // Matrix mode (or missing retail) — compute fresh retail from new cost
+        // Retail is $0/missing — compute initial retail from matrix
         const retailResult = computeRetailFromTiers(weightedAvgCost, matrixTiers);
         if (retailResult) {
           updates.unit_retail_snapshot = retailResult.retail;
@@ -215,9 +226,6 @@ async function syncCosts(base44, actorEmail, commitmentIds, skipRetailUpdate = f
             : 0;
           retailUpdated = true;
         }
-      } else if (currentRetail > 0) {
-        // skip_retail_update=true or no matrix tiers — just recalc margin
-        updates.margin_pct = Math.round(((currentRetail - weightedAvgCost) / currentRetail) * 10000) / 100;
       }
     }
 
