@@ -62,7 +62,8 @@ export default function CommitmentPricingEditor({ commitment, open, onClose, onS
     setMatrixLoading(true);
     setMatrixError(null);
     try {
-      const result = await base44.functions.invoke("computeRetailFromMatrix", { cost });
+      const raw = await base44.functions.invoke("computeRetailFromMatrix", { cost });
+      const result = raw?.data ?? raw;
       if (result.success) {
         setUnitRetail(String(result.retail_matrix_price));
         setMatrixTierLabel(result.tier_label);
@@ -143,10 +144,11 @@ export default function CommitmentPricingEditor({ commitment, open, onClose, onS
       // Clear cost override so sync can write
       await base44.entities.PartCommitment.update(commitment.id, { cost_override: false });
       // Sync cost from PO lines
-      const syncResult = await base44.functions.invoke("syncPOCostToCommitment", {
+      const syncRaw = await base44.functions.invoke("syncPOCostToCommitment", {
         commitment_id: commitment.id,
         skip_retail_update: true, // We handle retail ourselves below
       });
+      const syncResult = syncRaw?.data ?? syncRaw;
       // Get the synced cost
       const syncedItem = syncResult.synced?.[0];
       const newCost = syncedItem?.new_cost ?? costVal;
