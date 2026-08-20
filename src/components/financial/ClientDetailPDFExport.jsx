@@ -22,6 +22,10 @@ const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
 const FONT = {
   title: 18,
   projectName: 13,
+  overviewHeading: 12,
+  overviewSection: 10,
+  overviewLine: 9.5,
+  overviewTotal: 10,
   categoryHeading: 11,
   tableHeader: 8.5,
   body: 9.5,
@@ -171,6 +175,217 @@ function drawFooters(doc) {
   }
 }
 
+/**
+ * Compute overview summary buckets from grouped lines.
+ * Returns { parts: [{name, subtotal}], partsTotal, services: [{name, subtotal}], servicesTotal, additional: [{name, subtotal}], additionalTotal }
+ */
+function computeOverviewData(groups) {
+  const parts = [];
+  const services = [];
+  const additional = [];
+
+  for (const group of groups) {
+    if (group.categoryName === "SERVICES") {
+      // Sub-group services by parent_service_description from metadata
+      const serviceGroups = {};
+      for (const line of group.lines) {
+        const groupKey = line.metadata?.parent_service_description || line.description || "Other Services";
+        if (!serviceGroups[groupKey]) serviceGroups[groupKey] = 0;
+        serviceGroups[groupKey] += (line.line_total || 0);
+      }
+      for (const [name, subtotal] of Object.entries(serviceGroups)) {
+        services.push({ name, subtotal });
+      }
+    } else if (group.categoryName === "ADDITIONAL ITEMS") {
+      additional.push({ name: "Additional Items", subtotal: group.subtotal });
+    } else {
+      parts.push({ name: group.categoryName, subtotal: group.subtotal });
+    }
+  }
+
+  return {
+    parts,
+    partsTotal: parts.reduce((s, p) => s + p.subtotal, 0),
+    services,
+    servicesTotal: services.reduce((s, p) => s + p.subtotal, 0),
+    additional,
+    additionalTotal: additional.reduce((s, p) => s + p.subtotal, 0),
+  };
+}
+
+/**
+ * Draw the Overview summary section. Returns updated Y position.
+ */
+function drawOverview(doc, y, overview, invoice) {
+  const amountX = COL.retail;
+  const labelX = MARGIN_LEFT;
+
+  // ─── OVERVIEW heading ───
+  y = ensureSpace(doc, y, 20);
+  doc.setFontSize(FONT.overviewHeading);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(20, 20, 20);
+  doc.text("OVERVIEW", labelX, y);
+  y += 10;
+
+  // ─── PARTS section ───
+  if (overview.parts.length > 0) {
+    y = ensureSpace(doc, y, 12 + overview.parts.length * 6);
+    doc.setFontSize(FONT.overviewSection);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(40, 40, 40);
+    doc.text("PARTS", labelX, y);
+    y += 7;
+
+    doc.setFontSize(FONT.overviewLine);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(50, 50, 50);
+
+    for (const item of overview.parts) {
+      y = ensureSpace(doc, y, 6);
+      // Title-case the category name for readability
+      const displayName = item.name.split(/[\s/]+/).map(w =>
+        w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
+      ).join(" ");
+      doc.text(displayName, labelX + 4, y);
+      doc.text(formatCurrency(item.subtotal), amountX, y, { align: "right" });
+      y += 5.5;
+    }
+
+    // Parts Total
+    y += 2;
+    doc.setDrawColor(140, 140, 140);
+    doc.setLineWidth(0.2);
+    doc.line(labelX, y, amountX, y);
+    y += 4;
+
+    doc.setFontSize(FONT.overviewTotal);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(20, 20, 20);
+    doc.text("Parts Total", labelX + 4, y);
+    doc.text(formatCurrency(overview.partsTotal), amountX, y, { align: "right" });
+    y += 10;
+  }
+
+  // ─── SERVICES section ───
+  if (overview.services.length > 0) {
+    y = ensureSpace(doc, y, 12 + overview.services.length * 6);
+    doc.setFontSize(FONT.overviewSection);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(40, 40, 40);
+    doc.text("SERVICES", labelX, y);
+    y += 7;
+
+    doc.setFontSize(FONT.overviewLine);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(50, 50, 50);
+
+    for (const item of overview.services) {
+      y = ensureSpace(doc, y, 6);
+      doc.text(item.name, labelX + 4, y);
+      doc.text(formatCurrency(item.subtotal), amountX, y, { align: "right" });
+      y += 5.5;
+    }
+
+    // Services Total
+    y += 2;
+    doc.setDrawColor(140, 140, 140);
+    doc.setLineWidth(0.2);
+    doc.line(labelX, y, amountX, y);
+    y += 4;
+
+    doc.setFontSize(FONT.overviewTotal);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(20, 20, 20);
+    doc.text("Services Total", labelX + 4, y);
+    doc.text(formatCurrency(overview.servicesTotal), amountX, y, { align: "right" });
+    y += 10;
+  }
+
+  // ─── ADDITIONAL ITEMS section (if any) ───
+  if (overview.additional.length > 0) {
+    y = ensureSpace(doc, y, 18);
+    doc.setFontSize(FONT.overviewSection);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(40, 40, 40);
+    doc.text("ADDITIONAL ITEMS", labelX, y);
+    y += 7;
+
+    doc.setFontSize(FONT.overviewLine);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(50, 50, 50);
+
+    for (const item of overview.additional) {
+      doc.text(item.name, labelX + 4, y);
+      doc.text(formatCurrency(item.subtotal), amountX, y, { align: "right" });
+      y += 5.5;
+    }
+
+    y += 2;
+    doc.setDrawColor(140, 140, 140);
+    doc.setLineWidth(0.2);
+    doc.line(labelX, y, amountX, y);
+    y += 4;
+
+    doc.setFontSize(FONT.overviewTotal);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(20, 20, 20);
+    doc.text("Additional Items Total", labelX + 4, y);
+    doc.text(formatCurrency(overview.additionalTotal), amountX, y, { align: "right" });
+    y += 10;
+  }
+
+  // ─── OVERVIEW FINANCIAL SUMMARY ───
+  y = ensureSpace(doc, y, 40);
+  y += 3;
+  doc.setDrawColor(50, 50, 50);
+  doc.setLineWidth(0.5);
+  doc.line(labelX, y, amountX, y);
+  doc.setLineWidth(0.2);
+  y += 8;
+
+  const summaryLabelX = amountX - 70;
+
+  // Invoice Subtotal
+  doc.setFontSize(FONT.summaryLabel);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(50, 50, 50);
+  doc.text("Invoice Subtotal", summaryLabelX, y);
+  doc.setFont("helvetica", "bold");
+  doc.text(formatCurrency(invoice.subtotal || 0), amountX, y, { align: "right" });
+  y += 7;
+
+  // Credit Applied (only if > 0)
+  const effectiveCredit = invoice.credit_applied || invoice.credit_proposed || 0;
+  if (effectiveCredit > 0) {
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(50, 50, 50);
+    doc.text("Credit Applied", summaryLabelX, y);
+    doc.setTextColor(22, 130, 60);
+    doc.setFont("helvetica", "bold");
+    doc.text(`(${formatCurrency(effectiveCredit)})`, amountX, y, { align: "right" });
+    y += 7;
+  }
+
+  // Balance Due
+  y += 2;
+  doc.setDrawColor(80, 80, 80);
+  doc.setLineWidth(0.3);
+  doc.line(summaryLabelX, y, amountX, y);
+  doc.setLineWidth(0.2);
+  y += 7;
+
+  doc.setFontSize(FONT.balanceDueLabel);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(15, 15, 15);
+  doc.text("Balance Due", summaryLabelX, y);
+  doc.setFontSize(FONT.balanceDueValue);
+  doc.text(formatCurrency(invoice.balance_due || 0), amountX, y, { align: "right" });
+  y += 12;
+
+  return y;
+}
+
 // ─── MAIN EXPORT ───
 
 export function generateClientDetailPDF({ invoice, lines, project, categoryOrder }) {
@@ -237,8 +452,20 @@ export function generateClientDetailPDF({ invoice, lines, project, categoryOrder
   doc.setLineWidth(0.2);
   y += SPACE.categoryGapBefore;
 
-  // ─── CATEGORY GROUPS ───
+  // ─── CATEGORY GROUPS (computed first for Overview) ───
   const groups = groupLinesByCategory(lines, categoryOrder);
+
+  // ─── OVERVIEW SECTION ───
+  const overview = computeOverviewData(groups);
+  y = drawOverview(doc, y, overview, invoice);
+
+  // ─── Separator between Overview and Detail ───
+  y += 4;
+  doc.setDrawColor(200, 200, 200);
+  doc.setLineWidth(0.3);
+  doc.line(MARGIN_LEFT, y, PAGE_WIDTH - MARGIN_RIGHT, y);
+  doc.setLineWidth(0.2);
+  y += SPACE.categoryGapBefore;
 
   for (let gi = 0; gi < groups.length; gi++) {
     const group = groups[gi];
