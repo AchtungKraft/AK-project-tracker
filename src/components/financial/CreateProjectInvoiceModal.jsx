@@ -41,6 +41,7 @@ import {
   AlertTriangle,
   FileText,
   Package,
+  ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
@@ -64,6 +65,7 @@ export default function CreateProjectInvoiceModal({
   open, 
   onClose, 
   onSuccess,
+  onOpenDraft,
   preselectedProjectId = null,
   initialSelectedItems = [],
 }) {
@@ -78,6 +80,10 @@ export default function CreateProjectInvoiceModal({
   const [manualLines, setManualLines] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [billingValidation, setBillingValidation] = useState(null);
+
+  // Existing draft detection
+  const [existingDraft, setExistingDraft] = useState(null);
+  const [checkingDraft, setCheckingDraft] = useState(false);
 
   // Credit state
   const [availableCredit, setAvailableCredit] = useState(0);
@@ -99,8 +105,43 @@ export default function CreateProjectInvoiceModal({
       setCreditToApply(null);
       setCreditInputValue("");
       setAvailableCredit(0);
+      setExistingDraft(null);
+      setCheckingDraft(false);
     }
   }, [open, preselectedProjectId]);
+
+  // ── Check for existing active draft when project+type changes ──
+  useEffect(() => {
+    if (!open || !selectedProjectId || !invoiceType) {
+      setExistingDraft(null);
+      return;
+    }
+    let cancelled = false;
+    setCheckingDraft(true);
+    setExistingDraft(null);
+    (async () => {
+      try {
+        const drafts = await base44.entities.ProjectInvoice.filter({
+          project_id: selectedProjectId,
+          invoice_type: invoiceType,
+          status: 'draft',
+        });
+        if (!cancelled && drafts.length > 0) {
+          const draft = drafts[0];
+          const lines = await base44.entities.ProjectInvoiceLine.filter({ invoice_id: draft.id });
+          setExistingDraft({ ...draft, line_count: lines.length });
+        } else if (!cancelled) {
+          setExistingDraft(null);
+        }
+      } catch (e) {
+        console.warn('Failed to check existing draft:', e);
+        if (!cancelled) setExistingDraft(null);
+      } finally {
+        if (!cancelled) setCheckingDraft(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, selectedProjectId, invoiceType]);
 
   // ── Fetch billing validation once ──
   useEffect(() => {
@@ -248,6 +289,13 @@ export default function CreateProjectInvoiceModal({
         ]);
         
         onSuccess?.();
+      } else if (response.data?.existing_draft) {
+        // Backend detected a race condition — another draft was created between our check and save
+        setExistingDraft({
+          ...response.data.existing_invoice,
+          line_count: response.data.existing_invoice?.line_count ?? 0,
+        });
+        toast({ title: "A draft already exists for this project and type", variant: "default" });
       } else {
         toast({ title: response.data?.error || "Failed to create invoice", variant: "destructive" });
       }
@@ -313,6 +361,59 @@ export default function CreateProjectInvoiceModal({
             <div className="flex flex-col items-center justify-center h-40 text-gray-500">
               <FileText className="w-8 h-8 mb-2 text-gray-600" />
               <p>Select a project to begin</p>
+            </div>
+          ) : checkingDraft ? (
+            <div className="flex flex-col items-center justify-center h-40 text-gray-500">
+              <Loader2 className="w-6 h-6 mb-2 animate-spin text-gray-500" />
+              <p className="text-sm">Checking for existing drafts…</p>
+            </div>
+          ) : existingDraft ? (
+            /* ── EXISTING DRAFT DETECTED ── */
+            <div className="flex flex-col items-center justify-center py-8 px-4">
+              <div className="w-full max-w-md p-5 rounded-lg border border-amber-700/50 bg-amber-950/20 space-y-4">
+                <div className="flex items-center gap-2 text-amber-400">
+                  <AlertTriangle className="w-5 h-5" />
+                  <h3 className="font-semibold text-base">Draft Already Exists</h3>
+                </div>
+                <p className="text-sm text-gray-300">
+                  An active <span className="font-medium capitalize text-white">{existingDraft.invoice_type}</span> draft already exists for this project.
+                </p>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-gray-500">Subtotal</span>
+                    <p className="font-mono text-white">{formatCurrencyUSD(existingDraft.subtotal || 0)}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Balance Due</span>
+                    <p className="font-mono text-white">{formatCurrencyUSD(existingDraft.balance_due || 0)}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Lines</span>
+                    <p className="text-white">{existingDraft.line_count ?? '—'}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Created</span>
+                    <p className="text-white">
+                      {existingDraft.created_date
+                        ? new Date(existingDraft.created_date).toLocaleDateString()
+                        : '—'}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  className="w-full gap-2 bg-purple-600 hover:bg-purple-700 mt-2"
+                  onClick={() => {
+                    onClose();
+                    // Open the existing draft in the detail drawer by passing its ID up
+                    if (onOpenDraft) {
+                      onOpenDraft(existingDraft.id);
+                    }
+                  }}
+                >
+                  <ArrowRight className="w-4 h-4" />
+                  Continue Draft
+                </Button>
+              </div>
             </div>
           ) : invoiceType === "deposit" ? (
             /* ── DEPOSIT FLOW ── */
@@ -382,8 +483,8 @@ export default function CreateProjectInvoiceModal({
           )}
         </div>
 
-        {/* ── TOTALS PANEL (always visible) ── */}
-        {selectedProjectId && (
+        {/* ── TOTALS PANEL (always visible, hidden when existing draft shown) ── */}
+        {selectedProjectId && !existingDraft && !checkingDraft && (
           <InvoiceTotalsPanel
             subtotal={subtotal}
             totalCost={invoiceType === "deposit" ? 0 : totalCost}
@@ -408,34 +509,43 @@ export default function CreateProjectInvoiceModal({
         )}
 
         {/* ── ACTION BAR ── */}
-        <div className="flex-shrink-0 flex items-center justify-between border-t border-gray-700 pt-3 mt-1">
-          <div className="text-sm text-gray-400">
-            {selectedProjectId && subtotal > 0 && (
-              <span className="text-white font-medium">
-                {lineItemCount} item{lineItemCount !== 1 ? 's' : ''} — {formatCurrencyUSD(subtotal)}
-              </span>
-            )}
-            {validationFailed && (
-              <span className="text-red-400 ml-2 text-xs flex items-center gap-1 inline-flex">
-                <AlertTriangle className="w-3 h-3" />
-                Billing validation failed
-              </span>
-            )}
+        {!existingDraft && (
+          <div className="flex-shrink-0 flex items-center justify-between border-t border-gray-700 pt-3 mt-1">
+            <div className="text-sm text-gray-400">
+              {selectedProjectId && subtotal > 0 && (
+                <span className="text-white font-medium">
+                  {lineItemCount} item{lineItemCount !== 1 ? 's' : ''} — {formatCurrencyUSD(subtotal)}
+                </span>
+              )}
+              {validationFailed && (
+                <span className="text-red-400 ml-2 text-xs flex items-center gap-1 inline-flex">
+                  <AlertTriangle className="w-3 h-3" />
+                  Billing validation failed
+                </span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleSubmit} 
+                disabled={!canSubmit}
+                className="bg-green-600 hover:bg-green-700 gap-1"
+              >
+                {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                Save Draft
+              </Button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleSubmit} 
-              disabled={!canSubmit}
-              className="bg-green-600 hover:bg-green-700 gap-1"
-            >
-              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-              Save Draft
+        )}
+        {existingDraft && (
+          <div className="flex-shrink-0 flex justify-end border-t border-gray-700 pt-3 mt-1">
+            <Button variant="outline" onClick={onClose}>
+              Close
             </Button>
           </div>
-        </div>
+        )}
       </DialogContent>
     </Dialog>
   );

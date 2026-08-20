@@ -63,6 +63,37 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Project not found' }, { status: 404 });
     }
 
+    // ── DUPLICATE DRAFT PROTECTION ──
+    // Canonical uniqueness boundary: project_id + invoice_type + status=draft
+    const existingDrafts = await base44.entities.ProjectInvoice.filter({
+      project_id,
+      invoice_type,
+      status: 'draft',
+    });
+
+    if (existingDrafts.length > 0) {
+      const existing = existingDrafts[0];
+      // Count lines for context
+      const existingLines = await base44.entities.ProjectInvoiceLine.filter({ invoice_id: existing.id });
+      return Response.json({
+        success: false,
+        existing_draft: true,
+        existing_invoice_id: existing.id,
+        existing_invoice: {
+          id: existing.id,
+          project_id: existing.project_id,
+          invoice_type: existing.invoice_type,
+          status: existing.status,
+          subtotal: existing.subtotal ?? 0,
+          credit_proposed: existing.credit_proposed ?? 0,
+          balance_due: existing.balance_due ?? 0,
+          created_date: existing.created_date,
+          line_count: existingLines.length,
+        },
+        error: `An active ${invoice_type} draft already exists for this project.`,
+      });
+    }
+
     // ── Prefetch source records for validation ──
     const partCommitmentIds = lines
       .filter(l => l.type === 'part' && l.source_id)

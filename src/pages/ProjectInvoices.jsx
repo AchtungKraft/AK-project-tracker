@@ -474,6 +474,11 @@ export default function ProjectInvoices() {
           open={showCreateModal}
           onClose={() => { setShowCreateModal(false); setCreateModalProjectId(null); }}
           onSuccess={handleInvoiceCreated}
+          onOpenDraft={(invoiceId) => {
+            setShowCreateModal(false);
+            setCreateModalProjectId(null);
+            setSelectedInvoiceId(invoiceId);
+          }}
           preselectedProjectId={createModalProjectId || (projectFilter !== "all" ? projectFilter : null)}
         />
       )}
