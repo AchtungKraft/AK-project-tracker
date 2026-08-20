@@ -38,7 +38,14 @@ import {
   AlertTriangle,
   Pencil,
   X,
+  ChevronDown,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
@@ -46,6 +53,7 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import { invoiceKeys } from "@/components/financial/queryKeyFactories";
 import { guardInvoiceMutation } from "@/components/dev/CanonicalArchitectureGuards";
+import { downloadClientDetailPDF } from "@/components/financial/ClientDetailPDFExport";
 
 export default function ProjectInvoiceDetailDrawer({
   invoiceId,
@@ -276,6 +284,30 @@ export default function ProjectInvoiceDetailDrawer({
   };
 
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
+
+  const handleExportClientPDF = async () => {
+    if (!invoice || !lines.length) return;
+    setIsExportingPDF(true);
+    try {
+      // Fetch category sort orders for proper ordering
+      const categories = await base44.entities.PartCategory.list();
+      const categoryOrder = new Map();
+      categories.forEach(cat => {
+        categoryOrder.set(cat.name, cat.sort_order ?? 9999);
+      });
+      // Services and Additional Items go last
+      categoryOrder.set("SERVICES", 99000);
+      categoryOrder.set("ADDITIONAL ITEMS", 99500);
+
+      downloadClientDetailPDF({ invoice, lines, project, categoryOrder });
+      toast.success("Client detail PDF exported");
+    } catch (error) {
+      toast.error(error.message || "PDF export failed");
+    } finally {
+      setIsExportingPDF(false);
+    }
+  };
 
   const handleExportCSV = async () => {
     if (!invoice) return;
@@ -562,19 +594,33 @@ export default function ProjectInvoiceDetailDrawer({
                     Mark as Paid
                   </Button>
                 )}
-                <Button 
-                  variant="outline" 
-                  onClick={handleExportCSV} 
-                  className="gap-2"
-                  disabled={isExporting}
-                >
-                  {isExporting ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Download className="w-4 h-4" />
-                  )}
-                  Export CSV
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      className="gap-2"
+                      disabled={isExporting || isExportingPDF}
+                    >
+                      {(isExporting || isExportingPDF) ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4" />
+                      )}
+                      Export
+                      <ChevronDown className="w-3 h-3 ml-1" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={handleExportCSV} disabled={isExporting}>
+                      <Download className="w-4 h-4 mr-2" />
+                      Export CSV
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleExportClientPDF} disabled={isExportingPDF}>
+                      <FileText className="w-4 h-4 mr-2" />
+                      Client Detail PDF
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           )}
