@@ -337,8 +337,8 @@ export function generateClientDetailPDF({ invoice, lines, project, categoryOrder
     doc.setFontSize(FONT.subtotalLabel);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(50, 50, 50);
-    // Label at left margin — clear separation from right-aligned amount
-    doc.text(`${capitalize(group.categoryName)} Subtotal`, MARGIN_LEFT, y);
+    // Simple "Subtotal" label — category heading above provides context
+    doc.text("Subtotal", COL.qty - 20, y);
     // Amount right-aligned to Retail column
     doc.setTextColor(20, 20, 20);
     doc.text(formatCurrency(group.subtotal), COL.retail, y, { align: "right" });
