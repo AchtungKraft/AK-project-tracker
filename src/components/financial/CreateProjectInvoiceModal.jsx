@@ -43,7 +43,7 @@ import {
   Package,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
+import { useToast } from "@/components/ui/use-toast";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import FinancialProjectSelector from "./FinancialProjectSelector";
 import BillableItemsSelector from "./BillableItemsSelector";
@@ -68,6 +68,7 @@ export default function CreateProjectInvoiceModal({
   initialSelectedItems = [],
 }) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [invoiceType, setInvoiceType] = useState("progress");
@@ -235,7 +236,7 @@ export default function CreateProjectInvoiceModal({
       });
 
       if (response.data?.success) {
-        toast.success("Invoice draft created");
+        toast({ title: "Invoice draft created", variant: "default" });
         
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: billingKeys.states(normalizedProjectId) }),
@@ -248,11 +249,11 @@ export default function CreateProjectInvoiceModal({
         
         onSuccess?.();
       } else {
-        toast.error(response.data?.error || "Failed to create invoice");
+        toast({ title: response.data?.error || "Failed to create invoice", variant: "destructive" });
       }
     } catch (error) {
       console.error("Invoice creation error:", error);
-      toast.error(error.message || "Failed to create invoice");
+      toast({ title: error.message || "Failed to create invoice", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
