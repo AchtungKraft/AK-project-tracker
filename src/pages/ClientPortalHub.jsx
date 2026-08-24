@@ -34,7 +34,6 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSavedProjectViews } from "@/components/common/useSavedProjectViews";
 import SavedViewsSelector from "@/components/common/SavedViewsSelector";
@@ -46,6 +45,10 @@ import ProjectLifecycleCard from "@/components/clientportal/ProjectLifecycleCard
 import RecentlyApprovedStrip from "@/components/clientportal/RecentlyApprovedStrip";
 import ClientPortalCalendarView from "@/components/clientportal/ClientPortalCalendarView";
 import ColumnBoardView from "@/components/clientportal/ColumnBoardView";
+import { useHubData } from "@/components/clientportal/useHubData";
+import HubErrorState from "@/components/clientportal/HubErrorState";
+import HubFiltersExhaustedState from "@/components/clientportal/HubFiltersExhaustedState";
+import { useToast } from "@/components/ui/use-toast";
 import { 
   groupRequestsByProjectAndLifecycle, 
   SORT_MODE_OPTIONS,
@@ -57,6 +60,7 @@ import {
 export default function ClientPortalHub() {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
+  const { toast } = useToast();
   const [sendingEmailForProject, setSendingEmailForProject] = useState(null);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [tempFilters, setTempFilters] = useState(null);
@@ -88,31 +92,31 @@ export default function ClientPortalHub() {
           await base44.entities.ClientFeedbackRequest.update(request.id, {
             review_state: 'none', review_started_at: null
           });
-          toast.success('Stopped reviewing');
+          toast({ description: 'Stopped reviewing' });
           break;
         case 'start_review':
           await base44.entities.ClientFeedbackRequest.update(request.id, {
             review_state: 'in_review', review_started_at: new Date().toISOString()
           });
-          toast.success('Now reviewing');
+          toast({ description: 'Now reviewing' });
           break;
         case 'post_to_client':
           try {
             await base44.functions.invoke('updateRequestStatus', { requestId: request.id, status: 'posted' });
             base44.functions.invoke('sendNeedsReviewEmail', { requestId: request.id, isRepost: false }).catch(() => {});
-            toast.success('Posted to client');
-          } catch { toast.error('Failed to post'); }
+            toast({ description: 'Posted to client' });
+          } catch { toast({ variant: 'destructive', description: 'Failed to post' }); }
           break;
         case 'delete':
           if (!confirm('Delete this request and all its comments?')) { setIsSavingCardAction(false); return; }
           await base44.entities.ClientFeedbackRequest.delete(request.id);
-          toast.success('Request deleted');
+          toast({ description: 'Request deleted' });
           break;
         case 'resume':
           await base44.entities.ClientFeedbackRequest.update(request.id, {
             queue_hidden: false, queue_hidden_at: null, queue_resume_date: null
           });
-          toast.success('Resumed in Action Queue');
+          toast({ description: 'Resumed in Action Queue' });
           break;
         case 'remove_from_queue':
           setHideModalRequest(request);
@@ -120,11 +124,11 @@ export default function ClientPortalHub() {
           return; // Don't invalidate yet — modal handles it
         case 'archive_draft':
           await base44.entities.ClientFeedbackRequest.update(request.id, { status: 'archived' });
-          toast.success('Draft archived');
+          toast({ description: 'Draft archived' });
           break;
         case 'archive':
           await base44.entities.ClientFeedbackRequest.update(request.id, { status: 'archived' });
-          toast.success('Request archived');
+          toast({ description: 'Request archived' });
           break;
         default:
           break;
@@ -132,7 +136,7 @@ export default function ClientPortalHub() {
       queryClient.invalidateQueries({ queryKey: ['clientPortalHubData'] });
     } catch (error) {
       console.error('Card action error:', error);
-      toast.error('Action failed');
+      toast({ variant: 'destructive', description: 'Action failed' });
     } finally {
       setIsSavingCardAction(false);
     }
@@ -149,9 +153,9 @@ export default function ClientPortalHub() {
       });
       setHideModalRequest(null);
       queryClient.invalidateQueries({ queryKey: ['clientPortalHubData'] });
-      toast.success(resumeDate ? `Set aside until ${resumeDate}` : 'Set aside — will return when resumed');
+      toast({ description: resumeDate ? `Set aside until ${resumeDate}` : 'Set aside — will return when resumed' });
     } catch (error) {
-      toast.error('Failed to remove from queue');
+      toast({ variant: 'destructive', description: 'Failed to remove from queue' });
     } finally {
       setIsSavingCardAction(false);
     }
@@ -164,10 +168,10 @@ export default function ClientPortalHub() {
         due_date: newDate
       });
       queryClient.invalidateQueries({ queryKey: ['clientPortalHubData'] });
-      toast.success(newDate ? 'Due date updated' : 'Due date cleared');
+      toast({ description: newDate ? 'Due date updated' : 'Due date cleared' });
     } catch (error) {
       console.error('Error updating due date:', error);
-      toast.error('Failed to update due date');
+      toast({ variant: 'destructive', description: 'Failed to update due date' });
     }
   }, [queryClient]);
 
@@ -212,30 +216,21 @@ export default function ClientPortalHub() {
     try {
       const response = await base44.functions.invoke('sendBulkReviewEmail', { projectId, requestIds });
       if (response.data?.success) {
-        toast.success(`Email sent to ${response.data.emailsSent} client(s)`);
+        toast({ description: `Email sent to ${response.data.emailsSent} client(s)` });
         queryClient.invalidateQueries({ queryKey: ["clientPortalHubData"] });
       } else {
-        toast.error(response.data?.error || 'Failed to send email');
+        toast({ variant: 'destructive', description: response.data?.error || 'Failed to send email' });
       }
     } catch (error) {
       console.error('Error sending bulk email:', error);
-      toast.error('Failed to send email');
+      toast({ variant: 'destructive', description: 'Failed to send email' });
     } finally {
       setSendingEmailForProject(null);
     }
   };
 
-  // Single read model replaces 4 separate .list() calls
-  // PERF: 4 requests → 1, server-side parallel fetch + field projection
-  const { data: hubData, isLoading: loadingHubData } = useQuery({
-    queryKey: ["clientPortalHubData"],
-    queryFn: async () => {
-      const response = await base44.functions.invoke('getClientPortalHubData', {});
-      return response.data;
-    },
-    staleTime: 15000,
-    refetchOnMount: true,
-  });
+  // Resilient hub data loader with automatic fallback
+  const { data: hubData, isLoading: loadingHubData, isError: hubDataError, error: hubError, refetch: refetchHubData } = useHubData();
 
   const allRequests = hubData?.requests || [];
   const decisions = hubData?.decisions || [];
@@ -286,6 +281,46 @@ export default function ClientPortalHub() {
   });
 
   const projectStatuses = statuses.filter(s => s.scope === 'Project' && s.active);
+
+  // Validate persisted filters against currently available reference data
+  // Removes stale IDs that no longer exist (e.g., deleted team members, project types)
+  React.useEffect(() => {
+    if (projectTypes.length === 0 && teamMembers.length === 0 && statuses.length === 0) return; // reference data not loaded yet
+    
+    let changed = false;
+
+    // Validate selectedTypes
+    if (selectedTypes.length > 0) {
+      const validTypeIds = new Set(projectTypes.map(t => t.id));
+      const cleaned = selectedTypes.filter(id => validTypeIds.has(id));
+      if (cleaned.length !== selectedTypes.length) {
+        setFilter('selectedTypes', cleaned);
+        changed = true;
+        console.log('[ClientPortalHub] Removed stale project type filter IDs:', selectedTypes.filter(id => !validTypeIds.has(id)));
+      }
+    }
+
+    // Validate statusFilter
+    if (statusFilter !== 'all') {
+      const validStatusIds = new Set(statuses.filter(s => s.scope === 'Project').map(s => s.id));
+      if (!validStatusIds.has(statusFilter)) {
+        setFilter('statusFilter', 'all');
+        changed = true;
+        console.log('[ClientPortalHub] Removed stale status filter:', statusFilter);
+      }
+    }
+
+    // Validate assignedTo
+    if (assignedTo.length > 0) {
+      const validMemberIds = new Set(teamMembers.map(tm => tm.id));
+      const cleaned = assignedTo.filter(id => validMemberIds.has(id));
+      if (cleaned.length !== assignedTo.length) {
+        setFilter('assignedTo', cleaned);
+        changed = true;
+        console.log('[ClientPortalHub] Removed stale assignedTo filter IDs:', assignedTo.filter(id => !validMemberIds.has(id)));
+      }
+    }
+  }, [projectTypes, statuses, teamMembers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Calculate active filter count for mobile badge
   const activeFilterCount = useActiveFilterCount(
@@ -432,11 +467,45 @@ export default function ClientPortalHub() {
 
   const isLoading = loadingHubData || loadingProjects;
 
+  // Determine if filters are excluding all requests while unfiltered data exists
+  const hasActiveProjectFilters = selectedTypes.length > 0 || statusFilter !== 'all' || assignedTo.length > 0;
+  const filtersExhaustedRequests = !isLoading && !hubDataError && allRequests.length > 0 && lifecycleRequests.length === 0 && hasActiveProjectFilters;
+
+  // Log active filters for diagnostics
+  React.useEffect(() => {
+    if (!isLoading && !hubDataError && hasActiveProjectFilters) {
+      console.log('[ClientPortalHub] Active filters:', {
+        selectedTypes,
+        statusFilter,
+        assignedTo,
+        totalRequests: allRequests.length,
+        filteredRequests: lifecycleRequests.length,
+      });
+    }
+  }, [isLoading, hubDataError, allRequests.length, lifecycleRequests.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (isLoading) {
     return (
       <div className="p-6 flex items-center justify-center min-h-screen">
         <Loader2 className="w-8 h-8 animate-spin text-red-500" />
       </div>
+    );
+  }
+
+  // Error state — never masquerade as empty board
+  if (hubDataError) {
+    return (
+      <MobileSafeAreaContainer>
+        <div className={isMobile ? 'p-2 space-y-4' : 'p-3 md:p-6 space-y-6'}>
+          <div className="flex-1 min-w-0">
+            <h1 className="font-bold text-white flex items-center text-xl md:text-3xl gap-2 md:gap-3">
+              <Users className="w-6 h-6 md:w-8 md:h-8 text-red-500" />
+              Client Portal
+            </h1>
+          </div>
+          <HubErrorState error={hubError} onRetry={refetchHubData} />
+        </div>
+      </MobileSafeAreaContainer>
     );
   }
 
@@ -804,19 +873,26 @@ export default function ClientPortalHub() {
             {/* Column Board View — workflow-first with project grouping */}
             {boardViewMode === 'column' && (
               filteredProjectData.length === 0 ? (
-                <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
-                  <CardContent className="p-8 md:p-12 text-center">
-                    <div className="flex items-center justify-center w-16 h-16 rounded-full bg-gray-800 mx-auto mb-4">
-                      <LayoutDashboard className="w-8 h-8 text-gray-500" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-white mb-2">No Feedback Requests</h3>
-                    <p className="text-gray-400">
-                      {lifecycleQuickFilter !== 'all' 
-                        ? `No requests match the "${lifecycleQuickFilter.replace('_', ' ')}" filter.`
-                        : 'No feedback requests match the current filters.'}
-                    </p>
-                  </CardContent>
-                </Card>
+                filtersExhaustedRequests ? (
+                  <HubFiltersExhaustedState
+                    totalUnfilteredCount={allRequests.filter(r => r.status !== 'archived').length}
+                    onClearFilters={clearFilters}
+                  />
+                ) : (
+                  <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
+                    <CardContent className="p-8 md:p-12 text-center">
+                      <div className="flex items-center justify-center w-16 h-16 rounded-full bg-gray-800 mx-auto mb-4">
+                        <LayoutDashboard className="w-8 h-8 text-gray-500" />
+                      </div>
+                      <h3 className="text-xl font-semibold text-white mb-2">No Feedback Requests</h3>
+                      <p className="text-gray-400">
+                        {lifecycleQuickFilter !== 'all' 
+                          ? `No requests match the "${lifecycleQuickFilter.replace('_', ' ')}" filter.`
+                          : 'No feedback requests exist yet.'}
+                      </p>
+                    </CardContent>
+                  </Card>
+                )
               ) : (
                 <ColumnBoardView
                   filteredProjectData={filteredProjectData}
@@ -845,19 +921,26 @@ export default function ClientPortalHub() {
                 })()}
 
                 {filteredProjectData.length === 0 ? (
-                  <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
-                    <CardContent className="p-8 md:p-12 text-center">
-                      <div className="flex items-center justify-center w-16 h-16 rounded-full bg-gray-800 mx-auto mb-4">
-                        <LayoutDashboard className="w-8 h-8 text-gray-500" />
-                      </div>
-                      <h3 className="text-xl font-semibold text-white mb-2">No Feedback Requests</h3>
-                      <p className="text-gray-400">
-                        {lifecycleQuickFilter !== 'all' 
-                          ? `No requests match the "${lifecycleQuickFilter.replace('_', ' ')}" filter.`
-                          : 'No feedback requests match the current filters.'}
-                      </p>
-                    </CardContent>
-                  </Card>
+                  filtersExhaustedRequests ? (
+                    <HubFiltersExhaustedState
+                      totalUnfilteredCount={allRequests.filter(r => r.status !== 'archived').length}
+                      onClearFilters={clearFilters}
+                    />
+                  ) : (
+                    <Card className="bg-black/40 backdrop-blur-xl border border-gray-700">
+                      <CardContent className="p-8 md:p-12 text-center">
+                        <div className="flex items-center justify-center w-16 h-16 rounded-full bg-gray-800 mx-auto mb-4">
+                          <LayoutDashboard className="w-8 h-8 text-gray-500" />
+                        </div>
+                        <h3 className="text-xl font-semibold text-white mb-2">No Feedback Requests</h3>
+                        <p className="text-gray-400">
+                          {lifecycleQuickFilter !== 'all' 
+                            ? `No requests match the "${lifecycleQuickFilter.replace('_', ' ')}" filter.`
+                            : 'No feedback requests exist yet.'}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )
                 ) : (
                   filteredProjectData.map((projectGroup, index) => (
                     <ProjectLifecycleCard
