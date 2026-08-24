@@ -80,7 +80,10 @@ function capitalize(str) {
 
 /**
  * Group lines by category, resolving category name from saved snapshot data.
- * Returns array of { categoryName, lines[], subtotal }
+ * Returns array of { categoryName, lines[], subtotal, isService?, serviceSubGroups? }
+ * 
+ * Service lines are grouped into a single "SERVICES" category but also
+ * sub-grouped by metadata.parent_service_description for detail rendering.
  */
 function groupLinesByCategory(lines, categoryOrder) {
   const groups = {};
@@ -116,6 +119,21 @@ function groupLinesByCategory(lines, categoryOrder) {
 
   for (const group of sorted) {
     group.lines.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+    // Build service sub-groups for detail rendering
+    if (group.categoryName === "SERVICES") {
+      group.isService = true;
+      const subs = {};
+      for (const line of group.lines) {
+        const key = line.metadata?.parent_service_description || line.description || "Other Services";
+        if (!subs[key]) subs[key] = { name: key, lines: [], subtotal: 0 };
+        subs[key].lines.push(line);
+        subs[key].subtotal += (line.line_total || 0);
+      }
+      group.serviceSubGroups = Object.values(subs).sort(
+        (a, b) => (a.lines[0]?.sort_order || 0) - (b.lines[0]?.sort_order || 0)
+      );
+    }
   }
 
   return sorted;
@@ -386,6 +404,58 @@ function drawOverview(doc, y, overview, invoice) {
   return y;
 }
 
+/**
+ * Draw a single line item row. Returns updated Y position.
+ */
+function drawLineItem(doc, y, line, categoryName, isLastRow, totalLines) {
+  const descText = line.description || line.part_name || "—";
+  const descLines = doc.splitTextToSize(descText, DESC_MAX_WIDTH);
+  const rowHeight = Math.max(descLines.length * SPACE.lineHeight, SPACE.lineHeight) + SPACE.rowPadding;
+
+  const neededForRow = isLastRow
+    ? rowHeight + SPACE.subtotalGapAbove + 12
+    : rowHeight + 2;
+
+  const prevY = y;
+  y = ensureSpace(doc, y, neededForRow);
+  if (y === MARGIN_TOP && prevY !== MARGIN_TOP) {
+    doc.setFontSize(FONT.continuedLabel);
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(100, 100, 100);
+    doc.text(`${capitalize(categoryName)} — continued`, MARGIN_LEFT, y);
+    y += 6;
+    y = drawTableHeader(doc, y);
+    doc.setFontSize(FONT.body);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(35, 35, 35);
+  }
+
+  for (let di = 0; di < descLines.length; di++) {
+    doc.text(descLines[di], COL.description, y + (di * SPACE.lineHeight));
+  }
+
+  const qtyStr = line.qty != null ? String(line.qty) : "—";
+  const unitStr = line.unit_price != null ? formatCurrency(line.unit_price) : "—";
+  const totalStr = formatCurrency(line.line_total || 0);
+
+  doc.text(qtyStr, COL.qty, y, { align: "right" });
+  doc.text(unitStr, COL.unitRetail, y, { align: "right" });
+  doc.setFont("helvetica", "bold");
+  doc.text(totalStr, COL.retail, y, { align: "right" });
+  doc.setFont("helvetica", "normal");
+
+  y += rowHeight;
+
+  if (!isLastRow && totalLines > 3) {
+    doc.setDrawColor(225, 225, 225);
+    doc.setLineWidth(0.15);
+    doc.line(MARGIN_LEFT, y - 1, PAGE_WIDTH - MARGIN_RIGHT, y - 1);
+    doc.setLineWidth(0.2);
+  }
+
+  return y;
+}
+
 // ─── MAIN EXPORT ───
 
 export function generateClientDetailPDF({ invoice, lines, project, categoryOrder }) {
@@ -491,86 +561,97 @@ export function generateClientDetailPDF({ invoice, lines, project, categoryOrder
     doc.text(capitalize(group.categoryName), MARGIN_LEFT + 2, y);
     y += SPACE.categoryGapAfter + 2;
 
-    // Table header
-    y = drawTableHeader(doc, y);
+    // ─── SERVICE SUB-GROUPED DETAIL ───
+    if (group.isService && group.serviceSubGroups) {
+      for (let si = 0; si < group.serviceSubGroups.length; si++) {
+        const subGroup = group.serviceSubGroups[si];
 
-    // Line items
-    doc.setFontSize(FONT.body);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(35, 35, 35);
+        // Sub-group heading
+        y = ensureSpace(doc, y, 20);
+        if (si > 0) y += 6;
+        doc.setFontSize(FONT.body);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(60, 60, 60);
+        doc.text(subGroup.name, MARGIN_LEFT + 2, y);
+        y += 5;
 
-    for (let li = 0; li < group.lines.length; li++) {
-      const line = group.lines[li];
-      const descText = line.description || line.part_name || "—";
-      const descLines = doc.splitTextToSize(descText, DESC_MAX_WIDTH);
-      const rowHeight = Math.max(descLines.length * SPACE.lineHeight, SPACE.lineHeight) + SPACE.rowPadding;
-
-      // Check fit — keep last row + subtotal together when possible
-      const isLastRow = li === group.lines.length - 1;
-      const neededForRow = isLastRow
-        ? rowHeight + SPACE.subtotalGapAbove + 12 // row + subtotal
-        : rowHeight + 2;
-
-      const prevY = y;
-      y = ensureSpace(doc, y, neededForRow);
-      if (y === MARGIN_TOP && prevY !== MARGIN_TOP) {
-        // Page break happened — draw continuation header
-        doc.setFontSize(FONT.continuedLabel);
-        doc.setFont("helvetica", "italic");
-        doc.setTextColor(100, 100, 100);
-        doc.text(`${capitalize(group.categoryName)} — continued`, MARGIN_LEFT, y);
-        y += 6;
+        // Table header
         y = drawTableHeader(doc, y);
+
+        // Line items for this sub-group
         doc.setFontSize(FONT.body);
         doc.setFont("helvetica", "normal");
         doc.setTextColor(35, 35, 35);
-      }
 
-      // Description (multi-line)
-      for (let di = 0; di < descLines.length; di++) {
-        doc.text(descLines[di], COL.description, y + (di * SPACE.lineHeight));
-      }
+        for (let li = 0; li < subGroup.lines.length; li++) {
+          const line = subGroup.lines[li];
+          y = drawLineItem(doc, y, line, group.categoryName, li === subGroup.lines.length - 1, subGroup.lines.length);
+        }
 
-      // Numeric columns — aligned to first line of row
-      const qtyStr = line.qty != null ? String(line.qty) : "—";
-      const unitStr = line.unit_price != null ? formatCurrency(line.unit_price) : "—";
-      const totalStr = formatCurrency(line.line_total || 0);
-
-      doc.text(qtyStr, COL.qty, y, { align: "right" });
-      doc.text(unitStr, COL.unitRetail, y, { align: "right" });
-      doc.setFont("helvetica", "bold");
-      doc.text(totalStr, COL.retail, y, { align: "right" });
-      doc.setFont("helvetica", "normal");
-
-      y += rowHeight;
-
-      // Light row separator for dense categories
-      if (!isLastRow && group.lines.length > 3) {
-        doc.setDrawColor(225, 225, 225);
-        doc.setLineWidth(0.15);
-        doc.line(MARGIN_LEFT, y - 1, PAGE_WIDTH - MARGIN_RIGHT, y - 1);
+        // Sub-group subtotal
+        y += SPACE.subtotalGapAbove;
+        doc.setDrawColor(180, 180, 180);
         doc.setLineWidth(0.2);
+        doc.line(MARGIN_LEFT, y, PAGE_WIDTH - MARGIN_RIGHT, y);
+        doc.setLineWidth(0.2);
+        y += 5;
+
+        doc.setFontSize(FONT.subtotalLabel);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(50, 50, 50);
+        doc.text("Subtotal", COL.qty - 20, y);
+        doc.setTextColor(20, 20, 20);
+        doc.text(formatCurrency(subGroup.subtotal), COL.retail, y, { align: "right" });
+        y += SPACE.subtotalGapBelow - 4;
       }
+
+      // Overall Services total
+      y += 4;
+      doc.setDrawColor(160, 160, 160);
+      doc.setLineWidth(0.25);
+      doc.line(MARGIN_LEFT, y, PAGE_WIDTH - MARGIN_RIGHT, y);
+      doc.setLineWidth(0.2);
+      y += 5;
+
+      doc.setFontSize(FONT.subtotalLabel);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(50, 50, 50);
+      doc.text("Services Total", COL.qty - 20, y);
+      doc.setTextColor(20, 20, 20);
+      doc.text(formatCurrency(group.subtotal), COL.retail, y, { align: "right" });
+      y += SPACE.subtotalGapBelow;
+
+    } else {
+      // ─── STANDARD CATEGORY DETAIL (Parts, Additional, etc.) ───
+      // Table header
+      y = drawTableHeader(doc, y);
+
+      // Line items
+      doc.setFontSize(FONT.body);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(35, 35, 35);
+
+      for (let li = 0; li < group.lines.length; li++) {
+        const line = group.lines[li];
+        y = drawLineItem(doc, y, line, group.categoryName, li === group.lines.length - 1, group.lines.length);
+      }
+
+      // ─── CATEGORY SUBTOTAL ───
+      y += SPACE.subtotalGapAbove;
+      doc.setDrawColor(160, 160, 160);
+      doc.setLineWidth(0.25);
+      doc.line(MARGIN_LEFT, y, PAGE_WIDTH - MARGIN_RIGHT, y);
+      doc.setLineWidth(0.2);
+      y += 5;
+
+      doc.setFontSize(FONT.subtotalLabel);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(50, 50, 50);
+      doc.text("Subtotal", COL.qty - 20, y);
+      doc.setTextColor(20, 20, 20);
+      doc.text(formatCurrency(group.subtotal), COL.retail, y, { align: "right" });
+      y += SPACE.subtotalGapBelow;
     }
-
-    // ─── CATEGORY SUBTOTAL ───
-    y += SPACE.subtotalGapAbove;
-    doc.setDrawColor(160, 160, 160);
-    doc.setLineWidth(0.25);
-    doc.line(MARGIN_LEFT, y, PAGE_WIDTH - MARGIN_RIGHT, y);
-    doc.setLineWidth(0.2);
-    y += 5;
-
-    doc.setFontSize(FONT.subtotalLabel);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(50, 50, 50);
-    // Simple "Subtotal" label — category heading above provides context
-    doc.text("Subtotal", COL.qty - 20, y);
-    // Amount right-aligned to Retail column
-    doc.setTextColor(20, 20, 20);
-    doc.text(formatCurrency(group.subtotal), COL.retail, y, { align: "right" });
-
-    y += SPACE.subtotalGapBelow;
   }
 
   // ─── INVOICE FINANCIAL SUMMARY ───
