@@ -1,0 +1,46 @@
+{
+  "name": "ScopeItemComment",
+  "type": "object",
+  "properties": {
+    "scope_item_id": {
+      "type": "string",
+      "description": "Reference to ScopeItem"
+    },
+    "request_id": {
+      "type": "string",
+      "description": "Reference to ClientFeedbackRequest (denormalized for efficient queries)"
+    },
+    "author_type": {
+      "type": "string",
+      "enum": [
+        "client_contact",
+        "internal_user"
+      ],
+      "description": "Type of comment author"
+    },
+    "author_id": {
+      "type": "string",
+      "description": "ID of the comment author"
+    },
+    "author_name": {
+      "type": "string",
+      "description": "Snapshot of author display name"
+    },
+    "body": {
+      "type": "string",
+      "description": "Comment text"
+    },
+    "posted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When comment was posted"
+    }
+  },
+  "required": [
+    "scope_item_id",
+    "request_id",
+    "author_type",
+    "author_id",
+    "body"
+  ]
+}

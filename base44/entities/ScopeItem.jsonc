@@ -1,0 +1,108 @@
+{
+  "name": "ScopeItem",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "description": "Reference to ClientFeedbackRequest (scope review)"
+    },
+    "category_id": {
+      "type": "string",
+      "description": "Reference to ScopeCategory"
+    },
+    "group_id": {
+      "type": "string",
+      "description": "Reference to ScopeGroup"
+    },
+    "title": {
+      "type": "string",
+      "description": "Scope item title"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description / context"
+    },
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Reference image URLs"
+    },
+    "sort_order": {
+      "type": "number",
+      "default": 0,
+      "description": "Manual display order within group"
+    },
+    "decision_status": {
+      "type": "string",
+      "enum": [
+        "needs_review",
+        "approved",
+        "request_changes",
+        "not_now",
+        "reapproval_required"
+      ],
+      "default": "needs_review",
+      "description": "Client decision status"
+    },
+    "decision_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the current decision was made"
+    },
+    "decision_actor_type": {
+      "type": "string",
+      "enum": [
+        "client_contact",
+        "internal_user"
+      ],
+      "description": "Type of actor who made the decision"
+    },
+    "decision_actor_id": {
+      "type": "string",
+      "description": "ID of the actor who made the decision"
+    },
+    "budget_min": {
+      "type": "number",
+      "description": "Estimated budget minimum (retail, client-facing)"
+    },
+    "budget_max": {
+      "type": "number",
+      "description": "Estimated budget maximum (retail, client-facing)"
+    },
+    "budget_note": {
+      "type": "string",
+      "description": "Client-facing budget note / context"
+    },
+    "budget_tbd": {
+      "type": "boolean",
+      "default": false,
+      "description": "True if budget requires investigation and cannot yet be estimated"
+    },
+    "linked_feedback_request_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Future: linked ClientFeedbackRequest IDs for detailed follow-up"
+    },
+    "linked_task_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Future: linked internal Task IDs"
+    },
+    "material_hash": {
+      "type": "string",
+      "description": "Hash of material fields at time of last approval. Used for reapproval detection."
+    }
+  },
+  "required": [
+    "request_id",
+    "category_id",
+    "group_id",
+    "title"
+  ]
+}

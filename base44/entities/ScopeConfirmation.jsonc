@@ -1,0 +1,65 @@
+{
+  "name": "ScopeConfirmation",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "description": "Reference to ClientFeedbackRequest (scope review)"
+    },
+    "confirmed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When scope was confirmed"
+    },
+    "confirmed_by_type": {
+      "type": "string",
+      "enum": [
+        "client_contact",
+        "internal_user"
+      ],
+      "description": "Type of confirming actor"
+    },
+    "confirmed_by_id": {
+      "type": "string",
+      "description": "ID of confirming actor"
+    },
+    "confirmed_by_name": {
+      "type": "string",
+      "description": "Display name snapshot"
+    },
+    "approved_item_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Snapshot of approved ScopeItem IDs at confirmation"
+    },
+    "approved_budget_min": {
+      "type": "number",
+      "description": "Snapshot of approved scope budget minimum"
+    },
+    "approved_budget_max": {
+      "type": "number",
+      "description": "Snapshot of approved scope budget maximum"
+    },
+    "total_items": {
+      "type": "number",
+      "description": "Total items in scope at confirmation"
+    },
+    "revision": {
+      "type": "number",
+      "default": 1,
+      "description": "Scope revision number (increments on re-confirmation)"
+    },
+    "summary_snapshot": {
+      "type": "object",
+      "description": "Full status summary at time of confirmation"
+    }
+  },
+  "required": [
+    "request_id",
+    "confirmed_at",
+    "confirmed_by_type",
+    "confirmed_by_id"
+  ]
+}

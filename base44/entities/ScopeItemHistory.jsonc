@@ -1,0 +1,69 @@
+{
+  "name": "ScopeItemHistory",
+  "type": "object",
+  "properties": {
+    "scope_item_id": {
+      "type": "string",
+      "description": "Reference to ScopeItem"
+    },
+    "request_id": {
+      "type": "string",
+      "description": "Reference to ClientFeedbackRequest (denormalized)"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "decision",
+        "reapproval_triggered",
+        "material_change"
+      ],
+      "description": "Type of history event"
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "needs_review",
+        "approved",
+        "request_changes",
+        "not_now",
+        "reapproval_required"
+      ],
+      "description": "Decision recorded"
+    },
+    "previous_decision": {
+      "type": "string",
+      "description": "Previous decision status before this event"
+    },
+    "actor_type": {
+      "type": "string",
+      "enum": [
+        "client_contact",
+        "internal_user"
+      ],
+      "description": "Type of actor"
+    },
+    "actor_id": {
+      "type": "string",
+      "description": "ID of actor"
+    },
+    "actor_name": {
+      "type": "string",
+      "description": "Display name snapshot"
+    },
+    "note": {
+      "type": "string",
+      "description": "Decision note or change description"
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When event was recorded"
+    }
+  },
+  "required": [
+    "scope_item_id",
+    "request_id",
+    "event_type",
+    "recorded_at"
+  ]
+}
