@@ -4,10 +4,15 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Save, X, Upload, Loader2 } from "lucide-react";
+import { Save, X, Upload, Loader2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { cn } from "@/lib/utils";
 
+/**
+ * Scope Item editor — used for both creating and editing items.
+ * Category and Group are selected independently (not nested).
+ * Accepts optional preselectedCategoryId / preselectedGroupId for contextual add.
+ */
 export default function ScopeItemEditor({
   requestId,
   categories = [],
@@ -15,13 +20,15 @@ export default function ScopeItemEditor({
   onSave,
   onCancel,
   editItem = null,
+  preselectedCategoryId = null,
+  preselectedGroupId = null,
   isMobile = false,
 }) {
   const isEdit = !!editItem;
   const [title, setTitle] = useState(editItem?.title || "");
   const [description, setDescription] = useState(editItem?.description || "");
-  const [categoryId, setCategoryId] = useState(editItem?.category_id || (categories[0]?.id || ""));
-  const [groupId, setGroupId] = useState(editItem?.group_id || "");
+  const [categoryId, setCategoryId] = useState(editItem?.category_id || preselectedCategoryId || (categories[0]?.id || ""));
+  const [groupId, setGroupId] = useState(editItem?.group_id || preselectedGroupId || (groups[0]?.id || ""));
   const [budgetMin, setBudgetMin] = useState(editItem?.budget_min ?? "");
   const [budgetMax, setBudgetMax] = useState(editItem?.budget_max ?? "");
   const [budgetNote, setBudgetNote] = useState(editItem?.budget_note || "");
@@ -30,7 +37,8 @@ export default function ScopeItemEditor({
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const availableGroups = groups.filter(g => g.category_id === categoryId);
+  const sortedCategories = [...categories].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const sortedGroups = [...groups].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -63,7 +71,7 @@ export default function ScopeItemEditor({
 
   return (
     <div className="space-y-3 p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
-      <h4 className="text-sm font-semibold text-white">{isEdit ? 'Edit Item' : 'Add Scope Item'}</h4>
+      <h4 className="text-sm font-semibold text-white">{isEdit ? 'Edit Scope Item' : 'Add Scope Item'}</h4>
       
       <Input
         value={title}
@@ -80,28 +88,35 @@ export default function ScopeItemEditor({
         className="bg-gray-800 border-gray-700 text-white text-sm min-h-[60px] resize-none"
       />
 
-      <div className="flex gap-2 flex-wrap">
-        <Select value={categoryId} onValueChange={(v) => { setCategoryId(v); setGroupId(""); }}>
-          <SelectTrigger className="w-40 h-8 bg-gray-800 border-gray-700 text-white text-xs">
-            <SelectValue placeholder="Category" />
-          </SelectTrigger>
-          <SelectContent>
-            {categories.map(c => (
-              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      {/* Category & Group — independent selects */}
+      <div className={cn("flex gap-2", isMobile ? "flex-col" : "flex-wrap")}>
+        <div className="space-y-1">
+          <label className="text-[10px] text-gray-500 uppercase tracking-wide">Category</label>
+          <Select value={categoryId} onValueChange={setCategoryId}>
+            <SelectTrigger className="w-44 h-8 bg-gray-800 border-gray-700 text-white text-xs">
+              <SelectValue placeholder="Select category" />
+            </SelectTrigger>
+            <SelectContent>
+              {sortedCategories.map(c => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-        <Select value={groupId} onValueChange={setGroupId}>
-          <SelectTrigger className="w-40 h-8 bg-gray-800 border-gray-700 text-white text-xs">
-            <SelectValue placeholder="Group" />
-          </SelectTrigger>
-          <SelectContent>
-            {availableGroups.map(g => (
-              <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="space-y-1">
+          <label className="text-[10px] text-gray-500 uppercase tracking-wide">Group</label>
+          <Select value={groupId} onValueChange={setGroupId}>
+            <SelectTrigger className="w-44 h-8 bg-gray-800 border-gray-700 text-white text-xs">
+              <SelectValue placeholder="Select group" />
+            </SelectTrigger>
+            <SelectContent>
+              {sortedGroups.map(g => (
+                <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Budget */}
@@ -113,29 +128,16 @@ export default function ScopeItemEditor({
         {!budgetTbd && (
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-500">$</span>
-            <Input
-              type="number"
-              value={budgetMin}
-              onChange={(e) => setBudgetMin(e.target.value)}
-              placeholder="Min"
-              className="h-8 w-28 bg-gray-800 border-gray-700 text-white text-xs"
-            />
+            <Input type="number" value={budgetMin} onChange={(e) => setBudgetMin(e.target.value)}
+              placeholder="Min" className="h-8 w-28 bg-gray-800 border-gray-700 text-white text-xs" />
             <span className="text-xs text-gray-500">–</span>
-            <Input
-              type="number"
-              value={budgetMax}
-              onChange={(e) => setBudgetMax(e.target.value)}
-              placeholder="Max"
-              className="h-8 w-28 bg-gray-800 border-gray-700 text-white text-xs"
-            />
+            <Input type="number" value={budgetMax} onChange={(e) => setBudgetMax(e.target.value)}
+              placeholder="Max" className="h-8 w-28 bg-gray-800 border-gray-700 text-white text-xs" />
           </div>
         )}
-        <Input
-          value={budgetNote}
-          onChange={(e) => setBudgetNote(e.target.value)}
+        <Input value={budgetNote} onChange={(e) => setBudgetNote(e.target.value)}
           placeholder="Client-facing budget note (optional)..."
-          className="h-8 bg-gray-800 border-gray-700 text-white text-xs"
-        />
+          className="h-8 bg-gray-800 border-gray-700 text-white text-xs" />
       </div>
 
       {/* Images */}

@@ -1,11 +1,13 @@
 import React, { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { computeRollup, formatBudgetCompact, DECISION_LABELS } from "./scopeHelpers";
+import { computeRollup, formatBudgetCompact } from "./scopeHelpers";
 import ScopeItemCard from "./ScopeItemCard";
 
 export default function ScopeGroupSection({
   group,
+  categoryId,
   comments = [],
   history = [],
   onDecision,
@@ -13,6 +15,7 @@ export default function ScopeGroupSection({
   isClientView = false,
   readOnly = false,
   onEditItem,
+  onAddItem,
   isMobile = false,
   filter = "all",
 }) {
@@ -23,6 +26,7 @@ export default function ScopeGroupSection({
   const stats = computeRollup(allItems);
   const budget = formatBudgetCompact(stats.budget_min, stats.budget_max, false);
 
+  // Hide empty groups after filtering
   if (filter !== "all" && filteredItems.length === 0) return null;
 
   const statusParts = [];
@@ -31,26 +35,33 @@ export default function ScopeGroupSection({
   if (stats.request_changes > 0) statusParts.push(`${stats.request_changes} Changes`);
   if (stats.reapproval_required > 0) statusParts.push(`${stats.reapproval_required} Reapproval`);
 
+  const canEdit = !isClientView;
+
   return (
     <div className="space-y-2">
       {/* Group Header */}
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        className="w-full flex items-center gap-2 py-1.5 text-left group"
-      >
-        {collapsed ? (
-          <ChevronRight className="w-4 h-4 text-gray-500 shrink-0" />
-        ) : (
-          <ChevronDown className="w-4 h-4 text-gray-500 shrink-0" />
+      <div className="flex items-center gap-1">
+        <button onClick={() => setCollapsed(!collapsed)} className="flex items-center gap-2 flex-1 py-1 text-left group">
+          {collapsed
+            ? <ChevronRight className="w-4 h-4 text-gray-500 shrink-0" />
+            : <ChevronDown className="w-4 h-4 text-gray-500 shrink-0" />
+          }
+          <span className="font-semibold uppercase tracking-wide text-gray-300 text-xs">
+            {group.name}
+          </span>
+          <span className="text-[10px] text-gray-500 ml-1">
+            {statusParts.join(' · ')}
+          </span>
+          {budget && <span className="text-[10px] text-cyan-500/70 ml-auto">{budget}</span>}
+        </button>
+
+        {canEdit && onAddItem && (
+          <Button size="sm" variant="ghost" onClick={() => onAddItem({ categoryId, groupId: group.id })}
+            className="h-5 w-5 p-0 text-gray-600 hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity">
+            <Plus className="w-3 h-3" />
+          </Button>
         )}
-        <span className={cn("font-semibold uppercase tracking-wide text-gray-300", isMobile ? "text-xs" : "text-xs")}>
-          {group.name}
-        </span>
-        <span className="text-[10px] text-gray-500 ml-1">
-          {statusParts.join(' · ')}
-        </span>
-        {budget && <span className="text-[10px] text-cyan-500/70 ml-auto">{budget}</span>}
-      </button>
+      </div>
 
       {/* Items */}
       {!collapsed && (
@@ -69,9 +80,6 @@ export default function ScopeGroupSection({
               isMobile={isMobile}
             />
           ))}
-          {filteredItems.length === 0 && (
-            <p className="text-xs text-gray-600 italic pl-2">No items in this group</p>
-          )}
         </div>
       )}
     </div>

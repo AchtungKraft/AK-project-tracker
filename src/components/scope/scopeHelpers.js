@@ -1,5 +1,7 @@
 /**
- * Scope Review helpers — budget formatting, rollups, material hash for reapproval
+ * Scope Review helpers — budget formatting, rollups, material hash for reapproval.
+ * Architecture: Category and Group are independent request-level entities.
+ * Items reference both, and the display hierarchy is Category → Group → Item.
  */
 
 export const DECISION_LABELS = {
@@ -75,9 +77,7 @@ export function computeRollup(items) {
     }
 
     if (s === 'approved') {
-      if (item.budget_tbd) {
-        // TBD approved items tracked separately
-      } else {
+      if (!item.budget_tbd) {
         if (item.budget_min != null) stats.approved_budget_min += item.budget_min;
         if (item.budget_max != null) stats.approved_budget_max += item.budget_max;
       }
@@ -89,7 +89,6 @@ export function computeRollup(items) {
 
 /**
  * Compute a deterministic hash of material fields for reapproval detection.
- * Uses a simple JSON string comparison approach.
  */
 export function computeMaterialHash(item) {
   const fields = {
@@ -112,24 +111,38 @@ export function hasMaterialChanges(item) {
 }
 
 /**
- * Build hierarchy: categories → groups → items
+ * Build presentation hierarchy: Category → Group → Item.
+ * Groups are request-level (independent of category). The display nests them
+ * dynamically: for each category, find items in that category, group them
+ * by group_id, and display only groups that have items in that category.
  */
 export function buildScopeHierarchy(categories, groups, items) {
   const sortedCats = [...categories].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-  
+  const sortedGroups = [...groups].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const groupMap = new Map(sortedGroups.map(g => [g.id, g]));
+
   return sortedCats.map(cat => {
-    const catGroups = groups
-      .filter(g => g.category_id === cat.id)
-      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-    
+    const catItems = items.filter(i => i.category_id === cat.id);
+
+    // Group items by group_id, preserving canonical group sort order
+    const groupItemMap = new Map();
+    for (const item of catItems) {
+      if (!groupItemMap.has(item.group_id)) groupItemMap.set(item.group_id, []);
+      groupItemMap.get(item.group_id).push(item);
+    }
+
+    // Build group entries in canonical group sort order, only for groups that have items
+    const displayGroups = sortedGroups
+      .filter(g => groupItemMap.has(g.id))
+      .map(g => ({
+        ...g,
+        items: (groupItemMap.get(g.id) || []).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+      }));
+
     return {
       ...cat,
-      groups: catGroups.map(grp => {
-        const grpItems = items
-          .filter(i => i.group_id === grp.id)
-          .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-        return { ...grp, items: grpItems };
-      }),
+      allItems: catItems, // all items in this category (for rollups)
+      groups: displayGroups,
     };
   });
 }
