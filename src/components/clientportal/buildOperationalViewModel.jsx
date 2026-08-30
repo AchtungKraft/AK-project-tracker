@@ -71,10 +71,14 @@ export function buildOperationalViewModel(request, comments = [], decisions = []
   const lastClientComment = lastClientCommentEvent?.comment || null;
 
   // ── Comment preview ──
-  const latestInteractionEvent = allEvents.find(e => e.kind === 'comment' || e.kind === 'decision');
+  // Include scope events (scope_comment, scope_decision, scope_confirmation) alongside regular comment/decision
+  const latestInteractionEvent = allEvents.find(e =>
+    e.kind === 'comment' || e.kind === 'decision' ||
+    e.kind === 'scope_comment' || e.kind === 'scope_decision' || e.kind === 'scope_confirmation'
+  );
   const latestCommentContent = latestInteractionEvent?.kind === 'comment'
     ? (latestInteractionEvent.comment?.content_fallback || latestInteractionEvent.comment?.body || null)
-    : (latestInteractionEvent?.body || null);
+    : (latestInteractionEvent?.body || latestInteractionEvent?.scopeEvent?.body || null);
   const latestCommentActor = latestInteractionEvent?.actor || null;
 
   // ── Overdue check ──
