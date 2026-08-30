@@ -20,6 +20,7 @@ import { getRequestState, getRequestTypeInfo } from "@/components/clientportal/u
 import { getRequestStateCanonical } from "@/components/clientportal/stateHelpers";
 import { isStructuredReview } from "@/components/clientportal/reviewBehavior";
 import ImageModal from "../components/ui/ImageModal";
+import ScopeReviewDisplay from "@/components/scope/ScopeReviewDisplay";
 
 export default function ClientFeedbackRequestDetail() {
   const navigate = useNavigate();
@@ -357,7 +358,7 @@ export default function ClientFeedbackRequestDetail() {
               )}
             </div>
 
-            {clientAccess?.access_role === 'approver' && canAct && !isStructuredReview(request.request_type) && (
+            {clientAccess?.access_role === 'approver' && canAct && !isStructuredReview(request.request_type) && request.request_type !== 'client_scope_review' && (
               <div className="flex gap-2 mt-4">
                 <Button
                   size="sm"
@@ -404,7 +405,17 @@ export default function ClientFeedbackRequestDetail() {
           </Card>
         )}
 
-        {request.request_type === 'todo_list' ? (
+        {request.request_type === 'client_scope_review' ? (
+          <ScopeReviewDisplay
+            requestId={requestId}
+            queryKey={['clientRequestDetail', token, slug, requestId]}
+            token={token}
+            slug={slug}
+            isClientView={true}
+            clientAccessRole={clientAccess?.access_role}
+            clientContactId={clientAccess?.client_contact_id}
+          />
+        ) : request.request_type === 'todo_list' ? (
           <ToDoListDisplay
             requestId={requestId}
             tasks={requestData?.todoTasks || []}

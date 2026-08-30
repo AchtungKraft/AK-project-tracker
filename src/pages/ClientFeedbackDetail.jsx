@@ -39,6 +39,7 @@ import FeedbackCommentComposer from "../components/clientportal/FeedbackCommentC
 import HtmlContent from "@/components/shared/HtmlContent";
 import LinkPreviewGrid from "@/components/shared/LinkPreviewGrid";
 import { extractLinks } from "@/utils/extractLinks";
+import ScopeReviewDisplay from "@/components/scope/ScopeReviewDisplay";
 
 export default function ClientFeedbackDetail() {
   const isMobile = useIsMobile();
@@ -549,7 +550,7 @@ export default function ClientFeedbackDetail() {
             </div>
 
             {/* Action buttons - only show when data is loaded, hidden on mobile (shown in metadata card) */}
-            {!isMobile && !isInitialLoad && canAct && !isStructuredReview(request?.request_type) && (
+            {!isMobile && !isInitialLoad && canAct && !isStructuredReview(request?.request_type) && request?.request_type !== 'client_scope_review' && (
               <div className="flex gap-2">
                 <Button
                   size="sm"
@@ -629,7 +630,7 @@ export default function ClientFeedbackDetail() {
               <OperationalSummary request={enrichedRequest} isMobile={isMobile} />
 
               {/* Mobile: Approve/Changes buttons for non-structured-review */}
-              {isMobile && canAct && !isStructuredReview(request?.request_type) && (
+              {isMobile && canAct && !isStructuredReview(request?.request_type) && request?.request_type !== 'client_scope_review' && (
                 <div className="flex gap-2">
                   <Button
                     size="sm"
@@ -745,7 +746,32 @@ export default function ClientFeedbackDetail() {
             isMobile={isMobile}
           />
 
-          {request.request_type === 'todo_list' ? (
+          {request.request_type === 'client_scope_review' ? (
+            <>
+              <ScopeReviewDisplay
+                requestId={requestId}
+                queryKey={['internalFeedbackDetail', requestId, projectId]}
+                isClientView={false}
+                isMobile={isMobile}
+                userId={user.id}
+                userName={user.full_name}
+              />
+              {threadRequest && (
+                <ClientFeedbackThread
+                  requestId={requestId}
+                  userId={user.id}
+                  requestType={request.request_type}
+                  onDecisionSubmit={handleSubmitRequestDecision}
+                  onDeleteComment={handleDeleteComment}
+                  onDeleteDecision={handleDeleteDecision}
+                  isClientView={false}
+                  accessRole={user?.role}
+                  request={threadRequest}
+                  onImageClick={handleThreadImageClick}
+                />
+              )}
+            </>
+          ) : request.request_type === 'todo_list' ? (
             <>
               <ToDoListDisplay
                 requestId={requestId}
@@ -756,7 +782,6 @@ export default function ClientFeedbackDetail() {
                 queryKey={['internalFeedbackDetail', requestId, projectId]}
                 onImageClick={handleGalleryOpen}
               />
-              {/* Show comments thread for ToDo list requests */}
               {threadRequest && (
                 <ClientFeedbackThread
                   requestId={requestId}
