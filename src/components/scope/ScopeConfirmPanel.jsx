@@ -29,13 +29,12 @@ export default function ScopeConfirmPanel({
   isClientView = false,
 }) {
   const [confirming, setConfirming] = useState(false);
+  const stale = useMemo(() => isConfirmationStale(lastConfirmation, items), [lastConfirmation, items]);
 
   if (!stats || stats.total === 0) return null;
 
   const approvedBudget = formatBudgetRange(stats.approved_budget_min, stats.approved_budget_max, false);
   const allReviewed = stats.needs_review === 0 && stats.reapproval_required === 0;
-
-  const stale = useMemo(() => isConfirmationStale(lastConfirmation, items), [lastConfirmation, items]);
 
   const handleConfirm = async () => {
     setConfirming(true);
