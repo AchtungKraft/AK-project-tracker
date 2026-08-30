@@ -34,7 +34,8 @@ const REQUEST_TYPE_UI = {
     todo_list: { label: "Task List", color: "#14b8a6" },
     update: { label: "Project Update", color: "#6b7280" },
     budget_review: { label: "Budget Review", color: "#e11d48" },
-    deliverable_review: { label: "Deliverable Review", color: "#10b981" }
+    deliverable_review: { label: "Deliverable Review", color: "#10b981" },
+    client_scope_review: { label: "Scope Review", color: "#06b6d4" }
 };
 
 const getRequestTypeInfo = (type) => {
@@ -129,6 +130,12 @@ const EMPTY_RESPONSE = {
     attachments: [],
     todoTasks: [],
     taskGroups: [],
+    scopeCategories: [],
+    scopeGroups: [],
+    scopeItems: [],
+    scopeItemComments: [],
+    scopeItemHistory: [],
+    scopeConfirmations: [],
     assignableUsers: [],
     assignableContacts: []
 };
@@ -241,6 +248,12 @@ Deno.serve(async (req) => {
             todoTasksRaw,
             projectClientAccesses,
             taskGroupsRaw,
+            scopeCategoriesRaw,
+            scopeGroupsRaw,
+            scopeItemsRaw,
+            scopeItemCommentsRaw,
+            scopeItemHistoryRaw,
+            scopeConfirmationsRaw,
         ] = await Promise.all([
             withRetry(() => base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: requestId })).then(r => safeArray(r)),
             withRetry(() => base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: requestId })).then(r => safeArray(r)),
@@ -248,6 +261,24 @@ Deno.serve(async (req) => {
             withRetry(() => base44.asServiceRole.entities.ToDoListTask.filter({ request_id: requestId })).then(r => safeArray(r)).catch(() => []),
             withRetry(() => base44.asServiceRole.entities.ProjectClientAccess.filter({ project_id: request.project_id, access_status: 'active' })).then(r => safeArray(r)),
             withRetry(() => base44.asServiceRole.entities.TaskGroup.filter({ request_id: requestId })).then(r => safeArray(r)).catch(() => []),
+            request.request_type === 'client_scope_review'
+                ? withRetry(() => base44.asServiceRole.entities.ScopeCategory.filter({ request_id: requestId })).then(r => safeArray(r)).catch(() => [])
+                : Promise.resolve([]),
+            request.request_type === 'client_scope_review'
+                ? withRetry(() => base44.asServiceRole.entities.ScopeGroup.filter({ request_id: requestId })).then(r => safeArray(r)).catch(() => [])
+                : Promise.resolve([]),
+            request.request_type === 'client_scope_review'
+                ? withRetry(() => base44.asServiceRole.entities.ScopeItem.filter({ request_id: requestId })).then(r => safeArray(r)).catch(() => [])
+                : Promise.resolve([]),
+            request.request_type === 'client_scope_review'
+                ? withRetry(() => base44.asServiceRole.entities.ScopeItemComment.filter({ request_id: requestId })).then(r => safeArray(r)).catch(() => [])
+                : Promise.resolve([]),
+            request.request_type === 'client_scope_review'
+                ? withRetry(() => base44.asServiceRole.entities.ScopeItemHistory.filter({ request_id: requestId })).then(r => safeArray(r)).catch(() => [])
+                : Promise.resolve([]),
+            request.request_type === 'client_scope_review'
+                ? withRetry(() => base44.asServiceRole.entities.ScopeConfirmation.filter({ request_id: requestId })).then(r => safeArray(r)).catch(() => [])
+                : Promise.resolve([]),
         ]);
 
         // ── PHASE 4: Build ID sets for enrichment ──
@@ -437,6 +468,34 @@ Deno.serve(async (req) => {
             attachments: minimalAttachments,
             todoTasks: enrichedTodoTasks,
             taskGroups,
+            scopeCategories: [...scopeCategoriesRaw].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+            scopeGroups: [...scopeGroupsRaw].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+            scopeItems: [...scopeItemsRaw].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+            scopeItemComments: scopeItemCommentsRaw.map(c => ({
+                id: c.id,
+                scope_item_id: c.scope_item_id,
+                request_id: c.request_id,
+                author_type: c.author_type,
+                author_id: c.author_id,
+                author_name: c.author_name,
+                body: c.body,
+                posted_at: c.posted_at,
+                created_date: c.created_date
+            })),
+            scopeItemHistory: scopeItemHistoryRaw.map(h => ({
+                id: h.id,
+                scope_item_id: h.scope_item_id,
+                request_id: h.request_id,
+                event_type: h.event_type,
+                decision: h.decision,
+                previous_decision: h.previous_decision,
+                actor_type: h.actor_type,
+                actor_id: h.actor_id,
+                actor_name: h.actor_name,
+                recorded_at: h.recorded_at,
+                created_date: h.created_date
+            })),
+            scopeConfirmations: [...scopeConfirmationsRaw].sort((a, b) => new Date(b.confirmed_at || b.created_date) - new Date(a.confirmed_at || a.created_date)),
             assignableUsers: assignableUsers,
             assignableContacts: projectClients.map(c => ({ id: c.id, name: c.name, type: 'client_contact' }))
         }, {
