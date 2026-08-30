@@ -19,10 +19,12 @@ function materialHash(item) {
 
 async function resolveAccess(base44, request, token, slug) {
   let clientContactId = null;
+  let clientContact = null;
   if (slug) {
     const contacts = await base44.asServiceRole.entities.ClientContact.filter({ url_slug: slug, active: true });
     if (!contacts[0]) return null;
     clientContactId = contacts[0].id;
+    clientContact = contacts[0];
   }
 
   const filter = { project_id: request.project_id, access_status: 'active' };
@@ -30,7 +32,27 @@ async function resolveAccess(base44, request, token, slug) {
   if (clientContactId) filter.client_contact_id = clientContactId;
 
   const accesses = await base44.asServiceRole.entities.ProjectClientAccess.filter(filter);
-  return accesses[0] || null;
+  const access = accesses[0] || null;
+  if (access && !clientContact && access.client_contact_id) {
+    const c = await base44.asServiceRole.entities.ClientContact.filter({ id: access.client_contact_id });
+    clientContact = c[0] || null;
+  }
+  return { access, clientContact };
+}
+
+/** Fire-and-forget notification — never blocks the client response */
+async function notifyScopeActivity(base44, { requestId, projectId, clientName, actionType, comment }) {
+  try {
+    await base44.asServiceRole.functions.invoke('sendClientActivityNotification', {
+      requestId,
+      projectId,
+      clientName,
+      actionType,
+      comment: comment || null,
+    });
+  } catch (e) {
+    console.error('[publicManageScopeReview] notification failed (non-blocking):', e.message);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -52,15 +74,11 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Invalid scope review request' }, { status: 404, headers: CORS });
     }
 
-    const access = await resolveAccess(base44, request, token, slug);
+    const { access, clientContact } = await resolveAccess(base44, request, token, slug);
     if (!access) return Response.json({ error: 'Invalid access' }, { status: 403, headers: CORS });
 
     const actorId = access.client_contact_id;
-    let actorName = 'Client';
-    try {
-      const contacts = await base44.asServiceRole.entities.ClientContact.filter({ id: actorId });
-      if (contacts[0]?.name) actorName = contacts[0].name;
-    } catch (_) {}
+    const actorName = clientContact?.name || 'Client';
 
     const now = new Date().toISOString();
 
@@ -101,6 +119,18 @@ Deno.serve(async (req) => {
         recorded_at: now,
       });
 
+      // Notify — map scope decision to notification action type
+      const notifType = decision === 'approved' ? 'APPROVED'
+        : decision === 'request_changes' ? 'REVISION_REQUESTED'
+        : null;
+      if (notifType) {
+        notifyScopeActivity(base44, {
+          requestId, projectId: request.project_id, clientName: actorName,
+          actionType: notifType,
+          comment: `Scope item "${item.title}" — ${decision.replace(/_/g, ' ')}`,
+        });
+      }
+
       return Response.json({ success: true, item: updatedItem, history }, { headers: CORS });
     }
 
@@ -123,6 +153,13 @@ Deno.serve(async (req) => {
         body: comment.trim(),
         posted_at: now,
       });
+
+      notifyScopeActivity(base44, {
+        requestId, projectId: request.project_id, clientName: actorName,
+        actionType: 'COMMENT',
+        comment: `Comment on scope item "${item.title}": ${comment.trim().slice(0, 200)}`,
+      });
+
       return Response.json({ success: true, comment: created }, { headers: CORS });
     }
 
@@ -169,6 +206,12 @@ Deno.serve(async (req) => {
       await base44.asServiceRole.entities.ClientFeedbackRequest.update(requestId, {
         scope_confirmed_at: now,
         scope_confirmed_by_name: actorName,
+      });
+
+      notifyScopeActivity(base44, {
+        requestId, projectId: request.project_id, clientName: actorName,
+        actionType: 'APPROVED',
+        comment: `Scope confirmed — revision ${latestRevision + 1}: ${approved.length} approved items, budget $${budgetMin.toLocaleString()}–$${budgetMax.toLocaleString()}`,
       });
 
       return Response.json({ success: true, confirmation }, { headers: CORS });
