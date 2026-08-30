@@ -201,8 +201,8 @@ export function formatHoursRange(min, max) {
 export function computeMaterialHash(item, laborEstimates = []) {
   const itemLabor = laborEstimates
     .filter(le => le.scope_item_id === item.id)
-    .map(le => ({ gid: le.labor_group_id, hmin: le.hours_min, hmax: le.hours_max, rate: le.rate_snapshot }))
-    .sort((a, b) => a.gid.localeCompare(b.gid));
+    .map(le => ({ gid: le.labor_group_id || '', hmin: le.hours_min, hmax: le.hours_max, rate: le.rate_snapshot }))
+    .sort((a, b) => (a.gid || '').localeCompare(b.gid || ''));
   const fields = {
     title: item.title || '',
     description: item.description || '',

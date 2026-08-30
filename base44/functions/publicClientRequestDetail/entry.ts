@@ -136,6 +136,7 @@ const EMPTY_RESPONSE = {
     scopeItemComments: [],
     scopeItemHistory: [],
     scopeConfirmations: [],
+    scopeItemLaborEstimates: [],
     assignableUsers: [],
     assignableContacts: []
 };
@@ -254,6 +255,7 @@ Deno.serve(async (req) => {
             scopeItemCommentsRaw,
             scopeItemHistoryRaw,
             scopeConfirmationsRaw,
+            scopeLaborEstimatesRaw,
         ] = await Promise.all([
             withRetry(() => base44.asServiceRole.entities.ClientFeedbackComment.filter({ request_id: requestId })).then(r => safeArray(r)),
             withRetry(() => base44.asServiceRole.entities.ClientFeedbackDecision.filter({ request_id: requestId })).then(r => safeArray(r)),
@@ -278,6 +280,10 @@ Deno.serve(async (req) => {
                 : Promise.resolve([]),
             request.request_type === 'client_scope_review'
                 ? withRetry(() => base44.asServiceRole.entities.ScopeConfirmation.filter({ request_id: requestId })).then(r => safeArray(r)).catch(() => [])
+                : Promise.resolve([]),
+            // Labor estimates — fetched server-side, sanitized to client-safe shape (hours only, no rates/costs)
+            request.request_type === 'client_scope_review'
+                ? withRetry(() => base44.asServiceRole.entities.ScopeItemLaborEstimate.filter({ request_id: requestId })).then(r => safeArray(r)).catch(() => [])
                 : Promise.resolve([]),
         ]);
 
@@ -496,6 +502,15 @@ Deno.serve(async (req) => {
                 created_date: h.created_date
             })),
             scopeConfirmations: [...scopeConfirmationsRaw].sort((a, b) => new Date(b.confirmed_at || b.created_date) - new Date(a.confirmed_at || a.created_date)),
+            // Client-safe labor estimates — hours only, NO rates or internal labor dollars
+            scopeItemLaborEstimates: scopeLaborEstimatesRaw.map(le => ({
+                id: le.id,
+                scope_item_id: le.scope_item_id,
+                labor_group_name: le.labor_group_name_snapshot || 'Labor',
+                hours_min: le.hours_min || 0,
+                hours_max: le.hours_max || 0,
+                sort_order: le.sort_order || 0,
+            })),
             assignableUsers: assignableUsers,
             assignableContacts: projectClients.map(c => ({ id: c.id, name: c.name, type: 'client_contact' }))
         }, {

@@ -349,25 +349,35 @@ export default function ScopeReviewDisplay({
 
     // Handle labor estimates CRUD
     if (laborData && itemId) {
-      // Delete existing labor estimates for this item
-      const existingLabor = laborEstimates.filter(le => le.scope_item_id === itemId);
-      if (existingLabor.length > 0) {
-        await Promise.all(existingLabor.map(le => base44.entities.ScopeItemLaborEstimate.delete(le.id)));
-      }
-      // Create new ones
-      if (laborData.length > 0) {
-        await base44.entities.ScopeItemLaborEstimate.bulkCreate(
-          laborData.filter(ld => ld.labor_group_id && ld.hours_min !== "" && ld.hours_max !== "").map((ld, idx) => ({
-            request_id: requestId,
-            scope_item_id: itemId,
-            labor_group_id: ld.labor_group_id,
-            labor_group_name_snapshot: ld.labor_group_name_snapshot || '',
-            hours_min: Number(ld.hours_min) || 0,
-            hours_max: Number(ld.hours_max) || 0,
-            rate_snapshot: ld.rate_snapshot || 0,
-            sort_order: idx,
-          }))
-        );
+      try {
+        // Delete existing labor estimates for this item
+        const existingLabor = laborEstimates.filter(le => le.scope_item_id === itemId);
+        if (existingLabor.length > 0) {
+          await Promise.all(existingLabor.map(le => base44.entities.ScopeItemLaborEstimate.delete(le.id)));
+        }
+        // Create new ones
+        const validLabor = laborData.filter(ld => ld.labor_group_id && ld.hours_min !== "" && ld.hours_max !== "");
+        if (validLabor.length > 0) {
+          await base44.entities.ScopeItemLaborEstimate.bulkCreate(
+            validLabor.map((ld, idx) => ({
+              request_id: requestId,
+              scope_item_id: itemId,
+              labor_group_id: ld.labor_group_id,
+              labor_group_name_snapshot: ld.labor_group_name_snapshot || '',
+              hours_min: Number(ld.hours_min) || 0,
+              hours_max: Number(ld.hours_max) || 0,
+              rate_snapshot: ld.rate_snapshot || 0,
+              sort_order: idx,
+            }))
+          );
+        }
+      } catch (laborErr) {
+        console.error('Labor estimate save failed:', laborErr);
+        invalidate(); // Refetch canonical data so UI reflects actual persisted state
+        toast({ variant: 'destructive', description: 'Item saved but labor estimates failed to save. Please re-edit.' });
+        setAddItemState(null);
+        setEditingItem(null);
+        return;
       }
     }
 
