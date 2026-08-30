@@ -66,7 +66,7 @@ export const getApprovalTimestamp = (request, decisions) => {
 /**
  * Determine which lifecycle bucket a request belongs to
  */
-export const getLifecycleBucket = (request, decisions, attachments, comments) => {
+export const getLifecycleBucket = (request, decisions, attachments, comments, scopeActivity = []) => {
   // Use canonical state for draft/archived detection
   const state = getRequestState(request, decisions, attachments);
   
@@ -83,10 +83,12 @@ export const getLifecycleBucket = (request, decisions, attachments, comments) =>
   
   // Check if client has replied since last post — use timeline stateEvents (SINGLE SOURCE)
   // Includes both comments AND decisions (approve / request changes) from client
+  // Also includes scope activity for client_scope_review requests
   if (request.posted_at) {
     const requestComments = comments.filter(c => c.request_id === request.id);
     const requestDecisions = decisions.filter(d => d.request_id === request.id);
-    const { stateEvents } = buildFeedbackTimeline(request, requestComments, requestDecisions);
+    const requestScopeActivity = scopeActivity.filter(sa => sa.request_id === request.id);
+    const { stateEvents } = buildFeedbackTimeline(request, requestComments, requestDecisions, requestScopeActivity);
     
     const hasClientReply = stateEvents.some(e => e.actor === 'client');
     if (hasClientReply) {
@@ -148,13 +150,14 @@ export const getSortComparator = (mode) => {
  * Enrich a request with computed fields including actor-driven attention logic.
  *
  * DELEGATES to buildOperationalViewModel — the single canonical enrichment.
- * This wrapper filters comments/decisions by request_id (hub passes bulk arrays).
+ * This wrapper filters comments/decisions/scopeActivity by request_id (hub passes bulk arrays).
  */
-export const enrichRequest = (request, comments, decisions, attachments) => {
+export const enrichRequest = (request, comments, decisions, attachments, scopeActivity = []) => {
   const requestComments = comments.filter(c => c.request_id === request.id);
   const requestDecisions = decisions.filter(d => d.request_id === request.id);
+  const requestScopeActivity = scopeActivity.filter(sa => sa.request_id === request.id);
 
-  return buildOperationalViewModel(request, requestComments, requestDecisions, attachments);
+  return buildOperationalViewModel(request, requestComments, requestDecisions, attachments, requestScopeActivity);
 };
 
 /**
@@ -166,20 +169,21 @@ export const groupRequestsByProjectAndLifecycle = (
   decisions, 
   attachments, 
   comments,
-  sortMode = 'due_date'
+  sortMode = 'due_date',
+  scopeActivity = []
 ) => {
   const grouped = {};
   const comparator = getSortComparator(sortMode);
   
   requests.forEach(request => {
     const projectId = request.project_id || 'unknown';
-    const bucket = getLifecycleBucket(request, decisions, attachments, comments);
+    const bucket = getLifecycleBucket(request, decisions, attachments, comments, scopeActivity);
     
     // Skip null buckets (archived)
     if (!bucket) return;
     
     // Enrich request
-    const enrichedRequest = enrichRequest(request, comments, decisions, attachments);
+    const enrichedRequest = enrichRequest(request, comments, decisions, attachments, scopeActivity);
     
     if (!grouped[projectId]) {
       grouped[projectId] = {

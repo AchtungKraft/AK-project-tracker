@@ -40,6 +40,39 @@ async function resolveAccess(base44, request, token, slug) {
   return { access, clientContact };
 }
 
+/**
+ * Operational side effects for client scope activity.
+ * Mirrors existing behavior from publicAddClientComment / publicClientDecision:
+ *   - Clear review_state if 'in_review' (new client activity supersedes stale review)
+ *   - Auto-resume if queue_hidden (client activity brings request back to queue)
+ * Fire-and-forget — never blocks the client response.
+ */
+async function applyScopeOperationalSideEffects(base44, request) {
+  try {
+    const updates: Record<string, any> = {};
+    
+    // Clear stale review state — new client activity supersedes internal review
+    if (request.review_state === 'in_review') {
+      updates.review_state = 'none';
+      updates.review_started_at = null;
+    }
+    
+    // Auto-resume hidden requests — client activity brings them back
+    if (request.queue_hidden) {
+      updates.queue_hidden = false;
+      updates.queue_hidden_at = null;
+      updates.queue_resume_date = null;
+    }
+    
+    if (Object.keys(updates).length > 0) {
+      await base44.asServiceRole.entities.ClientFeedbackRequest.update(request.id, updates);
+      console.log('[publicManageScopeReview] operational side effects applied:', Object.keys(updates));
+    }
+  } catch (e) {
+    console.error('[publicManageScopeReview] operational side effects failed (non-blocking):', e.message);
+  }
+}
+
 /** Fire-and-forget notification — never blocks the client response */
 async function notifyScopeActivity(base44, { requestId, projectId, clientName, actionType, comment }) {
   try {
@@ -119,9 +152,13 @@ Deno.serve(async (req) => {
         recorded_at: now,
       });
 
+      // Operational side effects — clear review_state, auto-resume queue
+      applyScopeOperationalSideEffects(base44, request);
+
       // Notify — map scope decision to notification action type
       const notifType = decision === 'approved' ? 'APPROVED'
         : decision === 'request_changes' ? 'REVISION_REQUESTED'
+        : decision === 'not_now' ? 'REVISION_REQUESTED'
         : null;
       if (notifType) {
         notifyScopeActivity(base44, {
@@ -153,6 +190,9 @@ Deno.serve(async (req) => {
         body: comment.trim(),
         posted_at: now,
       });
+
+      // Operational side effects — clear review_state, auto-resume queue
+      applyScopeOperationalSideEffects(base44, request);
 
       notifyScopeActivity(base44, {
         requestId, projectId: request.project_id, clientName: actorName,
@@ -207,6 +247,9 @@ Deno.serve(async (req) => {
         scope_confirmed_at: now,
         scope_confirmed_by_name: actorName,
       });
+
+      // Operational side effects — clear review_state, auto-resume queue
+      applyScopeOperationalSideEffects(base44, request);
 
       notifyScopeActivity(base44, {
         requestId, projectId: request.project_id, clientName: actorName,

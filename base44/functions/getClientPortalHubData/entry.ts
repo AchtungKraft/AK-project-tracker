@@ -3,14 +3,10 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 /**
  * getClientPortalHubData — Single read model for ClientPortalHub
  *
- * Replaces 4 separate frontend .list() calls:
- *   - ClientFeedbackRequest.list()
- *   - ClientFeedbackComment.list()
- *   - ClientFeedbackDecision.list()
- *   - ClientFeedbackAttachment.list()
- *
- * Returns only the fields the Hub UI actually consumes,
- * reducing payload size by ~60-80%.
+ * Returns all entities needed for the Hub operational model.
+ * For client_scope_review requests, also fetches scope-specific activity
+ * (ScopeItemComment, ScopeItemHistory, ScopeConfirmation) and normalizes
+ * it into a unified scopeActivity array the frontend timeline can consume.
  */
 
 Deno.serve(async (req) => {
@@ -33,7 +29,7 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Parallel fetch — all 4 entities at once
+        // Parallel fetch — all 4 core entities at once
         const [
             allRequests,
             allComments,
@@ -45,6 +41,89 @@ Deno.serve(async (req) => {
             base44.entities.ClientFeedbackDecision.list(),
             base44.entities.ClientFeedbackAttachment.list(),
         ]);
+
+        // ── Scope activity: only fetch if scope review requests exist ──
+        const scopeRequestIds = allRequests
+            .filter(r => r.request_type === 'client_scope_review')
+            .map(r => r.id);
+
+        let scopeActivity: any[] = [];
+
+        if (scopeRequestIds.length > 0) {
+            const scopeRequestIdSet = new Set(scopeRequestIds);
+
+            // Parallel fetch scope entities
+            const [scopeComments, scopeHistory, scopeConfirmations] = await Promise.all([
+                base44.entities.ScopeItemComment.list(),
+                base44.entities.ScopeItemHistory.list(),
+                base44.entities.ScopeConfirmation.list(),
+            ]);
+
+            // Normalize ScopeItemComment → scope activity events
+            for (const c of scopeComments) {
+                if (!scopeRequestIdSet.has(c.request_id)) continue;
+                scopeActivity.push({
+                    request_id: c.request_id,
+                    kind: 'scope_comment',
+                    actor: c.author_type === 'client_contact' ? 'client' : 'team',
+                    actor_id: c.author_id,
+                    actor_name: c.author_name,
+                    date: c.posted_at || c.created_date,
+                    body: c.body ? c.body.slice(0, 200) : null,
+                });
+            }
+
+            // Normalize ScopeItemHistory → scope activity events
+            // Only include decision events (not material_change which is system-generated)
+            for (const h of scopeHistory) {
+                if (!scopeRequestIdSet.has(h.request_id)) continue;
+                if (h.event_type === 'material_change') continue; // system event, not client activity
+                
+                const decisionLabel = h.decision === 'approved' ? 'Approved'
+                    : h.decision === 'request_changes' ? 'Requested changes'
+                    : h.decision === 'not_now' ? 'Not now'
+                    : h.decision === 'needs_review' ? 'Needs review'
+                    : h.decision === 'reapproval_required' ? 'Reapproval required'
+                    : h.decision || 'Decision';
+
+                scopeActivity.push({
+                    request_id: h.request_id,
+                    kind: 'scope_decision',
+                    actor: h.actor_type === 'client_contact' ? 'client' : 'team',
+                    actor_id: h.actor_id,
+                    actor_name: h.actor_name,
+                    date: h.recorded_at || h.created_date,
+                    body: decisionLabel,
+                    decision: h.decision,
+                    event_type: h.event_type,
+                });
+            }
+
+            // Normalize ScopeConfirmation → scope activity events
+            for (const conf of scopeConfirmations) {
+                if (!scopeRequestIdSet.has(conf.request_id)) continue;
+
+                const approvedCount = conf.approved_item_ids?.length || 0;
+                const budgetMin = conf.approved_budget_min || 0;
+                const budgetMax = conf.approved_budget_max || 0;
+                const budgetStr = budgetMin || budgetMax
+                    ? ` — $${budgetMin.toLocaleString()}–$${budgetMax.toLocaleString()}`
+                    : '';
+
+                scopeActivity.push({
+                    request_id: conf.request_id,
+                    kind: 'scope_confirmation',
+                    actor: conf.confirmed_by_type === 'client_contact' ? 'client' : 'team',
+                    actor_id: conf.confirmed_by_id,
+                    actor_name: conf.confirmed_by_name,
+                    date: conf.confirmed_at || conf.created_date,
+                    body: `Scope confirmed — ${approvedCount} items approved${budgetStr}`,
+                    revision: conf.revision,
+                });
+            }
+
+            console.log(`[getClientPortalHubData] Scope activity: ${scopeActivity.length} events for ${scopeRequestIds.length} scope reviews`);
+        }
 
         // Project only the fields the Hub UI actually reads
 
@@ -113,7 +192,7 @@ Deno.serve(async (req) => {
         }));
 
         const executionTime = Date.now() - startTime;
-        console.log(`[getClientPortalHubData] ${executionTime}ms | ${requests.length} requests, ${comments.length} comments, ${decisions.length} decisions, ${attachments.length} attachments`);
+        console.log(`[getClientPortalHubData] ${executionTime}ms | ${requests.length} requests, ${comments.length} comments, ${decisions.length} decisions, ${attachments.length} attachments, ${scopeActivity.length} scopeActivity`);
 
         return Response.json({
             success: true,
@@ -121,6 +200,7 @@ Deno.serve(async (req) => {
             comments,
             decisions,
             attachments,
+            scopeActivity,
         });
 
     } catch (error) {

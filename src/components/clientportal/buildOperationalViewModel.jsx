@@ -33,13 +33,14 @@ import { format } from "date-fns";
 /**
  * Build the canonical operational view model for a single feedback request.
  *
- * @param {Object} request    — raw ClientFeedbackRequest record
- * @param {Array}  comments   — all ClientFeedbackComment records for this request
- * @param {Array}  decisions  — all ClientFeedbackDecision records for this request
- * @param {Array}  attachments — all ClientFeedbackAttachment records for this request (optional)
+ * @param {Object} request       — raw ClientFeedbackRequest record
+ * @param {Array}  comments      — all ClientFeedbackComment records for this request
+ * @param {Array}  decisions     — all ClientFeedbackDecision records for this request
+ * @param {Array}  attachments   — all ClientFeedbackAttachment records for this request (optional)
+ * @param {Array}  scopeActivity — normalized scope events for this request (optional, for client_scope_review)
  * @returns {Object} enriched request with all derived operational fields
  */
-export function buildOperationalViewModel(request, comments = [], decisions = [], attachments = []) {
+export function buildOperationalViewModel(request, comments = [], decisions = [], attachments = [], scopeActivity = []) {
   if (!request) return null;
 
   // ── Canonical state (single source of truth) ──
@@ -49,7 +50,8 @@ export function buildOperationalViewModel(request, comments = [], decisions = []
   const { allEvents, latestDisplayEvent, latestStateEvent } = buildFeedbackTimeline(
     request,
     comments,
-    decisions
+    decisions,
+    scopeActivity
   );
 
   // ── Actor & activity derivation ──

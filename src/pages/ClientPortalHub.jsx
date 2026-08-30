@@ -236,6 +236,7 @@ export default function ClientPortalHub() {
   const decisions = hubData?.decisions || [];
   const attachments = hubData?.attachments || [];
   const comments = hubData?.comments || [];
+  const scopeActivity = hubData?.scopeActivity || [];
 
   const { data: projects = [], isLoading: loadingProjects } = useQuery({
     queryKey: ["projects"],
@@ -418,9 +419,10 @@ export default function ClientPortalHub() {
       decisions,
       attachments,
       comments,
-      sortMode
+      sortMode,
+      scopeActivity
     );
-  }, [lifecycleRequests, projects, decisions, attachments, comments, sortMode]);
+  }, [lifecycleRequests, projects, decisions, attachments, comments, sortMode, scopeActivity]);
 
   // Group attention-eligible requests separately (includes archived with activity)
   const attentionProjectGroups = useMemo(() => {
@@ -430,9 +432,10 @@ export default function ClientPortalHub() {
       decisions,
       attachments,
       comments,
-      sortMode
+      sortMode,
+      scopeActivity
     );
-  }, [attentionEligibleRequests, projects, decisions, attachments, comments, sortMode]);
+  }, [attentionEligibleRequests, projects, decisions, attachments, comments, sortMode, scopeActivity]);
 
   // Calculate summary counts including overdue
   const summaryCounts = useMemo(() => {

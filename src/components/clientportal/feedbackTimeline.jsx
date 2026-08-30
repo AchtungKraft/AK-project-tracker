@@ -55,13 +55,14 @@ export function normalizeDate(d) {
 }
 
 /**
- * Build a unified event list from comments and decisions.
- * @param {Object}  request     – The feedback request
- * @param {Array}   comments    – All comments for this request (pre-filtered by request_id)
- * @param {Array}   decisions   – All decisions for this request (pre-filtered by request_id)
+ * Build a unified event list from comments, decisions, and scope activity.
+ * @param {Object}  request        – The feedback request
+ * @param {Array}   comments       – All comments for this request (pre-filtered by request_id)
+ * @param {Array}   decisions      – All decisions for this request (pre-filtered by request_id)
+ * @param {Array}   scopeActivity  – Normalized scope events for this request (optional, for client_scope_review)
  * @returns {{ allEvents: Array, stateEvents: Array, latestDisplayEvent: Object|null, latestStateEvent: Object|null }}
  */
-export function buildFeedbackTimeline(request, comments = [], decisions = []) {
+export function buildFeedbackTimeline(request, comments = [], decisions = [], scopeActivity = []) {
   // ── Build ALL events (timeline display — full history, NO posted_at filter) ──
   const allEvents = [];
 
@@ -103,6 +104,18 @@ export function buildFeedbackTimeline(request, comments = [], decisions = []) {
       date: normalizeDate(getEventTimestamp(d)),
       decision: d,
       body: d.note || decisionLabel,
+    });
+  });
+
+  // ── Scope Review activity (normalized events from backend) ──
+  // These are pre-normalized: { kind, actor, date, body, ... }
+  scopeActivity.forEach(sa => {
+    allEvents.push({
+      kind: sa.kind,           // 'scope_comment' | 'scope_decision' | 'scope_confirmation'
+      actor: sa.actor,         // 'client' | 'team'
+      date: normalizeDate(sa.date),
+      body: sa.body || null,
+      scopeEvent: sa,          // preserve full event for preview
     });
   });
 

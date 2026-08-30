@@ -31,6 +31,7 @@ async function fetchViaBackendFunction() {
     comments: data.comments || [],
     decisions: data.decisions || [],
     attachments: data.attachments || [],
+    scopeActivity: data.scopeActivity || [],
   };
 }
 
@@ -48,6 +49,7 @@ async function fetchViaDirectEntities() {
     comments: comments || [],
     decisions: decisions || [],
     attachments: attachments || [],
+    scopeActivity: [], // Fallback doesn't fetch scope entities
   };
 }
 
@@ -82,6 +84,7 @@ async function loadHubData() {
     commentsCount: result.comments.length,
     decisionsCount: result.decisions.length,
     attachmentsCount: result.attachments.length,
+    scopeActivityCount: result.scopeActivity.length,
   });
 
   return result;
