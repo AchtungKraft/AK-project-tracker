@@ -77,18 +77,27 @@ export default function ScopeConfirmPanel({
             <p className="text-xs text-green-400/70">Approved</p>
             <p className="text-lg font-bold text-green-300">{stats.approved} item{stats.approved !== 1 ? 's' : ''}</p>
             {approvedBudget && <p className="text-sm text-green-400 mt-0.5">{approvedBudget}</p>}
+            {stats.approved_tbd_count > 0 && (
+              <p className="text-[11px] text-green-400/60 mt-0.5">+ {stats.approved_tbd_count} TBD</p>
+            )}
           </div>
           <div className="bg-gray-800/50 border border-gray-700/30 rounded-lg p-3">
             <p className="text-xs text-gray-400">Not Now</p>
             <p className="text-lg font-bold text-gray-300">{stats.not_now} item{stats.not_now !== 1 ? 's' : ''}</p>
+            {(stats.not_now_budget_min > 0 || stats.not_now_budget_max > 0) && (
+              <p className="text-sm text-gray-400 mt-0.5">{formatBudgetRange(stats.not_now_budget_min, stats.not_now_budget_max, false)}</p>
+            )}
+            {stats.not_now_tbd_count > 0 && (
+              <p className="text-[11px] text-gray-500 mt-0.5">+ {stats.not_now_tbd_count} TBD</p>
+            )}
           </div>
         </div>
 
         {stats.request_changes > 0 && (
           <p className="text-xs text-orange-400">{stats.request_changes} item{stats.request_changes !== 1 ? 's' : ''} with changes requested</p>
         )}
-        {stats.tbd_count > 0 && stats.approved > 0 && (
-          <p className="text-xs text-gray-400">{stats.tbd_count} approved item{stats.tbd_count !== 1 ? 's' : ''} with TBD budget</p>
+        {stats.approved_tbd_count > 0 && (
+          <p className="text-xs text-gray-400">{stats.approved_tbd_count} approved item{stats.approved_tbd_count !== 1 ? 's' : ''} with TBD budget</p>
         )}
 
         {!allReviewed && (

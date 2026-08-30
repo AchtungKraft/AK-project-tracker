@@ -1,36 +1,82 @@
 import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle2, Clock, MessageSquare, XCircle, AlertTriangle } from "lucide-react";
+import { CheckCircle2, Clock, MessageSquare, XCircle, AlertTriangle, PauseCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBudgetRange } from "./scopeHelpers";
+
+function DispositionCard({ icon: Icon, label, count, budgetMin, budgetMax, tbdCount, colorScheme, isMobile }) {
+  if (count === 0) return null;
+  const budget = formatBudgetRange(budgetMin, budgetMax, false);
+  return (
+    <Card className={cn("border", colorScheme.card)}>
+      <CardContent className={cn("flex items-center justify-between", isMobile ? "p-3" : "p-4")}>
+        <div className="flex items-center gap-3">
+          <div className={cn("p-2 rounded-lg", colorScheme.iconBg)}>
+            <Icon className={cn("w-5 h-5", colorScheme.icon)} />
+          </div>
+          <div>
+            <p className={cn("font-bold", colorScheme.title, isMobile ? "text-base" : "text-lg")}>{label}</p>
+            <p className={cn("text-xs", colorScheme.subtitle)}>
+              {count} item{count !== 1 ? 's' : ''}
+              {tbdCount > 0 && <span className="ml-1 opacity-70">+ {tbdCount} TBD</span>}
+            </p>
+          </div>
+        </div>
+        {budget && (
+          <p className={cn("font-bold", colorScheme.title, isMobile ? "text-lg" : "text-xl")}>{budget}</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+const APPROVED_COLORS = {
+  card: "bg-green-950/20 border-green-700/40",
+  iconBg: "bg-green-500/20",
+  icon: "text-green-400",
+  title: "text-green-300",
+  subtitle: "text-green-400/70",
+};
+
+const NOT_NOW_COLORS = {
+  card: "bg-gray-800/40 border-gray-700/40",
+  iconBg: "bg-gray-500/20",
+  icon: "text-gray-400",
+  title: "text-gray-300",
+  subtitle: "text-gray-400/70",
+};
 
 export default function ScopeSummaryBar({ stats, isMobile = false }) {
   if (!stats || stats.total === 0) return null;
 
-  const approvedBudget = formatBudgetRange(stats.approved_budget_min, stats.approved_budget_max, false);
-  const approvedTbdCount = stats.tbd_count; // simplified — could refine later
-
   return (
     <div className="space-y-3">
-      {/* Approved Scope Total */}
-      {stats.approved > 0 && (
-        <Card className="bg-green-950/20 border-green-700/40">
-          <CardContent className={cn("flex items-center justify-between", isMobile ? "p-3" : "p-4")}>
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-500/20 rounded-lg">
-                <CheckCircle2 className="w-5 h-5 text-green-400" />
-              </div>
-              <div>
-                <p className={cn("font-bold text-green-300", isMobile ? "text-base" : "text-lg")}>Approved Scope</p>
-                <p className="text-xs text-green-400/70">{stats.approved} item{stats.approved !== 1 ? 's' : ''} approved</p>
-              </div>
-            </div>
-            {approvedBudget && (
-              <p className={cn("font-bold text-green-300", isMobile ? "text-lg" : "text-xl")}>{approvedBudget}</p>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      {/* Disposition cards */}
+      <div className={cn(
+        "grid gap-3",
+        (stats.approved > 0 && stats.not_now > 0) ? (isMobile ? "grid-cols-1" : "grid-cols-2") : "grid-cols-1"
+      )}>
+        <DispositionCard
+          icon={CheckCircle2}
+          label="Approved Scope"
+          count={stats.approved}
+          budgetMin={stats.approved_budget_min}
+          budgetMax={stats.approved_budget_max}
+          tbdCount={stats.approved_tbd_count}
+          colorScheme={APPROVED_COLORS}
+          isMobile={isMobile}
+        />
+        <DispositionCard
+          icon={PauseCircle}
+          label="Not Now"
+          count={stats.not_now}
+          budgetMin={stats.not_now_budget_min}
+          budgetMax={stats.not_now_budget_max}
+          tbdCount={stats.not_now_tbd_count}
+          colorScheme={NOT_NOW_COLORS}
+          isMobile={isMobile}
+        />
+      </div>
 
       {/* Status breakdown */}
       <div className={cn("grid gap-2", isMobile ? "grid-cols-2" : "grid-cols-5")}>

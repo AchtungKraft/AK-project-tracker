@@ -63,6 +63,10 @@ export function computeRollup(items) {
     tbd_count: 0,
     approved_budget_min: 0,
     approved_budget_max: 0,
+    approved_tbd_count: 0,
+    not_now_budget_min: 0,
+    not_now_budget_max: 0,
+    not_now_tbd_count: 0,
   };
 
   for (const item of items) {
@@ -77,9 +81,18 @@ export function computeRollup(items) {
     }
 
     if (s === 'approved') {
-      if (!item.budget_tbd) {
+      if (item.budget_tbd) {
+        stats.approved_tbd_count++;
+      } else {
         if (item.budget_min != null) stats.approved_budget_min += item.budget_min;
         if (item.budget_max != null) stats.approved_budget_max += item.budget_max;
+      }
+    } else if (s === 'not_now') {
+      if (item.budget_tbd) {
+        stats.not_now_tbd_count++;
+      } else {
+        if (item.budget_min != null) stats.not_now_budget_min += item.budget_min;
+        if (item.budget_max != null) stats.not_now_budget_max += item.budget_max;
       }
     }
   }
