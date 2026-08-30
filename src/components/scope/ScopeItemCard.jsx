@@ -7,6 +7,7 @@ import { CheckCircle2, XCircle, MessageSquare, Clock, AlertTriangle, ChevronDown
 import { cn } from "@/lib/utils";
 import { DECISION_LABELS, DECISION_COLORS, formatBudgetRange } from "./scopeHelpers";
 import StaffStatusOverrideMenu from "./StaffStatusOverrideMenu";
+import ImageModal from "@/components/ui/ImageModal";
 import { format } from "date-fns";
 
 export default function ScopeItemCard({
@@ -26,6 +27,8 @@ export default function ScopeItemCard({
   const [showHistory, setShowHistory] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
 
   const status = item.decision_status || "needs_review";
   const budget = formatBudgetRange(item.budget_min, item.budget_max, item.budget_tbd);
@@ -107,11 +110,28 @@ export default function ScopeItemCard({
 
         {/* Images */}
         {item.images?.length > 0 && (
-          <div className="flex gap-2 flex-wrap">
-            {item.images.map((url, idx) => (
-              <img key={idx} src={url} alt="" className="w-20 h-20 rounded-lg object-cover border border-gray-700" />
-            ))}
-          </div>
+          <>
+            <div className="flex gap-2 flex-wrap">
+              {item.images.slice(0, 4).map((url, idx) => (
+                <button key={idx} onClick={() => { setLightboxIndex(idx); setLightboxOpen(true); }}
+                  className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500 transition-colors cursor-pointer group">
+                  <img src={url} alt="" className="w-full h-full object-cover" />
+                  {idx === 3 && item.images.length > 4 && (
+                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                      <span className="text-white font-semibold text-sm">+{item.images.length - 4}</span>
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+            <ImageModal
+              isOpen={lightboxOpen}
+              onClose={() => setLightboxOpen(false)}
+              images={item.images}
+              currentIndex={lightboxIndex}
+              onNavigate={setLightboxIndex}
+            />
+          </>
         )}
 
         {/* Decision audit — latest */}

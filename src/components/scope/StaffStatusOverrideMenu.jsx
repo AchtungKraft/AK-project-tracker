@@ -65,7 +65,7 @@ export default function StaffStatusOverrideMenu({
         <DropdownMenuContent align="end" className="w-48 bg-gray-900 border-gray-700">
           {onEdit && (
             <>
-              <DropdownMenuItem onClick={() => onEdit(item)} className="text-xs text-gray-300 hover:text-white">
+              <DropdownMenuItem onSelect={() => { requestAnimationFrame(() => onEdit(item)); }} className="text-xs text-gray-300 hover:text-white">
                 Edit Item
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-gray-700/50" />
