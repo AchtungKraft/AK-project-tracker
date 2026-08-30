@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CheckCircle2, XCircle, MessageSquare, Clock, AlertTriangle, ChevronDown, ChevronUp, Send, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DECISION_LABELS, DECISION_COLORS, formatBudgetRange } from "./scopeHelpers";
+import StaffStatusOverrideMenu from "./StaffStatusOverrideMenu";
 import { format } from "date-fns";
 
 export default function ScopeItemCard({
@@ -14,19 +15,25 @@ export default function ScopeItemCard({
   history = [],
   onDecision,
   onComment,
+  onStaffStatusChange,
+  onStaffRequireReapproval,
   isClientView = false,
   readOnly = false,
   onEdit,
   isMobile = false,
 }) {
   const [showComments, setShowComments] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const status = item.decision_status || "needs_review";
   const budget = formatBudgetRange(item.budget_min, item.budget_max, item.budget_tbd);
   const itemComments = comments.filter(c => c.scope_item_id === item.id).sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
-  const latestDecisionEntry = history.filter(h => h.scope_item_id === item.id && h.event_type === 'decision').sort((a, b) => new Date(b.recorded_at) - new Date(a.recorded_at))[0];
+  const itemHistory = history.filter(h => h.scope_item_id === item.id).sort((a, b) => new Date(b.recorded_at) - new Date(a.recorded_at));
+  const latestDecisionEntry = itemHistory.find(h => h.event_type === 'decision');
+
+  const isStaff = !isClientView;
 
   const handleDecision = async (decision) => {
     if (onDecision) await onDecision(item.id, decision);
@@ -51,7 +58,7 @@ export default function ScopeItemCard({
       status === "needs_review" && "border-gray-700/50 bg-gray-800/30",
     )}>
       <div className={cn("space-y-3", isMobile ? "p-3" : "p-4")}>
-        {/* Title + Budget + Status */}
+        {/* Title + Budget + Status + Staff Menu */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <h4 className={cn("font-semibold text-white", isMobile ? "text-sm" : "text-base")}>{item.title}</h4>
@@ -63,22 +70,34 @@ export default function ScopeItemCard({
               </p>
             )}
           </div>
-          <Badge className={cn("text-xs border shrink-0", DECISION_COLORS[status])}>
-            {DECISION_LABELS[status]}
-          </Badge>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Badge className={cn("text-xs border", DECISION_COLORS[status])}>
+              {DECISION_LABELS[status]}
+            </Badge>
+            {isStaff && (
+              <StaffStatusOverrideMenu
+                item={item}
+                onStatusChange={onStaffStatusChange}
+                onRequireReapproval={onStaffRequireReapproval}
+                onEdit={onEdit}
+              />
+            )}
+          </div>
         </div>
 
-        {/* Reapproval warning */}
+        {/* Reapproval warning — client-facing version */}
         {status === "reapproval_required" && (
           <div className="flex items-center gap-2 p-2 rounded-md bg-red-950/30 border border-red-700/30">
             <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
-            <p className="text-xs text-red-300">Updated since client approval — review required</p>
+            <p className="text-xs text-red-300">
+              {isClientView ? "Updated — please review again" : "Updated since approval — review required"}
+            </p>
           </div>
         )}
 
         {/* Description */}
         {item.description && (
-          <p className={cn("text-gray-400 leading-relaxed", isMobile ? "text-sm" : "text-sm")}>{item.description}</p>
+          <p className={cn("text-gray-400 leading-relaxed", "text-sm")}>{item.description}</p>
         )}
 
         {/* Budget Note */}
@@ -95,15 +114,18 @@ export default function ScopeItemCard({
           </div>
         )}
 
-        {/* Decision audit */}
+        {/* Decision audit — latest */}
         {latestDecisionEntry && status !== "needs_review" && (
           <p className="text-xs text-gray-500">
             {DECISION_LABELS[latestDecisionEntry.decision]} by {latestDecisionEntry.actor_name || 'Unknown'}
-            {latestDecisionEntry.recorded_at && ` · ${format(new Date(latestDecisionEntry.recorded_at), "MMM d")}`}
+            {latestDecisionEntry.actor_type === 'internal_user' && !isClientView && (
+              <span className="text-gray-600"> · Staff</span>
+            )}
+            {latestDecisionEntry.recorded_at && ` · ${format(new Date(latestDecisionEntry.recorded_at), "MMM d, h:mm a")}`}
           </p>
         )}
 
-        {/* Decision Actions — client only, not read-only */}
+        {/* Client Decision Actions — only for appropriate states */}
         {!readOnly && (
           <div className={cn("flex gap-2 pt-1", isMobile ? "flex-col" : "flex-wrap")}>
             {(status === "needs_review" || status === "reapproval_required") && (
@@ -129,7 +151,7 @@ export default function ScopeItemCard({
                 </Button>
               </>
             )}
-            {status === "approved" && (
+            {status === "approved" && !isStaff && (
               <p className="text-xs text-green-400/70 flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3" /> Approved
               </p>
@@ -140,6 +162,41 @@ export default function ScopeItemCard({
               </Button>
             )}
           </div>
+        )}
+
+        {/* History toggle — staff only */}
+        {isStaff && itemHistory.length > 0 && (
+          <>
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className="flex items-center gap-1.5 text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
+            >
+              <Clock className="w-3 h-3" />
+              {itemHistory.length} history event{itemHistory.length !== 1 ? 's' : ''}
+              {showHistory ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+
+            {showHistory && (
+              <div className="space-y-1.5 pl-2 border-l-2 border-gray-700/40">
+                {itemHistory.map(h => (
+                  <div key={h.id} className="text-[11px] text-gray-500">
+                    <span className="text-gray-400">{h.actor_name || 'Unknown'}</span>
+                    {h.actor_type === 'internal_user' && <span className="text-gray-600"> · Staff</span>}
+                    {h.actor_type === 'client_contact' && <span className="text-cyan-700"> · Client</span>}
+                    <span className="mx-1">→</span>
+                    <span className="text-gray-300">{DECISION_LABELS[h.decision] || h.event_type}</span>
+                    {h.previous_decision && h.previous_decision !== h.decision && (
+                      <span className="text-gray-600"> (was {DECISION_LABELS[h.previous_decision]})</span>
+                    )}
+                    {h.note && <span className="text-gray-600 italic ml-1">— {h.note}</span>}
+                    {h.recorded_at && (
+                      <span className="text-gray-700 ml-1">{format(new Date(h.recorded_at), "MMM d, h:mm a")}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
 
         {/* Comments toggle */}

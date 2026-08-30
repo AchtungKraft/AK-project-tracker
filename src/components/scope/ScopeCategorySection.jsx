@@ -11,6 +11,8 @@ export default function ScopeCategorySection({
   history = [],
   onDecision,
   onComment,
+  onStaffStatusChange,
+  onStaffRequireReapproval,
   isClientView = false,
   readOnly = false,
   onEditItem,
@@ -93,6 +95,8 @@ export default function ScopeCategorySection({
                   history={history}
                   onDecision={onDecision}
                   onComment={onComment}
+                  onStaffStatusChange={onStaffStatusChange}
+                  onStaffRequireReapproval={onStaffRequireReapproval}
                   isClientView={isClientView}
                   readOnly={readOnly}
                   onEditItem={onEditItem}

@@ -1,16 +1,32 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Loader2, Shield } from "lucide-react";
+import { CheckCircle2, Loader2, Shield, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBudgetRange } from "./scopeHelpers";
 
+/**
+ * Detect if the current approved item set differs from the last confirmation snapshot.
+ */
+function isConfirmationStale(lastConfirmation, items) {
+  if (!lastConfirmation) return false;
+  const currentApprovedIds = items
+    .filter(i => i.decision_status === 'approved')
+    .map(i => i.id)
+    .sort();
+  const snapshotIds = (lastConfirmation.approved_item_ids || []).slice().sort();
+  if (currentApprovedIds.length !== snapshotIds.length) return true;
+  return currentApprovedIds.some((id, idx) => id !== snapshotIds[idx]);
+}
+
 export default function ScopeConfirmPanel({
   stats,
+  items = [],
   lastConfirmation,
   onConfirm,
   readOnly = false,
   isMobile = false,
+  isClientView = false,
 }) {
   const [confirming, setConfirming] = useState(false);
 
@@ -18,6 +34,8 @@ export default function ScopeConfirmPanel({
 
   const approvedBudget = formatBudgetRange(stats.approved_budget_min, stats.approved_budget_max, false);
   const allReviewed = stats.needs_review === 0 && stats.reapproval_required === 0;
+
+  const stale = useMemo(() => isConfirmationStale(lastConfirmation, items), [lastConfirmation, items]);
 
   const handleConfirm = async () => {
     setConfirming(true);
@@ -37,6 +55,22 @@ export default function ScopeConfirmPanel({
             <p className="text-xs text-gray-400">Review your selections and confirm the selected project scope</p>
           </div>
         </div>
+
+        {/* Stale confirmation warning */}
+        {stale && lastConfirmation && (
+          <div className="flex items-center gap-2 p-2.5 rounded-md bg-amber-950/30 border border-amber-700/30">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <div>
+              <p className="text-xs text-amber-300 font-medium">Scope changed since confirmation</p>
+              <p className="text-[11px] text-amber-400/70 mt-0.5">
+                Confirmed {lastConfirmation.confirmed_by_name ? `by ${lastConfirmation.confirmed_by_name}` : ''}
+                {' '}on {new Date(lastConfirmation.confirmed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                {lastConfirmation.revision > 1 && ` (v${lastConfirmation.revision})`}
+                {' · '}Reconfirmation required
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Summary */}
         <div className="grid grid-cols-2 gap-3">
@@ -64,11 +98,11 @@ export default function ScopeConfirmPanel({
           </p>
         )}
 
-        {lastConfirmation && (
+        {lastConfirmation && !stale && (
           <p className="text-xs text-gray-500 italic">
             Last confirmed by {lastConfirmation.confirmed_by_name || 'Unknown'} on{' '}
             {new Date(lastConfirmation.confirmed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-            {lastConfirmation.revision > 1 && ` (revision ${lastConfirmation.revision})`}
+            {lastConfirmation.revision > 1 && ` (v${lastConfirmation.revision})`}
           </p>
         )}
 
@@ -84,7 +118,7 @@ export default function ScopeConfirmPanel({
             )}
           >
             {confirming ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-            Confirm Selected Scope
+            {stale ? 'Reconfirm Scope' : 'Confirm Selected Scope'}
           </Button>
         )}
       </CardContent>

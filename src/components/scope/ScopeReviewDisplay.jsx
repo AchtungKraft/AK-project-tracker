@@ -9,6 +9,7 @@ import {
   buildScopeHierarchy,
   computeRollup,
   computeMaterialHash,
+  DECISION_LABELS,
 } from "./scopeHelpers";
 import ScopeCategorySection from "./ScopeCategorySection";
 import ScopeSummaryBar from "./ScopeSummaryBar";
@@ -232,6 +233,72 @@ export default function ScopeReviewDisplay({
     invalidate();
   }, [invalidate]);
 
+  // ─── Staff Status Override ───
+  const handleStaffStatusChange = useCallback(async (itemId, newStatus, note) => {
+    const item = items.find(i => i.id === itemId);
+    if (!item) return;
+    const now = new Date().toISOString();
+    const previous = item.decision_status || 'needs_review';
+
+    const updateData = {
+      decision_status: newStatus,
+      decision_at: now,
+      decision_actor_type: 'internal_user',
+      decision_actor_id: userId,
+    };
+    if (newStatus === 'approved') {
+      updateData.material_hash = computeMaterialHash(item);
+    }
+
+    await base44.entities.ScopeItem.update(itemId, updateData);
+
+    await base44.entities.ScopeItemHistory.create({
+      scope_item_id: itemId,
+      request_id: requestId,
+      event_type: 'decision',
+      decision: newStatus,
+      previous_decision: previous,
+      actor_type: 'internal_user',
+      actor_id: userId,
+      actor_name: userName || 'Achtung Kraft',
+      note: note || null,
+      recorded_at: now,
+    });
+
+    invalidate();
+    toast({ description: `Status changed: ${DECISION_LABELS[previous]} → ${DECISION_LABELS[newStatus]}` });
+  }, [items, requestId, userId, userName, invalidate, toast]);
+
+  const handleStaffRequireReapproval = useCallback(async (itemId, note) => {
+    const item = items.find(i => i.id === itemId);
+    if (!item) return;
+    const now = new Date().toISOString();
+    const previous = item.decision_status || 'needs_review';
+
+    await base44.entities.ScopeItem.update(itemId, {
+      decision_status: 'reapproval_required',
+      decision_at: now,
+      decision_actor_type: 'internal_user',
+      decision_actor_id: userId,
+    });
+
+    await base44.entities.ScopeItemHistory.create({
+      scope_item_id: itemId,
+      request_id: requestId,
+      event_type: 'reapproval_triggered',
+      decision: 'reapproval_required',
+      previous_decision: previous,
+      actor_type: 'internal_user',
+      actor_id: userId,
+      actor_name: userName || 'Achtung Kraft',
+      note: note || 'Staff requested reapproval',
+      recorded_at: now,
+    });
+
+    invalidate();
+    toast({ description: 'Reapproval required — item returned for client review' });
+  }, [items, requestId, userId, userName, invalidate, toast]);
+
   // ─── Item CRUD ───
   const handleSaveItem = useCallback(async (data, existingId) => {
     if (existingId) {
@@ -354,6 +421,8 @@ export default function ScopeReviewDisplay({
               history={history}
               onDecision={handleDecision}
               onComment={handleComment}
+              onStaffStatusChange={canEdit ? handleStaffStatusChange : undefined}
+              onStaffRequireReapproval={canEdit ? handleStaffRequireReapproval : undefined}
               isClientView={isClientView}
               readOnly={readOnly}
               onEditItem={canEdit ? setEditingItem : undefined}
@@ -381,10 +450,12 @@ export default function ScopeReviewDisplay({
       {items.length > 0 && (
         <ScopeConfirmPanel
           stats={stats}
+          items={items}
           lastConfirmation={lastConfirmation}
           onConfirm={handleConfirm}
           readOnly={readOnly}
           isMobile={isMobile}
+          isClientView={isClientView}
         />
       )}
     </div>

@@ -12,6 +12,8 @@ export default function ScopeGroupSection({
   history = [],
   onDecision,
   onComment,
+  onStaffStatusChange,
+  onStaffRequireReapproval,
   isClientView = false,
   readOnly = false,
   onEditItem,
@@ -74,6 +76,8 @@ export default function ScopeGroupSection({
               history={history}
               onDecision={onDecision}
               onComment={onComment}
+              onStaffStatusChange={onStaffStatusChange}
+              onStaffRequireReapproval={onStaffRequireReapproval}
               isClientView={isClientView}
               readOnly={readOnly}
               onEdit={onEditItem}
