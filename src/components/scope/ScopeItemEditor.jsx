@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Save, X, Upload, Loader2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { cn } from "@/lib/utils";
+import LaborEstimateEditor from "./LaborEstimateEditor";
 
 /**
  * Scope Item editor — used for both creating and editing items.
@@ -17,6 +18,8 @@ export default function ScopeItemEditor({
   requestId,
   categories = [],
   groups = [],
+  laborGroups = [],
+  laborEstimates: initialLaborEstimates = [],
   onSave,
   onCancel,
   editItem = null,
@@ -36,6 +39,15 @@ export default function ScopeItemEditor({
   const [images, setImages] = useState(editItem?.images || []);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [labor, setLabor] = useState(() =>
+    initialLaborEstimates.map(le => ({
+      labor_group_id: le.labor_group_id,
+      labor_group_name_snapshot: le.labor_group_name_snapshot || '',
+      hours_min: le.hours_min ?? "",
+      hours_max: le.hours_max ?? "",
+      rate_snapshot: le.rate_snapshot || 0,
+    }))
+  );
 
   const sortedCategories = [...categories].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   const sortedGroups = [...groups].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
@@ -65,7 +77,7 @@ export default function ScopeItemEditor({
       budget_tbd: budgetTbd,
       images: images.length > 0 ? images : null,
     };
-    await onSave(data, editItem?.id);
+    await onSave(data, editItem?.id, labor);
     setSaving(false);
   };
 
@@ -139,6 +151,9 @@ export default function ScopeItemEditor({
           placeholder="Client-facing budget note (optional)..."
           className="h-8 bg-gray-800 border-gray-700 text-white text-xs" />
       </div>
+
+      {/* AK Labor Estimates */}
+      <LaborEstimateEditor laborGroups={laborGroups} estimates={labor} onChange={setLabor} isMobile={isMobile} />
 
       {/* Images */}
       <div className="flex items-center gap-2 flex-wrap">

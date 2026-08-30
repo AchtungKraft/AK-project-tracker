@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { computeRollup, formatBudgetCompact } from "./scopeHelpers";
+import { computeRollup, formatBudgetCompact, formatHoursRange } from "./scopeHelpers";
 import ScopeItemCard from "./ScopeItemCard";
 
 export default function ScopeGroupSection({
@@ -10,6 +10,7 @@ export default function ScopeGroupSection({
   categoryId,
   comments = [],
   history = [],
+  laborEstimates = [],
   onDecision,
   onComment,
   onStaffStatusChange,
@@ -25,7 +26,7 @@ export default function ScopeGroupSection({
 
   const allItems = group.items || [];
   const filteredItems = filter === "all" ? allItems : allItems.filter(i => (i.decision_status || "needs_review") === filter);
-  const stats = computeRollup(allItems);
+  const stats = computeRollup(allItems, laborEstimates);
   const budget = formatBudgetCompact(stats.budget_min, stats.budget_max, false);
 
   // Hide empty groups after filtering
@@ -54,7 +55,11 @@ export default function ScopeGroupSection({
           <span className="text-[10px] text-gray-500 ml-1">
             {statusParts.join(' · ')}
           </span>
-          {budget && <span className="text-[10px] text-cyan-500/70 ml-auto">{budget}</span>}
+          <span className="flex-1" />
+          {stats.ak_hours_max > 0 && (
+            <span className="text-[10px] text-red-400/60 mr-2">{formatHoursRange(stats.ak_hours_min, stats.ak_hours_max)}</span>
+          )}
+          {budget && <span className="text-[10px] text-cyan-500/70">{budget}</span>}
         </button>
 
         {canEdit && onAddItem && (
@@ -74,6 +79,7 @@ export default function ScopeGroupSection({
               item={item}
               comments={comments}
               history={history}
+              laborEstimates={laborEstimates.filter(le => le.scope_item_id === item.id)}
               onDecision={onDecision}
               onComment={onComment}
               onStaffStatusChange={onStaffStatusChange}

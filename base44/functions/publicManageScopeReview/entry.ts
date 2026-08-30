@@ -6,7 +6,12 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
-function materialHash(item) {
+async function materialHash(base44, item) {
+  // Include labor estimates in hash for reapproval detection
+  const laborEst = await base44.asServiceRole.entities.ScopeItemLaborEstimate.filter({ scope_item_id: item.id });
+  const labor = laborEst
+    .map(le => ({ gid: le.labor_group_id, hmin: le.hours_min, hmax: le.hours_max, rate: le.rate_snapshot }))
+    .sort((a, b) => a.gid.localeCompare(b.gid));
   return JSON.stringify({
     title: item.title || '',
     description: item.description || '',
@@ -14,6 +19,7 @@ function materialHash(item) {
     budget_max: item.budget_max ?? null,
     budget_note: item.budget_note || '',
     images: (item.images || []).slice().sort(),
+    labor,
   });
 }
 
@@ -137,7 +143,7 @@ Deno.serve(async (req) => {
         decision_actor_type: 'client_contact',
         decision_actor_id: actorId,
       };
-      if (decision === 'approved') update.material_hash = materialHash(item);
+      if (decision === 'approved') update.material_hash = await materialHash(base44, item);
 
       const updatedItem = await base44.asServiceRole.entities.ScopeItem.update(itemId, update);
       const history = await base44.asServiceRole.entities.ScopeItemHistory.create({
@@ -222,6 +228,14 @@ Deno.serve(async (req) => {
       const latestRevision = existing.reduce((m, c) => Math.max(m, c.revision || 0), 0);
       const budgetMin = approved.reduce((sum, i) => sum + (i.budget_tbd ? 0 : (i.budget_min || 0)), 0);
       const budgetMax = approved.reduce((sum, i) => sum + (i.budget_tbd ? 0 : (i.budget_max || 0)), 0);
+
+      // Compute approved labor hours snapshot
+      const approvedIds = new Set(approved.map(i => i.id));
+      const allLabor = await base44.asServiceRole.entities.ScopeItemLaborEstimate.filter({ request_id: requestId });
+      const approvedLabor = allLabor.filter(le => approvedIds.has(le.scope_item_id));
+      const akHoursMin = approvedLabor.reduce((s, le) => s + (le.hours_min || 0), 0);
+      const akHoursMax = approvedLabor.reduce((s, le) => s + (le.hours_max || 0), 0);
+
       const summary = {
         total: items.length,
         approved: approved.length,
@@ -238,6 +252,8 @@ Deno.serve(async (req) => {
         approved_item_ids: approved.map(i => i.id),
         approved_budget_min: budgetMin,
         approved_budget_max: budgetMax,
+        approved_ak_hours_min: akHoursMin,
+        approved_ak_hours_max: akHoursMax,
         total_items: items.length,
         revision: latestRevision + 1,
         summary_snapshot: summary,

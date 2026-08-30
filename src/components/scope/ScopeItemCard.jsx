@@ -7,6 +7,7 @@ import { CheckCircle2, XCircle, MessageSquare, Clock, AlertTriangle, ChevronDown
 import { cn } from "@/lib/utils";
 import { DECISION_LABELS, DECISION_COLORS, formatBudgetRange } from "./scopeHelpers";
 import StaffStatusOverrideMenu from "./StaffStatusOverrideMenu";
+import LaborSummaryInline from "./LaborSummaryInline";
 import ImageModal from "@/components/ui/ImageModal";
 import { format } from "date-fns";
 
@@ -14,6 +15,7 @@ export default function ScopeItemCard({
   item,
   comments = [],
   history = [],
+  laborEstimates = [],
   onDecision,
   onComment,
   onStaffStatusChange,
@@ -102,6 +104,9 @@ export default function ScopeItemCard({
         {item.description && (
           <p className={cn("text-gray-400 leading-relaxed", "text-sm")}>{item.description}</p>
         )}
+
+        {/* AK Labor Summary */}
+        <LaborSummaryInline laborEstimates={laborEstimates} isClientView={isClientView} />
 
         {/* Budget Note */}
         {item.budget_note && (

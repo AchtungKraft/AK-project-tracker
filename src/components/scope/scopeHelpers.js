@@ -48,9 +48,10 @@ export function formatBudgetCompact(min, max, tbd) {
 }
 
 /**
- * Compute rollup stats for a list of ScopeItems
+ * Compute rollup stats for a list of ScopeItems.
+ * Optionally accepts laborEstimates array to compute AK labor rollups.
  */
-export function computeRollup(items) {
+export function computeRollup(items, laborEstimates = []) {
   const stats = {
     total: items.length,
     needs_review: 0,
@@ -67,7 +68,29 @@ export function computeRollup(items) {
     not_now_budget_min: 0,
     not_now_budget_max: 0,
     not_now_tbd_count: 0,
+    // AK labor rollups — overall
+    ak_hours_min: 0,
+    ak_hours_max: 0,
+    ak_labor_min: 0,
+    ak_labor_max: 0,
+    // AK labor — approved disposition
+    approved_ak_hours_min: 0,
+    approved_ak_hours_max: 0,
+    approved_ak_labor_min: 0,
+    approved_ak_labor_max: 0,
+    // AK labor — not now disposition
+    not_now_ak_hours_min: 0,
+    not_now_ak_hours_max: 0,
+    not_now_ak_labor_min: 0,
+    not_now_ak_labor_max: 0,
   };
+
+  // Build lookup: scope_item_id → labor estimates
+  const laborByItem = new Map();
+  for (const le of laborEstimates) {
+    if (!laborByItem.has(le.scope_item_id)) laborByItem.set(le.scope_item_id, []);
+    laborByItem.get(le.scope_item_id).push(le);
+  }
 
   for (const item of items) {
     const s = item.decision_status || 'needs_review';
@@ -80,6 +103,21 @@ export function computeRollup(items) {
       if (item.budget_max != null) stats.budget_max += item.budget_max;
     }
 
+    // Item-level labor totals
+    const itemLabor = laborByItem.get(item.id) || [];
+    let itemHoursMin = 0, itemHoursMax = 0, itemLaborMin = 0, itemLaborMax = 0;
+    for (const le of itemLabor) {
+      itemHoursMin += le.hours_min || 0;
+      itemHoursMax += le.hours_max || 0;
+      itemLaborMin += (le.hours_min || 0) * (le.rate_snapshot || 0);
+      itemLaborMax += (le.hours_max || 0) * (le.rate_snapshot || 0);
+    }
+
+    stats.ak_hours_min += itemHoursMin;
+    stats.ak_hours_max += itemHoursMax;
+    stats.ak_labor_min += itemLaborMin;
+    stats.ak_labor_max += itemLaborMax;
+
     if (s === 'approved') {
       if (item.budget_tbd) {
         stats.approved_tbd_count++;
@@ -87,6 +125,10 @@ export function computeRollup(items) {
         if (item.budget_min != null) stats.approved_budget_min += item.budget_min;
         if (item.budget_max != null) stats.approved_budget_max += item.budget_max;
       }
+      stats.approved_ak_hours_min += itemHoursMin;
+      stats.approved_ak_hours_max += itemHoursMax;
+      stats.approved_ak_labor_min += itemLaborMin;
+      stats.approved_ak_labor_max += itemLaborMax;
     } else if (s === 'not_now') {
       if (item.budget_tbd) {
         stats.not_now_tbd_count++;
@@ -94,6 +136,10 @@ export function computeRollup(items) {
         if (item.budget_min != null) stats.not_now_budget_min += item.budget_min;
         if (item.budget_max != null) stats.not_now_budget_max += item.budget_max;
       }
+      stats.not_now_ak_hours_min += itemHoursMin;
+      stats.not_now_ak_hours_max += itemHoursMax;
+      stats.not_now_ak_labor_min += itemLaborMin;
+      stats.not_now_ak_labor_max += itemLaborMax;
     }
   }
 
@@ -101,9 +147,62 @@ export function computeRollup(items) {
 }
 
 /**
+ * Compute labor breakdown by labor group for a set of items.
+ * Returns an array of { labor_group_id, name, hours_min, hours_max, cost_min, cost_max }.
+ */
+export function computeLaborBreakdown(items, laborEstimates = []) {
+  const itemIds = new Set(items.map(i => i.id));
+  const relevant = laborEstimates.filter(le => itemIds.has(le.scope_item_id));
+  const byGroup = new Map();
+  for (const le of relevant) {
+    const key = le.labor_group_id;
+    if (!byGroup.has(key)) {
+      byGroup.set(key, { labor_group_id: key, name: le.labor_group_name_snapshot || 'Unknown', hours_min: 0, hours_max: 0, cost_min: 0, cost_max: 0 });
+    }
+    const g = byGroup.get(key);
+    g.hours_min += le.hours_min || 0;
+    g.hours_max += le.hours_max || 0;
+    g.cost_min += (le.hours_min || 0) * (le.rate_snapshot || 0);
+    g.cost_max += (le.hours_max || 0) * (le.rate_snapshot || 0);
+  }
+  return Array.from(byGroup.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Compute labor totals for a single scope item.
+ */
+export function computeItemLaborTotals(laborEstimates = []) {
+  let hours_min = 0, hours_max = 0, cost_min = 0, cost_max = 0;
+  for (const le of laborEstimates) {
+    hours_min += le.hours_min || 0;
+    hours_max += le.hours_max || 0;
+    cost_min += (le.hours_min || 0) * (le.rate_snapshot || 0);
+    cost_max += (le.hours_max || 0) * (le.rate_snapshot || 0);
+  }
+  return { hours_min, hours_max, cost_min, cost_max };
+}
+
+/** Format hours range for display */
+export function formatHoursRange(min, max) {
+  if (!min && !max) return null;
+  const fmt = v => Number.isInteger(v) ? v.toString() : v.toFixed(1);
+  if (min != null && max != null && min !== max) return `${fmt(min)}–${fmt(max)} hrs`;
+  if (min != null) return `${fmt(min)} hrs`;
+  return `${fmt(max)} hrs`;
+}
+
+/**
  * Compute a deterministic hash of material fields for reapproval detection.
  */
-export function computeMaterialHash(item) {
+/**
+ * Compute a deterministic hash of material fields for reapproval detection.
+ * Includes labor estimate data so changes trigger reapproval.
+ */
+export function computeMaterialHash(item, laborEstimates = []) {
+  const itemLabor = laborEstimates
+    .filter(le => le.scope_item_id === item.id)
+    .map(le => ({ gid: le.labor_group_id, hmin: le.hours_min, hmax: le.hours_max, rate: le.rate_snapshot }))
+    .sort((a, b) => a.gid.localeCompare(b.gid));
   const fields = {
     title: item.title || '',
     description: item.description || '',
@@ -111,6 +210,7 @@ export function computeMaterialHash(item) {
     budget_max: item.budget_max ?? null,
     budget_note: item.budget_note || '',
     images: (item.images || []).slice().sort(),
+    labor: itemLabor,
   };
   return JSON.stringify(fields);
 }

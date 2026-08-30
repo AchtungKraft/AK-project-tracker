@@ -2,13 +2,14 @@ import React, { useState } from "react";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { computeRollup, formatBudgetCompact } from "./scopeHelpers";
+import { computeRollup, formatBudgetCompact, formatHoursRange } from "./scopeHelpers";
 import ScopeGroupSection from "./ScopeGroupSection";
 
 export default function ScopeCategorySection({
   category,
   comments = [],
   history = [],
+  laborEstimates = [],
   onDecision,
   onComment,
   onStaffStatusChange,
@@ -24,7 +25,7 @@ export default function ScopeCategorySection({
 
   // Use allItems from the hierarchy builder (all items in this category)
   const allItems = category.allItems || (category.groups || []).flatMap(g => g.items || []);
-  const stats = computeRollup(allItems);
+  const stats = computeRollup(allItems, laborEstimates);
   const budget = formatBudgetCompact(stats.budget_min, stats.budget_max, false);
 
   // If filtering, check if any items match
@@ -65,6 +66,9 @@ export default function ScopeCategorySection({
               <p className="text-xs text-gray-500 mt-0.5">
                 {statusParts.join(' · ')}
                 {budget && <span className="text-cyan-500/70 ml-2">{budget}</span>}
+                {stats.ak_hours_max > 0 && (
+                  <span className="text-red-400/60 ml-2">{formatHoursRange(stats.ak_hours_min, stats.ak_hours_max)}</span>
+                )}
               </p>
             ) : (
               <p className="text-xs text-gray-600 mt-0.5 italic">No scope items yet</p>
@@ -93,6 +97,7 @@ export default function ScopeCategorySection({
                   categoryId={category.id}
                   comments={comments}
                   history={history}
+                  laborEstimates={laborEstimates}
                   onDecision={onDecision}
                   onComment={onComment}
                   onStaffStatusChange={onStaffStatusChange}

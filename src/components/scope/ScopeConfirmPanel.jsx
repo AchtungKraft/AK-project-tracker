@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Loader2, Shield, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatBudgetRange } from "./scopeHelpers";
+import { formatBudgetRange, formatHoursRange } from "./scopeHelpers";
 
 /**
  * Detect if the current approved item set differs from the last confirmation snapshot.
@@ -34,6 +34,8 @@ export default function ScopeConfirmPanel({
   if (!stats || stats.total === 0) return null;
 
   const approvedBudget = formatBudgetRange(stats.approved_budget_min, stats.approved_budget_max, false);
+  const approvedHours = formatHoursRange(stats.approved_ak_hours_min, stats.approved_ak_hours_max);
+  const notNowHours = formatHoursRange(stats.not_now_ak_hours_min, stats.not_now_ak_hours_max);
   const allReviewed = stats.needs_review === 0 && stats.reapproval_required === 0;
 
   const handleConfirm = async () => {
@@ -77,6 +79,7 @@ export default function ScopeConfirmPanel({
             <p className="text-xs text-green-400/70">Approved</p>
             <p className="text-lg font-bold text-green-300">{stats.approved} item{stats.approved !== 1 ? 's' : ''}</p>
             {approvedBudget && <p className="text-sm text-green-400 mt-0.5">{approvedBudget}</p>}
+            {approvedHours && <p className="text-[11px] text-red-400/70 mt-0.5">{approvedHours} AK hrs</p>}
             {stats.approved_tbd_count > 0 && (
               <p className="text-[11px] text-green-400/60 mt-0.5">+ {stats.approved_tbd_count} TBD</p>
             )}
@@ -87,6 +90,7 @@ export default function ScopeConfirmPanel({
             {(stats.not_now_budget_min > 0 || stats.not_now_budget_max > 0) && (
               <p className="text-sm text-gray-400 mt-0.5">{formatBudgetRange(stats.not_now_budget_min, stats.not_now_budget_max, false)}</p>
             )}
+            {notNowHours && <p className="text-[11px] text-red-400/60 mt-0.5">{notNowHours} AK hrs</p>}
             {stats.not_now_tbd_count > 0 && (
               <p className="text-[11px] text-gray-500 mt-0.5">+ {stats.not_now_tbd_count} TBD</p>
             )}

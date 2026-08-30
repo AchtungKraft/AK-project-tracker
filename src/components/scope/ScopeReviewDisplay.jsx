@@ -17,6 +17,7 @@ import ScopeConfirmPanel from "./ScopeConfirmPanel";
 import ScopeFilterBar from "./ScopeFilterBar";
 import ScopeAdminControls from "./ScopeAdminControls";
 import ScopeItemEditor from "./ScopeItemEditor";
+import LaborBreakdownPanel from "./LaborBreakdownPanel";
 
 /**
  * Main Scope Review Display for a client_scope_review request.
@@ -48,15 +49,17 @@ export default function ScopeReviewDisplay({
   const { data: scopeData, isLoading } = useQuery({
     queryKey: ['scopeReviewData', requestId],
     queryFn: async () => {
-      const [categories, groups, items, comments, history, confirmations] = await Promise.all([
+      const [categories, groups, items, comments, history, confirmations, laborEstimates, laborGroups] = await Promise.all([
         base44.entities.ScopeCategory.filter({ request_id: requestId }),
         base44.entities.ScopeGroup.filter({ request_id: requestId }),
         base44.entities.ScopeItem.filter({ request_id: requestId }),
         base44.entities.ScopeItemComment.filter({ request_id: requestId }),
         base44.entities.ScopeItemHistory.filter({ request_id: requestId }),
         base44.entities.ScopeConfirmation.filter({ request_id: requestId }),
+        base44.entities.ScopeItemLaborEstimate.filter({ request_id: requestId }),
+        base44.entities.ScopeLaborGroup.filter({ is_active: true }),
       ]);
-      return { categories, groups, items, comments, history, confirmations };
+      return { categories, groups, items, comments, history, confirmations, laborEstimates, laborGroups };
     },
     enabled: !!requestId,
     staleTime: 15000,
@@ -68,10 +71,12 @@ export default function ScopeReviewDisplay({
   const comments = scopeData?.comments || [];
   const history = scopeData?.history || [];
   const confirmations = scopeData?.confirmations || [];
+  const laborEstimates = scopeData?.laborEstimates || [];
+  const laborGroups = scopeData?.laborGroups || [];
   const lastConfirmation = confirmations.sort((a, b) => new Date(b.confirmed_at) - new Date(a.confirmed_at))[0];
 
   const hierarchy = useMemo(() => buildScopeHierarchy(categories, groups, items), [categories, groups, items]);
-  const stats = useMemo(() => computeRollup(items), [items]);
+  const stats = useMemo(() => computeRollup(items, laborEstimates), [items, laborEstimates]);
 
   const invalidate = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['scopeReviewData', requestId] });
@@ -95,7 +100,7 @@ export default function ScopeReviewDisplay({
     };
 
     if (decision === 'approved') {
-      updateData.material_hash = computeMaterialHash(item);
+      updateData.material_hash = computeMaterialHash(item, laborEstimates);
     }
 
     await base44.entities.ScopeItem.update(itemId, updateData);
@@ -113,7 +118,7 @@ export default function ScopeReviewDisplay({
     });
 
     invalidate();
-  }, [items, isClientView, clientContactId, userId, userName, requestId, invalidate]);
+  }, [items, laborEstimates, isClientView, clientContactId, userId, userName, requestId, invalidate]);
 
   // ─── Comment handler ───
   const handleComment = useCallback(async (itemId, body) => {
@@ -143,6 +148,14 @@ export default function ScopeReviewDisplay({
     const approvedBudgetMax = approved.reduce((s, i) => s + (i.budget_max || 0), 0);
     const revision = (lastConfirmation?.revision || 0) + 1;
 
+    // Compute approved labor snapshot
+    const approvedIds = new Set(approved.map(i => i.id));
+    const approvedLabor = laborEstimates.filter(le => approvedIds.has(le.scope_item_id));
+    const approvedAkHoursMin = approvedLabor.reduce((s, le) => s + (le.hours_min || 0), 0);
+    const approvedAkHoursMax = approvedLabor.reduce((s, le) => s + (le.hours_max || 0), 0);
+    const approvedAkLaborMin = approvedLabor.reduce((s, le) => s + (le.hours_min || 0) * (le.rate_snapshot || 0), 0);
+    const approvedAkLaborMax = approvedLabor.reduce((s, le) => s + (le.hours_max || 0) * (le.rate_snapshot || 0), 0);
+
     await base44.entities.ScopeConfirmation.create({
       request_id: requestId,
       confirmed_at: new Date().toISOString(),
@@ -152,9 +165,11 @@ export default function ScopeReviewDisplay({
       approved_item_ids: approved.map(i => i.id),
       approved_budget_min: approvedBudgetMin,
       approved_budget_max: approvedBudgetMax,
+      approved_ak_hours_min: approvedAkHoursMin,
+      approved_ak_hours_max: approvedAkHoursMax,
       total_items: items.length,
       revision,
-      summary_snapshot: stats,
+      summary_snapshot: { ...stats, approved_ak_labor_min: approvedAkLaborMin, approved_ak_labor_max: approvedAkLaborMax },
     });
 
     await base44.entities.ClientFeedbackRequest.update(requestId, {
@@ -247,7 +262,7 @@ export default function ScopeReviewDisplay({
       decision_actor_id: userId,
     };
     if (newStatus === 'approved') {
-      updateData.material_hash = computeMaterialHash(item);
+      updateData.material_hash = computeMaterialHash(item, laborEstimates);
     }
 
     await base44.entities.ScopeItem.update(itemId, updateData);
@@ -300,12 +315,14 @@ export default function ScopeReviewDisplay({
   }, [items, requestId, userId, userName, invalidate, toast]);
 
   // ─── Item CRUD ───
-  const handleSaveItem = useCallback(async (data, existingId) => {
+  const handleSaveItem = useCallback(async (data, existingId, laborData) => {
+    let itemId = existingId;
     if (existingId) {
       const existing = items.find(i => i.id === existingId);
+      // Build new hash including labor changes
+      const newHash = computeMaterialHash({ ...existing, ...data }, laborData ? laborData.map((ld, i) => ({ ...ld, scope_item_id: existingId })) : laborEstimates);
       if (existing && existing.decision_status === 'approved') {
         const oldHash = existing.material_hash;
-        const newHash = computeMaterialHash({ ...existing, ...data });
         if (oldHash && oldHash !== newHash) {
           data.decision_status = 'reapproval_required';
           await base44.entities.ScopeItemHistory.create({
@@ -326,13 +343,39 @@ export default function ScopeReviewDisplay({
     } else {
       const siblings = items.filter(i => i.group_id === data.group_id && i.category_id === data.category_id);
       data.sort_order = siblings.reduce((m, i) => Math.max(m, i.sort_order || 0), 0) + 1;
-      await base44.entities.ScopeItem.create(data);
+      const created = await base44.entities.ScopeItem.create(data);
+      itemId = created.id;
     }
+
+    // Handle labor estimates CRUD
+    if (laborData && itemId) {
+      // Delete existing labor estimates for this item
+      const existingLabor = laborEstimates.filter(le => le.scope_item_id === itemId);
+      if (existingLabor.length > 0) {
+        await Promise.all(existingLabor.map(le => base44.entities.ScopeItemLaborEstimate.delete(le.id)));
+      }
+      // Create new ones
+      if (laborData.length > 0) {
+        await base44.entities.ScopeItemLaborEstimate.bulkCreate(
+          laborData.filter(ld => ld.labor_group_id && ld.hours_min !== "" && ld.hours_max !== "").map((ld, idx) => ({
+            request_id: requestId,
+            scope_item_id: itemId,
+            labor_group_id: ld.labor_group_id,
+            labor_group_name_snapshot: ld.labor_group_name_snapshot || '',
+            hours_min: Number(ld.hours_min) || 0,
+            hours_max: Number(ld.hours_max) || 0,
+            rate_snapshot: ld.rate_snapshot || 0,
+            sort_order: idx,
+          }))
+        );
+      }
+    }
+
     setAddItemState(null);
     setEditingItem(null);
     invalidate();
     toast({ description: existingId ? 'Item updated' : 'Item added' });
-  }, [items, requestId, userId, userName, invalidate, toast]);
+  }, [items, laborEstimates, requestId, userId, userName, invalidate, toast]);
 
   // ─── Add Item with optional preselection ───
   const handleAddItem = useCallback((preselection = {}) => {
@@ -353,7 +396,7 @@ export default function ScopeReviewDisplay({
   return (
     <div className="space-y-4">
       {/* Summary Bar */}
-      <ScopeSummaryBar stats={stats} isMobile={isMobile} />
+      <ScopeSummaryBar stats={stats} isMobile={isMobile} isClientView={isClientView} />
 
       {/* Filter Bar */}
       {items.length > 0 && (
@@ -391,6 +434,7 @@ export default function ScopeReviewDisplay({
           requestId={requestId}
           categories={categories}
           groups={groups}
+          laborGroups={laborGroups}
           preselectedCategoryId={addItemState.categoryId}
           preselectedGroupId={addItemState.groupId}
           onSave={handleSaveItem}
@@ -403,11 +447,18 @@ export default function ScopeReviewDisplay({
           requestId={requestId}
           categories={categories}
           groups={groups}
+          laborGroups={laborGroups}
+          laborEstimates={laborEstimates.filter(le => le.scope_item_id === editingItem.id)}
           editItem={editingItem}
           onSave={handleSaveItem}
           onCancel={() => setEditingItem(null)}
           isMobile={isMobile}
         />
+      )}
+
+      {/* Labor Breakdown — internal only */}
+      {!isClientView && laborEstimates.length > 0 && (
+        <LaborBreakdownPanel items={items} laborEstimates={laborEstimates} isMobile={isMobile} />
       )}
 
       {/* Hierarchy */}
@@ -419,6 +470,7 @@ export default function ScopeReviewDisplay({
               category={cat}
               comments={comments}
               history={history}
+              laborEstimates={laborEstimates}
               onDecision={handleDecision}
               onComment={handleComment}
               onStaffStatusChange={canEdit ? handleStaffStatusChange : undefined}
@@ -457,6 +509,7 @@ export default function ScopeReviewDisplay({
           isMobile={isMobile}
           isClientView={isClientView}
         />
+
       )}
     </div>
   );

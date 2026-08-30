@@ -2,11 +2,15 @@ import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { CheckCircle2, Clock, MessageSquare, XCircle, AlertTriangle, PauseCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatBudgetRange } from "./scopeHelpers";
+import { formatBudgetRange, formatHoursRange } from "./scopeHelpers";
 
-function DispositionCard({ icon: Icon, label, count, budgetMin, budgetMax, tbdCount, colorScheme, isMobile }) {
+function DispositionCard({ icon: Icon, label, count, budgetMin, budgetMax, tbdCount, akHoursMin, akHoursMax, akLaborMin, akLaborMax, colorScheme, isMobile, isClientView }) {
   if (count === 0) return null;
   const budget = formatBudgetRange(budgetMin, budgetMax, false);
+  const hasLabor = (akHoursMin > 0 || akHoursMax > 0);
+  const hoursLabel = hasLabor ? formatHoursRange(akHoursMin, akHoursMax) : null;
+  const laborLabel = (!isClientView && hasLabor) ? formatBudgetRange(akLaborMin, akLaborMax, false) : null;
+
   return (
     <Card className={cn("border", colorScheme.card)}>
       <CardContent className={cn("flex items-center justify-between", isMobile ? "p-3" : "p-4")}>
@@ -22,9 +26,17 @@ function DispositionCard({ icon: Icon, label, count, budgetMin, budgetMax, tbdCo
             </p>
           </div>
         </div>
-        {budget && (
-          <p className={cn("font-bold", colorScheme.title, isMobile ? "text-lg" : "text-xl")}>{budget}</p>
-        )}
+        <div className="text-right">
+          {budget && (
+            <p className={cn("font-bold", colorScheme.title, isMobile ? "text-lg" : "text-xl")}>{budget}</p>
+          )}
+          {hoursLabel && (
+            <p className="text-[11px] text-red-400/70 mt-0.5">AK Hours: {hoursLabel}</p>
+          )}
+          {laborLabel && (
+            <p className="text-[10px] text-emerald-400/60">AK Labor: {laborLabel}</p>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
@@ -46,7 +58,7 @@ const NOT_NOW_COLORS = {
   subtitle: "text-gray-400/70",
 };
 
-export default function ScopeSummaryBar({ stats, isMobile = false }) {
+export default function ScopeSummaryBar({ stats, isMobile = false, isClientView = false }) {
   if (!stats || stats.total === 0) return null;
 
   return (
@@ -63,8 +75,13 @@ export default function ScopeSummaryBar({ stats, isMobile = false }) {
           budgetMin={stats.approved_budget_min}
           budgetMax={stats.approved_budget_max}
           tbdCount={stats.approved_tbd_count}
+          akHoursMin={stats.approved_ak_hours_min}
+          akHoursMax={stats.approved_ak_hours_max}
+          akLaborMin={stats.approved_ak_labor_min}
+          akLaborMax={stats.approved_ak_labor_max}
           colorScheme={APPROVED_COLORS}
           isMobile={isMobile}
+          isClientView={isClientView}
         />
         <DispositionCard
           icon={PauseCircle}
@@ -73,8 +90,13 @@ export default function ScopeSummaryBar({ stats, isMobile = false }) {
           budgetMin={stats.not_now_budget_min}
           budgetMax={stats.not_now_budget_max}
           tbdCount={stats.not_now_tbd_count}
+          akHoursMin={stats.not_now_ak_hours_min}
+          akHoursMax={stats.not_now_ak_hours_max}
+          akLaborMin={stats.not_now_ak_labor_min}
+          akLaborMax={stats.not_now_ak_labor_max}
           colorScheme={NOT_NOW_COLORS}
           isMobile={isMobile}
+          isClientView={isClientView}
         />
       </div>
 

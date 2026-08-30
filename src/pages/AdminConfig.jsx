@@ -19,6 +19,7 @@ import VendorGroupsConfig from "../components/admin/VendorGroupsConfig";
 import ServiceCatalogConfig from "../components/admin/ServiceCatalogConfig";
 import ServiceVendorsConfig from "../components/admin/ServiceVendorsConfig";
 import ProjectStorageTemplatesConfig from "../components/admin/ProjectStorageTemplatesConfig";
+import ScopeLaborGroupsConfig from "../components/admin/ScopeLaborGroupsConfig";
 
 const PANEL_MAP = {
   "users": UsersConfig,
@@ -35,6 +36,7 @@ const PANEL_MAP = {
   "service-vendors": ServiceVendorsConfig,
   "pricing-matrix": RetailMarkupMatrixConfig,
   "pricing-guardrails": PricingStrictModeConfig,
+  "labor-rates": ScopeLaborGroupsConfig,
   "car-makes": CarMakesConfig,
   "car-models": CarModelsConfig,
   "car-years": CarYearsConfig,

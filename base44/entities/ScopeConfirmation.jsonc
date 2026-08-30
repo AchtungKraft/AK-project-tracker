@@ -42,6 +42,14 @@
       "type": "number",
       "description": "Snapshot of approved scope budget maximum"
     },
+    "approved_ak_hours_min": {
+      "type": "number",
+      "description": "Snapshot of approved AK labor hours minimum"
+    },
+    "approved_ak_hours_max": {
+      "type": "number",
+      "description": "Snapshot of approved AK labor hours maximum"
+    },
     "total_items": {
       "type": "number",
       "description": "Total items in scope at confirmation"
@@ -53,7 +61,7 @@
     },
     "summary_snapshot": {
       "type": "object",
-      "description": "Full status summary at time of confirmation"
+      "description": "Full status summary at time of confirmation (includes labor totals)"
     }
   },
   "required": [

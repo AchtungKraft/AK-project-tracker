@@ -1,0 +1,47 @@
+{
+  "name": "ScopeItemLaborEstimate",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "description": "Reference to ClientFeedbackRequest (denormalized for efficient queries)"
+    },
+    "scope_item_id": {
+      "type": "string",
+      "description": "Reference to ScopeItem"
+    },
+    "labor_group_id": {
+      "type": "string",
+      "description": "Reference to ScopeLaborGroup"
+    },
+    "labor_group_name_snapshot": {
+      "type": "string",
+      "description": "Snapshot of the labor group name at time of estimate creation"
+    },
+    "hours_min": {
+      "type": "number",
+      "description": "Minimum estimated hours (supports decimals e.g. 0.5, 1.5)"
+    },
+    "hours_max": {
+      "type": "number",
+      "description": "Maximum estimated hours (supports decimals)"
+    },
+    "rate_snapshot": {
+      "type": "number",
+      "description": "Hourly rate at time of estimate creation \u2014 never silently updated"
+    },
+    "sort_order": {
+      "type": "number",
+      "default": 0,
+      "description": "Display order within the scope item"
+    }
+  },
+  "required": [
+    "request_id",
+    "scope_item_id",
+    "labor_group_id",
+    "hours_min",
+    "hours_max",
+    "rate_snapshot"
+  ]
+}

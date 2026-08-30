@@ -75,6 +75,7 @@ const ADMIN_GROUPS = [
     items: [
       { key: "pricing-matrix", label: "Pricing Matrix" },
       { key: "pricing-guardrails", label: "Pricing Guardrails" },
+      { key: "labor-rates", label: "AK Labor Rates" },
     ],
   },
   {
