@@ -70,7 +70,7 @@ function DispositionCard({ icon: Icon, label, items, laborEstimates, colorScheme
             </p>
           ))}
           {hoursLabel && (
-            <p className="text-[11px] text-red-400/70">{hoursLabel} AK hrs</p>
+            <p className="text-[11px] text-red-400/70">{hoursLabel.replace(/ hrs$/, '')} AK hrs</p>
           )}
         </div>
       </CardContent>

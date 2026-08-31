@@ -58,7 +58,7 @@ export default function ScopeGroupSection({
           </span>
           <span className="flex-1" />
           {pricingRollup.ak_hours_max > 0 && (
-            <span className="text-[10px] text-red-400/60 mr-2">{formatHoursRange(pricingRollup.ak_hours_min, pricingRollup.ak_hours_max)} AK hrs</span>
+            <span className="text-[10px] text-red-400/60 mr-2">{formatHoursRange(pricingRollup.ak_hours_min, pricingRollup.ak_hours_max).replace(/ hrs$/, '')} AK hrs</span>
           )}
           {(() => {
             const total = pricingRollup.all_classified && !pricingRollup.has_incomplete && pricingRollup.hard_cost_tbd_count === 0

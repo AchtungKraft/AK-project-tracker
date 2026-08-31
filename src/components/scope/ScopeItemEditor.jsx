@@ -28,7 +28,7 @@ export default function ScopeItemEditor({
   isMobile = false,
 }) {
   const isEdit = !!editItem;
-  const existingModel = editItem?.pricing_model || 'legacy_estimate';
+  const existingModel = editItem?.pricing_model || (isEdit ? 'legacy_estimate' : 'hard_cost_plus_labor');
   const hasLegacyBudget = isEdit && existingModel === 'legacy_estimate' && (editItem?.budget_min != null || editItem?.budget_max != null || editItem?.budget_tbd);
 
   const [title, setTitle] = useState(editItem?.title || "");

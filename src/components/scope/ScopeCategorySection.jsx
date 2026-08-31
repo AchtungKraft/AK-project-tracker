@@ -74,7 +74,7 @@ export default function ScopeCategorySection({
                   return total ? <span className="text-cyan-500/70 ml-2">{total}</span> : null;
                 })()}
                 {pricingRollup.ak_hours_max > 0 && (
-                  <span className="text-red-400/60 ml-2">{formatHoursRange(pricingRollup.ak_hours_min, pricingRollup.ak_hours_max)} AK hrs</span>
+                  <span className="text-red-400/60 ml-2">{formatHoursRange(pricingRollup.ak_hours_min, pricingRollup.ak_hours_max).replace(/ hrs$/, '')} AK hrs</span>
                 )}
               </p>
             ) : (

@@ -57,7 +57,7 @@ function PricingRollupCard({ title, items, laborEstimates, colorClasses, isClien
           {l.label}: <span className={l.bold ? "" : colorClasses.value}>{l.value}</span>
         </p>
       ))}
-      {hoursLabel && <p className="text-[11px] text-red-400/70 mt-0.5">{hoursLabel} AK hrs</p>}
+      {hoursLabel && <p className="text-[11px] text-red-400/70 mt-0.5">{hoursLabel.replace(/ hrs$/, '')} AK hrs</p>}
       {rollup.hard_cost_tbd_count > 0 && <p className="text-[11px] text-gray-500 mt-0.5">+ {rollup.hard_cost_tbd_count} TBD</p>}
       {rollup.legacy_budget_tbd_count > 0 && <p className="text-[11px] text-gray-500 mt-0.5">+ {rollup.legacy_budget_tbd_count} TBD</p>}
     </div>

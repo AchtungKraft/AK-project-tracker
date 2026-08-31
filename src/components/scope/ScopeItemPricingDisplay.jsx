@@ -64,23 +64,10 @@ export default function ScopeItemPricingDisplay({ item, laborEstimates = [], isC
 
   return (
     <div className="space-y-1.5">
-      {/* Total Estimate — visually strongest */}
-      {pricing.estimate_complete && totalEst && (
-        <p className={cn("font-bold", isMobile ? "text-base" : "text-lg", "text-white")}>
-          {totalEst}
-        </p>
-      )}
-      {!pricing.estimate_complete && !pricing.hard_cost_tbd && pricing.hard_cost_min != null && !pricing.labor_estimated && (
-        <p className="text-xs text-gray-500 italic">Total Estimate: Pending AK labor</p>
-      )}
-      {pricing.hard_cost_tbd && (
-        <p className="text-xs text-gray-500 italic">Total Estimate: TBD</p>
-      )}
-
       {/* Hard Cost */}
       {hardCost && (
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-gray-500 uppercase tracking-wide w-20 shrink-0">Hard Cost</span>
+          <span className="text-[10px] text-gray-500 uppercase tracking-wide w-24 shrink-0">Hard Cost</span>
           <span className={cn("text-sm font-medium", pricing.hard_cost_tbd ? "text-gray-400 italic" : "text-cyan-400")}>
             {hardCost}
           </span>
@@ -91,13 +78,10 @@ export default function ScopeItemPricingDisplay({ item, laborEstimates = [], isC
       {pricing.labor_estimated ? (
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-gray-500 uppercase tracking-wide w-20 shrink-0">AK Labor</span>
+            <span className="text-[10px] text-gray-500 uppercase tracking-wide w-24 shrink-0">AK Labor</span>
             <span className="text-sm font-medium text-emerald-400">
-              {!isClientView ? formatDollarRange(pricing.ak_labor_min, pricing.ak_labor_max) : hours}
+              {!isClientView ? formatDollarRange(pricing.ak_labor_min, pricing.ak_labor_max) : formatDollarRange(pricing.ak_labor_min, pricing.ak_labor_max)}
             </span>
-            {!isClientView && hours && (
-              <span className="text-[10px] text-red-400/70 ml-1">{hours}</span>
-            )}
           </div>
           <LaborLine
             hours={hours}
@@ -112,10 +96,36 @@ export default function ScopeItemPricingDisplay({ item, laborEstimates = [], isC
         </div>
       ) : (
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-gray-500 uppercase tracking-wide w-20 shrink-0">AK Labor</span>
+          <span className="text-[10px] text-gray-500 uppercase tracking-wide w-24 shrink-0">AK Labor</span>
           <span className="text-xs text-gray-500 italic">Not estimated</span>
         </div>
       )}
+
+      {/* AK Hours */}
+      {hours && (
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-gray-500 uppercase tracking-wide w-24 shrink-0">AK Hours</span>
+          <span className="text-sm font-medium text-red-400/80">{hours}</span>
+        </div>
+      )}
+
+      {/* Total Estimate */}
+      {pricing.estimate_complete && totalEst ? (
+        <div className="flex items-center gap-2 pt-1 border-t border-gray-700/30 mt-1">
+          <span className="text-[10px] text-gray-500 uppercase tracking-wide w-24 shrink-0 font-semibold">Total Estimate</span>
+          <span className={cn("font-bold", isMobile ? "text-base" : "text-lg", "text-white")}>{totalEst}</span>
+        </div>
+      ) : !pricing.estimate_complete && !pricing.hard_cost_tbd && pricing.hard_cost_min != null && !pricing.labor_estimated ? (
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-gray-500 uppercase tracking-wide w-24 shrink-0">Total Estimate</span>
+          <span className="text-xs text-gray-500 italic">Pending AK labor</span>
+        </div>
+      ) : pricing.hard_cost_tbd ? (
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-gray-500 uppercase tracking-wide w-24 shrink-0">Total Estimate</span>
+          <span className="text-xs text-gray-500 italic">TBD</span>
+        </div>
+      ) : null}
 
       {/* Hard cost note */}
       {pricing.hard_cost_note && (
