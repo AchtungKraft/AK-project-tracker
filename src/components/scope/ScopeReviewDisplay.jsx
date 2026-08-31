@@ -145,14 +145,50 @@ export default function ScopeReviewDisplay({
     const actorId = isClientView ? clientContactId : userId;
     const actorName = userName || 'Client';
     const approved = items.filter(i => i.decision_status === 'approved');
+    const notNow = items.filter(i => i.decision_status === 'not_now');
     const revision = (lastConfirmation?.revision || 0) + 1;
 
-    // Compute full pricing rollup for approved items
+    // Compute full pricing rollups — server-calculated
     const approvedRollup = computeScopePricingRollup(approved, laborEstimates);
+    const notNowRollup = computeScopePricingRollup(notNow, laborEstimates);
 
     // Legacy budget fields for backward compat
     const approvedBudgetMin = approved.reduce((s, i) => s + (i.budget_min || 0), 0);
     const approvedBudgetMax = approved.reduce((s, i) => s + (i.budget_max || 0), 0);
+
+    const summarySnapshot = {
+      ...stats,
+      // Pricing snapshot version — readers check this to distinguish legacy vs new
+      pricing_snapshot_version: 1,
+      // Approved — full pricing decomposition
+      approved_item_count: approved.length,
+      approved_hard_cost_min: approvedRollup.hard_cost_min,
+      approved_hard_cost_max: approvedRollup.hard_cost_max,
+      approved_hard_cost_tbd_count: approvedRollup.hard_cost_tbd_count,
+      approved_ak_labor_min: approvedRollup.ak_labor_min,
+      approved_ak_labor_max: approvedRollup.ak_labor_max,
+      approved_ak_hours_min: approvedRollup.ak_hours_min,
+      approved_ak_hours_max: approvedRollup.ak_hours_max,
+      approved_total_estimate_min: approvedRollup.total_estimate_min,
+      approved_total_estimate_max: approvedRollup.total_estimate_max,
+      approved_estimate_complete: !approvedRollup.has_incomplete && approvedRollup.hard_cost_tbd_count === 0 && approvedRollup.classified_count > 0 && approvedRollup.legacy_count === 0,
+      // Legacy compat — kept for existing code that reads these
+      approved_budget_min: approvedBudgetMin,
+      approved_budget_max: approvedBudgetMax,
+      // Not Now — contextual snapshot (not part of confirmed scope)
+      not_now_item_count: notNow.length,
+      not_now_hard_cost_min: notNowRollup.hard_cost_min,
+      not_now_hard_cost_max: notNowRollup.hard_cost_max,
+      not_now_hard_cost_tbd_count: notNowRollup.hard_cost_tbd_count,
+      not_now_ak_labor_min: notNowRollup.ak_labor_min,
+      not_now_ak_labor_max: notNowRollup.ak_labor_max,
+      not_now_ak_hours_min: notNowRollup.ak_hours_min,
+      not_now_ak_hours_max: notNowRollup.ak_hours_max,
+      not_now_total_estimate_min: notNowRollup.total_estimate_min,
+      not_now_total_estimate_max: notNowRollup.total_estimate_max,
+      not_now_budget_min: notNow.reduce((s, i) => s + (i.budget_min || 0), 0),
+      not_now_budget_max: notNow.reduce((s, i) => s + (i.budget_max || 0), 0),
+    };
 
     await base44.entities.ScopeConfirmation.create({
       request_id: requestId,
@@ -167,18 +203,7 @@ export default function ScopeReviewDisplay({
       approved_ak_hours_max: approvedRollup.ak_hours_max,
       total_items: items.length,
       revision,
-      summary_snapshot: {
-        ...stats,
-        // Full pricing snapshot
-        approved_hard_cost_min: approvedRollup.hard_cost_min,
-        approved_hard_cost_max: approvedRollup.hard_cost_max,
-        approved_ak_labor_min: approvedRollup.ak_labor_min,
-        approved_ak_labor_max: approvedRollup.ak_labor_max,
-        approved_total_estimate_min: approvedRollup.total_estimate_min,
-        approved_total_estimate_max: approvedRollup.total_estimate_max,
-        approved_ak_hours_min: approvedRollup.ak_hours_min,
-        approved_ak_hours_max: approvedRollup.ak_hours_max,
-      },
+      summary_snapshot: summarySnapshot,
     });
 
     await base44.entities.ClientFeedbackRequest.update(requestId, {

@@ -227,41 +227,88 @@ Deno.serve(async (req) => {
       if (approved.length === 0) {
         return Response.json({ error: 'At least one approved item is required' }, { status: 409, headers: CORS });
       }
+      const notNow = items.filter(i => i.decision_status === 'not_now');
 
       const existing = await base44.asServiceRole.entities.ScopeConfirmation.filter({ request_id: requestId });
       const latestRevision = existing.reduce((m, c) => Math.max(m, c.revision || 0), 0);
+
+      // Legacy budget fields for backward compat
       const budgetMin = approved.reduce((sum, i) => sum + (i.budget_tbd ? 0 : (i.budget_min || 0)), 0);
       const budgetMax = approved.reduce((sum, i) => sum + (i.budget_tbd ? 0 : (i.budget_max || 0)), 0);
 
-      // Compute approved labor and pricing snapshot
-      const approvedIds = new Set(approved.map(i => i.id));
+      // Compute full pricing from canonical data
       const allLabor = await base44.asServiceRole.entities.ScopeItemLaborEstimate.filter({ request_id: requestId });
-      const approvedLabor = allLabor.filter(le => approvedIds.has(le.scope_item_id));
-      const akHoursMin = approvedLabor.reduce((s, le) => s + (le.hours_min || 0), 0);
-      const akHoursMax = approvedLabor.reduce((s, le) => s + (le.hours_max || 0), 0);
-      const akLaborMin = approvedLabor.reduce((s, le) => s + (le.hours_min || 0) * (le.rate_snapshot || 0), 0);
-      const akLaborMax = approvedLabor.reduce((s, le) => s + (le.hours_max || 0) * (le.rate_snapshot || 0), 0);
 
-      // Hard cost totals for classified items
-      const classifiedApproved = approved.filter(i => i.pricing_model === 'hard_cost_plus_labor');
-      const hardCostMin = classifiedApproved.reduce((s, i) => s + (i.hard_cost_tbd ? 0 : (i.hard_cost_min || 0)), 0);
-      const hardCostMax = classifiedApproved.reduce((s, i) => s + (i.hard_cost_tbd ? 0 : (i.hard_cost_max || 0)), 0);
-      const totalEstMin = hardCostMin + akLaborMin + approved.filter(i => i.pricing_model !== 'hard_cost_plus_labor').reduce((s, i) => s + (i.budget_min || 0), 0);
-      const totalEstMax = hardCostMax + akLaborMax + approved.filter(i => i.pricing_model !== 'hard_cost_plus_labor').reduce((s, i) => s + (i.budget_max || 0), 0);
+      // Helper: compute disposition rollup from items + labor
+      function computeDispositionRollup(dispItems) {
+        const dispIds = new Set(dispItems.map(i => i.id));
+        const dispLabor = allLabor.filter(le => dispIds.has(le.scope_item_id));
+        const akHoursMin = dispLabor.reduce((s, le) => s + (le.hours_min || 0), 0);
+        const akHoursMax = dispLabor.reduce((s, le) => s + (le.hours_max || 0), 0);
+        const akLaborMin = dispLabor.reduce((s, le) => s + (le.hours_min || 0) * (le.rate_snapshot || 0), 0);
+        const akLaborMax = dispLabor.reduce((s, le) => s + (le.hours_max || 0) * (le.rate_snapshot || 0), 0);
+        const classified = dispItems.filter(i => i.pricing_model === 'hard_cost_plus_labor');
+        const legacy = dispItems.filter(i => i.pricing_model !== 'hard_cost_plus_labor');
+        const hardCostTbdCount = classified.filter(i => i.hard_cost_tbd).length;
+        const hardCostMin = classified.reduce((s, i) => s + (i.hard_cost_tbd ? 0 : (i.hard_cost_min || 0)), 0);
+        const hardCostMax = classified.reduce((s, i) => s + (i.hard_cost_tbd ? 0 : (i.hard_cost_max || 0)), 0);
+        const legacyBudgetMin = legacy.reduce((s, i) => s + (i.budget_min || 0), 0);
+        const legacyBudgetMax = legacy.reduce((s, i) => s + (i.budget_max || 0), 0);
+        const totalEstMin = hardCostMin + akLaborMin + legacyBudgetMin;
+        const totalEstMax = hardCostMax + akLaborMax + legacyBudgetMax;
+        const allClassified = classified.length === dispItems.length;
+        const estimateComplete = allClassified && hardCostTbdCount === 0 && dispLabor.length > 0 && (akHoursMin > 0 || akHoursMax > 0);
+        return {
+          item_count: dispItems.length,
+          hard_cost_min: hardCostMin, hard_cost_max: hardCostMax, hard_cost_tbd_count: hardCostTbdCount,
+          ak_labor_min: akLaborMin, ak_labor_max: akLaborMax,
+          ak_hours_min: akHoursMin, ak_hours_max: akHoursMax,
+          total_estimate_min: totalEstMin, total_estimate_max: totalEstMax,
+          estimate_complete: estimateComplete,
+          budget_min: legacyBudgetMin + hardCostMin, budget_max: legacyBudgetMax + hardCostMax,
+        };
+      }
+
+      const aRollup = computeDispositionRollup(approved);
+      const nRollup = computeDispositionRollup(notNow);
 
       const summary = {
+        // Pricing snapshot version — readers check this to distinguish legacy vs new
+        pricing_snapshot_version: 1,
         total: items.length,
         approved: approved.length,
         request_changes: items.filter(i => i.decision_status === 'request_changes').length,
-        not_now: items.filter(i => i.decision_status === 'not_now').length,
-        approved_hard_cost_min: hardCostMin,
-        approved_hard_cost_max: hardCostMax,
-        approved_ak_labor_min: akLaborMin,
-        approved_ak_labor_max: akLaborMax,
-        approved_total_estimate_min: totalEstMin,
-        approved_total_estimate_max: totalEstMax,
-        approved_ak_hours_min: akHoursMin,
-        approved_ak_hours_max: akHoursMax,
+        not_now: notNow.length,
+        needs_review: 0,
+        reapproval_required: 0,
+        // Approved — full pricing decomposition
+        approved_item_count: aRollup.item_count,
+        approved_hard_cost_min: aRollup.hard_cost_min,
+        approved_hard_cost_max: aRollup.hard_cost_max,
+        approved_hard_cost_tbd_count: aRollup.hard_cost_tbd_count,
+        approved_ak_labor_min: aRollup.ak_labor_min,
+        approved_ak_labor_max: aRollup.ak_labor_max,
+        approved_ak_hours_min: aRollup.ak_hours_min,
+        approved_ak_hours_max: aRollup.ak_hours_max,
+        approved_total_estimate_min: aRollup.total_estimate_min,
+        approved_total_estimate_max: aRollup.total_estimate_max,
+        approved_estimate_complete: aRollup.estimate_complete,
+        // Legacy compat
+        approved_budget_min: budgetMin,
+        approved_budget_max: budgetMax,
+        // Not Now — contextual snapshot
+        not_now_item_count: nRollup.item_count,
+        not_now_hard_cost_min: nRollup.hard_cost_min,
+        not_now_hard_cost_max: nRollup.hard_cost_max,
+        not_now_hard_cost_tbd_count: nRollup.hard_cost_tbd_count,
+        not_now_ak_labor_min: nRollup.ak_labor_min,
+        not_now_ak_labor_max: nRollup.ak_labor_max,
+        not_now_ak_hours_min: nRollup.ak_hours_min,
+        not_now_ak_hours_max: nRollup.ak_hours_max,
+        not_now_total_estimate_min: nRollup.total_estimate_min,
+        not_now_total_estimate_max: nRollup.total_estimate_max,
+        not_now_budget_min: notNow.reduce((s, i) => s + (i.budget_min || 0), 0),
+        not_now_budget_max: notNow.reduce((s, i) => s + (i.budget_max || 0), 0),
       };
 
       const confirmation = await base44.asServiceRole.entities.ScopeConfirmation.create({
@@ -273,8 +320,8 @@ Deno.serve(async (req) => {
         approved_item_ids: approved.map(i => i.id),
         approved_budget_min: budgetMin,
         approved_budget_max: budgetMax,
-        approved_ak_hours_min: akHoursMin,
-        approved_ak_hours_max: akHoursMax,
+        approved_ak_hours_min: aRollup.ak_hours_min,
+        approved_ak_hours_max: aRollup.ak_hours_max,
         total_items: items.length,
         revision: latestRevision + 1,
         summary_snapshot: summary,
@@ -291,7 +338,7 @@ Deno.serve(async (req) => {
       notifyScopeActivity(base44, {
         requestId, projectId: request.project_id, clientName: actorName,
         actionType: 'APPROVED',
-        comment: `Scope confirmed — revision ${latestRevision + 1}: ${approved.length} approved items, budget $${budgetMin.toLocaleString()}–$${budgetMax.toLocaleString()}`,
+        comment: `Scope confirmed — revision ${latestRevision + 1}: ${approved.length} approved, total estimate $${aRollup.total_estimate_min.toLocaleString()}–$${aRollup.total_estimate_max.toLocaleString()}`,
       });
 
       return Response.json({ success: true, confirmation }, { headers: CORS });

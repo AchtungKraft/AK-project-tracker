@@ -5,6 +5,7 @@ import { CheckCircle2, Loader2, Shield, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatHoursRange } from "./scopeHelpers";
 import { computeScopePricingRollup, formatDollarRange } from "./scopePricingHelpers";
+import HistoricalConfirmationDisplay from "./HistoricalConfirmationDisplay";
 
 function isConfirmationStale(lastConfirmation, items) {
   if (!lastConfirmation) return false;
@@ -160,11 +161,7 @@ export default function ScopeConfirmPanel({
         )}
 
         {lastConfirmation && !stale && (
-          <p className="text-xs text-gray-500 italic">
-            Last confirmed by {lastConfirmation.confirmed_by_name || 'Unknown'} on{' '}
-            {new Date(lastConfirmation.confirmed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-            {lastConfirmation.revision > 1 && ` (v${lastConfirmation.revision})`}
-          </p>
+          <HistoricalConfirmationDisplay confirmation={lastConfirmation} isClientView={isClientView} />
         )}
 
         {!readOnly && (
