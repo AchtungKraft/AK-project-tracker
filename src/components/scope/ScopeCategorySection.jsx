@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { computeRollup, formatBudgetCompact, formatHoursRange } from "./scopeHelpers";
+import { computeRollup, formatHoursRange } from "./scopeHelpers";
+import { computeScopePricingRollup, formatDollarCompact } from "./scopePricingHelpers";
 import ScopeGroupSection from "./ScopeGroupSection";
 
 export default function ScopeCategorySection({
@@ -26,7 +27,7 @@ export default function ScopeCategorySection({
   // Use allItems from the hierarchy builder (all items in this category)
   const allItems = category.allItems || (category.groups || []).flatMap(g => g.items || []);
   const stats = computeRollup(allItems, laborEstimates);
-  const budget = formatBudgetCompact(stats.budget_min, stats.budget_max, false);
+  const pricingRollup = computeScopePricingRollup(allItems, laborEstimates);
 
   // If filtering, check if any items match
   const hasMatchingItems = filter === "all" || allItems.some(i => (i.decision_status || "needs_review") === filter);
@@ -65,9 +66,15 @@ export default function ScopeCategorySection({
             {allItems.length > 0 ? (
               <p className="text-xs text-gray-500 mt-0.5">
                 {statusParts.join(' · ')}
-                {budget && <span className="text-cyan-500/70 ml-2">{budget}</span>}
-                {stats.ak_hours_max > 0 && (
-                  <span className="text-red-400/60 ml-2">{formatHoursRange(stats.ak_hours_min, stats.ak_hours_max)}</span>
+                {(() => {
+                  // Show total estimate if all classified, else legacy budget
+                  const total = pricingRollup.all_classified && !pricingRollup.has_incomplete && pricingRollup.hard_cost_tbd_count === 0
+                    ? formatDollarCompact(pricingRollup.total_estimate_min, pricingRollup.total_estimate_max)
+                    : formatDollarCompact(pricingRollup.legacy_budget_min + pricingRollup.hard_cost_min + pricingRollup.ak_labor_min, pricingRollup.legacy_budget_max + pricingRollup.hard_cost_max + pricingRollup.ak_labor_max);
+                  return total ? <span className="text-cyan-500/70 ml-2">{total}</span> : null;
+                })()}
+                {pricingRollup.ak_hours_max > 0 && (
+                  <span className="text-red-400/60 ml-2">{formatHoursRange(pricingRollup.ak_hours_min, pricingRollup.ak_hours_max)} AK hrs</span>
                 )}
               </p>
             ) : (

@@ -63,22 +63,48 @@
       "type": "string",
       "description": "ID of the actor who made the decision"
     },
+    "pricing_model": {
+      "type": "string",
+      "enum": [
+        "legacy_estimate",
+        "hard_cost_plus_labor"
+      ],
+      "default": "legacy_estimate",
+      "description": "Pricing classification. legacy_estimate = unclassified old budget. hard_cost_plus_labor = explicit hard cost + AK labor = total estimate."
+    },
     "budget_min": {
       "type": "number",
-      "description": "Estimated budget minimum (retail, client-facing)"
+      "description": "Legacy estimated budget minimum (used when pricing_model=legacy_estimate)"
     },
     "budget_max": {
       "type": "number",
-      "description": "Estimated budget maximum (retail, client-facing)"
+      "description": "Legacy estimated budget maximum (used when pricing_model=legacy_estimate)"
     },
     "budget_note": {
       "type": "string",
-      "description": "Client-facing budget note / context"
+      "description": "Client-facing budget/cost note"
     },
     "budget_tbd": {
       "type": "boolean",
       "default": false,
-      "description": "True if budget requires investigation and cannot yet be estimated"
+      "description": "Legacy TBD flag (used when pricing_model=legacy_estimate)"
+    },
+    "hard_cost_min": {
+      "type": "number",
+      "description": "Hard cost minimum (parts, materials, outside services) \u2014 used when pricing_model=hard_cost_plus_labor"
+    },
+    "hard_cost_max": {
+      "type": "number",
+      "description": "Hard cost maximum \u2014 used when pricing_model=hard_cost_plus_labor"
+    },
+    "hard_cost_tbd": {
+      "type": "boolean",
+      "default": false,
+      "description": "True if hard cost requires investigation and cannot yet be estimated"
+    },
+    "hard_cost_note": {
+      "type": "string",
+      "description": "Client-facing hard cost note / context"
     },
     "linked_feedback_request_ids": {
       "type": "array",

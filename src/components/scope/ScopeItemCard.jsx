@@ -5,9 +5,9 @@ import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { CheckCircle2, XCircle, MessageSquare, Clock, AlertTriangle, ChevronDown, ChevronUp, Send, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { DECISION_LABELS, DECISION_COLORS, formatBudgetRange } from "./scopeHelpers";
+import { DECISION_LABELS, DECISION_COLORS } from "./scopeHelpers";
 import StaffStatusOverrideMenu from "./StaffStatusOverrideMenu";
-import LaborSummaryInline from "./LaborSummaryInline";
+import ScopeItemPricingDisplay from "./ScopeItemPricingDisplay";
 import ImageModal from "@/components/ui/ImageModal";
 import { format } from "date-fns";
 
@@ -33,7 +33,6 @@ export default function ScopeItemCard({
   const [lightboxIndex, setLightboxIndex] = useState(0);
 
   const status = item.decision_status || "needs_review";
-  const budget = formatBudgetRange(item.budget_min, item.budget_max, item.budget_tbd);
   const itemComments = comments.filter(c => c.scope_item_id === item.id).sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
   const itemHistory = history.filter(h => h.scope_item_id === item.id).sort((a, b) => new Date(b.recorded_at) - new Date(a.recorded_at));
   const latestDecisionEntry = itemHistory.find(h => h.event_type === 'decision');
@@ -67,13 +66,6 @@ export default function ScopeItemCard({
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <h4 className={cn("font-semibold text-white", isMobile ? "text-sm" : "text-base")}>{item.title}</h4>
-            {budget && (
-              <p className={cn("font-medium mt-0.5", isMobile ? "text-sm" : "text-base",
-                item.budget_tbd ? "text-gray-400 italic" : "text-cyan-400"
-              )}>
-                {budget}
-              </p>
-            )}
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             <Badge className={cn("text-xs border", DECISION_COLORS[status])}>
@@ -100,16 +92,16 @@ export default function ScopeItemCard({
           </div>
         )}
 
+        {/* Pricing */}
+        <ScopeItemPricingDisplay item={item} laborEstimates={laborEstimates} isClientView={isClientView} isMobile={isMobile} />
+
         {/* Description */}
         {item.description && (
           <p className={cn("text-gray-400 leading-relaxed", "text-sm")}>{item.description}</p>
         )}
 
-        {/* AK Labor Summary */}
-        <LaborSummaryInline laborEstimates={laborEstimates} isClientView={isClientView} />
-
-        {/* Budget Note */}
-        {item.budget_note && (
+        {/* Budget Note (legacy items without hard_cost_note) */}
+        {item.budget_note && item.pricing_model !== 'hard_cost_plus_labor' && (
           <p className="text-xs text-gray-500 italic">{item.budget_note}</p>
         )}
 

@@ -11,6 +11,7 @@ import {
   computeMaterialHash,
   DECISION_LABELS,
 } from "./scopeHelpers";
+import { computeScopePricingRollup } from "./scopePricingHelpers";
 import ScopeCategorySection from "./ScopeCategorySection";
 import ScopeSummaryBar from "./ScopeSummaryBar";
 import ScopeConfirmPanel from "./ScopeConfirmPanel";
@@ -144,17 +145,14 @@ export default function ScopeReviewDisplay({
     const actorId = isClientView ? clientContactId : userId;
     const actorName = userName || 'Client';
     const approved = items.filter(i => i.decision_status === 'approved');
-    const approvedBudgetMin = approved.reduce((s, i) => s + (i.budget_min || 0), 0);
-    const approvedBudgetMax = approved.reduce((s, i) => s + (i.budget_max || 0), 0);
     const revision = (lastConfirmation?.revision || 0) + 1;
 
-    // Compute approved labor snapshot
-    const approvedIds = new Set(approved.map(i => i.id));
-    const approvedLabor = laborEstimates.filter(le => approvedIds.has(le.scope_item_id));
-    const approvedAkHoursMin = approvedLabor.reduce((s, le) => s + (le.hours_min || 0), 0);
-    const approvedAkHoursMax = approvedLabor.reduce((s, le) => s + (le.hours_max || 0), 0);
-    const approvedAkLaborMin = approvedLabor.reduce((s, le) => s + (le.hours_min || 0) * (le.rate_snapshot || 0), 0);
-    const approvedAkLaborMax = approvedLabor.reduce((s, le) => s + (le.hours_max || 0) * (le.rate_snapshot || 0), 0);
+    // Compute full pricing rollup for approved items
+    const approvedRollup = computeScopePricingRollup(approved, laborEstimates);
+
+    // Legacy budget fields for backward compat
+    const approvedBudgetMin = approved.reduce((s, i) => s + (i.budget_min || 0), 0);
+    const approvedBudgetMax = approved.reduce((s, i) => s + (i.budget_max || 0), 0);
 
     await base44.entities.ScopeConfirmation.create({
       request_id: requestId,
@@ -165,11 +163,22 @@ export default function ScopeReviewDisplay({
       approved_item_ids: approved.map(i => i.id),
       approved_budget_min: approvedBudgetMin,
       approved_budget_max: approvedBudgetMax,
-      approved_ak_hours_min: approvedAkHoursMin,
-      approved_ak_hours_max: approvedAkHoursMax,
+      approved_ak_hours_min: approvedRollup.ak_hours_min,
+      approved_ak_hours_max: approvedRollup.ak_hours_max,
       total_items: items.length,
       revision,
-      summary_snapshot: { ...stats, approved_ak_labor_min: approvedAkLaborMin, approved_ak_labor_max: approvedAkLaborMax },
+      summary_snapshot: {
+        ...stats,
+        // Full pricing snapshot
+        approved_hard_cost_min: approvedRollup.hard_cost_min,
+        approved_hard_cost_max: approvedRollup.hard_cost_max,
+        approved_ak_labor_min: approvedRollup.ak_labor_min,
+        approved_ak_labor_max: approvedRollup.ak_labor_max,
+        approved_total_estimate_min: approvedRollup.total_estimate_min,
+        approved_total_estimate_max: approvedRollup.total_estimate_max,
+        approved_ak_hours_min: approvedRollup.ak_hours_min,
+        approved_ak_hours_max: approvedRollup.ak_hours_max,
+      },
     });
 
     await base44.entities.ClientFeedbackRequest.update(requestId, {
@@ -180,7 +189,7 @@ export default function ScopeReviewDisplay({
     invalidate();
     queryClient.invalidateQueries({ queryKey });
     toast({ description: `Scope confirmed — ${approved.length} items approved` });
-  }, [items, stats, lastConfirmation, requestId, isClientView, clientContactId, userId, userName, invalidate, queryClient, queryKey, toast]);
+  }, [items, stats, laborEstimates, lastConfirmation, requestId, isClientView, clientContactId, userId, userName, invalidate, queryClient, queryKey, toast]);
 
   // ─── Admin: Category CRUD ───
   const handleCreateCategory = useCallback(async (name) => {
@@ -319,8 +328,9 @@ export default function ScopeReviewDisplay({
     let itemId = existingId;
     if (existingId) {
       const existing = items.find(i => i.id === existingId);
-      // Build new hash including labor changes
-      const newHash = computeMaterialHash({ ...existing, ...data }, laborData ? laborData.map((ld, i) => ({ ...ld, scope_item_id: existingId })) : laborEstimates);
+      // Build new hash including labor changes and hard cost fields
+      const merged = { ...existing, ...data };
+      const newHash = computeMaterialHash(merged, laborData ? laborData.map((ld, i) => ({ ...ld, scope_item_id: existingId })) : laborEstimates);
       if (existing && existing.decision_status === 'approved') {
         const oldHash = existing.material_hash;
         if (oldHash && oldHash !== newHash) {
@@ -406,7 +416,7 @@ export default function ScopeReviewDisplay({
   return (
     <div className="space-y-4">
       {/* Summary Bar */}
-      <ScopeSummaryBar stats={stats} isMobile={isMobile} isClientView={isClientView} />
+      <ScopeSummaryBar stats={stats} items={items} laborEstimates={laborEstimates} isMobile={isMobile} isClientView={isClientView} />
 
       {/* Filter Bar */}
       {items.length > 0 && (
@@ -513,6 +523,7 @@ export default function ScopeReviewDisplay({
         <ScopeConfirmPanel
           stats={stats}
           items={items}
+          laborEstimates={laborEstimates}
           lastConfirmation={lastConfirmation}
           onConfirm={handleConfirm}
           readOnly={readOnly}

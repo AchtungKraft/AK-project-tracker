@@ -7,7 +7,7 @@ const CORS = {
 };
 
 async function materialHash(base44, item) {
-  // Include labor estimates in hash for reapproval detection
+  // Include labor estimates and hard cost fields in hash for reapproval detection
   const laborEst = await base44.asServiceRole.entities.ScopeItemLaborEstimate.filter({ scope_item_id: item.id });
   const labor = laborEst
     .map(le => ({ gid: le.labor_group_id, hmin: le.hours_min, hmax: le.hours_max, rate: le.rate_snapshot }))
@@ -18,6 +18,10 @@ async function materialHash(base44, item) {
     budget_min: item.budget_min ?? null,
     budget_max: item.budget_max ?? null,
     budget_note: item.budget_note || '',
+    hard_cost_min: item.hard_cost_min ?? null,
+    hard_cost_max: item.hard_cost_max ?? null,
+    hard_cost_tbd: item.hard_cost_tbd || false,
+    hard_cost_note: item.hard_cost_note || '',
     images: (item.images || []).slice().sort(),
     labor,
   });
@@ -229,18 +233,35 @@ Deno.serve(async (req) => {
       const budgetMin = approved.reduce((sum, i) => sum + (i.budget_tbd ? 0 : (i.budget_min || 0)), 0);
       const budgetMax = approved.reduce((sum, i) => sum + (i.budget_tbd ? 0 : (i.budget_max || 0)), 0);
 
-      // Compute approved labor hours snapshot
+      // Compute approved labor and pricing snapshot
       const approvedIds = new Set(approved.map(i => i.id));
       const allLabor = await base44.asServiceRole.entities.ScopeItemLaborEstimate.filter({ request_id: requestId });
       const approvedLabor = allLabor.filter(le => approvedIds.has(le.scope_item_id));
       const akHoursMin = approvedLabor.reduce((s, le) => s + (le.hours_min || 0), 0);
       const akHoursMax = approvedLabor.reduce((s, le) => s + (le.hours_max || 0), 0);
+      const akLaborMin = approvedLabor.reduce((s, le) => s + (le.hours_min || 0) * (le.rate_snapshot || 0), 0);
+      const akLaborMax = approvedLabor.reduce((s, le) => s + (le.hours_max || 0) * (le.rate_snapshot || 0), 0);
+
+      // Hard cost totals for classified items
+      const classifiedApproved = approved.filter(i => i.pricing_model === 'hard_cost_plus_labor');
+      const hardCostMin = classifiedApproved.reduce((s, i) => s + (i.hard_cost_tbd ? 0 : (i.hard_cost_min || 0)), 0);
+      const hardCostMax = classifiedApproved.reduce((s, i) => s + (i.hard_cost_tbd ? 0 : (i.hard_cost_max || 0)), 0);
+      const totalEstMin = hardCostMin + akLaborMin + approved.filter(i => i.pricing_model !== 'hard_cost_plus_labor').reduce((s, i) => s + (i.budget_min || 0), 0);
+      const totalEstMax = hardCostMax + akLaborMax + approved.filter(i => i.pricing_model !== 'hard_cost_plus_labor').reduce((s, i) => s + (i.budget_max || 0), 0);
 
       const summary = {
         total: items.length,
         approved: approved.length,
         request_changes: items.filter(i => i.decision_status === 'request_changes').length,
         not_now: items.filter(i => i.decision_status === 'not_now').length,
+        approved_hard_cost_min: hardCostMin,
+        approved_hard_cost_max: hardCostMax,
+        approved_ak_labor_min: akLaborMin,
+        approved_ak_labor_max: akLaborMax,
+        approved_total_estimate_min: totalEstMin,
+        approved_total_estimate_max: totalEstMax,
+        approved_ak_hours_min: akHoursMin,
+        approved_ak_hours_max: akHoursMax,
       };
 
       const confirmation = await base44.asServiceRole.entities.ScopeConfirmation.create({

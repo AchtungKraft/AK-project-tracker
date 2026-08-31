@@ -137,6 +137,7 @@ const EMPTY_RESPONSE = {
     scopeItemHistory: [],
     scopeConfirmations: [],
     scopeItemLaborEstimates: [],
+    scopeItemPricing: [],
     assignableUsers: [],
     assignableContacts: []
 };
@@ -511,6 +512,68 @@ Deno.serve(async (req) => {
                 hours_max: le.hours_max || 0,
                 sort_order: le.sort_order || 0,
             })),
+            // Canonical scope item pricing — server-computed safe aggregates
+            scopeItemPricing: (() => {
+                if (request.request_type !== 'client_scope_review') return [];
+                // Build labor lookup
+                const laborByItem = new Map();
+                for (const le of scopeLaborEstimatesRaw) {
+                    if (!laborByItem.has(le.scope_item_id)) laborByItem.set(le.scope_item_id, []);
+                    laborByItem.get(le.scope_item_id).push(le);
+                }
+                return scopeItemsRaw.map(item => {
+                    const model = item.pricing_model || 'legacy_estimate';
+                    const itemLabor = laborByItem.get(item.id) || [];
+                    let akHoursMin = 0, akHoursMax = 0, akLaborMin = 0, akLaborMax = 0;
+                    for (const le of itemLabor) {
+                        akHoursMin += le.hours_min || 0;
+                        akHoursMax += le.hours_max || 0;
+                        akLaborMin += (le.hours_min || 0) * (le.rate_snapshot || 0);
+                        akLaborMax += (le.hours_max || 0) * (le.rate_snapshot || 0);
+                    }
+                    const laborEstimated = itemLabor.length > 0 && (akHoursMin > 0 || akHoursMax > 0);
+
+                    if (model === 'legacy_estimate') {
+                        return {
+                            scope_item_id: item.id,
+                            pricing_model: 'legacy_estimate',
+                            hard_cost_min: null,
+                            hard_cost_max: null,
+                            hard_cost_tbd: false,
+                            ak_hours_min: akHoursMin,
+                            ak_hours_max: akHoursMax,
+                            ak_labor_min: akLaborMin,
+                            ak_labor_max: akLaborMax,
+                            total_estimate_min: null,
+                            total_estimate_max: null,
+                            labor_estimated: laborEstimated,
+                            estimate_complete: false,
+                        };
+                    }
+
+                    const hcMin = item.hard_cost_min ?? null;
+                    const hcMax = item.hard_cost_max ?? null;
+                    const hcTbd = item.hard_cost_tbd || false;
+                    const hcAvail = !hcTbd && hcMin != null && hcMax != null;
+                    const complete = hcAvail && laborEstimated;
+
+                    return {
+                        scope_item_id: item.id,
+                        pricing_model: 'hard_cost_plus_labor',
+                        hard_cost_min: hcMin,
+                        hard_cost_max: hcMax,
+                        hard_cost_tbd: hcTbd,
+                        ak_hours_min: akHoursMin,
+                        ak_hours_max: akHoursMax,
+                        ak_labor_min: akLaborMin,
+                        ak_labor_max: akLaborMax,
+                        total_estimate_min: complete ? (hcMin || 0) + akLaborMin : null,
+                        total_estimate_max: complete ? (hcMax || 0) + akLaborMax : null,
+                        labor_estimated: laborEstimated,
+                        estimate_complete: complete,
+                    };
+                });
+            })(),
             assignableUsers: assignableUsers,
             assignableContacts: projectClients.map(c => ({ id: c.id, name: c.name, type: 'client_contact' }))
         }, {

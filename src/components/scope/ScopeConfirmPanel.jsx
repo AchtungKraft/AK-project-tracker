@@ -3,11 +3,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Loader2, Shield, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatBudgetRange, formatHoursRange } from "./scopeHelpers";
+import { formatHoursRange } from "./scopeHelpers";
+import { computeScopePricingRollup, formatDollarRange } from "./scopePricingHelpers";
 
-/**
- * Detect if the current approved item set differs from the last confirmation snapshot.
- */
 function isConfirmationStale(lastConfirmation, items) {
   if (!lastConfirmation) return false;
   const currentApprovedIds = items
@@ -19,9 +17,57 @@ function isConfirmationStale(lastConfirmation, items) {
   return currentApprovedIds.some((id, idx) => id !== snapshotIds[idx]);
 }
 
+function PricingRollupCard({ title, items, laborEstimates, colorClasses, isClientView }) {
+  const rollup = computeScopePricingRollup(items, laborEstimates);
+  const hoursLabel = formatHoursRange(rollup.ak_hours_min, rollup.ak_hours_max);
+
+  // Primary display: total estimate if all classified & complete, else hard cost + legacy
+  let lines = [];
+  if (rollup.classified_count > 0 && rollup.legacy_count === 0 && !rollup.has_incomplete && rollup.hard_cost_tbd_count === 0) {
+    const total = formatDollarRange(rollup.total_estimate_min, rollup.total_estimate_max);
+    if (total) lines.push({ label: 'Total Estimate', value: total, bold: true });
+    const hc = formatDollarRange(rollup.hard_cost_min, rollup.hard_cost_max);
+    if (hc) lines.push({ label: 'Hard Cost', value: hc });
+    if (!isClientView) {
+      const labor = formatDollarRange(rollup.ak_labor_min, rollup.ak_labor_max);
+      if (labor) lines.push({ label: 'AK Labor', value: labor });
+    }
+  } else {
+    // Mixed or legacy
+    if (rollup.classified_count > 0) {
+      const hc = formatDollarRange(rollup.hard_cost_min, rollup.hard_cost_max);
+      if (hc) lines.push({ label: 'Hard Cost', value: hc });
+    }
+    if (rollup.legacy_count > 0) {
+      const leg = formatDollarRange(rollup.legacy_budget_min, rollup.legacy_budget_max);
+      if (leg) lines.push({ label: rollup.classified_count > 0 ? 'Legacy Estimate' : 'Estimate', value: leg });
+    }
+    if (!isClientView) {
+      const labor = formatDollarRange(rollup.ak_labor_min, rollup.ak_labor_max);
+      if (labor) lines.push({ label: 'AK Labor', value: labor });
+    }
+  }
+
+  return (
+    <div className={cn("border rounded-lg p-3", colorClasses.border, colorClasses.bg)}>
+      <p className={cn("text-xs", colorClasses.label)}>{title}</p>
+      <p className={cn("text-lg font-bold", colorClasses.count)}>{rollup.count} item{rollup.count !== 1 ? 's' : ''}</p>
+      {lines.map((l, i) => (
+        <p key={i} className={cn("mt-0.5", l.bold ? "text-sm font-semibold text-white" : "text-[11px] text-gray-400")}>
+          {l.label}: <span className={l.bold ? "" : colorClasses.value}>{l.value}</span>
+        </p>
+      ))}
+      {hoursLabel && <p className="text-[11px] text-red-400/70 mt-0.5">{hoursLabel} AK hrs</p>}
+      {rollup.hard_cost_tbd_count > 0 && <p className="text-[11px] text-gray-500 mt-0.5">+ {rollup.hard_cost_tbd_count} TBD</p>}
+      {rollup.legacy_budget_tbd_count > 0 && <p className="text-[11px] text-gray-500 mt-0.5">+ {rollup.legacy_budget_tbd_count} TBD</p>}
+    </div>
+  );
+}
+
 export default function ScopeConfirmPanel({
   stats,
   items = [],
+  laborEstimates = [],
   lastConfirmation,
   onConfirm,
   readOnly = false,
@@ -33,9 +79,8 @@ export default function ScopeConfirmPanel({
 
   if (!stats || stats.total === 0) return null;
 
-  const approvedBudget = formatBudgetRange(stats.approved_budget_min, stats.approved_budget_max, false);
-  const approvedHours = formatHoursRange(stats.approved_ak_hours_min, stats.approved_ak_hours_max);
-  const notNowHours = formatHoursRange(stats.not_now_ak_hours_min, stats.not_now_ak_hours_max);
+  const approvedItems = items.filter(i => i.decision_status === 'approved');
+  const notNowItems = items.filter(i => i.decision_status === 'not_now');
   const allReviewed = stats.needs_review === 0 && stats.reapproval_required === 0;
 
   const handleConfirm = async () => {
@@ -57,7 +102,6 @@ export default function ScopeConfirmPanel({
           </div>
         </div>
 
-        {/* Stale confirmation warning */}
         {stale && lastConfirmation && (
           <div className="flex items-center gap-2 p-2.5 rounded-md bg-amber-950/30 border border-amber-700/30">
             <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
@@ -75,33 +119,38 @@ export default function ScopeConfirmPanel({
 
         {/* Summary */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-green-950/20 border border-green-700/30 rounded-lg p-3">
-            <p className="text-xs text-green-400/70">Approved</p>
-            <p className="text-lg font-bold text-green-300">{stats.approved} item{stats.approved !== 1 ? 's' : ''}</p>
-            {approvedBudget && <p className="text-sm text-green-400 mt-0.5">{approvedBudget}</p>}
-            {approvedHours && <p className="text-[11px] text-red-400/70 mt-0.5">{approvedHours} AK hrs</p>}
-            {stats.approved_tbd_count > 0 && (
-              <p className="text-[11px] text-green-400/60 mt-0.5">+ {stats.approved_tbd_count} TBD</p>
-            )}
-          </div>
-          <div className="bg-gray-800/50 border border-gray-700/30 rounded-lg p-3">
-            <p className="text-xs text-gray-400">Not Now</p>
-            <p className="text-lg font-bold text-gray-300">{stats.not_now} item{stats.not_now !== 1 ? 's' : ''}</p>
-            {(stats.not_now_budget_min > 0 || stats.not_now_budget_max > 0) && (
-              <p className="text-sm text-gray-400 mt-0.5">{formatBudgetRange(stats.not_now_budget_min, stats.not_now_budget_max, false)}</p>
-            )}
-            {notNowHours && <p className="text-[11px] text-red-400/60 mt-0.5">{notNowHours} AK hrs</p>}
-            {stats.not_now_tbd_count > 0 && (
-              <p className="text-[11px] text-gray-500 mt-0.5">+ {stats.not_now_tbd_count} TBD</p>
-            )}
-          </div>
+          {approvedItems.length > 0 && (
+            <PricingRollupCard
+              title="Approved"
+              items={approvedItems}
+              laborEstimates={laborEstimates}
+              isClientView={isClientView}
+              colorClasses={{
+                bg: 'bg-green-950/20',
+                border: 'border-green-700/30',
+                label: 'text-green-400/70',
+                count: 'text-green-300',
+                value: 'text-green-400',
+              }}
+            />
+          )}
+          <PricingRollupCard
+            title="Not Now"
+            items={notNowItems}
+            laborEstimates={laborEstimates}
+            isClientView={isClientView}
+            colorClasses={{
+              bg: 'bg-gray-800/50',
+              border: 'border-gray-700/30',
+              label: 'text-gray-400',
+              count: 'text-gray-300',
+              value: 'text-gray-400',
+            }}
+          />
         </div>
 
         {stats.request_changes > 0 && (
           <p className="text-xs text-orange-400">{stats.request_changes} item{stats.request_changes !== 1 ? 's' : ''} with changes requested</p>
-        )}
-        {stats.approved_tbd_count > 0 && (
-          <p className="text-xs text-gray-400">{stats.approved_tbd_count} approved item{stats.approved_tbd_count !== 1 ? 's' : ''} with TBD budget</p>
         )}
 
         {!allReviewed && (

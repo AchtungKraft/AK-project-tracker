@@ -193,10 +193,7 @@ export function formatHoursRange(min, max) {
 
 /**
  * Compute a deterministic hash of material fields for reapproval detection.
- */
-/**
- * Compute a deterministic hash of material fields for reapproval detection.
- * Includes labor estimate data so changes trigger reapproval.
+ * Includes labor estimate data and hard cost fields so changes trigger reapproval.
  */
 export function computeMaterialHash(item, laborEstimates = []) {
   const itemLabor = laborEstimates
@@ -209,6 +206,10 @@ export function computeMaterialHash(item, laborEstimates = []) {
     budget_min: item.budget_min ?? null,
     budget_max: item.budget_max ?? null,
     budget_note: item.budget_note || '',
+    hard_cost_min: item.hard_cost_min ?? null,
+    hard_cost_max: item.hard_cost_max ?? null,
+    hard_cost_tbd: item.hard_cost_tbd || false,
+    hard_cost_note: item.hard_cost_note || '',
     images: (item.images || []).slice().sort(),
     labor: itemLabor,
   };

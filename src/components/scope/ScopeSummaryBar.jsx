@@ -2,14 +2,48 @@ import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { CheckCircle2, Clock, MessageSquare, XCircle, AlertTriangle, PauseCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatBudgetRange, formatHoursRange } from "./scopeHelpers";
+import { formatHoursRange } from "./scopeHelpers";
+import { computeScopePricingRollup, formatDollarRange } from "./scopePricingHelpers";
 
-function DispositionCard({ icon: Icon, label, count, budgetMin, budgetMax, tbdCount, akHoursMin, akHoursMax, akLaborMin, akLaborMax, colorScheme, isMobile, isClientView }) {
-  if (count === 0) return null;
-  const budget = formatBudgetRange(budgetMin, budgetMax, false);
-  const hasLabor = (akHoursMin > 0 || akHoursMax > 0);
-  const hoursLabel = hasLabor ? formatHoursRange(akHoursMin, akHoursMax) : null;
-  const laborLabel = (!isClientView && hasLabor) ? formatBudgetRange(akLaborMin, akLaborMax, false) : null;
+function DispositionCard({ icon: Icon, label, items, laborEstimates, colorScheme, isMobile, isClientView }) {
+  if (!items || items.length === 0) return null;
+
+  const rollup = computeScopePricingRollup(items, laborEstimates);
+  const hasLabor = rollup.ak_hours_min > 0 || rollup.ak_hours_max > 0;
+  const hoursLabel = hasLabor ? formatHoursRange(rollup.ak_hours_min, rollup.ak_hours_max) : null;
+
+  // Determine what to show as the primary dollar range
+  let primaryLabel = null;
+  let secondaryLines = [];
+
+  if (rollup.classified_count > 0 && rollup.legacy_count === 0) {
+    // All classified — show full breakdown
+    if (rollup.has_incomplete || rollup.hard_cost_tbd_count > 0) {
+      // Some incomplete — show hard cost + labor separately
+      const hc = formatDollarRange(rollup.hard_cost_min, rollup.hard_cost_max);
+      if (hc) secondaryLines.push({ label: 'Hard Cost', value: hc, color: 'text-cyan-400' });
+      if (rollup.hard_cost_tbd_count > 0) secondaryLines.push({ label: 'Hard Cost TBD', value: `${rollup.hard_cost_tbd_count} item${rollup.hard_cost_tbd_count > 1 ? 's' : ''}`, color: 'text-gray-400' });
+      if (!isClientView && hasLabor) secondaryLines.push({ label: 'AK Labor', value: formatDollarRange(rollup.ak_labor_min, rollup.ak_labor_max), color: 'text-emerald-400' });
+    } else {
+      // All complete — show total estimate as primary
+      primaryLabel = formatDollarRange(rollup.total_estimate_min, rollup.total_estimate_max);
+      const hc = formatDollarRange(rollup.hard_cost_min, rollup.hard_cost_max);
+      if (hc) secondaryLines.push({ label: 'Hard Cost', value: hc, color: 'text-cyan-400/70' });
+      if (!isClientView && hasLabor) secondaryLines.push({ label: 'AK Labor', value: formatDollarRange(rollup.ak_labor_min, rollup.ak_labor_max), color: 'text-emerald-400/70' });
+    }
+  } else if (rollup.legacy_count > 0 && rollup.classified_count === 0) {
+    // All legacy
+    primaryLabel = formatDollarRange(rollup.legacy_budget_min, rollup.legacy_budget_max);
+    if (rollup.legacy_budget_tbd_count > 0) secondaryLines.push({ label: 'TBD', value: `${rollup.legacy_budget_tbd_count} item${rollup.legacy_budget_tbd_count > 1 ? 's' : ''}`, color: 'text-gray-400' });
+    if (!isClientView && hasLabor) secondaryLines.push({ label: 'AK Labor', value: formatDollarRange(rollup.ak_labor_min, rollup.ak_labor_max), color: 'text-emerald-400/70' });
+  } else {
+    // Mixed — show what we can
+    const totalClassified = formatDollarRange(rollup.total_estimate_min, rollup.total_estimate_max);
+    const totalLegacy = formatDollarRange(rollup.legacy_budget_min, rollup.legacy_budget_max);
+    if (totalClassified) secondaryLines.push({ label: 'Classified', value: totalClassified, color: 'text-white' });
+    if (totalLegacy) secondaryLines.push({ label: 'Legacy', value: totalLegacy, color: 'text-cyan-400/70' });
+    if (!isClientView && hasLabor) secondaryLines.push({ label: 'AK Labor', value: formatDollarRange(rollup.ak_labor_min, rollup.ak_labor_max), color: 'text-emerald-400/70' });
+  }
 
   return (
     <Card className={cn("border", colorScheme.card)}>
@@ -21,20 +55,22 @@ function DispositionCard({ icon: Icon, label, count, budgetMin, budgetMax, tbdCo
           <div>
             <p className={cn("font-bold", colorScheme.title, isMobile ? "text-base" : "text-lg")}>{label}</p>
             <p className={cn("text-xs", colorScheme.subtitle)}>
-              {count} item{count !== 1 ? 's' : ''}
-              {tbdCount > 0 && <span className="ml-1 opacity-70">+ {tbdCount} TBD</span>}
+              {rollup.count} item{rollup.count !== 1 ? 's' : ''}
             </p>
           </div>
         </div>
-        <div className="text-right">
-          {budget && (
-            <p className={cn("font-bold", colorScheme.title, isMobile ? "text-lg" : "text-xl")}>{budget}</p>
+        <div className="text-right space-y-0.5">
+          {primaryLabel && (
+            <p className={cn("font-bold", colorScheme.title, isMobile ? "text-lg" : "text-xl")}>{primaryLabel}</p>
           )}
+          {secondaryLines.map((l, i) => (
+            <p key={i} className="text-[10px]">
+              <span className="text-gray-500">{l.label}: </span>
+              <span className={l.color}>{l.value}</span>
+            </p>
+          ))}
           {hoursLabel && (
-            <p className="text-[11px] text-red-400/70 mt-0.5">AK Hours: {hoursLabel}</p>
-          )}
-          {laborLabel && (
-            <p className="text-[10px] text-emerald-400/60">AK Labor: {laborLabel}</p>
+            <p className="text-[11px] text-red-400/70">{hoursLabel} AK hrs</p>
           )}
         </div>
       </CardContent>
@@ -58,27 +94,24 @@ const NOT_NOW_COLORS = {
   subtitle: "text-gray-400/70",
 };
 
-export default function ScopeSummaryBar({ stats, isMobile = false, isClientView = false }) {
+export default function ScopeSummaryBar({ stats, items = [], laborEstimates = [], isMobile = false, isClientView = false }) {
   if (!stats || stats.total === 0) return null;
+
+  const approvedItems = items.filter(i => i.decision_status === 'approved');
+  const notNowItems = items.filter(i => i.decision_status === 'not_now');
 
   return (
     <div className="space-y-3">
       {/* Disposition cards */}
       <div className={cn(
         "grid gap-3",
-        (stats.approved > 0 && stats.not_now > 0) ? (isMobile ? "grid-cols-1" : "grid-cols-2") : "grid-cols-1"
+        (approvedItems.length > 0 && notNowItems.length > 0) ? (isMobile ? "grid-cols-1" : "grid-cols-2") : "grid-cols-1"
       )}>
         <DispositionCard
           icon={CheckCircle2}
           label="Approved Scope"
-          count={stats.approved}
-          budgetMin={stats.approved_budget_min}
-          budgetMax={stats.approved_budget_max}
-          tbdCount={stats.approved_tbd_count}
-          akHoursMin={stats.approved_ak_hours_min}
-          akHoursMax={stats.approved_ak_hours_max}
-          akLaborMin={stats.approved_ak_labor_min}
-          akLaborMax={stats.approved_ak_labor_max}
+          items={approvedItems}
+          laborEstimates={laborEstimates}
           colorScheme={APPROVED_COLORS}
           isMobile={isMobile}
           isClientView={isClientView}
@@ -86,14 +119,8 @@ export default function ScopeSummaryBar({ stats, isMobile = false, isClientView 
         <DispositionCard
           icon={PauseCircle}
           label="Not Now"
-          count={stats.not_now}
-          budgetMin={stats.not_now_budget_min}
-          budgetMax={stats.not_now_budget_max}
-          tbdCount={stats.not_now_tbd_count}
-          akHoursMin={stats.not_now_ak_hours_min}
-          akHoursMax={stats.not_now_ak_hours_max}
-          akLaborMin={stats.not_now_ak_labor_min}
-          akLaborMax={stats.not_now_ak_labor_max}
+          items={notNowItems}
+          laborEstimates={laborEstimates}
           colorScheme={NOT_NOW_COLORS}
           isMobile={isMobile}
           isClientView={isClientView}
