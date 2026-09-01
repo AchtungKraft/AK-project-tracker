@@ -33,11 +33,16 @@ export default function ScopeItemEditorDrawer({
     }
   }, [open]);
 
-  // ESC to close
+  // ESC to close — but only if no Radix popover/select is open above us
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        // If a Radix Select/Popover/Dropdown is open, let it handle Escape first
+        const openOverlay = document.querySelector('[data-radix-popper-content-wrapper]');
+        if (openOverlay) return;
+        onClose();
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
