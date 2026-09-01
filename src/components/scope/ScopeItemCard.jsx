@@ -92,10 +92,10 @@ export default function ScopeItemCard({
           </div>
         )}
 
-        {/* Pricing */}
+        {/* Pricing — Total-first hierarchy */}
         <ScopeItemPricingDisplay item={item} laborEstimates={laborEstimates} isClientView={isClientView} isMobile={isMobile} />
 
-        {/* Description */}
+        {/* Description — after pricing block */}
         {item.description && (
           <p className={cn("text-gray-400 leading-relaxed", "text-sm")}>{item.description}</p>
         )}

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Loader2, Shield, AlertTriangle } from "lucide-react";
+import { CheckCircle2, Loader2, Shield, AlertTriangle, PauseCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatHoursRange } from "./scopeHelpers";
 import { computeScopePricingRollup, formatDollarRange } from "./scopePricingHelpers";
@@ -18,47 +18,76 @@ function isConfirmationStale(lastConfirmation, items) {
   return currentApprovedIds.some((id, idx) => id !== snapshotIds[idx]);
 }
 
-function PricingRollupCard({ title, items, laborEstimates, colorClasses, isClientView }) {
+function ConfirmDispositionSummary({ icon: Icon, title, items, laborEstimates, colorClasses, isClientView }) {
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
   const rollup = computeScopePricingRollup(items, laborEstimates);
   const hoursLabel = formatHoursRange(rollup.ak_hours_min, rollup.ak_hours_max);
 
-  // Primary display: total estimate if all classified & complete, else hard cost + legacy
-  let lines = [];
+  // Primary: total estimate if all classified & complete
+  let primaryLabel = null;
+  let secondaryLines = [];
+
   if (rollup.classified_count > 0 && rollup.legacy_count === 0 && !rollup.has_incomplete && rollup.hard_cost_tbd_count === 0) {
-    const total = formatDollarRange(rollup.total_estimate_min, rollup.total_estimate_max);
-    if (total) lines.push({ label: 'Total Estimate', value: total, bold: true });
+    primaryLabel = formatDollarRange(rollup.total_estimate_min, rollup.total_estimate_max);
     const hc = formatDollarRange(rollup.hard_cost_min, rollup.hard_cost_max);
-    if (hc) lines.push({ label: 'Hard Cost', value: hc });
+    if (hc) secondaryLines.push({ label: 'Hard Cost', value: hc });
     if (!isClientView) {
       const labor = formatDollarRange(rollup.ak_labor_min, rollup.ak_labor_max);
-      if (labor) lines.push({ label: 'AK Labor', value: labor });
+      if (labor) secondaryLines.push({ label: 'AK Labor', value: labor });
     }
   } else {
-    // Mixed or legacy
     if (rollup.classified_count > 0) {
       const hc = formatDollarRange(rollup.hard_cost_min, rollup.hard_cost_max);
-      if (hc) lines.push({ label: 'Hard Cost', value: hc });
+      if (hc) secondaryLines.push({ label: 'Hard Cost', value: hc });
     }
     if (rollup.legacy_count > 0) {
       const leg = formatDollarRange(rollup.legacy_budget_min, rollup.legacy_budget_max);
-      if (leg) lines.push({ label: rollup.classified_count > 0 ? 'Legacy Estimate' : 'Estimate', value: leg });
+      if (leg) secondaryLines.push({ label: rollup.classified_count > 0 ? 'Legacy Estimate' : 'Estimate', value: leg });
     }
     if (!isClientView) {
       const labor = formatDollarRange(rollup.ak_labor_min, rollup.ak_labor_max);
-      if (labor) lines.push({ label: 'AK Labor', value: labor });
+      if (labor) secondaryLines.push({ label: 'AK Labor', value: labor });
     }
   }
 
+  const hasBreakdown = secondaryLines.length > 0;
+
   return (
     <div className={cn("border rounded-lg p-3", colorClasses.border, colorClasses.bg)}>
-      <p className={cn("text-xs", colorClasses.label)}>{title}</p>
+      <div className="flex items-center gap-1.5 mb-1">
+        <Icon className={cn("w-3.5 h-3.5", colorClasses.label)} />
+        <p className={cn("text-xs", colorClasses.label)}>{title}</p>
+      </div>
       <p className={cn("text-lg font-bold", colorClasses.count)}>{rollup.count} item{rollup.count !== 1 ? 's' : ''}</p>
-      {lines.map((l, i) => (
-        <p key={i} className={cn("mt-0.5", l.bold ? "text-sm font-semibold text-white" : "text-[11px] text-gray-400")}>
-          {l.label}: <span className={l.bold ? "" : colorClasses.value}>{l.value}</span>
-        </p>
-      ))}
+
+      {/* Primary total */}
+      {primaryLabel && (
+        <p className="text-sm font-semibold text-white mt-0.5">{primaryLabel}</p>
+      )}
+
+      {/* Hours */}
       {hoursLabel && <p className="text-[11px] text-red-400/70 mt-0.5">{hoursLabel.replace(/ hrs$/, '')} AK hrs</p>}
+
+      {/* Collapsible breakdown */}
+      {hasBreakdown && (
+        <div className="mt-1">
+          <button onClick={() => setBreakdownOpen(!breakdownOpen)}
+            className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-300 transition-colors">
+            {breakdownOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            <span>Cost Breakdown</span>
+          </button>
+          {breakdownOpen && (
+            <div className="mt-1 pl-2 space-y-0.5">
+              {secondaryLines.map((l, i) => (
+                <p key={i} className="text-[11px] text-gray-500">
+                  {l.label}: <span className={colorClasses.value}>{l.value}</span>
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {rollup.hard_cost_tbd_count > 0 && <p className="text-[11px] text-gray-500 mt-0.5">+ {rollup.hard_cost_tbd_count} TBD</p>}
       {rollup.legacy_budget_tbd_count > 0 && <p className="text-[11px] text-gray-500 mt-0.5">+ {rollup.legacy_budget_tbd_count} TBD</p>}
     </div>
@@ -83,6 +112,8 @@ export default function ScopeConfirmPanel({
   const approvedItems = items.filter(i => i.decision_status === 'approved');
   const notNowItems = items.filter(i => i.decision_status === 'not_now');
   const allReviewed = stats.needs_review === 0 && stats.reapproval_required === 0;
+  const unreviewedCount = stats.needs_review + stats.reapproval_required;
+  const hasDecisions = approvedItems.length > 0 || notNowItems.length > 0;
 
   const handleConfirm = async () => {
     setConfirming(true);
@@ -118,46 +149,60 @@ export default function ScopeConfirmPanel({
           </div>
         )}
 
-        {/* Summary */}
-        <div className="grid grid-cols-2 gap-3">
-          {approvedItems.length > 0 && (
-            <PricingRollupCard
-              title="Approved"
-              items={approvedItems}
-              laborEstimates={laborEstimates}
-              isClientView={isClientView}
-              colorClasses={{
-                bg: 'bg-green-950/20',
-                border: 'border-green-700/30',
-                label: 'text-green-400/70',
-                count: 'text-green-300',
-                value: 'text-green-400',
-              }}
-            />
-          )}
-          <PricingRollupCard
-            title="Not Now"
-            items={notNowItems}
-            laborEstimates={laborEstimates}
-            isClientView={isClientView}
-            colorClasses={{
-              bg: 'bg-gray-800/50',
-              border: 'border-gray-700/30',
-              label: 'text-gray-400',
-              count: 'text-gray-300',
-              value: 'text-gray-400',
-            }}
-          />
-        </div>
+        {/* Empty state — no decisions yet */}
+        {!hasDecisions && !allReviewed && (
+          <p className="text-xs text-amber-400">
+            {unreviewedCount} item{unreviewedCount !== 1 ? 's' : ''} still need review before confirmation
+          </p>
+        )}
+
+        {/* Disposition summaries — only show when decisions exist */}
+        {hasDecisions && (
+          <div className={cn("grid gap-3", approvedItems.length > 0 && notNowItems.length > 0 ? "grid-cols-2" : "grid-cols-1")}>
+            {approvedItems.length > 0 && (
+              <ConfirmDispositionSummary
+                icon={CheckCircle2}
+                title="Approved"
+                items={approvedItems}
+                laborEstimates={laborEstimates}
+                isClientView={isClientView}
+                colorClasses={{
+                  bg: 'bg-green-950/20',
+                  border: 'border-green-700/30',
+                  label: 'text-green-400/70',
+                  count: 'text-green-300',
+                  value: 'text-green-400',
+                }}
+              />
+            )}
+            {notNowItems.length > 0 && (
+              <ConfirmDispositionSummary
+                icon={PauseCircle}
+                title="Not Now"
+                items={notNowItems}
+                laborEstimates={laborEstimates}
+                isClientView={isClientView}
+                colorClasses={{
+                  bg: 'bg-gray-800/50',
+                  border: 'border-gray-700/30',
+                  label: 'text-gray-400',
+                  count: 'text-gray-300',
+                  value: 'text-gray-400',
+                }}
+              />
+            )}
+          </div>
+        )}
+
+        {/* Remaining items to review */}
+        {hasDecisions && !allReviewed && (
+          <p className="text-xs text-amber-400">
+            {unreviewedCount} item{unreviewedCount !== 1 ? 's' : ''} still need review before confirmation
+          </p>
+        )}
 
         {stats.request_changes > 0 && (
           <p className="text-xs text-orange-400">{stats.request_changes} item{stats.request_changes !== 1 ? 's' : ''} with changes requested</p>
-        )}
-
-        {!allReviewed && (
-          <p className="text-xs text-amber-400">
-            {stats.needs_review + stats.reapproval_required} item{(stats.needs_review + stats.reapproval_required) !== 1 ? 's' : ''} still need review before confirmation
-          </p>
         )}
 
         {lastConfirmation && !stale && (

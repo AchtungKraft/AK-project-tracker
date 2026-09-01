@@ -24,7 +24,6 @@ export default function ScopeCategorySection({
 }) {
   const [collapsed, setCollapsed] = useState(false);
 
-  // Use allItems from the hierarchy builder (all items in this category)
   const allItems = category.allItems || (category.groups || []).flatMap(g => g.items || []);
   const stats = computeRollup(allItems, laborEstimates);
   const pricingRollup = computeScopePricingRollup(allItems, laborEstimates);
@@ -32,19 +31,24 @@ export default function ScopeCategorySection({
   // If filtering, check if any items match
   const hasMatchingItems = filter === "all" || allItems.some(i => (i.decision_status || "needs_review") === filter);
 
-  // In client view, hide empty categories entirely
   if (isClientView && allItems.length === 0) return null;
-  // When filtering, hide categories with no matching items
   if (filter !== "all" && !hasMatchingItems) return null;
 
-  const statusParts = [];
-  if (stats.approved > 0) statusParts.push(`${stats.approved} Approved`);
-  if (stats.needs_review > 0) statusParts.push(`${stats.needs_review} Needs Review`);
-  if (stats.request_changes > 0) statusParts.push(`${stats.request_changes} Changes`);
-  if (stats.reapproval_required > 0) statusParts.push(`${stats.reapproval_required} Reapproval`);
-  if (stats.not_now > 0) statusParts.push(`${stats.not_now} Not Now`);
+  // Compute the total label for the category
+  const totalLabel = pricingRollup.all_classified && !pricingRollup.has_incomplete && pricingRollup.hard_cost_tbd_count === 0
+    ? formatDollarCompact(pricingRollup.total_estimate_min, pricingRollup.total_estimate_max)
+    : formatDollarCompact(
+        pricingRollup.legacy_budget_min + pricingRollup.hard_cost_min + pricingRollup.ak_labor_min,
+        pricingRollup.legacy_budget_max + pricingRollup.hard_cost_max + pricingRollup.ak_labor_max
+      );
+  const hoursLabel = pricingRollup.ak_hours_max > 0
+    ? formatHoursRange(pricingRollup.ak_hours_min, pricingRollup.ak_hours_max)?.replace(/ hrs$/, '')
+    : null;
 
   const canEdit = !isClientView;
+
+  // Count populated groups for suppression logic
+  const populatedGroupCount = (category.groups || []).filter(g => (g.items || []).length > 0).length;
 
   return (
     <div className={cn(
@@ -52,7 +56,7 @@ export default function ScopeCategorySection({
       isMobile ? "p-2" : "p-4",
       "bg-gray-900/40 border-gray-700/50"
     )}>
-      {/* Category Header */}
+      {/* Category Header — simplified */}
       <div className="flex items-center gap-2">
         <button onClick={() => setCollapsed(!collapsed)} className="flex items-center gap-2 flex-1 text-left min-w-0">
           {collapsed
@@ -65,31 +69,15 @@ export default function ScopeCategorySection({
             </h3>
             {allItems.length > 0 ? (
               <p className="text-xs text-gray-500 mt-0.5">
-                {statusParts.join(' · ')}
-                {(() => {
-                  // Show total estimate if all classified, else legacy budget
-                  const total = pricingRollup.all_classified && !pricingRollup.has_incomplete && pricingRollup.hard_cost_tbd_count === 0
-                    ? formatDollarCompact(pricingRollup.total_estimate_min, pricingRollup.total_estimate_max)
-                    : formatDollarCompact(pricingRollup.legacy_budget_min + pricingRollup.hard_cost_min + pricingRollup.ak_labor_min, pricingRollup.legacy_budget_max + pricingRollup.hard_cost_max + pricingRollup.ak_labor_max);
-                  return total ? <span className="text-cyan-500/70 ml-2">{total}</span> : null;
-                })()}
-                {pricingRollup.ak_hours_max > 0 && (
-                  <span className="text-red-400/60 ml-2">{formatHoursRange(pricingRollup.ak_hours_min, pricingRollup.ak_hours_max).replace(/ hrs$/, '')} AK hrs</span>
-                )}
+                {stats.total} item{stats.total !== 1 ? 's' : ''}
+                {totalLabel && <span className="text-gray-400 ml-1">· {totalLabel} total</span>}
+                {hoursLabel && <span className="text-red-400/60 ml-1">· {hoursLabel} AK hrs</span>}
               </p>
             ) : (
               <p className="text-xs text-gray-600 mt-0.5 italic">No scope items yet</p>
             )}
           </div>
         </button>
-
-        <span className={cn(
-          "text-xs font-medium px-2 py-0.5 rounded shrink-0",
-          stats.total === 0 ? "bg-gray-800/50 text-gray-600" :
-          stats.total === stats.approved ? "bg-green-900/30 text-green-400" : "bg-gray-800 text-gray-400"
-        )}>
-          {stats.total} item{stats.total !== 1 ? 's' : ''}
-        </span>
       </div>
 
       {/* Body */}
@@ -115,11 +103,11 @@ export default function ScopeCategorySection({
                   onAddItem={onAddItem}
                   isMobile={isMobile}
                   filter={filter}
+                  suppressPricing={populatedGroupCount <= 1}
                 />
               ))}
             </div>
           ) : canEdit && allItems.length === 0 ? (
-            /* Empty category with add action for staff */
             <div className="py-2 pl-4">
               <Button size="sm" variant="ghost" onClick={() => onAddItem?.({ categoryId: category.id })}
                 className="text-xs text-gray-500 hover:text-white gap-1 h-7">
@@ -128,7 +116,6 @@ export default function ScopeCategorySection({
             </div>
           ) : null}
 
-          {/* Contextual add for non-empty categories */}
           {canEdit && allItems.length > 0 && onAddItem && (
             <div className="pl-4">
               <Button size="sm" variant="ghost" onClick={() => onAddItem({ categoryId: category.id })}

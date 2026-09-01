@@ -22,28 +22,33 @@ export default function ScopeGroupSection({
   onAddItem,
   isMobile = false,
   filter = "all",
+  suppressPricing = false,
 }) {
   const [collapsed, setCollapsed] = useState(false);
 
   const allItems = group.items || [];
   const filteredItems = filter === "all" ? allItems : allItems.filter(i => (i.decision_status || "needs_review") === filter);
-  const stats = computeRollup(allItems, laborEstimates);
-  const pricingRollup = computeScopePricingRollup(allItems, laborEstimates);
 
   // Hide empty groups after filtering
   if (filter !== "all" && filteredItems.length === 0) return null;
 
-  const statusParts = [];
-  if (stats.approved > 0) statusParts.push(`${stats.approved} Approved`);
-  if (stats.needs_review > 0) statusParts.push(`${stats.needs_review} Needs Review`);
-  if (stats.request_changes > 0) statusParts.push(`${stats.request_changes} Changes`);
-  if (stats.reapproval_required > 0) statusParts.push(`${stats.reapproval_required} Reapproval`);
-
   const canEdit = !isClientView;
+
+  // Only compute pricing if we're going to show it
+  let compactTotal = null;
+  if (!suppressPricing && allItems.length > 0) {
+    const pricingRollup = computeScopePricingRollup(allItems, laborEstimates);
+    compactTotal = pricingRollup.all_classified && !pricingRollup.has_incomplete && pricingRollup.hard_cost_tbd_count === 0
+      ? formatDollarCompact(pricingRollup.total_estimate_min, pricingRollup.total_estimate_max)
+      : formatDollarCompact(
+          pricingRollup.legacy_budget_min + pricingRollup.hard_cost_min + pricingRollup.ak_labor_min,
+          pricingRollup.legacy_budget_max + pricingRollup.hard_cost_max + pricingRollup.ak_labor_max
+        );
+  }
 
   return (
     <div className="space-y-2">
-      {/* Group Header */}
+      {/* Group Header — organizational, compact */}
       <div className="flex items-center gap-1">
         <button onClick={() => setCollapsed(!collapsed)} className="flex items-center gap-2 flex-1 py-1 text-left group">
           {collapsed
@@ -54,18 +59,10 @@ export default function ScopeGroupSection({
             {group.name}
           </span>
           <span className="text-[10px] text-gray-500 ml-1">
-            {statusParts.join(' · ')}
+            {allItems.length} item{allItems.length !== 1 ? 's' : ''}
+            {compactTotal && <span className="text-gray-400 ml-1">· {compactTotal}</span>}
           </span>
           <span className="flex-1" />
-          {pricingRollup.ak_hours_max > 0 && (
-            <span className="text-[10px] text-red-400/60 mr-2">{formatHoursRange(pricingRollup.ak_hours_min, pricingRollup.ak_hours_max).replace(/ hrs$/, '')} AK hrs</span>
-          )}
-          {(() => {
-            const total = pricingRollup.all_classified && !pricingRollup.has_incomplete && pricingRollup.hard_cost_tbd_count === 0
-              ? formatDollarCompact(pricingRollup.total_estimate_min, pricingRollup.total_estimate_max)
-              : formatDollarCompact(pricingRollup.legacy_budget_min + pricingRollup.hard_cost_min + pricingRollup.ak_labor_min, pricingRollup.legacy_budget_max + pricingRollup.hard_cost_max + pricingRollup.ak_labor_max);
-            return total ? <span className="text-[10px] text-cyan-500/70">{total}</span> : null;
-          })()}
         </button>
 
         {canEdit && onAddItem && (

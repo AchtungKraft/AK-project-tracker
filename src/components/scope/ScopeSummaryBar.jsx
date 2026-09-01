@@ -1,78 +1,92 @@
-import React from "react";
+import React, { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle2, Clock, MessageSquare, XCircle, AlertTriangle, PauseCircle } from "lucide-react";
+import { CheckCircle2, Clock, MessageSquare, XCircle, AlertTriangle, PauseCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatHoursRange } from "./scopeHelpers";
 import { computeScopePricingRollup, formatDollarRange } from "./scopePricingHelpers";
 
 function DispositionCard({ icon: Icon, label, items, laborEstimates, colorScheme, isMobile, isClientView }) {
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
   if (!items || items.length === 0) return null;
 
   const rollup = computeScopePricingRollup(items, laborEstimates);
   const hasLabor = rollup.ak_hours_min > 0 || rollup.ak_hours_max > 0;
   const hoursLabel = hasLabor ? formatHoursRange(rollup.ak_hours_min, rollup.ak_hours_max) : null;
 
-  // Determine what to show as the primary dollar range
+  // Primary: total estimate
   let primaryLabel = null;
   let secondaryLines = [];
 
   if (rollup.classified_count > 0 && rollup.legacy_count === 0) {
-    // All classified — show full breakdown
-    if (rollup.has_incomplete || rollup.hard_cost_tbd_count > 0) {
-      // Some incomplete — show hard cost + labor separately
-      const hc = formatDollarRange(rollup.hard_cost_min, rollup.hard_cost_max);
-      if (hc) secondaryLines.push({ label: 'Hard Cost', value: hc, color: 'text-cyan-400' });
-      if (rollup.hard_cost_tbd_count > 0) secondaryLines.push({ label: 'Hard Cost TBD', value: `${rollup.hard_cost_tbd_count} item${rollup.hard_cost_tbd_count > 1 ? 's' : ''}`, color: 'text-gray-400' });
-      if (!isClientView && hasLabor) secondaryLines.push({ label: 'AK Labor', value: formatDollarRange(rollup.ak_labor_min, rollup.ak_labor_max), color: 'text-emerald-400' });
-    } else {
-      // All complete — show total estimate as primary
+    if (!rollup.has_incomplete && rollup.hard_cost_tbd_count === 0) {
       primaryLabel = formatDollarRange(rollup.total_estimate_min, rollup.total_estimate_max);
       const hc = formatDollarRange(rollup.hard_cost_min, rollup.hard_cost_max);
-      if (hc) secondaryLines.push({ label: 'Hard Cost', value: hc, color: 'text-cyan-400/70' });
-      if (!isClientView && hasLabor) secondaryLines.push({ label: 'AK Labor', value: formatDollarRange(rollup.ak_labor_min, rollup.ak_labor_max), color: 'text-emerald-400/70' });
+      if (hc) secondaryLines.push({ label: 'Hard Cost', value: hc });
+      if (hasLabor) secondaryLines.push({ label: 'AK Labor', value: formatDollarRange(rollup.ak_labor_min, rollup.ak_labor_max) });
+    } else {
+      const hc = formatDollarRange(rollup.hard_cost_min, rollup.hard_cost_max);
+      if (hc) secondaryLines.push({ label: 'Hard Cost', value: hc });
+      if (rollup.hard_cost_tbd_count > 0) secondaryLines.push({ label: 'Hard Cost TBD', value: `${rollup.hard_cost_tbd_count} item${rollup.hard_cost_tbd_count > 1 ? 's' : ''}` });
+      if (hasLabor) secondaryLines.push({ label: 'AK Labor', value: formatDollarRange(rollup.ak_labor_min, rollup.ak_labor_max) });
     }
   } else if (rollup.legacy_count > 0 && rollup.classified_count === 0) {
-    // All legacy
     primaryLabel = formatDollarRange(rollup.legacy_budget_min, rollup.legacy_budget_max);
-    if (rollup.legacy_budget_tbd_count > 0) secondaryLines.push({ label: 'TBD', value: `${rollup.legacy_budget_tbd_count} item${rollup.legacy_budget_tbd_count > 1 ? 's' : ''}`, color: 'text-gray-400' });
-    if (!isClientView && hasLabor) secondaryLines.push({ label: 'AK Labor', value: formatDollarRange(rollup.ak_labor_min, rollup.ak_labor_max), color: 'text-emerald-400/70' });
+    if (hasLabor) secondaryLines.push({ label: 'AK Labor', value: formatDollarRange(rollup.ak_labor_min, rollup.ak_labor_max) });
   } else {
-    // Mixed — show what we can
     const totalClassified = formatDollarRange(rollup.total_estimate_min, rollup.total_estimate_max);
     const totalLegacy = formatDollarRange(rollup.legacy_budget_min, rollup.legacy_budget_max);
-    if (totalClassified) secondaryLines.push({ label: 'Classified', value: totalClassified, color: 'text-white' });
-    if (totalLegacy) secondaryLines.push({ label: 'Legacy', value: totalLegacy, color: 'text-cyan-400/70' });
-    if (!isClientView && hasLabor) secondaryLines.push({ label: 'AK Labor', value: formatDollarRange(rollup.ak_labor_min, rollup.ak_labor_max), color: 'text-emerald-400/70' });
+    if (totalClassified) secondaryLines.push({ label: 'Classified', value: totalClassified });
+    if (totalLegacy) secondaryLines.push({ label: 'Legacy', value: totalLegacy });
+    if (hasLabor) secondaryLines.push({ label: 'AK Labor', value: formatDollarRange(rollup.ak_labor_min, rollup.ak_labor_max) });
   }
+
+  const hasBreakdown = secondaryLines.length > 0;
 
   return (
     <Card className={cn("border", colorScheme.card)}>
-      <CardContent className={cn("flex items-center justify-between", isMobile ? "p-3" : "p-4")}>
-        <div className="flex items-center gap-3">
-          <div className={cn("p-2 rounded-lg", colorScheme.iconBg)}>
-            <Icon className={cn("w-5 h-5", colorScheme.icon)} />
+      <CardContent className={cn(isMobile ? "p-3" : "p-4", "space-y-1")}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={cn("p-2 rounded-lg", colorScheme.iconBg)}>
+              <Icon className={cn("w-5 h-5", colorScheme.icon)} />
+            </div>
+            <div>
+              <p className={cn("font-bold", colorScheme.title, isMobile ? "text-sm" : "text-base")}>{label}</p>
+              <p className={cn("text-xs", colorScheme.subtitle)}>
+                {rollup.count} item{rollup.count !== 1 ? 's' : ''}
+              </p>
+            </div>
           </div>
+          <div className="text-right">
+            {primaryLabel && (
+              <p className={cn("font-bold text-white", isMobile ? "text-lg" : "text-xl")}>{primaryLabel}</p>
+            )}
+            {hoursLabel && (
+              <p className="text-xs text-red-400/70">{hoursLabel.replace(/ hrs$/, '')} AK hrs</p>
+            )}
+          </div>
+        </div>
+
+        {/* Collapsible cost breakdown */}
+        {hasBreakdown && (
           <div>
-            <p className={cn("font-bold", colorScheme.title, isMobile ? "text-base" : "text-lg")}>{label}</p>
-            <p className={cn("text-xs", colorScheme.subtitle)}>
-              {rollup.count} item{rollup.count !== 1 ? 's' : ''}
-            </p>
+            <button onClick={() => setBreakdownOpen(!breakdownOpen)}
+              className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-300 transition-colors mt-1">
+              {breakdownOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              <span>Cost Breakdown</span>
+            </button>
+            {breakdownOpen && (
+              <div className="mt-1 pl-3 space-y-0.5 border-l border-gray-700/30">
+                {secondaryLines.map((l, i) => (
+                  <p key={i} className="text-[11px] text-gray-500">
+                    <span>{l.label}:</span>{' '}
+                    <span className="text-gray-400">{l.value}</span>
+                  </p>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-        <div className="text-right space-y-0.5">
-          {primaryLabel && (
-            <p className={cn("font-bold", colorScheme.title, isMobile ? "text-lg" : "text-xl")}>{primaryLabel}</p>
-          )}
-          {secondaryLines.map((l, i) => (
-            <p key={i} className="text-[10px]">
-              <span className="text-gray-500">{l.label}: </span>
-              <span className={l.color}>{l.value}</span>
-            </p>
-          ))}
-          {hoursLabel && (
-            <p className="text-[11px] text-red-400/70">{hoursLabel.replace(/ hrs$/, '')} AK hrs</p>
-          )}
-        </div>
+        )}
       </CardContent>
     </Card>
   );
