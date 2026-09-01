@@ -17,7 +17,7 @@ import ScopeSummaryBar from "./ScopeSummaryBar";
 import ScopeConfirmPanel from "./ScopeConfirmPanel";
 import ScopeFilterBar from "./ScopeFilterBar";
 import ScopeAdminControls from "./ScopeAdminControls";
-import ScopeItemEditor from "./ScopeItemEditor";
+import ScopeItemEditorDrawer from "./ScopeItemEditorDrawer";
 import LaborBreakdownPanel from "./LaborBreakdownPanel";
 
 /**
@@ -467,36 +467,27 @@ export default function ScopeReviewDisplay({
       )}
 
       {/* Persistent Add Item button — visible when categories and groups exist */}
-      {canEdit && !showEditor && categories.length > 0 && groups.length > 0 && (
+      {canEdit && categories.length > 0 && groups.length > 0 && (
         <Button size="sm" onClick={() => handleAddItem({})} className="bg-gray-700 hover:bg-gray-600 text-white gap-1">
           <Plus className="w-3.5 h-3.5" /> Add Scope Item
         </Button>
       )}
 
-      {/* Item Editor — add or edit */}
-      {canEdit && addItemState !== null && !editingItem && (
-        <ScopeItemEditor
-          requestId={requestId}
-          categories={categories}
-          groups={groups}
-          laborGroups={laborGroups}
-          preselectedCategoryId={addItemState.categoryId}
-          preselectedGroupId={addItemState.groupId}
-          onSave={handleSaveItem}
-          onCancel={() => setAddItemState(null)}
-          isMobile={isMobile}
-        />
-      )}
-      {canEdit && editingItem && (
-        <ScopeItemEditor
-          requestId={requestId}
-          categories={categories}
-          groups={groups}
-          laborGroups={laborGroups}
-          laborEstimates={laborEstimates.filter(le => le.scope_item_id === editingItem.id)}
+      {/* Item Editor Drawer — add or edit (replaces inline editor) */}
+      {canEdit && (
+        <ScopeItemEditorDrawer
+          open={addItemState !== null || !!editingItem}
+          onClose={() => { setAddItemState(null); setEditingItem(null); }}
+          mode={editingItem ? "edit" : "create"}
           editItem={editingItem}
+          requestId={requestId}
+          categories={categories}
+          groups={groups}
+          laborGroups={laborGroups}
+          laborEstimates={editingItem ? laborEstimates.filter(le => le.scope_item_id === editingItem.id) : []}
+          preselectedCategoryId={addItemState?.categoryId}
+          preselectedGroupId={addItemState?.groupId}
           onSave={handleSaveItem}
-          onCancel={() => setEditingItem(null)}
           isMobile={isMobile}
         />
       )}

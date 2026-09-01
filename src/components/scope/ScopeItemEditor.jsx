@@ -26,6 +26,7 @@ export default function ScopeItemEditor({
   preselectedCategoryId = null,
   preselectedGroupId = null,
   isMobile = false,
+  insideDrawer = false,
 }) {
   const isEdit = !!editItem;
   const existingModel = editItem?.pricing_model || (isEdit ? 'legacy_estimate' : 'hard_cost_plus_labor');
@@ -155,8 +156,11 @@ export default function ScopeItemEditor({
   };
 
   return (
-    <div className="space-y-3 p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
-      <h4 className="text-sm font-semibold text-white">{isEdit ? 'Edit Scope Item' : 'Add Scope Item'}</h4>
+    <div className={cn(
+      "space-y-3",
+      insideDrawer ? "p-4" : "p-3 bg-gray-800/50 rounded-lg border border-gray-700/50"
+    )}>
+      {!insideDrawer && <h4 className="text-sm font-semibold text-white">{isEdit ? 'Edit Scope Item' : 'Add Scope Item'}</h4>}
 
       <Input value={title} onChange={(e) => setTitle(e.target.value)}
         placeholder="Item title..." className="bg-gray-800 border-gray-700 text-white" autoFocus />
@@ -288,13 +292,17 @@ export default function ScopeItemEditor({
         ))}
       </div>
 
-      <div className="flex gap-2">
-        <Button size="sm" onClick={handleSave} disabled={!title.trim() || !categoryId || !groupId || saving} className="bg-red-600 hover:bg-red-700 text-white gap-1">
-          {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-          {isEdit ? 'Save' : 'Add Item'}
-        </Button>
+      {/* Action buttons — sticky footer in drawer */}
+      <div className={cn(
+        "flex gap-2",
+        insideDrawer && "sticky bottom-0 bg-gray-900 border-t border-gray-700/50 p-4 -mx-4 -mb-4 mt-4"
+      )}>
         <Button size="sm" variant="ghost" onClick={onCancel} className="text-gray-400">
-          <X className="w-3 h-3 mr-1" /> Cancel
+          Cancel
+        </Button>
+        <Button size="sm" onClick={handleSave} disabled={!title.trim() || !categoryId || !groupId || saving} className="bg-red-600 hover:bg-red-700 text-white gap-1 ml-auto">
+          {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+          {isEdit ? 'Save Item' : 'Add Item'}
         </Button>
       </div>
     </div>

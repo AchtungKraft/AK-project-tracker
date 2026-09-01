@@ -12,13 +12,13 @@ import { formatHoursRange } from "./scopeHelpers";
  *   Hard Cost / AK Labor (tertiary, expandable for clients)
  *   Labor Breakdown (expandable, internal-only rates)
  */
-export default function ScopeItemPricingDisplay({ item, laborEstimates = [], isClientView = false, isMobile = false }) {
+export default function ScopeItemPricingDisplay({ item, laborEstimates = [], isClientView = false, isMobile = false, compact = false }) {
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [laborOpen, setLaborOpen] = useState(false);
   const pricing = computeScopeItemPricing(item, laborEstimates);
 
   if (pricing.pricing_model === 'legacy_estimate') {
-    return <LegacyPricingDisplay pricing={pricing} laborEstimates={laborEstimates} isClientView={isClientView} isMobile={isMobile} />;
+    return <LegacyPricingDisplay pricing={pricing} laborEstimates={laborEstimates} isClientView={isClientView} isMobile={isMobile} compact={compact} />;
   }
 
   // === hard_cost_plus_labor ===
@@ -67,19 +67,19 @@ export default function ScopeItemPricingDisplay({ item, laborEstimates = [], isC
     : null;
 
   return (
-    <div className="space-y-1">
+    <div className={cn("space-y-0.5", compact && "text-right")}>
       {/* Total Estimate — PRIMARY */}
       {totalLabel ? (
-        <p className={cn("font-bold text-white", isMobile ? "text-base" : "text-lg")}>
+        <p className={cn("font-bold text-white", compact ? "text-sm" : isMobile ? "text-base" : "text-lg")}>
           {totalLabel}
         </p>
       ) : pendingReason ? (
-        <p className="text-sm text-gray-400 italic">{pendingReason}</p>
+        <p className={cn("text-gray-400 italic", compact ? "text-xs" : "text-sm")}>{pendingReason}</p>
       ) : null}
 
       {/* AK Hours — SECONDARY OPERATIONAL */}
       {hours && (
-        <p className={cn("font-medium text-red-400/80", isMobile ? "text-xs" : "text-sm")}>
+        <p className={cn("font-medium text-red-400/80", compact ? "text-[11px]" : isMobile ? "text-xs" : "text-sm")}>
           {hours.replace(/ hrs$/, '')} AK hrs
         </p>
       )}
@@ -129,36 +129,36 @@ export default function ScopeItemPricingDisplay({ item, laborEstimates = [], isC
   );
 }
 
-/** Internal view: Hard Cost + AK Labor as secondary text, expandable labor breakdown */
+/** Internal view: Hard Cost + AK Labor as secondary text, compact single-line labor detail */
 function InternalCostBreakdown({ hardCostDisplay, laborDisplay, laborEstimates, pricing, laborOpen, onToggleLabor, isMobile }) {
   return (
     <div className="space-y-0.5">
-      {/* Hard Cost + AK Labor on one or two compact lines */}
+      {/* Hard Cost + AK Labor inline */}
       <div className="flex items-center gap-3 flex-wrap">
         {hardCostDisplay && (
-          <span className="text-xs text-gray-500">
+          <span className="text-[11px] text-gray-500">
             Hard Cost <span className="text-gray-400">{hardCostDisplay}</span>
           </span>
         )}
         {laborDisplay && (
-          <span className="text-xs text-gray-500">
+          <span className="text-[11px] text-gray-500">
             AK Labor <span className="text-gray-400">{laborDisplay}</span>
           </span>
         )}
         {!pricing.labor_estimated && (
-          <span className="text-xs text-gray-500 italic">AK Labor not estimated</span>
+          <span className="text-[11px] text-gray-500 italic">AK Labor not estimated</span>
         )}
       </div>
 
-      {/* Labor Breakdown toggle — internal only */}
+      {/* Labor Breakdown — compact single-line per group */}
       {laborEstimates?.length > 0 && (
         <div>
-          <button onClick={onToggleLabor} className="flex items-center gap-1.5 text-[10px] text-gray-500 hover:text-gray-300 transition-colors mt-0.5">
-            {laborOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            <span>Labor Breakdown</span>
+          <button onClick={onToggleLabor} className="flex items-center gap-1 text-[10px] text-gray-600 hover:text-gray-400 transition-colors">
+            {laborOpen ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
+            <span>Labor Detail</span>
           </button>
           {laborOpen && (
-            <div className="mt-1 pl-3 space-y-0.5 border-l border-gray-700/30">
+            <div className="mt-0.5 space-y-0">
               {laborEstimates
                 .slice()
                 .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
@@ -167,15 +167,10 @@ function InternalCostBreakdown({ hardCostDisplay, laborDisplay, laborEstimates, 
                   const costMax = (le.hours_max || 0) * (le.rate_snapshot || 0);
                   const h = formatHoursRange(le.hours_min, le.hours_max);
                   return (
-                    <div key={le.id || idx} className="text-[10px] text-gray-500">
-                      <span className="text-gray-400 uppercase tracking-wide">{le.labor_group_name_snapshot || 'Unknown'}</span>
-                      <br />
-                      <span>{h}</span>
-                      <span className="mx-1">·</span>
-                      <span>${le.rate_snapshot}/hr</span>
-                      <span className="mx-1">·</span>
-                      <span className="text-emerald-400/70">{formatDollarRange(costMin, costMax)}</span>
-                    </div>
+                    <p key={le.id || idx} className="text-[10px] text-gray-500 leading-tight">
+                      <span className="text-gray-400 uppercase">{le.labor_group_name_snapshot || '?'}</span>
+                      {' '}{h} · ${le.rate_snapshot}/hr · <span className="text-emerald-400/70">{formatDollarRange(costMin, costMax)}</span>
+                    </p>
                   );
                 })}
             </div>
@@ -236,21 +231,21 @@ function ClientCostBreakdown({ hardCostDisplay, laborDisplay, laborEstimates, pr
 }
 
 /** Legacy pricing: unclassified items */
-function LegacyPricingDisplay({ pricing, laborEstimates, isClientView, isMobile }) {
+function LegacyPricingDisplay({ pricing, laborEstimates, isClientView, isMobile, compact = false }) {
   const [laborOpen, setLaborOpen] = useState(false);
   const budget = formatDollarRange(pricing.legacy_budget_min, pricing.legacy_budget_max);
   const hours = formatHoursRange(pricing.ak_hours_min, pricing.ak_hours_max);
 
   return (
-    <div className="space-y-1">
+    <div className={cn("space-y-0.5", compact && "text-right")}>
       {pricing.legacy_budget_tbd ? (
-        <p className="text-sm text-gray-400 italic">Estimate: TBD</p>
+        <p className={cn("text-gray-400 italic", compact ? "text-xs" : "text-sm")}>Estimate: TBD</p>
       ) : budget ? (
-        <p className={cn("font-bold text-white", isMobile ? "text-base" : "text-lg")}>{budget}</p>
+        <p className={cn("font-bold text-white", compact ? "text-sm" : isMobile ? "text-base" : "text-lg")}>{budget}</p>
       ) : null}
 
       {hours && (
-        <p className={cn("font-medium text-red-400/80", isMobile ? "text-xs" : "text-sm")}>
+        <p className={cn("font-medium text-red-400/80", compact ? "text-[11px]" : isMobile ? "text-xs" : "text-sm")}>
           {hours.replace(/ hrs$/, '')} AK hrs
         </p>
       )}
