@@ -274,6 +274,13 @@ Deno.serve(async (req) => {
       });
     }
     
+    // Identify AK_STOCK project IDs for legacy holding detection
+    const akStockProjectIds = new Set();
+    // The current project is already known; also check allCommitmentsForParts which may span projects
+    if (project.is_system_project === true && project.system_project_type === 'AK_STOCK') {
+      akStockProjectIds.add(project.id);
+    }
+    
     for (const c of allCommitmentsForParts) {
       const inv = partInventoryMap.get(c.part_id);
       if (!inv) continue;
@@ -284,8 +291,14 @@ Deno.serve(async (req) => {
       
       inv.reserved_global += reserved;
       inv.on_order_global += covered;
-      const eff_req = Math.max(0, required - (c.qty_removed ?? 0));
-      inv.to_order_global += Math.max(0, eff_req - reserved - covered - (c.qty_installed ?? 0));
+      
+      // AK STOCK legacy PROJECT holding: ZERO demand contribution
+      const isReplenish = c.demand_source === 'STOCK_REPLENISHMENT' || c.demand_source === 'STOCK_MANUAL';
+      const isLegacyHolding = akStockProjectIds.has(c.project_id) && !isReplenish;
+      if (!isLegacyHolding) {
+        const eff_req = Math.max(0, required - (c.qty_removed ?? 0));
+        inv.to_order_global += Math.max(0, eff_req - reserved - covered - (c.qty_installed ?? 0));
+      }
     }
     
     for (const [partId, inv] of partInventoryMap.entries()) {
@@ -371,11 +384,12 @@ Deno.serve(async (req) => {
         }
 
         const coverage_qty = reserved_from_stock + covered_from_po + qty_installed;
-        const to_order_qty = Math.max(0, effective_required - coverage_qty);
+        // AK STOCK legacy PROJECT holding records: ZERO demand — they are historical metadata
+        const to_order_qty = isAkStockLegacy ? 0 : Math.max(0, effective_required - coverage_qty);
         const to_order = to_order_qty;
-        const commitment_fulfilled = coverage_qty >= effective_required && effective_required > 0;
-        const needs_order = to_order_qty > 0;
-        const available_to_install = Math.max(0, Math.min(reserved_from_stock + covered_from_po - qty_installed, effective_required - qty_installed));
+        const commitment_fulfilled = isAkStockLegacy ? false : (coverage_qty >= effective_required && effective_required > 0);
+        const needs_order = isAkStockLegacy ? false : (to_order_qty > 0);
+        const available_to_install = isAkStockLegacy ? 0 : Math.max(0, Math.min(reserved_from_stock + covered_from_po - qty_installed, effective_required - qty_installed));
 
         const partInv = partInventoryMap.get(c.part_id) || {
           physical_stock: 0, reserved_global: 0, on_order_global: 0, to_order_global: 0, available: 0,

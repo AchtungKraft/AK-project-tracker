@@ -199,6 +199,12 @@ Deno.serve(async (req) => {
       });
     }
     
+    // Build AK_STOCK project ID set for legacy holding detection
+    const akStockProjectIdSet = new Set();
+    for (const p of projects) {
+      if (p.is_system_project === true && p.system_project_type === 'AK_STOCK') akStockProjectIdSet.add(p.id);
+    }
+    
     for (const c of commitments) {
       const inv = partInventoryMap.get(c.part_id);
       if (!inv) continue;
@@ -209,8 +215,14 @@ Deno.serve(async (req) => {
       
       inv.reserved_global += reserved;
       inv.on_order_global += covered;
-      const eff_req = Math.max(0, required - (c.qty_removed ?? 0));
-      inv.to_order_global += Math.max(0, eff_req - reserved - covered - (c.qty_installed ?? 0));
+      
+      // AK STOCK legacy PROJECT holding: ZERO demand contribution
+      const isReplenish = c.demand_source === 'STOCK_REPLENISHMENT' || c.demand_source === 'STOCK_MANUAL';
+      const isLegacyHolding = akStockProjectIdSet.has(c.project_id) && !isReplenish;
+      if (!isLegacyHolding) {
+        const eff_req = Math.max(0, required - (c.qty_removed ?? 0));
+        inv.to_order_global += Math.max(0, eff_req - reserved - covered - (c.qty_installed ?? 0));
+      }
     }
     
     for (const [partId, inv] of partInventoryMap.entries()) {
@@ -258,8 +270,9 @@ Deno.serve(async (req) => {
       }
 
       const totalCoverage = reserved_from_stock + covered_from_po + qty_installed;
-      const to_order = Math.max(0, effective_required - totalCoverage);
-      const available_to_install = Math.max(0, Math.min(reserved_from_stock + covered_from_po - qty_installed, effective_required - qty_installed));
+      // AK STOCK legacy PROJECT holding records: ZERO demand — historical metadata only
+      const to_order = isAkStockLegacy ? 0 : Math.max(0, effective_required - totalCoverage);
+      const available_to_install = isAkStockLegacy ? 0 : Math.max(0, Math.min(reserved_from_stock + covered_from_po - qty_installed, effective_required - qty_installed));
 
       const on_order_qty = commitmentLineItems.reduce((sum, li) => {
         const order = orderMap.get(li.order_id);
@@ -355,7 +368,7 @@ Deno.serve(async (req) => {
       };
 
       const { next_action, block_reason_code, prepay_diagnostics } = computeNextAction(
-        { required_total, reserved_from_stock, covered_from_po, qty_installed, qty_removed, requires_prepay },
+        { required_total, reserved_from_stock, covered_from_po, qty_installed, qty_removed, requires_prepay, isAkStockLegacy },
         has_vendor,
         prepayContext
       );
@@ -532,8 +545,8 @@ Deno.serve(async (req) => {
         effective_required,
         coverage_qty: totalCoverage,
         to_order_qty: to_order,
-        needs_order: to_order > 0,
-        commitment_fulfilled: totalCoverage >= effective_required && effective_required > 0,
+        needs_order: isAkStockLegacy ? false : (to_order > 0),
+        commitment_fulfilled: isAkStockLegacy ? false : (totalCoverage >= effective_required && effective_required > 0),
         allowed: {
           canCreatePO: is_orderable,
           canCreateDeltaOrder: covered_from_po > 0 && to_order === 0,
@@ -696,7 +709,13 @@ function computeNextAction(commitment, partHasVendor, prepayContext = {}) {
     qty_installed = 0,
     qty_removed = 0,
     requires_prepay = false,
+    isAkStockLegacy = false,
   } = commitment;
+
+  // AK STOCK legacy PROJECT holding: null action — no demand
+  if (isAkStockLegacy) {
+    return { next_action: null, block_reason_code: null, prepay_diagnostics: null };
+  }
 
   const effective_required = Math.max(0, required_total - qty_removed);
   const totalCoverage = reserved_from_stock + covered_from_po + qty_installed;

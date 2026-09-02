@@ -85,6 +85,12 @@ Deno.serve(async (req) => {
       return (poolByProject.get(projectId) || []).reduce((sum, p) => sum + (p.balance || 0), 0);
     };
 
+    // Build AK_STOCK project ID set for legacy holding detection
+    const akStockProjectIdSet = new Set();
+    for (const p of projects) {
+      if (p.is_system_project === true && p.system_project_type === 'AK_STOCK') akStockProjectIdSet.add(p.id);
+    }
+    
     // Enrich commitment using CANONICAL MATH ONLY
     const enrichCommitment = (c) => {
       const project = projectMap.get(c.project_id);
@@ -92,8 +98,18 @@ Deno.serve(async (req) => {
       const vendor = part ? vendorMap.get(part.default_vendor_id) : null;
       const poolBalance = getProjectPoolBalance(c.project_id);
 
+      // AK STOCK legacy PROJECT holding: ZERO demand
+      const isReplenish = c.demand_source === 'STOCK_REPLENISHMENT' || c.demand_source === 'STOCK_MANUAL';
+      const isAkStockLegacy = akStockProjectIdSet.has(c.project_id) && !isReplenish;
+
       // CANONICAL: All quantities via shared helper
       const q = readCanonicalQty(c);
+      // Override to_order for legacy holding records
+      if (isAkStockLegacy) {
+        q.to_order = 0;
+        q.available_to_install = 0;
+        q.is_satisfied = false;
+      }
 
       // CANONICAL: Funding blocked uses shared helper
       const fundingBlocked = isCommitmentFundingBlocked(c, project, poolBalance);

@@ -55,8 +55,11 @@ export function isNonConsumingCommitment(commitment, project) {
 /**
  * Read canonical quantities from a commitment record.
  * Normalizes legacy field names to canonical ones.
+ * 
+ * options.isAkStockLegacy: if true, forces to_order=0 and available_to_install=0
+ * (legacy AK STOCK PROJECT holding records produce ZERO demand).
  */
-export function readCanonicalQty(c) {
+export function readCanonicalQty(c, options = {}) {
   const required_total = c.required_total ?? 0;
   const qty_removed = c.qty_removed ?? 0;
   const effective_required = Math.max(0, required_total - qty_removed);
@@ -65,12 +68,15 @@ export function readCanonicalQty(c) {
   const qty_installed = c.qty_installed ?? 0;
 
   const coverage_total = reserved_from_stock + covered_from_po + qty_installed;
-  const to_order = Math.max(0, effective_required - coverage_total);
-  const available_to_install = Math.max(0, Math.min(
+  
+  // AK STOCK legacy PROJECT holding records: ZERO demand
+  const isLegacyHolding = options.isAkStockLegacy === true;
+  const to_order = isLegacyHolding ? 0 : Math.max(0, effective_required - coverage_total);
+  const available_to_install = isLegacyHolding ? 0 : Math.max(0, Math.min(
     reserved_from_stock + covered_from_po - qty_installed,
     effective_required - qty_installed
   ));
-  const is_satisfied = coverage_total >= effective_required && effective_required > 0;
+  const is_satisfied = isLegacyHolding ? false : (coverage_total >= effective_required && effective_required > 0);
 
   return {
     required_total,
