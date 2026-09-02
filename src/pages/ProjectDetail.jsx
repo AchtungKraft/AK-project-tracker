@@ -23,7 +23,7 @@ import ProjectClientPortal from "../components/project/ProjectClientPortal";
 import ProjectPurchaseOrders from "../components/project/ProjectPurchaseOrders";
 import ProjectServicesSection from "../components/supply/ProjectServicesSection";
 import ProjectPagesTab from "../components/clientpages/ProjectPagesTab";
-import ProjectStoragePanel from "../components/project/ProjectStoragePanel";
+import ProjectStorageView from "../components/project/ProjectStorageView";
 import ProjectLaborSummary from "../components/project/ProjectLaborSummary";
 
 // Stable query defaults for reference data (rarely changes)
@@ -407,7 +407,7 @@ export default function ProjectDetail() {
           </TabsContent>
 
           <TabsContent value="storage" className={isMobile ? 'mt-3' : 'mt-6'}>
-            <ProjectStoragePanel projectId={projectId} projectName={project?.name} />
+            <ProjectStorageView projectId={projectId} projectName={project?.name} />
           </TabsContent>
 
           <TabsContent value="hours" className={isMobile ? 'mt-3' : 'mt-6'}>

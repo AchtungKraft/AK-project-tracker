@@ -92,6 +92,14 @@ export default function ContainerDetailPanel({
             <span className="text-gray-500">·</span>
             <span className="text-gray-400">{containedParts.length} parts · {totalUnits} units</span>
           </div>
+          {/* Project badge — visible in header */}
+          {project && (
+            <div className="mt-0.5">
+              <span className="inline-flex items-center gap-1 text-xs text-blue-400 bg-blue-950/20 px-1.5 py-0.5 rounded">
+                <Package className="w-3 h-3" />{project.name}
+              </span>
+            </div>
+          )}
           {/* Location — directly in header, no label */}
           <div className="mt-0.5">
             {location ? (

@@ -121,6 +121,19 @@ export default function LocationDetailPanel({
         </div>
       </div>
 
+      {/* Project badge — visible if project storage */}
+      {location.project_id && (() => {
+        const proj = (projects || []).find(p => p.id === location.project_id);
+        return proj ? (
+          <div>
+            <span className="inline-flex items-center gap-1 text-xs text-blue-400 bg-blue-950/20 px-2 py-0.5 rounded">
+              <Package className="w-3 h-3" />{proj.name}
+              {location.is_project_storage && <Badge variant="outline" className="text-[9px] py-0 ml-1 border-blue-600/40 text-blue-400">Project Storage</Badge>}
+            </span>
+          </div>
+        ) : null;
+      })()}
+
       {/* Quick stats — minimal */}
       <div className="flex items-center gap-4 text-xs text-gray-400">
         <span><span className="text-white font-semibold">{directItems.length}</span> parts</span>
