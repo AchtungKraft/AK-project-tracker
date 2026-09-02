@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { 
-  Search, ChevronRight, Package, LayoutGrid, List, X, ArrowLeft
+  Search, ChevronRight, Package, LayoutGrid, List, X, ArrowLeft, ScanLine
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig, buildLocationPathString } from "./locationTypeConfig";
@@ -30,6 +30,7 @@ import CreateContainerModal from "./CreateContainerModal";
 import MoveContainerModal from "./MoveContainerModal";
 import AddToContainerModal from "./AddToContainerModal";
 import EmptyContainerModal from "./EmptyContainerModal";
+import ScannerModal from "./ScannerModal";
 
 const STORAGE_KEY = 'achtung_inventory_locations_state';
 
@@ -91,6 +92,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   const [buildModalPart, setBuildModalPart] = useState(null);
   const [needToBuyModalPart, setNeedToBuyModalPart] = useState(null);
   const [galleryState, setGalleryState] = useState({ open: false, images: [], currentIndex: 0 });
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   // URL sync
   const setSelectedLocationId = useCallback((id) => {
@@ -280,6 +282,16 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   };
 
   const goHome = () => { setSelectedLocationId(null); setSelectedContainer(null); setPreviewPart(null); setSearchTerm(''); };
+
+  // Scanner navigation handlers
+  const handleScanOpenLocation = (locId) => {
+    handleLocationSelect(locId);
+    setScannerOpen(false);
+  };
+  const handleScanOpenContainer = (ctr) => {
+    handleSelectContainer(ctr);
+    setScannerOpen(false);
+  };
   const clearSearch = () => setSearchTerm('');
 
   const handleToggleEmpty = (checked) => {
@@ -451,6 +463,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
       {addToContainerTarget && <AddToContainerModal container={addToContainerTarget} onClose={() => setAddToContainerTarget(null)} inventoryItems={inventoryItems} parts={parts} />}
       {emptyContainerTarget && <EmptyContainerModal container={emptyContainerTarget} onClose={() => setEmptyContainerTarget(null)} locations={locations} containers={containers} inventoryItems={inventoryItems} parts={parts} />}
       <ImageGallery isOpen={galleryState.open} images={galleryState.images} currentIndex={galleryState.currentIndex} onClose={closeGallery} onNavigate={navigateGallery} />
+      {scannerOpen && <ScannerModal locations={locations} containers={containers} inventoryItems={inventoryItems} projects={projects} onOpenLocation={handleScanOpenLocation} onOpenContainer={handleScanOpenContainer} onClose={() => setScannerOpen(false)} />}
     </>
   );
 
@@ -485,6 +498,10 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                   className={cn("pl-11 pr-10 bg-gray-900/50 border-gray-700 text-white", mobileIsHome ? "h-12 text-base" : "h-10 text-sm")} />
                 {searchTerm && <button onClick={clearSearch} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"><X className="w-4 h-4" /></button>}
               </div>
+              <Button size="icon" variant="ghost" onClick={() => setScannerOpen(true)}
+                className="h-10 w-10 text-gray-400 hover:text-red-400 shrink-0" title="Scan QR">
+                <ScanLine className="w-5 h-5" />
+              </Button>
               {mobileIsLocation && (
                 <div className="flex items-center gap-0.5 bg-black/40 border border-gray-700 rounded-lg p-0.5 shrink-0">
                   <Button size="sm" variant={viewMode === 'list' ? 'default' : 'ghost'} onClick={() => setViewMode('list')} className={cn("h-7 px-1.5", viewMode === 'list' ? 'bg-red-600 text-white' : 'text-gray-400')}><List className="w-3.5 h-3.5" /></Button>
@@ -557,7 +574,11 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                 <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-gray-600 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 font-mono pointer-events-none">⌘K</kbd>
               )}
             </div>
-            {/* View toggle */}
+            {/* Scan + View toggle */}
+            <Button size="sm" variant="outline" onClick={() => setScannerOpen(true)}
+              className="h-9 gap-1.5 border-gray-700 text-gray-300 hover:text-red-400 hover:border-red-700 shrink-0">
+              <ScanLine className="w-4 h-4" /> Scan
+            </Button>
             <div className="flex items-center gap-0.5 bg-black/40 border border-gray-700 rounded-lg p-0.5 shrink-0">
               <Button size="sm" variant={viewMode === 'list' ? 'default' : 'ghost'} onClick={() => setViewMode('list')} className={cn("h-7 px-1.5", viewMode === 'list' ? 'bg-red-600 text-white' : 'text-gray-400')}><List className="w-3.5 h-3.5" /></Button>
               <Button size="sm" variant={viewMode === 'cards' ? 'default' : 'ghost'} onClick={() => setViewMode('cards')} className={cn("h-7 px-1.5", viewMode === 'cards' ? 'bg-red-600 text-white' : 'text-gray-400')}><LayoutGrid className="w-3.5 h-3.5" /></Button>
