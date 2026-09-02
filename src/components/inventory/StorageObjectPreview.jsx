@@ -14,6 +14,7 @@ export default function StorageObjectPreview({
   selectedPart, selectedContainer,
   locations, inventoryItems, parts, projects, vendors, containers = [],
   onMoveContainer, onReturnHomeContainer, onAddPartsToContainer, onEmptyContainer,
+  onMoveFromContainer,
   onPartClick, onClose, getInventoryStats,
   currentLocationId,
 }) {
@@ -32,7 +33,8 @@ export default function StorageObjectPreview({
   if (selectedContainer) {
     return <ContainerInspector container={selectedContainer} locations={locations} inventoryItems={inventoryItems}
       parts={parts} projects={projects} onMove={onMoveContainer} onReturnHome={onReturnHomeContainer}
-      onAddParts={onAddPartsToContainer} onEmpty={onEmptyContainer} onClose={onClose} />;
+      onAddParts={onAddPartsToContainer} onEmpty={onEmptyContainer}
+      onMoveFromContainer={onMoveFromContainer} onClose={onClose} />;
   }
 
   return <PartInspector part={selectedPart} inventoryItems={inventoryItems} locations={locations}
@@ -42,7 +44,7 @@ export default function StorageObjectPreview({
 
 // ─── CONTAINER INSPECTOR ────────────────────────────────────────────
 
-function ContainerInspector({ container, locations, inventoryItems, parts, projects, onMove, onReturnHome, onAddParts, onEmpty, onClose }) {
+function ContainerInspector({ container, locations, inventoryItems, parts, projects, onMove, onReturnHome, onAddParts, onEmpty, onMoveFromContainer, onClose }) {
   const tc = getContainerTypeConfig(container.container_type);
   const TypeIcon = tc.icon;
   const displayColor = container.color || tc.color;
@@ -108,6 +110,11 @@ function ContainerInspector({ container, locations, inventoryItems, parts, proje
         <Button size="sm" variant="ghost" onClick={() => printContainerQRLabel(container, { locations })} className="h-7 w-7 p-0 text-gray-500 hover:text-white" title="Print QR">
           <Printer className="w-3 h-3" />
         </Button>
+        {containedParts.length > 0 && onMoveFromContainer && (
+          <Button size="sm" variant="outline" onClick={() => onMoveFromContainer(container)} className="gap-1 h-7 text-[10px] border-gray-700 text-gray-300">
+            <Package className="w-3 h-3" /> Move Items
+          </Button>
+        )}
         <div className="flex-1" />
         <Button size="sm" variant="ghost" onClick={() => onAddParts?.(container)} className="gap-1 h-7 text-[10px] text-gray-500 hover:text-white">
           <Plus className="w-3 h-3" /> Add

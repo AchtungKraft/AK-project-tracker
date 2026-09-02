@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { useToast } from "@/components/ui/use-toast";
 import { getContainerTypeConfig } from "./containerTypeConfig";
 import { printContainerQRLabel } from "./containerQRLabel";
 import LocationBreadcrumb from "./LocationBreadcrumb";
@@ -17,11 +17,12 @@ import StoragePartRow from "./StoragePartRow";
 
 export default function ContainerDetailPanel({
   container, locations, inventoryItems, parts, projects, vendors,
-  onClose, onMove, onReturnHome, onAddParts, onEmptyContainer,
+  onClose, onMove, onReturnHome, onAddParts, onEmptyContainer, onMoveFromContainer,
   onPartClick, onOpenGallery, partActions,
   getInventoryStats, getInventoryItemId,
 }) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [showMore, setShowMore] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesValue, setNotesValue] = useState(container.notes || '');
@@ -49,9 +50,9 @@ export default function ContainerDetailPanel({
         last_verified_by: user.full_name || user.email || 'Unknown',
       });
       queryClient.invalidateQueries({ queryKey: ['storageContainers'] });
-      toast.success('Container verified');
+      toast({ title: 'Container verified' });
     } catch (e) {
-      toast.error('Failed to verify: ' + e.message);
+      toast({ title: 'Failed to verify', description: e.message, variant: 'destructive' });
     } finally {
       setVerifying(false);
     }
@@ -62,9 +63,9 @@ export default function ContainerDetailPanel({
       await base44.entities.StorageContainer.update(container.id, { notes: notesValue.trim() || null });
       queryClient.invalidateQueries({ queryKey: ['storageContainers'] });
       setEditingNotes(false);
-      toast.success('Notes saved');
+      toast({ title: 'Notes saved' });
     } catch (e) {
-      toast.error('Failed to save notes: ' + e.message);
+      toast({ title: 'Failed to save notes', description: e.message, variant: 'destructive' });
     }
   };
 
@@ -105,8 +106,13 @@ export default function ContainerDetailPanel({
       {/* Primary actions — the technician's toolbar */}
       <div className="flex items-center gap-2 px-4 py-2 border-b border-red-900/20 bg-gray-900/10 shrink-0">
         <Button size="sm" variant="outline" onClick={() => onMove(container)} className="gap-1.5 h-9 text-sm border-gray-700 text-gray-300">
-          <ArrowRightLeft className="w-4 h-4" /> Move
+          <ArrowRightLeft className="w-4 h-4" /> Move Ctr
         </Button>
+        {onMoveFromContainer && containedParts.length > 0 && (
+          <Button size="sm" variant="outline" onClick={() => onMoveFromContainer(container)} className="gap-1.5 h-9 text-sm border-gray-700 text-gray-300">
+            <Package className="w-4 h-4" /> Move Items
+          </Button>
+        )}
         {isAwayFromHome && (
           <Button size="sm" variant="outline" onClick={() => onReturnHome?.(container)} className="gap-1.5 h-9 text-sm border-amber-700/50 text-amber-400 hover:bg-amber-950/30">
             <Home className="w-4 h-4" /> Return Home

@@ -31,6 +31,7 @@ import MoveContainerModal from "./MoveContainerModal";
 import AddToContainerModal from "./AddToContainerModal";
 import EmptyContainerModal from "./EmptyContainerModal";
 import ScannerModal from "./ScannerModal";
+import InventoryMoveWorkflow from "./move/InventoryMoveWorkflow";
 
 const STORAGE_KEY = 'achtung_inventory_locations_state';
 
@@ -93,6 +94,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   const [needToBuyModalPart, setNeedToBuyModalPart] = useState(null);
   const [galleryState, setGalleryState] = useState({ open: false, images: [], currentIndex: 0 });
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [moveWorkflowSource, setMoveWorkflowSource] = useState(null); // { type, id, entity }
 
   // URL sync
   const setSelectedLocationId = useCallback((id) => {
@@ -292,6 +294,26 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
     handleSelectContainer(ctr);
     setScannerOpen(false);
   };
+
+  // Move workflow handlers
+  const handleStartMoveFromLocation = (locId) => {
+    const loc = locations.find(l => l.id === locId);
+    if (loc) setMoveWorkflowSource({ type: 'LOCATION', id: locId, entity: loc });
+  };
+  const handleStartMoveFromContainer = (ctr) => {
+    setMoveWorkflowSource({ type: 'CONTAINER', id: ctr.id, entity: ctr });
+  };
+  const handleMoveWorkflowClose = () => {
+    setMoveWorkflowSource(null);
+  };
+  const handleMoveNavLocation = (locId) => {
+    handleLocationSelect(locId);
+    setMoveWorkflowSource(null);
+  };
+  const handleMoveNavContainer = (ctr) => {
+    handleSelectContainer(ctr);
+    setMoveWorkflowSource(null);
+  };
   const clearSearch = () => setSearchTerm('');
 
   const handleToggleEmpty = (checked) => {
@@ -464,6 +486,15 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
       {emptyContainerTarget && <EmptyContainerModal container={emptyContainerTarget} onClose={() => setEmptyContainerTarget(null)} locations={locations} containers={containers} inventoryItems={inventoryItems} parts={parts} />}
       <ImageGallery isOpen={galleryState.open} images={galleryState.images} currentIndex={galleryState.currentIndex} onClose={closeGallery} onNavigate={navigateGallery} />
       {scannerOpen && <ScannerModal locations={locations} containers={containers} inventoryItems={inventoryItems} projects={projects} onOpenLocation={handleScanOpenLocation} onOpenContainer={handleScanOpenContainer} onClose={() => setScannerOpen(false)} />}
+      {moveWorkflowSource && (
+        <InventoryMoveWorkflow
+          source={moveWorkflowSource}
+          locations={locations} containers={containers} inventoryItems={inventoryItems} parts={parts} projects={projects}
+          onClose={handleMoveWorkflowClose}
+          onNavigateLocation={handleMoveNavLocation}
+          onNavigateContainer={handleMoveNavContainer}
+        />
+      )}
     </>
   );
 
@@ -530,6 +561,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
               onReturnHome={(c) => { setMoveContainerReturnHome(true); setMoveContainerTarget(c); }}
               onAddParts={(c) => setAddToContainerTarget(c)}
               onEmptyContainer={(c) => setEmptyContainerTarget(c)}
+              onMoveFromContainer={handleStartMoveFromContainer}
               onPartClick={onPartClick} onOpenGallery={openGallery} partActions={partActions}
               getInventoryStats={getInventoryStats} getInventoryItemId={getInventoryItemId} />
           )}
@@ -543,6 +575,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                     onNavigateLocation={handleLocationSelect} isFavorite={isFavorite(selectedLocationId)}
                     onToggleFavorite={toggleFavorite} onSelectContainer={handleSelectContainer}
                     onMoveContainer={containerHandlers.onMoveContainer} onCreateContainer={containerHandlers.onCreateContainer}
+                    onMoveFromLocation={handleStartMoveFromLocation}
                     onPrintQR={printLocationQR} />
                 </div>
               )}
@@ -635,6 +668,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                         onNavigateLocation={handleLocationSelect} isFavorite={isFavorite(selectedLocationId)}
                         onToggleFavorite={toggleFavorite} onSelectContainer={handleSelectContainer}
                         onMoveContainer={containerHandlers.onMoveContainer} onCreateContainer={containerHandlers.onCreateContainer}
+                        onMoveFromLocation={handleStartMoveFromLocation}
                         onPrintQR={printLocationQR} selectedContainerId={selectedContainer?.id} flashId={flashId} />
                     </div>
                     {renderLocationContent()}
@@ -667,6 +701,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                   onReturnHomeContainer={(c) => { setMoveContainerReturnHome(true); setMoveContainerTarget(c); }}
                   onAddPartsToContainer={(c) => setAddToContainerTarget(c)}
                   onEmptyContainer={(c) => setEmptyContainerTarget(c)}
+                  onMoveFromContainer={handleStartMoveFromContainer}
                   onPartClick={handlePartFullDetails}
                   onClose={() => { setPreviewPart(null); setSelectedContainer(null); }}
                   getInventoryStats={getInventoryStats}

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Package, ChevronRight, ChevronDown, Printer, Star, Plus } from "lucide-react";
+import { MapPin, Package, ChevronRight, ChevronDown, Printer, Star, Plus, ArrowRightLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig } from "./locationTypeConfig";
 import LocationBreadcrumb from "./LocationBreadcrumb";
@@ -24,6 +24,7 @@ export default function LocationDetailPanel({
   onSelectContainer,
   onMoveContainer,
   onCreateContainer,
+  onMoveFromLocation,
   selectedContainerId,
   flashId,
 }) {
@@ -105,6 +106,11 @@ export default function LocationDetailPanel({
           {onPrintQR && (
             <Button size="icon" variant="ghost" onClick={() => onPrintQR(location)} className="h-8 w-8 text-gray-400" title="Print Label">
               <Printer className="w-4 h-4" />
+            </Button>
+          )}
+          {onMoveFromLocation && directItems.length > 0 && (
+            <Button size="sm" variant="ghost" onClick={() => onMoveFromLocation(locationId)} className="h-8 px-2 text-xs text-gray-400 hover:text-white gap-1" title="Move loose inventory">
+              <ArrowRightLeft className="w-3.5 h-3.5" /> Move
             </Button>
           )}
           {onCreateContainer && (
