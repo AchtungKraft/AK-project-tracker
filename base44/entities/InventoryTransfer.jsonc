@@ -48,6 +48,52 @@
       ],
       "default": "completed",
       "description": "Status of the transfer"
+    },
+    "transfer_type": {
+      "type": "string",
+      "enum": [
+        "inventory_move",
+        "container_move",
+        "put_away",
+        "project_stage",
+        "return_to_stock",
+        "admin_correction"
+      ],
+      "default": "inventory_move",
+      "description": "V2: Classification of this physical transfer"
+    },
+    "from_container_id": {
+      "type": "string",
+      "description": "V2: Source container (if item was inside a container)"
+    },
+    "to_container_id": {
+      "type": "string",
+      "description": "V2: Destination container (if moving into a container)"
+    },
+    "container_id": {
+      "type": "string",
+      "description": "V2: For container_move type \u2014 the container being relocated"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "V2: Project context for project-related transfers"
+    },
+    "performed_by": {
+      "type": "string",
+      "description": "V2: User who performed the transfer"
+    },
+    "performed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "V2: When the transfer was physically performed"
+    },
+    "source_receipt_id": {
+      "type": "string",
+      "description": "V2: InventoryReceipt reference for put_away transfers"
+    },
+    "batch_id": {
+      "type": "string",
+      "description": "V2: Groups multiple transfer records from one user operation"
     }
   },
   "required": [
