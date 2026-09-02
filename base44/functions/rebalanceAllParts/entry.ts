@@ -30,11 +30,19 @@ Deno.serve(async (req) => {
     const dry_run = body.dry_run !== false;
     const timestamp = new Date().toISOString();
 
-    // Fetch all parts
-    const allParts = await base44.asServiceRole.entities.Part.list();
+    // Fetch all parts, commitments, and projects
+    const [allParts, allCommitments, allProjects] = await Promise.all([
+      base44.asServiceRole.entities.Part.list(),
+      base44.asServiceRole.entities.PartCommitment.list(),
+      base44.asServiceRole.entities.Project.list(),
+    ]);
     
-    // Fetch all commitments to find which parts have commitments
-    const allCommitments = await base44.asServiceRole.entities.PartCommitment.list();
+    // Build AK_STOCK project ID set
+    const akStockProjectIds = new Set(
+      allProjects
+        .filter(p => p.is_system_project === true && p.system_project_type === 'AK_STOCK')
+        .map(p => p.id)
+    );
     
     // Group commitments by part
     const commitmentsByPart = {};
@@ -84,21 +92,27 @@ Deno.serve(async (req) => {
         const current_reserved = c.reserved_from_stock ?? c.qty_reserved ?? 0;
         const current_to_order = c.qty_to_order ?? 0;
 
-        // REPLENISHMENT DEMAND: Skip auto-allocation from general stock only when
-        // the commitment still needs purchasing. After receiving, the earned reservation
-        // (from PO receive conversion) must be preserved to prevent demand regeneration.
+        // AK_STOCK INVENTORY HOLDING: Non-consuming commitments must NOT auto-allocate
+        // general stock. Legacy PROJECT-style AK_STOCK commitments: ALWAYS zero.
+        // Replenishment: zero until fulfilled (earned via PO receive), then preserve.
         const isReplenishment = c.demand_source === 'STOCK_REPLENISHMENT' || c.demand_source === 'STOCK_MANUAL';
+        const isAkStockProject = akStockProjectIds.has(c.project_id);
         const currentCoverage = current_reserved + covered_from_po;
-        const stillNeedsPurchasing = isReplenishment && currentCoverage < required_total;
+        const isAkStockLegacyProject = isAkStockProject && !isReplenishment;
+        const isReplenishmentUnfulfilled = isReplenishment && currentCoverage < required_total;
+        const skipAutoAllocation = isAkStockLegacyProject || isReplenishmentUnfulfilled;
 
-        // How much do we need from stock? Unfulfilled replenishment = 0
-        const need_from_stock = stillNeedsPurchasing ? 0 : Math.max(0, required_total - covered_from_po);
+        // How much do we need from stock? Non-consuming = 0
+        const need_from_stock = skipAutoAllocation ? 0 : Math.max(0, required_total - covered_from_po);
         
         // Allocate from remaining stock
         const new_reserved = Math.min(remaining_stock, need_from_stock);
         
         // Compute to_order
-        const new_to_order = Math.max(0, required_total - new_reserved - covered_from_po);
+        // AK_STOCK legacy PROJECT commitments: to_order = 0 (inventory-holding, not procurement)
+        const new_to_order = isAkStockLegacyProject 
+          ? 0 
+          : Math.max(0, required_total - new_reserved - covered_from_po);
 
         // Deduct from remaining
         remaining_stock = Math.max(0, remaining_stock - new_reserved);
@@ -121,18 +135,22 @@ Deno.serve(async (req) => {
         }
 
         // INVARIANT CHECK
-        const sum = new_reserved + covered_from_po + new_to_order;
-        if (Math.abs(sum - required_total) > 0.001) {
-          part_violations.push({
-            commitment_id: c.id,
-            violation: 'COVERAGE_MATH_VIOLATION',
-            required_total,
-            reserved: new_reserved,
-            covered: covered_from_po,
-            to_order: new_to_order,
-            sum,
-            diff: sum - required_total
-          });
+        // AK_STOCK legacy PROJECT commitments are inventory-holding records
+        // that intentionally have reserved=0, to_order=0. Skip coverage math check.
+        if (!isAkStockLegacyProject) {
+          const sum = new_reserved + covered_from_po + new_to_order;
+          if (Math.abs(sum - required_total) > 0.001) {
+            part_violations.push({
+              commitment_id: c.id,
+              violation: 'COVERAGE_MATH_VIOLATION',
+              required_total,
+              reserved: new_reserved,
+              covered: covered_from_po,
+              to_order: new_to_order,
+              sum,
+              diff: sum - required_total
+            });
+          }
         }
       }
 

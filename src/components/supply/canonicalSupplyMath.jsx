@@ -28,6 +28,31 @@ export function isReplenishmentDemand(commitment) {
 }
 
 /**
+ * Returns true if this commitment belongs to an AK_STOCK inventory-holding project.
+ * AK_STOCK commitments (regardless of demand_source) must NOT consume general
+ * physical inventory. Physical stock received for AK_STOCK remains general
+ * available inventory until a normal project commitment reserves it.
+ * 
+ * Accepts either a project object or a view-model with is_system_project flag.
+ */
+export function isAkStockHoldingCommitment(commitment, project) {
+  // Check project-level flag
+  if (project?.is_system_project === true && project?.system_project_type === 'AK_STOCK') return true;
+  // Check view-model flag (from getOpsSupplyView)
+  if (commitment?.is_system_project === true) return true;
+  return false;
+}
+
+/**
+ * Returns true if this commitment should NOT auto-allocate general stock.
+ * Combines replenishment demand detection with AK_STOCK holding semantics.
+ * Used by frontend supply views to determine display behavior.
+ */
+export function isNonConsumingCommitment(commitment, project) {
+  return isReplenishmentDemand(commitment) || isAkStockHoldingCommitment(commitment, project);
+}
+
+/**
  * Read canonical quantities from a commitment record.
  * Normalizes legacy field names to canonical ones.
  */

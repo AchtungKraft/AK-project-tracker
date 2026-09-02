@@ -350,13 +350,16 @@ Deno.serve(async (req) => {
         const qty_installed = c.qty_installed ?? 0;
 
         // AUTO-ALLOCATION
-        // REPLENISHMENT DEMAND: Skip auto-allocation only when still needs purchasing.
-        // After receiving, the earned reservation must be preserved.
+        // AK_STOCK INVENTORY HOLDING: Legacy PROJECT-style AK_STOCK commitments
+        // ALWAYS skip auto-allocation. Replenishment skips until fulfilled.
         const isReplenishment = c.demand_source === 'STOCK_REPLENISHMENT' || c.demand_source === 'STOCK_MANUAL';
+        const isAkStockProject = project.is_system_project === true && project.system_project_type === 'AK_STOCK';
+        const isAkStockLegacy = isAkStockProject && !isReplenishment;
         const currentPersistedCoverage = (c.reserved_from_stock ?? 0) + (c.covered_from_po ?? 0) + qty_installed;
-        const stillNeedsPurchasing = isReplenishment && currentPersistedCoverage < effective_required;
+        const isReplenishmentUnfulfilled = isReplenishment && currentPersistedCoverage < effective_required;
+        const skipAutoAlloc = isAkStockLegacy || isReplenishmentUnfulfilled;
         const partInvForAlloc = partInventoryMap.get(c.part_id);
-        if (!stillNeedsPurchasing) {
+        if (!skipAutoAlloc) {
           const alreadyCovered = reserved_from_stock + covered_from_po + qty_installed;
           const gap = Math.max(0, effective_required - alreadyCovered);
           if (gap > 0 && partInvForAlloc && partInvForAlloc.available > 0) {
