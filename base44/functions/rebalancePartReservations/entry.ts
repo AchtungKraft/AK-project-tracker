@@ -104,16 +104,27 @@ Deno.serve(async (req) => {
       const current_to_order = c.qty_to_order ?? 0;
 
       // REPLENISHMENT DEMAND: Stock replenishment commitments must NOT consume
-      // existing physical inventory. Their purpose is to PURCHASE additional stock.
-      // Only covered_from_po (active POs) reduces their to_order.
+      // existing physical inventory BEFORE purchasing. Their purpose is to PURCHASE additional stock.
+      // However, AFTER a PO is received, the receive handler converts covered_from_po → reserved_from_stock.
+      // In that state, the commitment is fulfilled and the reserved stock is EARNED (paid for via PO).
+      // We must preserve that earned reservation, otherwise a rebalance would strip it and
+      // regenerate duplicate procurement demand.
+      //
+      // Logic: skip auto-allocation only when the commitment still has a purchasing gap.
+      // Once fully covered (reserved + covered_po + installed >= required), treat normally.
       const isReplenishment = c.demand_source === 'STOCK_REPLENISHMENT' || c.demand_source === 'STOCK_MANUAL';
 
       // PHASE 12R: Account for installed qty - only allocate for remaining need
       const remaining_required = Math.max(0, required_total - qty_installed);
       
+      // Check if replenishment still needs purchasing (has unfulfilled gap)
+      const currentCoverage = current_reserved + covered_from_po + qty_installed;
+      const stillNeedsPurchasing = isReplenishment && currentCoverage < required_total;
+      
       // How much do we need from stock? (remaining minus what PO covers)
-      // Replenishment demand: ZERO from stock — must be purchased
-      const need_from_stock = isReplenishment ? 0 : Math.max(0, remaining_required - covered_from_po);
+      // Replenishment demand that still needs purchasing: ZERO from general stock
+      // Replenishment demand already fulfilled (e.g. after receive): treat normally
+      const need_from_stock = stillNeedsPurchasing ? 0 : Math.max(0, remaining_required - covered_from_po);
       
       // Allocate from remaining stock
       const new_reserved = Math.min(remaining_stock, need_from_stock);

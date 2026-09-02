@@ -84,11 +84,15 @@ Deno.serve(async (req) => {
         const current_reserved = c.reserved_from_stock ?? c.qty_reserved ?? 0;
         const current_to_order = c.qty_to_order ?? 0;
 
-        // REPLENISHMENT DEMAND: Never allocate physical stock to stock replenishment commitments
+        // REPLENISHMENT DEMAND: Skip auto-allocation from general stock only when
+        // the commitment still needs purchasing. After receiving, the earned reservation
+        // (from PO receive conversion) must be preserved to prevent demand regeneration.
         const isReplenishment = c.demand_source === 'STOCK_REPLENISHMENT' || c.demand_source === 'STOCK_MANUAL';
+        const currentCoverage = current_reserved + covered_from_po;
+        const stillNeedsPurchasing = isReplenishment && currentCoverage < required_total;
 
-        // How much do we need from stock? Replenishment = 0
-        const need_from_stock = isReplenishment ? 0 : Math.max(0, required_total - covered_from_po);
+        // How much do we need from stock? Unfulfilled replenishment = 0
+        const need_from_stock = stillNeedsPurchasing ? 0 : Math.max(0, required_total - covered_from_po);
         
         // Allocate from remaining stock
         const new_reserved = Math.min(remaining_stock, need_from_stock);
