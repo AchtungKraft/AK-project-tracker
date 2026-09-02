@@ -46,13 +46,14 @@ export default function CreateContainerModal({ onClose, preselectedLocationId, p
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const qrValue = `AK_CONTAINER:${Date.now()}`;
+      // V2: Stable QR identity — uses entity ID after create, patched immediately
+      const tempQrValue = `AK_CTR:${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
       const data = {
         name,
         container_type: containerType,
         color,
         short_code: effectiveNumber,
-        qr_code_value: qrValue,
+        qr_code_value: tempQrValue,
         status: 'active',
         ...(locationId && { location_id: locationId }),
         ...(homeLocationId && homeLocationId !== '__none__' && { home_location_id: homeLocationId }),
@@ -60,7 +61,11 @@ export default function CreateContainerModal({ onClose, preselectedLocationId, p
         ...(notes.trim() && { notes: notes.trim() }),
         ...(description && { description }),
       };
-      return base44.entities.StorageContainer.create(data);
+      const created = await base44.entities.StorageContainer.create(data);
+      // Patch QR with stable entity-ID-based value
+      const stableQr = `AK_CTR:${created.id}`;
+      await base44.entities.StorageContainer.update(created.id, { qr_code_value: stableQr });
+      return { ...created, qr_code_value: stableQr };
     },
     onSuccess: (container) => {
       queryClient.invalidateQueries({ queryKey: ['storageContainers'] });

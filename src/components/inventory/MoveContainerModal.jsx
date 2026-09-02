@@ -60,17 +60,24 @@ export default function MoveContainerModal({ container, onClose, locations = [],
       .sort((a, b) => (a.location_area || '').localeCompare(b.location_area || ''));
   }, [activeLocations, searchTerm]);
 
+  // V2: Use canonical transferInventoryBatch for audited container moves
   const moveMutation = useMutation({
     mutationFn: async () => {
-      await base44.entities.StorageContainer.update(container.id, { location_id: destinationId });
-      for (const item of containedItems) {
-        await base44.entities.InventoryItem.update(item.id, { location_id: destinationId });
-      }
+      const response = await base44.functions.invoke('transferInventoryBatch', {
+        transfer_type: 'container_move',
+        container_id: container.id,
+        destination_location_id: destinationId,
+        idempotency_key: `ctr_move_${container.id}_${destinationId}_${Math.floor(Date.now() / 60000)}`,
+        notes: `Moved ${container.short_code || container.name}`,
+      });
+      if (response.data?.error) throw new Error(response.data.error);
+      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['storageContainers'] });
       queryClient.invalidateQueries({ predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'inventoryItems' });
       queryClient.invalidateQueries({ queryKey: ['locations'] });
+      queryClient.invalidateQueries({ queryKey: ['inventoryTransfers'] });
       const destLoc = locations.find(l => l.id === destinationId);
       const isReturnHome = destinationId === container.home_location_id;
       toast.success(
