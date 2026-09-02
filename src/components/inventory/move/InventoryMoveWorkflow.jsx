@@ -138,7 +138,8 @@ export default function InventoryMoveWorkflow({
         })),
       };
 
-      const res = await base44.functions.invoke('transferInventoryBatch', payload);
+      const raw = await base44.functions.invoke('transferInventoryBatch', payload);
+      const res = raw?.data || raw;
       setMoveResult(res);
       setStep('result');
 

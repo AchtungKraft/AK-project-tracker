@@ -20,10 +20,12 @@ export default function MoveSuccessPanel({
   result, source, destination, moveLines, locations, projects,
   onDone, onViewDestination, onMoveMore,
 }) {
-  const isFullSuccess = result.success && (!result.errors || result.errors.length === 0);
-  const hasPartialFailure = result.executed > 0 && result.failed > 0;
-  const totalFailed = result.failed || 0;
-  const totalExecuted = result.executed || 0;
+  // Normalize: unwrap .data if the raw SDK response leaked through
+  const r = result?.data || result || {};
+  const isFullSuccess = r.success && (!r.errors || r.errors.length === 0);
+  const hasPartialFailure = (r.executed || 0) > 0 && (r.failed || 0) > 0;
+  const totalFailed = r.failed || 0;
+  const totalExecuted = r.executed || 0;
   const totalPieces = moveLines.reduce((s, l) => s + l.qty, 0);
 
   const destName = destination.type === 'CONTAINER'
@@ -64,7 +66,7 @@ export default function MoveSuccessPanel({
           ? `${totalExecuted} inventory lines · ${totalPieces} pieces moved`
           : hasPartialFailure
             ? `${totalExecuted} succeeded, ${totalFailed} failed`
-            : `All ${totalFailed} lines failed`
+            : `All ${totalFailed || moveLines.length} lines failed`
         }
       </p>
 
@@ -88,11 +90,11 @@ export default function MoveSuccessPanel({
       </div>
 
       {/* Failed lines detail */}
-      {result.errors && result.errors.length > 0 && (
+      {r.errors && r.errors.length > 0 && (
         <div className="w-full max-w-sm mb-6 border border-red-800/50 rounded-lg overflow-hidden">
           <div className="px-3 py-2 bg-red-950/30 text-xs text-red-400 font-semibold">Failed Lines</div>
           <div className="divide-y divide-gray-800">
-            {result.errors.map((err, idx) => {
+            {r.errors.map((err, idx) => {
               const line = moveLines[err.index];
               return (
                 <div key={idx} className="px-3 py-2 text-left">
