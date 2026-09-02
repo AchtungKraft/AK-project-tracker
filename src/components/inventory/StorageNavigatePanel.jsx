@@ -1,7 +1,8 @@
-import React from "react";
-import { Star, Clock, ChevronRight, ChevronDown, MapPin, Package } from "lucide-react";
+import React, { useMemo } from "react";
+import { Star, Clock, ChevronRight, ChevronDown, MapPin, Package, PackageOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig } from "./locationTypeConfig";
+import { findReceivingLocation } from "@/lib/receivingLocationResolver";
 
 /**
  * Desktop left panel — Navigate.
@@ -11,6 +12,7 @@ export default function StorageNavigatePanel({
   favorites, recents, locations, locationPartCounts, showEmptyLocations,
   selectedLocationId, expandedLocations,
   onSelectLocation, onToggleExpand, onToggleFavorite, isFavorite, onToggleEmpty,
+  inventoryItems, onOpenPutAway,
 }) {
   const resolveLocation = (id) => locations.find(l => l.id === id);
   const favLocs = favorites.map(resolveLocation).filter(Boolean);
@@ -55,8 +57,27 @@ export default function StorageNavigatePanel({
     );
   };
 
+  // Put Away count
+  const putAwayCount = useMemo(() => {
+    const rcv = findReceivingLocation(locations);
+    if (!rcv || !inventoryItems) return 0;
+    return inventoryItems.filter(i => i.location_id === rcv.id && (i.quantity_on_hand || 0) > 0).length;
+  }, [locations, inventoryItems]);
+
   return (
     <div className="flex flex-col h-full overflow-hidden text-[13px]">
+      {/* Put Away shortcut */}
+      {putAwayCount > 0 && onOpenPutAway && (
+        <div className="px-2 pt-2 pb-1">
+          <button onClick={onOpenPutAway}
+            className="w-full flex items-center gap-2 px-2 py-2 rounded-lg bg-green-950/20 border border-green-800/30 hover:bg-green-950/30 transition-colors text-left">
+            <PackageOpen className="w-4 h-4 text-green-400 shrink-0" />
+            <span className="flex-1 text-sm font-medium text-green-300">Put Away</span>
+            <span className="text-xs px-1.5 py-0.5 rounded-full bg-green-600/20 text-green-400">{putAwayCount}</span>
+          </button>
+        </div>
+      )}
+
       {/* Favorites */}
       {favLocs.length > 0 && (
         <div className="px-2 pt-2 pb-1">

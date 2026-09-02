@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import PutAwayQueue from "./workflows/PutAwayQueue";
+import PutAwayQueueList from "./putaway/PutAwayQueueList";
 import ProjectStagingView from "./workflows/ProjectStagingView";
 import TechnicianCartsView from "./workflows/TechnicianCartsView";
 import ReadyToInstallView from "./workflows/ReadyToInstallView";

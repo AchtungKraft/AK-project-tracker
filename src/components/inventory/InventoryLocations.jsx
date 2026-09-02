@@ -32,6 +32,7 @@ import AddToContainerModal from "./AddToContainerModal";
 import EmptyContainerModal from "./EmptyContainerModal";
 import ScannerModal from "./ScannerModal";
 import InventoryMoveWorkflow from "./move/InventoryMoveWorkflow";
+import PutAwayWorkflow from "./putaway/PutAwayWorkflow";
 
 const STORAGE_KEY = 'achtung_inventory_locations_state';
 
@@ -95,6 +96,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   const [galleryState, setGalleryState] = useState({ open: false, images: [], currentIndex: 0 });
   const [scannerOpen, setScannerOpen] = useState(false);
   const [moveWorkflowSource, setMoveWorkflowSource] = useState(null); // { type, id, entity }
+  const [putAwayOpen, setPutAwayOpen] = useState(false);
 
   // URL sync
   const setSelectedLocationId = useCallback((id) => {
@@ -118,6 +120,8 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   const { data: commitments = [] } = useQuery({ queryKey: ['partCommitments'], queryFn: () => base44.entities.PartCommitment.filter({ commitment_status: { $nin: ['cancelled', 'closed'] } }, '-created_date', 200), staleTime: 30000, gcTime: 120000, refetchOnWindowFocus: false });
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: () => base44.entities.Project.list(), staleTime: 30000, gcTime: 120000, refetchOnWindowFocus: false });
   const { data: containers = [] } = useQuery({ queryKey: ['storageContainers'], queryFn: () => base44.entities.StorageContainer.filter({ active: true }), staleTime: 30000, gcTime: 120000, refetchOnWindowFocus: false });
+  const { data: orders = [] } = useQuery({ queryKey: ['orders'], queryFn: () => base44.entities.Order.list(), staleTime: 60000, gcTime: 300000, refetchOnWindowFocus: false });
+  const { data: lineItems = [] } = useQuery({ queryKey: ['partPurchaseLineItems'], queryFn: () => base44.entities.PartPurchaseLineItem.list(), staleTime: 60000, gcTime: 300000, refetchOnWindowFocus: false });
 
   // --- Derived ---
   const getDescendants = useCallback((locationId) => {
@@ -495,6 +499,15 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
           onNavigateContainer={handleMoveNavContainer}
         />
       )}
+      {putAwayOpen && (
+        <PutAwayWorkflow
+          locations={locations} containers={containers} inventoryItems={inventoryItems} parts={parts} projects={projects}
+          orders={orders} lineItems={lineItems} commitments={commitments}
+          onClose={() => setPutAwayOpen(false)}
+          onNavigateLocation={(id) => { handleLocationSelect(id); setPutAwayOpen(false); }}
+          onNavigateContainer={(ctr) => { handleSelectContainer(ctr); setPutAwayOpen(false); }}
+        />
+      )}
     </>
   );
 
@@ -550,7 +563,8 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
               onSelectLocation={handleLocationSelect} onSelectContainer={handleSelectContainer}
               onToggleEmpty={handleToggleEmpty} expandedLocations={expandedLocations}
               onToggleExpand={(id) => setExpandedLocations(prev => ({ ...prev, [id]: !prev[id] }))}
-              onToggleFavorite={toggleFavorite} isFavorite={isFavorite} />
+              onToggleFavorite={toggleFavorite} isFavorite={isFavorite}
+              onOpenPutAway={() => setPutAwayOpen(true)} />
           )}
 
           {mobileIsContainer && !showSearchOverlay && (
@@ -641,6 +655,8 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
               onToggleExpand={(id) => setExpandedLocations(prev => ({ ...prev, [id]: !prev[id] }))}
               onToggleFavorite={toggleFavorite} isFavorite={isFavorite}
               onToggleEmpty={handleToggleEmpty}
+              inventoryItems={inventoryItems}
+              onOpenPutAway={() => setPutAwayOpen(true)}
             />
           </div>
 

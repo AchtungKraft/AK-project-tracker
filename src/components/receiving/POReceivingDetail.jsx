@@ -40,6 +40,7 @@ import POStatusBadge from "@/components/supply/POStatusBadge";
 import POFinancialSummary from "./POFinancialSummary";
 import PartModal from "@/components/parts/PartModal";
 import LocationSelect from "@/components/common/LocationSelect";
+import { findReceivingLocation } from "@/lib/receivingLocationResolver";
 
 const LOCATION_NONE = "__none__";
 
@@ -68,6 +69,11 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
   
   const [lineInputs, setLineInputs] = useState({});
   const [selectedLines, setSelectedLines] = useState(new Set());
+  // Default receiving location — resolve from locations prop
+  const receivingLocId = useMemo(() => {
+    const rcv = findReceivingLocation(locations || []);
+    return rcv?.id || LOCATION_NONE;
+  }, [locations]);
   const [defaultLocation, setDefaultLocation] = useState(LOCATION_NONE);
   const [isReceiving, setIsReceiving] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -112,20 +118,20 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
     return { openLines: open, completedLines: completed };
   }, [effectivePO?.lines]);
 
-  // Rebuild local state from PO data
+  // Rebuild local state from PO data — default location is Receiving
   const rebuildStateFromPO = useCallback((poData) => {
     if (!poData?.lines) return;
     const initial = {};
     poData.lines.forEach(line => {
       initial[line.line_item_id] = {
         receive_qty: 0,
-        location_id: LOCATION_NONE,
+        location_id: receivingLocId,
       };
     });
     setLineInputs(initial);
     setSelectedLines(new Set());
     initializedForRef.current = poData.order_id;
-  }, []);
+  }, [receivingLocId]);
 
   // Initialize ONCE when PO first loads or on different PO
   useEffect(() => {
@@ -164,11 +170,15 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
     openLines.forEach(line => {
       if (updated[line.line_item_id]) {
         updated[line.line_item_id].receive_qty = line.qty_remaining;
+        // Ensure receiving location if not explicitly changed
+        if (!updated[line.line_item_id].location_id || updated[line.line_item_id].location_id === LOCATION_NONE) {
+          updated[line.line_item_id].location_id = receivingLocId;
+        }
       }
     });
     setLineInputs(updated);
     selectAllOpen();
-  }, [effectivePO?.lines, lineInputs, openLines, selectAllOpen]);
+  }, [effectivePO?.lines, lineInputs, openLines, selectAllOpen, receivingLocId]);
 
   const applyDefaultLocation = useCallback(() => {
     if (defaultLocation === LOCATION_NONE) return;
@@ -222,7 +232,7 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
       const serverLine = effectivePO.lines.find(sl => sl.line_item_id === l.line_item_id);
       if (!serverLine) return;
       const newRemaining = Math.max(0, serverLine.qty_remaining - l.receive_qty);
-      newInputs[l.line_item_id] = { receive_qty: newRemaining, location_id: LOCATION_NONE };
+      newInputs[l.line_item_id] = { receive_qty: newRemaining, location_id: receivingLocId };
     });
     // Keep unaffected open lines selected, auto-select remaining open lines
     effectivePO.lines.forEach(line => {
@@ -531,7 +541,7 @@ export default function POReceivingDetail({ po, locations, isLoading, refetch })
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
                   <MapPin className="w-4 h-4 text-gray-500" />
-                  <span className="text-xs text-gray-400 whitespace-nowrap">Apply Location to Selected:</span>
+                  <span className="text-xs text-gray-400 whitespace-nowrap">Override Location:</span>
                   <LocationSelect
                     value={defaultLocation === LOCATION_NONE ? '' : defaultLocation}
                     onValueChange={(v) => setDefaultLocation(v || LOCATION_NONE)}

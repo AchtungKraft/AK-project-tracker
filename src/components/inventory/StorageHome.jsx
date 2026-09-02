@@ -3,6 +3,7 @@ import { Star, Clock, ChevronRight, ChevronDown, MapPin, Package } from "lucide-
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig } from "./locationTypeConfig";
 import { getContainerTypeConfig } from "./containerTypeConfig";
+import PutAwayIndicator from "./putaway/PutAwayIndicator";
 
 /**
  * StorageHome — the "where do I go?" screen.
@@ -24,6 +25,7 @@ export default function StorageHome({
   onToggleExpand,
   onToggleFavorite,
   isFavorite,
+  onOpenPutAway,
 }) {
   const [browseOpen, setBrowseOpen] = useState(false);
 
@@ -88,6 +90,15 @@ export default function StorageHome({
 
   return (
     <div className="flex-1 overflow-y-auto">
+      {/* Put Away Indicator */}
+      <div className="px-4 pt-4">
+        <PutAwayIndicator
+          locations={locations}
+          inventoryItems={inventoryItems}
+          onClick={onOpenPutAway}
+        />
+      </div>
+
       {/* Favorites */}
       {favLocs.length > 0 && (
         <div className="px-4 pt-4 pb-2">

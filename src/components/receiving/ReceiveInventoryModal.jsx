@@ -17,6 +17,7 @@ import { PartTypeBadge } from "@/components/parts/PartTypeSelector";
 import { useSupplyAction } from "@/components/supply/useProjectSupplyView";
 import { extractRefreshContext } from "@/components/supply/forceAppRefresh";
 import { refreshForAdjustStock } from "@/components/supply/tieredSupplyRefresh";
+import { getReceivingLocationId } from "@/lib/receivingLocationResolver";
 
 /**
  * ReceiveInventoryModal - PHASE 12R CONTROLLED HYBRID
@@ -77,6 +78,14 @@ export default function ReceiveInventoryModal({
     queryKey: ['locations'],
     queryFn: () => base44.entities.Location.list(),
   });
+
+  // Default to Receiving location if no location set and this is PO receiving
+  React.useEffect(() => {
+    if (locations.length > 0 && !formData.location_id) {
+      const rcvId = getReceivingLocationId(locations);
+      if (rcvId) setFormData(prev => ({ ...prev, location_id: rcvId }));
+    }
+  }, [locations.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const createLocationMutation = useMutation({
     mutationFn: (name) => base44.entities.Location.create({
@@ -409,7 +418,7 @@ export default function ReceiveInventoryModal({
               </div>
             )}
             <p className="text-xs text-gray-500 mt-1">
-              If no location is selected, inventory will be assigned to "Unassigned" automatically.
+              Defaults to Receiving. Use Put Away in Storage to assign permanent storage.
             </p>
           </div>
 
