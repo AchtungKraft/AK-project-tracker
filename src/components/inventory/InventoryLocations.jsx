@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { 
-  Search, ChevronRight, Package, LayoutGrid, List, X, ArrowLeft, ScanLine
+  Search, ChevronRight, Package, LayoutGrid, List, X, ArrowLeft, ScanLine, ArrowRightLeft
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig, buildLocationPathString } from "./locationTypeConfig";
@@ -32,6 +32,7 @@ import AddToContainerModal from "./AddToContainerModal";
 import EmptyContainerModal from "./EmptyContainerModal";
 import ScannerModal from "./ScannerModal";
 import InventoryMoveWorkflow from "./move/InventoryMoveWorkflow";
+import MobileMoveWorkflow from "./mobile/MobileMoveWorkflow";
 import PutAwayWorkflow from "./putaway/PutAwayWorkflow";
 
 const STORAGE_KEY = 'achtung_inventory_locations_state';
@@ -96,6 +97,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   const [galleryState, setGalleryState] = useState({ open: false, images: [], currentIndex: 0 });
   const [scannerOpen, setScannerOpen] = useState(false);
   const [moveWorkflowSource, setMoveWorkflowSource] = useState(null); // { type, id, entity }
+  const [mobileMoveOpen, setMobileMoveOpen] = useState(false);
   const [putAwayOpen, setPutAwayOpen] = useState(false);
 
   // URL sync
@@ -299,10 +301,16 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
     setScannerOpen(false);
   };
 
-  // Move workflow handlers
+  // Move workflow handlers — mobile uses full scan-first workflow
   const handleStartMoveFromLocation = (locId) => {
-    const loc = locations.find(l => l.id === locId);
-    if (loc) setMoveWorkflowSource({ type: 'LOCATION', id: locId, entity: loc });
+    if (isMobile) {
+      // On mobile, launch the scan-first move workflow pre-loaded with this source
+      const loc = locations.find(l => l.id === locId);
+      if (loc) setMoveWorkflowSource({ type: 'LOCATION', id: locId, entity: loc });
+    } else {
+      const loc = locations.find(l => l.id === locId);
+      if (loc) setMoveWorkflowSource({ type: 'LOCATION', id: locId, entity: loc });
+    }
   };
   const handleStartMoveFromContainer = (ctr) => {
     setMoveWorkflowSource({ type: 'CONTAINER', id: ctr.id, entity: ctr });
@@ -508,6 +516,14 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
           onNavigateContainer={(ctr) => { handleSelectContainer(ctr); setPutAwayOpen(false); }}
         />
       )}
+      {mobileMoveOpen && (
+        <MobileMoveWorkflow
+          locations={locations} containers={containers} inventoryItems={inventoryItems} parts={parts} projects={projects}
+          onClose={() => setMobileMoveOpen(false)}
+          onNavigateLocation={(id) => { handleLocationSelect(id); setMobileMoveOpen(false); }}
+          onNavigateContainer={(ctr) => { handleSelectContainer(ctr); setMobileMoveOpen(false); }}
+        />
+      )}
     </>
   );
 
@@ -558,13 +574,26 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
           {showSearchOverlay && renderSearchResults()}
 
           {mobileIsHome && !showSearchOverlay && (
-            <StorageHome favorites={favorites} recents={recents} locations={locations} containers={containers}
-              inventoryItems={inventoryItems} locationPartCounts={locationPartCounts} showEmptyLocations={showEmptyLocations}
-              onSelectLocation={handleLocationSelect} onSelectContainer={handleSelectContainer}
-              onToggleEmpty={handleToggleEmpty} expandedLocations={expandedLocations}
-              onToggleExpand={(id) => setExpandedLocations(prev => ({ ...prev, [id]: !prev[id] }))}
-              onToggleFavorite={toggleFavorite} isFavorite={isFavorite}
-              onOpenPutAway={() => setPutAwayOpen(true)} />
+            <>
+              {/* Mobile quick actions */}
+              <div className="px-3 pt-3 pb-1 flex gap-2">
+                <Button onClick={() => setMobileMoveOpen(true)}
+                  className="flex-1 h-12 gap-2 bg-red-600 hover:bg-red-700 text-base font-bold">
+                  <ScanLine className="w-5 h-5" /> Scan to Move
+                </Button>
+                <Button onClick={() => setPutAwayOpen(true)}
+                  variant="outline" className="h-12 gap-2 border-gray-600 text-gray-300 text-sm px-4">
+                  <ArrowRightLeft className="w-4 h-4" /> Put Away
+                </Button>
+              </div>
+              <StorageHome favorites={favorites} recents={recents} locations={locations} containers={containers}
+                inventoryItems={inventoryItems} locationPartCounts={locationPartCounts} showEmptyLocations={showEmptyLocations}
+                onSelectLocation={handleLocationSelect} onSelectContainer={handleSelectContainer}
+                onToggleEmpty={handleToggleEmpty} expandedLocations={expandedLocations}
+                onToggleExpand={(id) => setExpandedLocations(prev => ({ ...prev, [id]: !prev[id] }))}
+                onToggleFavorite={toggleFavorite} isFavorite={isFavorite}
+                onOpenPutAway={() => setPutAwayOpen(true)} />
+            </>
           )}
 
           {mobileIsContainer && !showSearchOverlay && (

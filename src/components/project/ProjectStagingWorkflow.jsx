@@ -45,6 +45,7 @@ export default function ProjectStagingWorkflow({
   const [searchTerm, setSearchTerm] = useState('');
   const [destView, setDestView] = useState('choose');
   const [scanError, setScanError] = useState(null);
+  const [destSearch, setDestSearch] = useState('');
   const [conflictWarning, setConflictWarning] = useState(null);
   const [pendingDest, setPendingDest] = useState(null);
   const batchRef = useRef(null);
@@ -304,14 +305,13 @@ export default function ProjectStagingWorkflow({
     }
 
     if (destView === 'browse') {
-      const [destSearch, setDestSearch] = useState('');
       const term = destSearch.toLowerCase();
       const filtLocs = locations.filter(l => l.active !== false && (l.location_area?.toLowerCase().includes(term) || l.short_code?.toLowerCase().includes(term))).slice(0, 20);
       const filtCtrs = containers.filter(c => c.active !== false && c.status !== 'archived' && (c.name?.toLowerCase().includes(term) || c.short_code?.toLowerCase().includes(term))).slice(0, 15);
       return (
         <div className="fixed inset-0 z-[80] bg-black flex flex-col">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-800 shrink-0">
-            <Button size="icon" variant="ghost" onClick={() => setDestView('choose')} className="h-9 w-9 text-gray-400"><ArrowLeft className="w-5 h-5" /></Button>
+            <Button size="icon" variant="ghost" onClick={() => { setDestSearch(''); setDestView('choose'); }} className="h-9 w-9 text-gray-400"><ArrowLeft className="w-5 h-5" /></Button>
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
               <Input value={destSearch} onChange={(e) => setDestSearch(e.target.value)}
