@@ -15,6 +15,19 @@
  */
 
 /**
+ * Returns true if this commitment represents stock replenishment demand.
+ * Replenishment demand must NOT have physical stock auto-allocated —
+ * the entire point is to PURCHASE additional inventory.
+ * 
+ * Canonical identification: demand_source on the commitment itself.
+ * Avoid name-based checks on the project.
+ */
+export function isReplenishmentDemand(commitment) {
+  const ds = commitment?.demand_source;
+  return ds === 'STOCK_REPLENISHMENT' || ds === 'STOCK_MANUAL';
+}
+
+/**
  * Read canonical quantities from a commitment record.
  * Normalizes legacy field names to canonical ones.
  */

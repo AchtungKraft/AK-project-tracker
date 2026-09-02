@@ -84,8 +84,11 @@ Deno.serve(async (req) => {
         const current_reserved = c.reserved_from_stock ?? c.qty_reserved ?? 0;
         const current_to_order = c.qty_to_order ?? 0;
 
-        // How much do we need from stock?
-        const need_from_stock = Math.max(0, required_total - covered_from_po);
+        // REPLENISHMENT DEMAND: Never allocate physical stock to stock replenishment commitments
+        const isReplenishment = c.demand_source === 'STOCK_REPLENISHMENT' || c.demand_source === 'STOCK_MANUAL';
+
+        // How much do we need from stock? Replenishment = 0
+        const need_from_stock = isReplenishment ? 0 : Math.max(0, required_total - covered_from_po);
         
         // Allocate from remaining stock
         const new_reserved = Math.min(remaining_stock, need_from_stock);

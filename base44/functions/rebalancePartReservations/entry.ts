@@ -103,11 +103,17 @@ Deno.serve(async (req) => {
       const current_reserved = c.reserved_from_stock ?? 0;
       const current_to_order = c.qty_to_order ?? 0;
 
+      // REPLENISHMENT DEMAND: Stock replenishment commitments must NOT consume
+      // existing physical inventory. Their purpose is to PURCHASE additional stock.
+      // Only covered_from_po (active POs) reduces their to_order.
+      const isReplenishment = c.demand_source === 'STOCK_REPLENISHMENT' || c.demand_source === 'STOCK_MANUAL';
+
       // PHASE 12R: Account for installed qty - only allocate for remaining need
       const remaining_required = Math.max(0, required_total - qty_installed);
       
       // How much do we need from stock? (remaining minus what PO covers)
-      const need_from_stock = Math.max(0, remaining_required - covered_from_po);
+      // Replenishment demand: ZERO from stock — must be purchased
+      const need_from_stock = isReplenishment ? 0 : Math.max(0, remaining_required - covered_from_po);
       
       // Allocate from remaining stock
       const new_reserved = Math.min(remaining_stock, need_from_stock);
@@ -174,19 +180,29 @@ Deno.serve(async (req) => {
 
     // PHASE 5: HARD GUARDRAIL — STOCK_AVAILABLE_NOT_RESERVED
     // If physical_stock > 0 AND to_order > 0 AND reserved_from_stock === 0
-    // This indicates a bug in the allocation algorithm
-    for (const u of updates) {
-      if (physical_stock > 0 && u.new_to_order > 0 && u.new_reserved === 0 && u.remaining_required > 0) {
-        violations.push({
-          commitment_id: u.commitment_id,
-          violation: 'STOCK_AVAILABLE_NOT_RESERVED',
-          message: `Stock exists (${physical_stock}) but commitment needs order (${u.new_to_order}) with zero reservation. This indicates allocation was skipped incorrectly.`,
-          physical_stock,
-          new_reserved: u.new_reserved,
-          new_to_order: u.new_to_order,
-          remaining_required: u.remaining_required,
-          covered_from_po: u.covered_from_po
-        });
+    // This indicates a bug in the allocation algorithm.
+    // EXCEPTIONS:
+    // 1. Replenishment demand is intentionally not reserved from stock.
+    // 2. If remaining_stock is 0 after higher-priority allocations, zero reservation is correct.
+    if (remaining_stock > 0) {
+      for (const u of updates) {
+        if (u.new_to_order > 0 && u.new_reserved === 0 && u.remaining_required > 0) {
+          const commitmentRecord = openCommitments.find(c => c.id === u.commitment_id);
+          const isReplenishment = commitmentRecord?.demand_source === 'STOCK_REPLENISHMENT' || commitmentRecord?.demand_source === 'STOCK_MANUAL';
+          if (!isReplenishment) {
+            violations.push({
+              commitment_id: u.commitment_id,
+              violation: 'STOCK_AVAILABLE_NOT_RESERVED',
+              message: `Stock exists (${physical_stock}, remaining=${remaining_stock}) but commitment needs order (${u.new_to_order}) with zero reservation.`,
+              physical_stock,
+              remaining_stock,
+              new_reserved: u.new_reserved,
+              new_to_order: u.new_to_order,
+              remaining_required: u.remaining_required,
+              covered_from_po: u.covered_from_po
+            });
+          }
+        }
       }
     }
 

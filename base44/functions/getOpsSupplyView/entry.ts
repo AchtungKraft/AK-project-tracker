@@ -238,13 +238,18 @@ Deno.serve(async (req) => {
       const qty_installed = c.qty_installed ?? 0;
 
       // AUTO-ALLOCATION
+      // REPLENISHMENT DEMAND: Stock replenishment commitments must NOT auto-allocate
+      // physical inventory. Their purpose is to PURCHASE additional stock.
+      const isReplenishment = c.demand_source === 'STOCK_REPLENISHMENT' || c.demand_source === 'STOCK_MANUAL';
       const partInvForAlloc = partInventoryMap.get(c.part_id);
-      const gap = Math.max(0, effective_required - reserved_from_stock - covered_from_po - qty_installed);
-      if (gap > 0 && partInvForAlloc && partInvForAlloc.available > 0) {
-        const autoReserve = Math.min(gap, partInvForAlloc.available);
-        reserved_from_stock += autoReserve;
-        partInvForAlloc.available -= autoReserve;
-        partInvForAlloc.reserved_global += autoReserve;
+      if (!isReplenishment) {
+        const gap = Math.max(0, effective_required - reserved_from_stock - covered_from_po - qty_installed);
+        if (gap > 0 && partInvForAlloc && partInvForAlloc.available > 0) {
+          const autoReserve = Math.min(gap, partInvForAlloc.available);
+          reserved_from_stock += autoReserve;
+          partInvForAlloc.available -= autoReserve;
+          partInvForAlloc.reserved_global += autoReserve;
+        }
       }
 
       const totalCoverage = reserved_from_stock + covered_from_po + qty_installed;
