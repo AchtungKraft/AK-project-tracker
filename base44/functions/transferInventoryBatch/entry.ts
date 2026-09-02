@@ -201,8 +201,10 @@ Deno.serve(async (req) => {
         errors.push({ index: i, error: `Insufficient qty: available=${available}, requested=${line.qty}`, code: 'INSUFFICIENT_QTY' }); continue;
       }
 
-      // Same location+container check
-      if (invItem.location_id === destLocationId && (invItem.container_id || null) === destContainerId) {
+      // Same location+container check — only reject if BOTH location AND container are identical
+      const sameLocation = invItem.location_id === destLocationId;
+      const sameContainer = (invItem.container_id || null) === destContainerId;
+      if (sameLocation && sameContainer) {
         errors.push({ index: i, error: 'Already at destination', code: 'SAME_LOCATION' }); continue;
       }
 

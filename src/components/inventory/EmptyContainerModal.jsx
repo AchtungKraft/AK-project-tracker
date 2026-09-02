@@ -30,21 +30,44 @@ export default function EmptyContainerModal({ container, onClose, locations = []
 
   const otherContainers = containers.filter(c => c.id !== container.id && c.active !== false);
 
+  // V2: Use canonical batch transfer for audited container emptying
   const emptyMutation = useMutation({
     mutationFn: async () => {
-      for (const item of containedItems) {
-        const update = { container_id: null };
-        if (action === 'moveLocation' && destinationLocationId) {
-          update.location_id = destinationLocationId;
-        }
-        if (action === 'moveContainer' && destinationContainerId) {
-          update.container_id = destinationContainerId;
-        }
-        await base44.entities.InventoryItem.update(item.id, update);
+      let destLocId = container.location_id; // default: leave at container's location
+      let destCtrId = null;
+
+      if (action === 'moveLocation' && destinationLocationId) {
+        destLocId = destinationLocationId;
       }
+      if (action === 'moveContainer' && destinationContainerId) {
+        destCtrId = destinationContainerId;
+        const destCtr = containers.find(c => c.id === destinationContainerId);
+        if (destCtr?.location_id) destLocId = destCtr.location_id;
+      }
+
+      const lines = containedItems.map(item => ({
+        inventory_item_id: item.id,
+        part_id: item.part_id,
+        qty: Math.max(0, (item.quantity_on_hand || 0) - (item.quantity_reserved || 0)),
+      })).filter(l => l.qty > 0);
+
+      if (lines.length === 0) throw new Error('No available inventory to move');
+
+      const response = await base44.functions.invoke('transferInventoryBatch', {
+        transfer_type: 'inventory_move',
+        source_container_id: container.id,
+        destination_location_id: destLocId,
+        destination_container_id: destCtrId,
+        batch_id: `empty_ctr_${container.id}_${Date.now()}`,
+        notes: `Emptied ${container.short_code || container.name}`,
+        lines,
+      });
+      if (response.data?.error) throw new Error(response.data.error);
+      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'inventoryItems' });
+      queryClient.invalidateQueries({ queryKey: ['inventoryTransfers'] });
       toast.success(`Emptied ${container.name} — ${containedItems.length} part${containedItems.length !== 1 ? 's' : ''} moved`);
       onClose();
     },

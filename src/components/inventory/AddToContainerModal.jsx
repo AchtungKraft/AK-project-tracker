@@ -40,14 +40,39 @@ export default function AddToContainerModal({ container, onClose, inventoryItems
     });
   };
 
+  // V2: Use canonical batch transfer to assign items to container with audit trail
   const addMutation = useMutation({
     mutationFn: async () => {
+      const lines = [];
       for (const itemId of selectedIds) {
-        await base44.entities.InventoryItem.update(itemId, { container_id: container.id });
+        const item = inventoryItems.find(i => i.id === itemId);
+        if (item) {
+          const available = (item.quantity_on_hand || 0) - (item.quantity_reserved || 0);
+          if (available > 0) {
+            lines.push({
+              inventory_item_id: itemId,
+              part_id: item.part_id,
+              qty: available,
+            });
+          }
+        }
       }
+      // Use batch transfer: move from current location (loose) into container
+      const response = await base44.functions.invoke('transferInventoryBatch', {
+        transfer_type: 'inventory_move',
+        source_location_id: container.location_id,
+        destination_location_id: container.location_id,
+        destination_container_id: container.id,
+        batch_id: `add_to_ctr_${container.id}_${Date.now()}`,
+        notes: `Added to ${container.short_code || container.name}`,
+        lines,
+      });
+      if (response.data?.error) throw new Error(response.data.error);
+      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'inventoryItems' });
+      queryClient.invalidateQueries({ queryKey: ['inventoryTransfers'] });
       toast.success(`Added ${selectedIds.size} part${selectedIds.size !== 1 ? 's' : ''} to ${container.name}`);
       onClose();
     },

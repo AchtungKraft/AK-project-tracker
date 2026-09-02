@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-export default function RemoveFromContainerModal({ inventoryItem, container, part, onClose, locations = [], containers = [] }) {
+export default function RemoveFromContainerModal({ inventoryItem, container, part, onClose, locations = [], containers = [], queryClient: externalQC }) {
   const queryClient = useQueryClient();
   const [action, setAction] = useState('leave'); // leave | moveContainer | moveLocation
   const [destinationLocationId, setDestinationLocationId] = useState('');
@@ -16,19 +16,43 @@ export default function RemoveFromContainerModal({ inventoryItem, container, par
 
   const otherContainers = containers.filter(c => c.id !== container.id && c.location_id === container.location_id);
 
+  // V2: Use canonical batch transfer for audited container removal
   const removeMutation = useMutation({
     mutationFn: async () => {
-      const update = { container_id: null };
+      const available = (inventoryItem.quantity_on_hand || 0) - (inventoryItem.quantity_reserved || 0);
+      if (available <= 0) throw new Error('No available quantity to move');
+
+      let destLocId = container.location_id; // default: leave at container's location
+      let destCtrId = null;
+
       if (action === 'moveLocation' && destinationLocationId) {
-        update.location_id = destinationLocationId;
+        destLocId = destinationLocationId;
       }
       if (action === 'moveContainer' && destinationContainerId) {
-        update.container_id = destinationContainerId;
+        destCtrId = destinationContainerId;
+        const destCtr = containers.find(c => c.id === destinationContainerId);
+        if (destCtr?.location_id) destLocId = destCtr.location_id;
       }
-      await base44.entities.InventoryItem.update(inventoryItem.id, update);
+
+      const response = await base44.functions.invoke('transferInventoryBatch', {
+        transfer_type: 'inventory_move',
+        source_container_id: container.id,
+        destination_location_id: destLocId,
+        destination_container_id: destCtrId,
+        batch_id: `remove_from_ctr_${container.id}_${Date.now()}`,
+        notes: `Removed from ${container.short_code || container.name}`,
+        lines: [{
+          inventory_item_id: inventoryItem.id,
+          part_id: inventoryItem.part_id,
+          qty: available,
+        }],
+      });
+      if (response.data?.error) throw new Error(response.data.error);
+      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'inventoryItems' });
+      queryClient.invalidateQueries({ queryKey: ['inventoryTransfers'] });
       toast.success(`Removed "${part?.part_name}" from ${container.name}`);
       onClose();
     },
