@@ -65,6 +65,7 @@ import CommitmentBillingDiagnostics from "@/components/financial/CommitmentBilli
 import InvoiceReconciliationDiagnostics from "@/components/financial/InvoiceReconciliationDiagnostics";
 import ResolveNeedModal from "@/components/supply/ResolveNeedModal";
 import BackfillPOCostsModal from "@/components/supply/BackfillPOCostsModal";
+import AkStockInventorySummary from "@/components/supply/AkStockInventorySummary";
 import ProjectPurchaseOrders from "@/components/project/ProjectPurchaseOrders";
 import ProjectServicesSection from "@/components/supply/ProjectServicesSection";
 import { useServicesView } from "@/components/supply/useServicesView";
@@ -116,6 +117,9 @@ export default function ProjectSupplyManager() {
   if (localStorage.getItem('ak_debug_coverage') === 'true') {
     console.log("[PSM] Items:", supplyItems?.length ?? 0, "Loading:", supplyLoading);
   }
+
+  // AK STOCK detection — inventory-holding project, not a consuming build
+  const isAkStock = project?.is_system_project === true && project?.system_project_type === 'AK_STOCK';
 
   // FORWARD MODEL ONLY - No legacy support
   const ALLOWED_TABS = ['plan', 'buy', 'receive', 'install', 'invoice', 'orders', 'services', 'report'];
@@ -430,6 +434,10 @@ export default function ProjectSupplyManager() {
         unit_cost_snapshot: item.unit_cost,
         unit_retail_snapshot: item.unit_retail,
         
+        // AK STOCK metadata
+        demand_source: item.demand_source || null,
+        isAkStockLegacy: item.isAkStockLegacy || false,
+        
         // Raw commitment reference for modal access
         _raw: item._raw || {},
       };
@@ -509,6 +517,11 @@ export default function ProjectSupplyManager() {
   // Filter commitments for each tab - using CANONICAL fields from read model
   const getFilteredCommitments = (tabFilter) => {
     let filtered = enrichedCommitments;
+
+    // AK STOCK: exclude legacy PROJECT holding rows — they have no operational purpose
+    if (isAkStock) {
+      filtered = filtered.filter(c => !c.isAkStockLegacy);
+    }
 
     // Apply status filter for tab using CANONICAL coverage fields
     switch (tabFilter) {
@@ -1046,7 +1059,7 @@ export default function ProjectSupplyManager() {
               </TabsTrigger>
               <TabsTrigger value="install" className="data-[state=active]:bg-emerald-900/30 gap-1.5">
                 <Wrench className="w-4 h-4" />
-                Install
+                {isAkStock ? 'In Stock' : 'Install'}
               </TabsTrigger>
               <TabsTrigger value="invoice" className="data-[state=active]:bg-green-900/30 gap-1.5">
                 <Receipt className="w-4 h-4" />
@@ -1068,11 +1081,22 @@ export default function ProjectSupplyManager() {
 
             {/* Tab Contents - GNO-style card-based grouped views */}
             <TabsContent value="plan" className="mt-4 space-y-4">
+              {/* AK STOCK: Inventory summary — What do we have? What do we need? */}
+              {isAkStock && (
+                <AkStockInventorySummary items={enrichedCommitments} />
+              )}
+
               {/* Tab Header */}
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-lg font-semibold text-white">Planned Requirements</h2>
-                  <p className="text-xs text-gray-500">Auto: reserves stock first, remainder goes to order queue.</p>
+                  <h2 className="text-lg font-semibold text-white">
+                    {isAkStock ? 'Stock Replenishment' : 'Planned Requirements'}
+                  </h2>
+                  <p className="text-xs text-gray-500">
+                    {isAkStock 
+                      ? 'Active replenishment orders for inventory stock levels.'
+                      : 'Auto: reserves stock first, remainder goes to order queue.'}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <AddPartButton projectId={projectId} onSuccess={handleModalSuccess} />
@@ -1109,8 +1133,8 @@ export default function ProjectSupplyManager() {
                 onPartClick={handlePartClick}
                 onCreatePO={handleSinglePOCreate}
                 onReceive={guardedSetReceiveModal}
-                onInstall={guardedSetInstallModal}
-                onReverseInstall={guardedSetReverseInstallModal}
+                onInstall={isAkStock ? null : guardedSetInstallModal}
+                onReverseInstall={isAkStock ? null : guardedSetReverseInstallModal}
                 onDeltaOrder={guardedSetDeltaOrderCommitment}
                 onManageQty={guardedSetQtyManagerDrawer}
                 onCancel={guardedSetCancelModal}
@@ -1123,6 +1147,7 @@ export default function ProjectSupplyManager() {
                 categoriesMap={categoriesMap}
                 vendorsMap={vendorsMap}
                 tab="plan"
+                isAkStock={isAkStock}
               />
             </TabsContent>
 
@@ -1251,8 +1276,12 @@ export default function ProjectSupplyManager() {
               {/* Tab Header */}
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-lg font-semibold text-white">Installation Queue</h2>
-                  <p className="text-xs text-gray-500">Items ready to install</p>
+                  <h2 className="text-lg font-semibold text-white">
+                    {isAkStock ? 'In Stock Inventory' : 'Installation Queue'}
+                  </h2>
+                  <p className="text-xs text-gray-500">
+                    {isAkStock ? 'Parts currently in stock and reserved' : 'Items ready to install'}
+                  </p>
                 </div>
               </div>
 

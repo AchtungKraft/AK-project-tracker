@@ -629,6 +629,8 @@ Deno.serve(async (req) => {
             return { quantity_valid: !hasViolation, violations: vs, quantity_violation: hasViolation, blocking: hasViolation, valid: !hasViolation };
           })(),
 
+          demand_source: c.demand_source || null,
+          isAkStockLegacy: isAkStockLegacy,
           ...(prepay_diagnostics ? { prepay_diagnostics } : {}),
         };
       });
@@ -745,6 +747,8 @@ Deno.serve(async (req) => {
         name: project.name,
         client_name: project.client_name,
         financial_model_version: 'forward',
+        is_system_project: project.is_system_project || false,
+        system_project_type: project.system_project_type || null,
       },
       items: filtered,
       tab_counts: tabCounts,

@@ -153,12 +153,13 @@ export function PSMSummaryStrip({ items, tab }) {
 // ── STATUS CHIP ─────────────────────────────────────────────────
 // Single primary status derived from canonical backend fields.
 // Green/Yellow/Red/Blue only.
-function StatusChip({ commitment, tab }) {
+// AK STOCK uses inventory/purchasing terminology instead of install.
+function StatusChip({ commitment, tab, isAkStock }) {
   let label, color;
   const isOrderingCtx = tab === 'buy';
 
   if (commitment.commitment_fulfilled && (commitment.qty_installed ?? 0) >= (commitment.effective_required ?? 1)) {
-    label = "Installed"; color = "bg-emerald-900/50 text-emerald-400 border-emerald-700/50";
+    label = isAkStock ? "In Stock" : "Installed"; color = "bg-emerald-900/50 text-emerald-400 border-emerald-700/50";
   } else if (commitment.billing_state === 'PAID') {
     label = "Paid"; color = "bg-emerald-900/50 text-emerald-400 border-emerald-700/50";
   } else if (commitment.billing_state === 'INVOICED') {
@@ -170,9 +171,9 @@ function StatusChip({ commitment, tab }) {
   } else if ((commitment.covered_from_po ?? 0) > 0 && !commitment.commitment_fulfilled) {
     label = "Ordered"; color = "bg-blue-900/50 text-blue-400 border-blue-700/50";
   } else if (resolveInstallState(commitment).is_ready_to_install) {
-    label = "Ready"; color = "bg-emerald-900/50 text-emerald-400 border-emerald-700/50";
+    label = isAkStock ? "In Stock" : "Ready"; color = "bg-emerald-900/50 text-emerald-400 border-emerald-700/50";
   } else if (commitment.commitment_fulfilled) {
-    label = "Fulfilled"; color = "bg-emerald-900/50 text-emerald-400 border-emerald-700/50";
+    label = isAkStock ? "Received" : "Fulfilled"; color = "bg-emerald-900/50 text-emerald-400 border-emerald-700/50";
   } else {
     label = "Planned"; color = "bg-gray-800/80 text-gray-400 border-gray-700/50";
   }
@@ -269,6 +270,7 @@ export function PSMItemRow({
   categoriesMap,
   vendorsMap,
   tab = 'plan',
+  isAkStock = false,
 }) {
   const navigate = useNavigate();
   const [showDetails, setShowDetails] = useState(false);
@@ -335,7 +337,7 @@ export function PSMItemRow({
         </button>
 
         {/* Status Chip */}
-        <StatusChip commitment={commitment} tab={tab} />
+        <StatusChip commitment={commitment} tab={tab} isAkStock={isAkStock} />
 
         {/* Integrity badge (only when violations exist) */}
         <IntegrityViolationBadge commitment={commitment} />
@@ -406,12 +408,12 @@ export function PSMItemRow({
                 <ExternalLink className="w-4 h-4 mr-2" /> View PO{commitment.order_number ? ` #${commitment.order_number}` : ''}
               </DropdownMenuItem>
             )}
-            {!hideInstallActions && allowed?.canInstall && resolveInstallState(commitment).is_ready_to_install && (
+            {!hideInstallActions && !isAkStock && allowed?.canInstall && resolveInstallState(commitment).is_ready_to_install && (
               <DropdownMenuItem onClick={() => onInstall?.(commitment)}>
                 <Wrench className="w-4 h-4 mr-2" /> Install ({resolveInstallState(commitment).available_to_install})
               </DropdownMenuItem>
             )}
-            {!hideInstallActions && allowed?.canReverseInstall && (
+            {!hideInstallActions && !isAkStock && allowed?.canReverseInstall && (
               <DropdownMenuItem onClick={() => onReverseInstall?.(commitment)}>
                 <X className="w-4 h-4 mr-2" /> Reverse Install
               </DropdownMenuItem>
@@ -447,11 +449,15 @@ export function PSMItemRow({
         <div className="px-3 pb-3 ml-10 space-y-3">
           {/* Quantity Summary */}
           <div className="flex flex-wrap gap-4 text-xs font-mono text-gray-400">
-            <span>Req: <span className="text-white">{commitment.effective_required ?? commitment.required_total ?? 0}</span></span>
-            <span>Installed: <span className="text-emerald-400">{commitment.qty_installed ?? 0}</span></span>
+            <span>{isAkStock ? 'Target' : 'Req'}: <span className="text-white">{commitment.effective_required ?? commitment.required_total ?? 0}</span></span>
+            {!isAkStock && <span>Installed: <span className="text-emerald-400">{commitment.qty_installed ?? 0}</span></span>}
+            {isAkStock && <span>Received: <span className="text-emerald-400">{commitment.qty_installed ?? 0}</span></span>}
             <span>Reserved: <span className="text-blue-400">{commitment.reserved_from_stock ?? 0}</span></span>
             <span>On PO: <span className="text-yellow-400">{commitment.covered_from_po ?? 0}</span></span>
             {toOrder > 0 && <span>To Order: <span className="text-red-400">{toOrder}</span></span>}
+            {isAkStock && commitment.inventory_snapshot && (
+              <span className="border-l border-gray-700 pl-4">On Hand: <span className="text-blue-300">{commitment.inventory_snapshot.physical_stock ?? 0}</span></span>
+            )}
           </div>
 
           {/* Financial Detail */}
@@ -880,6 +886,7 @@ export default function PSMGroupedView({
   categoriesMap,
   vendorsMap,
   tab,
+  isAkStock = false,
 }) {
   // PART 2: Default ALL groups expanded - use 'all' as marker for "expand everything"
   const [expandedGroups, setExpandedGroups] = useState(new Set(['__ALL_EXPANDED__']));
@@ -1238,6 +1245,7 @@ export default function PSMGroupedView({
         categoriesMap={categoriesMap}
         vendorsMap={vendorsMap}
         tab={tab}
+        isAkStock={isAkStock}
         />
       ))}
     </div>
@@ -1276,6 +1284,7 @@ function PSMGroupCardWithSubgroups({
   categoriesMap,
   vendorsMap,
   tab,
+  isAkStock = false,
 }) {
   const items = group.items;
   const hasSubgroups = subgroupMode !== 'none' && group.sortedSubgroups?.length > 0;
@@ -1450,6 +1459,7 @@ function PSMGroupCardWithSubgroups({
                 categoriesMap={categoriesMap}
                 vendorsMap={vendorsMap}
                 tab={tab}
+                isAkStock={isAkStock}
               />
             ))
           )}
