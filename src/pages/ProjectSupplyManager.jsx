@@ -1201,8 +1201,8 @@ export default function ProjectSupplyManager() {
                 onPartClick={handlePartClick}
                 onCreatePO={handleSinglePOCreate}
                 onReceive={guardedSetReceiveModal}
-                onInstall={guardedSetInstallModal}
-                onReverseInstall={guardedSetReverseInstallModal}
+                onInstall={isAkStock ? null : guardedSetInstallModal}
+                onReverseInstall={isAkStock ? null : guardedSetReverseInstallModal}
                 onDeltaOrder={guardedSetDeltaOrderCommitment}
                 onManageQty={guardedSetQtyManagerDrawer}
                 onCancel={guardedSetCancelModal}
@@ -1215,6 +1215,7 @@ export default function ProjectSupplyManager() {
                 categoriesMap={categoriesMap}
                 vendorsMap={vendorsMap}
                 tab="buy"
+                isAkStock={isAkStock}
               />
             </TabsContent>
 
@@ -1254,8 +1255,8 @@ export default function ProjectSupplyManager() {
                 onPartClick={handlePartClick}
                 onCreatePO={handleSinglePOCreate}
                 onReceive={guardedSetReceiveModal}
-                onInstall={guardedSetInstallModal}
-                onReverseInstall={guardedSetReverseInstallModal}
+                onInstall={isAkStock ? null : guardedSetInstallModal}
+                onReverseInstall={isAkStock ? null : guardedSetReverseInstallModal}
                 onDeltaOrder={guardedSetDeltaOrderCommitment}
                 onManageQty={guardedSetQtyManagerDrawer}
                 onCancel={guardedSetCancelModal}
@@ -1268,6 +1269,7 @@ export default function ProjectSupplyManager() {
                 categoriesMap={categoriesMap}
                 vendorsMap={vendorsMap}
                 tab="receive"
+                isAkStock={isAkStock}
               />
               </SafeRenderBoundary>
             </TabsContent>
@@ -1311,8 +1313,8 @@ export default function ProjectSupplyManager() {
                 onPartClick={handlePartClick}
                 onCreatePO={handleSinglePOCreate}
                 onReceive={guardedSetReceiveModal}
-                onInstall={guardedSetInstallModal}
-                onReverseInstall={guardedSetReverseInstallModal}
+                onInstall={isAkStock ? null : guardedSetInstallModal}
+                onReverseInstall={isAkStock ? null : guardedSetReverseInstallModal}
                 onDeltaOrder={guardedSetDeltaOrderCommitment}
                 onManageQty={guardedSetQtyManagerDrawer}
                 onCancel={guardedSetCancelModal}
@@ -1325,6 +1327,7 @@ export default function ProjectSupplyManager() {
                 categoriesMap={categoriesMap}
                 vendorsMap={vendorsMap}
                 tab="install"
+                isAkStock={isAkStock}
               />
             </TabsContent>
 

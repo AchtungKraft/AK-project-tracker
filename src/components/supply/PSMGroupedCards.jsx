@@ -772,6 +772,7 @@ function PSMSubGroupCard({
   categoriesMap,
   vendorsMap,
   tab,
+  isAkStock = false,
 }) {
   const sortedItems = useMemo(() => applySorting(subgroup.items || [], sortMode), [subgroup.items, sortMode]);
   
@@ -842,6 +843,7 @@ function PSMSubGroupCard({
               categoriesMap={categoriesMap}
               vendorsMap={vendorsMap}
               tab={tab}
+              isAkStock={isAkStock}
             />
           ))}
         </div>
@@ -1432,6 +1434,7 @@ function PSMGroupCardWithSubgroups({
                  categoriesMap={categoriesMap}
                  vendorsMap={vendorsMap}
                  tab={tab}
+                 isAkStock={isAkStock}
                 />
               ))}
             </div>
