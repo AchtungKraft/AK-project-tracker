@@ -201,9 +201,9 @@ function PrimaryActionButton({ commitment, tab, actionsEnabled, onCreatePO, onRe
       </Button>
     );
   }
-  if (tab === 'install' && allowed.canInstall && installState.is_ready_to_install) {
+  if (tab === 'install' && onInstall && allowed.canInstall && installState.is_ready_to_install) {
     return (
-      <Button size="sm" onClick={() => onInstall?.(commitment)} disabled={!actionsEnabled}
+      <Button size="sm" onClick={() => onInstall(commitment)} disabled={!actionsEnabled}
         className="h-7 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium">
         Install
       </Button>
@@ -226,9 +226,9 @@ function PrimaryActionButton({ commitment, tab, actionsEnabled, onCreatePO, onRe
       </Button>
     );
   }
-  if (allowed.canInstall && installState.is_ready_to_install) {
+  if (onInstall && allowed.canInstall && installState.is_ready_to_install) {
     return (
-      <Button size="sm" variant="outline" onClick={() => onInstall?.(commitment)} disabled={!actionsEnabled}
+      <Button size="sm" variant="outline" onClick={() => onInstall(commitment)} disabled={!actionsEnabled}
         className="h-7 px-3 text-xs border-emerald-700 text-emerald-400 hover:bg-emerald-900/30 font-medium">
         Install
       </Button>
