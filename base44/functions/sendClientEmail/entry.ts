@@ -24,7 +24,7 @@ const BRAND = {
   name: 'Achtung Kraft',
   color: '#cc0000',
   closing: '— Achtung Kraft Projects',
-  portalBaseUrl: 'https://akclient.base44.app',
+  portalBaseUrl: 'https://client.achtungkraft.com',
 };
 
 // ── Legacy HTML builder (for email types not yet upgraded) ────────────

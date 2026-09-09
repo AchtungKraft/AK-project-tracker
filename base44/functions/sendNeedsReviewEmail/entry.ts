@@ -331,7 +331,7 @@ Deno.serve(async (req) => {
         const imageUrls = collectImageUrls(latestTeamComment);
         const imagesHtml = buildImagesHtml(imageUrls);
 
-        const clientPortalBaseUrl = 'https://akclient.base44.app';
+        const clientPortalBaseUrl = 'https://client.achtungkraft.com';
         const subjectTemplate = savedTemplate?.subject_template || defaultTpl.subject;
         const buttonText = savedTemplate?.button_text || defaultTpl.button_text;
 

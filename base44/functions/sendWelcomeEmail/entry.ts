@@ -109,8 +109,18 @@ Deno.serve(async (req) => {
         const subjectTemplate = savedTemplate?.subject_template || defaultTpl.subject;
         const buttonText = savedTemplate?.button_text || defaultTpl.button_text;
 
-        const clientPortalBaseUrl = 'https://akclient.base44.app';
+        const clientPortalBaseUrl = 'https://client.achtungkraft.com';
         const clientSlug = contact.url_slug || access.url_slug || '';
+
+        // Build personalized portal URL with slug
+        let portalUrl;
+        if (clientSlug) {
+            portalUrl = `${clientPortalBaseUrl}/ClientProjects?slug=${encodeURIComponent(clientSlug)}`;
+        } else if (access.share_token) {
+            portalUrl = `${clientPortalBaseUrl}?token=${access.share_token}`;
+        } else {
+            portalUrl = clientPortalBaseUrl;
+        }
 
         const placeholderData = { project_name: project.name, client_name: contact.name, client_slug: clientSlug };
         const subject = replacePlaceholders(subjectTemplate, placeholderData);
@@ -123,7 +133,7 @@ Deno.serve(async (req) => {
             projectName: project.name,
             greeting,
             introText,
-            ctaUrl: clientPortalBaseUrl,
+            ctaUrl: portalUrl,
             ctaText: buttonText,
             portalCode: clientSlug || null,
         });
@@ -142,7 +152,7 @@ Deno.serve(async (req) => {
             'CLIENT PORTAL ACCESS',
             'Use this code to access your project portal.',
             '',
-            `Direct link → ${clientPortalBaseUrl}`,
+            `Direct link → ${portalUrl}`,
             clientSlug ? `Your Client ID → ${clientSlug}` : '',
             '',
             '---',

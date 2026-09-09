@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
             : [];
         if (contacts.length === 0) return Response.json({ message: 'No client contacts found' });
 
-        const clientPortalBaseUrl = 'https://akclient.base44.app';
+        const clientPortalBaseUrl = 'https://client.achtungkraft.com';
 
         const subjectTemplate = savedTemplate?.subject_template || defaultTpl.subject;
         const bodyIntroTemplate = savedTemplate?.body_intro || defaultTpl.body_intro;

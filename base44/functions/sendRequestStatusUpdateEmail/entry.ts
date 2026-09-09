@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
             project_id: request.project_id, access_status: 'active'
         });
 
-        const clientPortalBaseUrl = 'https://akclient.base44.app';
+        const clientPortalBaseUrl = 'https://client.achtungkraft.com';
         const emailResults = [];
 
         // --- CLIENT EMAILS ---

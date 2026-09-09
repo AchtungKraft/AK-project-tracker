@@ -4,7 +4,7 @@
  * Internal domain must NEVER appear in client-facing URLs.
  */
 
-const CLIENT_PORTAL_DOMAIN = 'https://akclient.base44.app';
+const CLIENT_PORTAL_DOMAIN = 'https://client.achtungkraft.com';
 
 /**
  * Build a public client portal URL.

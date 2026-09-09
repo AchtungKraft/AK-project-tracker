@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
     if (!access) return Response.json({ error: 'Access record not found' }, { status: 404 });
 
-    const clientPortalBaseUrl = 'https://akclient.base44.app';
+    const clientPortalBaseUrl = 'https://client.achtungkraft.com';
     const clientSlug = contact.url_slug || access.url_slug || '';
     const portalUrl = clientSlug
       ? `${clientPortalBaseUrl}?slug=${clientSlug}`
