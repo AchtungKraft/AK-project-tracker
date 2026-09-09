@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
     const clientPortalBaseUrl = 'https://client.achtungkraft.com';
     const clientSlug = contact.url_slug || access.url_slug || '';
     const portalUrl = clientSlug
-      ? `${clientPortalBaseUrl}?slug=${clientSlug}`
+      ? `${clientPortalBaseUrl}/ClientProjects?slug=${encodeURIComponent(clientSlug)}`
       : `${clientPortalBaseUrl}?token=${access.share_token}`;
 
     const channelsSent = [];

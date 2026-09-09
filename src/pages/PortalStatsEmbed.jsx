@@ -2,7 +2,7 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { ExternalLink } from "lucide-react";
 
-const ANALYTICS_URL = "https://akclient.base44.app/AnalyticsDashboard";
+const ANALYTICS_URL = "https://client.achtungkraft.com/AnalyticsDashboard";
 
 export default function PortalStatsEmbed() {
   return (
