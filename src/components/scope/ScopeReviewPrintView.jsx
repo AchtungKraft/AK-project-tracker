@@ -85,6 +85,7 @@ const PRINT_STYLES = `
   .sp-page-break { page-break-before: always; }
   .sp-avoid-break { break-inside: avoid; page-break-inside: avoid; }
   .sp-keep-with-next { break-after: avoid; page-break-after: avoid; }
+  .sp-cat-band + div { break-before: avoid; page-break-before: avoid; }
   .sp-running-header {
     position: fixed;
     top: 0; left: 0; right: 0;
@@ -263,9 +264,9 @@ export default function ScopeReviewPrintView({
     projectSize: "13pt",
     metaSize: "9pt",
     sectionHeadSize: "11pt",
-    catSize: "14pt",
-    grpSize: "11pt",
-    itemTitleSize: "11pt",
+    catSize: "13pt",
+    grpSize: "10.5pt",
+    itemTitleSize: "10.5pt",
     bodySize: "9.5pt",
     smallSize: "8pt",
     tinySize: "7pt",
@@ -279,6 +280,15 @@ export default function ScopeReviewPrintView({
     colorAccentBg: "#f8fafc",
     colorNoticeBg: "#f8fafb",
     colorNoticeBorder: "#e2e8f0",
+    /* Hierarchy tokens */
+    catBandBg: "#1e293b",
+    catBandText: "#ffffff",
+    catBandMeta: "#94a3b8",
+    grpBandBg: "#f1f5f9",
+    grpAccent: "#475569",
+    grpText: "#1e293b",
+    itemIndent: 16,
+    itemDivider: "#e5e7eb",
   };
 
   return (
@@ -388,32 +398,35 @@ export default function ScopeReviewPrintView({
           <div style={{ fontSize: T.sectionHeadSize, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: T.colorPrimary, borderBottom: `1.5px solid ${T.colorRule}`, paddingBottom: 4, marginBottom: 12 }}>
             Scope Overview
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {hierarchy.map((cat, catIdx) => {
               const s = buildCatSummary(catRollups.get(cat.id));
               return (
                 <div key={cat.id} style={{
-                  flex: "1 1 180px", maxWidth: 260,
-                  padding: "10px 14px", borderRadius: 4,
-                  border: `1px solid ${T.colorRule}`, background: T.colorAccentBg,
+                  padding: "8px 14px", borderRadius: 3,
+                  background: T.catBandBg,
+                  display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12,
+                  flexWrap: "wrap",
                 }}>
-                  <div style={{ fontSize: T.smallSize, fontWeight: 700, textTransform: "uppercase", color: T.colorPrimary, letterSpacing: "0.02em" }}>
+                  <div style={{ fontSize: T.smallSize, fontWeight: 700, textTransform: "uppercase", color: T.catBandText, letterSpacing: "0.04em" }}>
                     {catIdx + 1}. {cat.name}
                   </div>
-                  <div style={{ fontSize: T.bodySize, color: T.colorBody, marginTop: 4 }}>
-                    {s.count} item{s.count !== 1 ? "s" : ""}
+                  <div style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: T.smallSize, color: T.catBandMeta }}>
+                      {s.count} item{s.count !== 1 ? "s" : ""}
+                    </span>
+                    {s.totalLabel && (
+                      <span style={{ fontSize: T.bodySize, fontWeight: 700, color: T.catBandText }}>{s.totalLabel}</span>
+                    )}
+                    {s.incompleteCount > 0 && !s.totalLabel && (
+                      <span style={{ fontSize: T.smallSize, color: "#fbbf24" }}>
+                        {s.incompleteCount} pending pricing
+                      </span>
+                    )}
+                    {s.hoursLabel && (
+                      <span style={{ fontSize: T.smallSize, color: T.catBandMeta }}>{s.hoursLabel}</span>
+                    )}
                   </div>
-                  {s.totalLabel && (
-                    <div style={{ fontSize: "11pt", fontWeight: 700, color: T.colorPrimary, marginTop: 2 }}>{s.totalLabel}</div>
-                  )}
-                  {s.incompleteCount > 0 && !s.totalLabel && (
-                    <div style={{ fontSize: T.bodySize, color: "#b45309", marginTop: 2 }}>
-                      {s.incompleteCount} item{s.incompleteCount > 1 ? "s" : ""} pending final pricing
-                    </div>
-                  )}
-                  {s.hoursLabel && (
-                    <div style={{ fontSize: T.bodySize, color: T.colorMuted, marginTop: 1 }}>{s.hoursLabel}</div>
-                  )}
                 </div>
               );
             })}
@@ -471,28 +484,36 @@ export default function ScopeReviewPrintView({
               {/* Page break before 2nd+ categories */}
               {catIdx > 0 && <div className="sp-page-break" />}
 
-              {/* ── Category Header ── */}
-              <div className="sp-avoid-break sp-keep-with-next" style={{
-                borderTop: `3px solid ${T.colorRuleHeavy}`, paddingTop: 12, marginBottom: 16,
-                marginTop: catIdx > 0 ? 0 : 8,
+              {/* ── CATEGORY BAND — dark full-width header ── */}
+              <div className="sp-avoid-break sp-keep-with-next sp-cat-band" style={{
+                marginTop: catIdx > 0 ? 0 : 12,
+                marginBottom: 16,
+                background: T.catBandBg,
+                padding: "12px 16px",
+                borderRadius: 3,
               }}>
                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-                  <h2 style={{ fontSize: T.catSize, fontWeight: 800, textTransform: "uppercase", color: T.colorPrimary, margin: 0, letterSpacing: "0.01em" }}>
+                  <h2 style={{
+                    fontSize: T.catSize, fontWeight: 800, textTransform: "uppercase",
+                    color: T.catBandText, margin: 0, letterSpacing: "0.03em",
+                  }}>
                     {catIdx + 1}{"\u2003"}{cat.name}
                   </h2>
-                  <span style={{ fontSize: T.smallSize, color: T.colorMuted, whiteSpace: "nowrap" }}>
+                  <span style={{ fontSize: T.smallSize, fontWeight: 600, color: T.catBandMeta, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em" }}>
                     {catSummary.count} item{catSummary.count !== 1 ? "s" : ""}
                   </span>
                 </div>
-                <div style={{ fontSize: T.bodySize, color: T.colorMuted, marginTop: 3 }}>
-                  {catSummary.totalLabel && (
-                    <><span style={{ fontWeight: 600, color: T.colorBody }}>{catSummary.totalLabel}</span> total estimate</>
+                <div style={{ fontSize: T.smallSize, color: T.catBandMeta, marginTop: 4, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "baseline" }}>
+                  {catSummary.incompleteCount > 0 && (
+                    <span style={{ color: "#fbbf24" }}>
+                      {catSummary.incompleteCount} item{catSummary.incompleteCount > 1 ? "s" : ""} pending final pricing
+                    </span>
                   )}
-                  {catSummary.incompleteCount > 0 && !catSummary.totalLabel && (
-                    <>{catSummary.incompleteCount} item{catSummary.incompleteCount > 1 ? "s" : ""} pending final pricing</>
+                  {catSummary.incompleteCount > 0 && catSummary.hoursLabel && (
+                    <span style={{ color: T.catBandMeta }}>·</span>
                   )}
                   {catSummary.hoursLabel && (
-                    <>{(catSummary.totalLabel || catSummary.incompleteCount > 0) ? " · " : ""}{catSummary.hoursLabel}</>
+                    <span>{catSummary.hoursLabel}</span>
                   )}
                 </div>
               </div>
@@ -502,69 +523,78 @@ export default function ScopeReviewPrintView({
                 const grpRollup = computeScopePricingRollup(grp.items, laborEstimates);
                 const gs = buildCatSummary(grpRollup);
                 return (
-                  <div key={grp.id} style={{ marginBottom: 20 }}>
-                    {/* Group Header */}
+                  <div key={grp.id} style={{ marginBottom: 22 }}>
+                    {/* GROUP BAND — light subsection with left accent */}
                     <div className="sp-avoid-break sp-keep-with-next" style={{
+                      marginTop: grpIdx > 0 ? 18 : 0,
+                      background: T.grpBandBg,
+                      borderLeft: `3px solid ${T.grpAccent}`,
+                      padding: "7px 12px",
+                      borderRadius: "0 3px 3px 0",
                       display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8,
-                      borderBottom: `1px solid ${T.colorRule}`, paddingBottom: 3, marginBottom: 10,
+                      marginBottom: 10,
                     }}>
-                      <h3 style={{ fontSize: T.grpSize, fontWeight: 700, textTransform: "uppercase", color: T.colorBody, margin: 0 }}>
+                      <h3 style={{ fontSize: T.grpSize, fontWeight: 700, textTransform: "uppercase", color: T.grpText, margin: 0, letterSpacing: "0.02em" }}>
                         {catIdx + 1}.{grpIdx + 1}{"\u2003"}{grp.name}
                       </h3>
-                      <span style={{ fontSize: T.smallSize, color: T.colorLight, whiteSpace: "nowrap" }}>
+                      <span style={{ fontSize: T.smallSize, color: T.colorMuted, whiteSpace: "nowrap" }}>
                         {gs.count} item{gs.count !== 1 ? "s" : ""}
                         {gs.totalLabel && <> · {gs.totalLabel}</>}
                       </span>
                     </div>
 
-                    {/* ── Items ── */}
-                    {grp.items.map((item, itemIdx) => {
-                      const num = `${catIdx + 1}.${grpIdx + 1}.${itemIdx + 1}`;
-                      const pricing = computeScopeItemPricing(item, laborByItem.get(item.id) || []);
-                      const status = item.decision_status || "needs_review";
+                    {/* ── Items — indented under group ── */}
+                    <div style={{ paddingLeft: T.itemIndent }}>
+                      {grp.items.map((item, itemIdx) => {
+                        const num = `${catIdx + 1}.${grpIdx + 1}.${itemIdx + 1}`;
+                        const pricing = computeScopeItemPricing(item, laborByItem.get(item.id) || []);
+                        const status = item.decision_status || "needs_review";
+                        const isLast = itemIdx === grp.items.length - 1;
 
-                      return (
-                        <div key={item.id} className="sp-avoid-break" style={{
-                          padding: "10px 0", borderBottom: `1px solid #e5e7eb`,
-                          marginBottom: 2,
-                        }}>
-                          {/* Item title row */}
-                          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: T.itemTitleSize, fontWeight: 700, color: T.colorPrimary }}>
-                                <span style={{ color: T.colorLight, fontWeight: 500 }}>{num}</span>{"\u2003"}{item.title}
+                        return (
+                          <div key={item.id} className="sp-avoid-break" style={{
+                            padding: "8px 0 10px",
+                            borderBottom: isLast ? "none" : `1px solid ${T.itemDivider}`,
+                          }}>
+                            {/* Item title row — muted number, bold title */}
+                            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: T.itemTitleSize, fontWeight: 700, color: T.colorPrimary }}>
+                                  <span style={{ color: T.colorLight, fontWeight: 400, fontSize: T.bodySize }}>{num}</span>
+                                  {"\u2003"}{item.title}
+                                </div>
                               </div>
+                              {showItemStatus && <StatusBadge status={status} />}
                             </div>
-                            {showItemStatus && <StatusBadge status={status} />}
+
+                            {/* Pricing */}
+                            <ItemPricing pricing={pricing} T={T} />
+
+                            {/* Description */}
+                            {item.description && (
+                              <div style={{ marginTop: 8, fontSize: T.bodySize, color: T.colorBody, lineHeight: "1.45", whiteSpace: "pre-wrap" }}>
+                                {item.description}
+                              </div>
+                            )}
+
+                            {/* Client-facing notes */}
+                            {item.budget_note && (
+                              <div style={{ marginTop: 5, fontStyle: "italic", fontSize: T.bodySize, color: T.colorMuted }}>
+                                {item.budget_note}
+                              </div>
+                            )}
+                            {item.hard_cost_note && !item.budget_note && (
+                              <div style={{ marginTop: 5, fontStyle: "italic", fontSize: T.bodySize, color: T.colorMuted }}>
+                                {item.hard_cost_note}
+                              </div>
+                            )}
+
+                            {/* Images */}
+                            <ItemImages images={item.images} />
                           </div>
-
-                          {/* Pricing */}
-                          <ItemPricing pricing={pricing} T={T} />
-
-                          {/* Description */}
-                          {item.description && (
-                            <div style={{ marginTop: 8, fontSize: T.bodySize, color: T.colorBody, lineHeight: "1.45", whiteSpace: "pre-wrap" }}>
-                              {item.description}
-                            </div>
-                          )}
-
-                          {/* Client-facing notes */}
-                          {item.budget_note && (
-                            <div style={{ marginTop: 5, fontStyle: "italic", fontSize: T.bodySize, color: T.colorMuted }}>
-                              {item.budget_note}
-                            </div>
-                          )}
-                          {item.hard_cost_note && !item.budget_note && (
-                            <div style={{ marginTop: 5, fontStyle: "italic", fontSize: T.bodySize, color: T.colorMuted }}>
-                              {item.hard_cost_note}
-                            </div>
-                          )}
-
-                          {/* Images */}
-                          <ItemImages images={item.images} />
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
                 );
               })}
