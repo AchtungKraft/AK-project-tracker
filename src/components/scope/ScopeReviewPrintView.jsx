@@ -66,8 +66,16 @@ const PRINT_STYLES = `
     background: white !important;
     color: #111 !important;
     transform: none !important;
-    padding: 0 !important;
+    padding: 32px 0 0 0 !important;
     margin: 0 !important;
+  }
+  /* Force background printing for hierarchy elements */
+  #scope-print-root .sp-cat-band,
+  #scope-print-root .sp-overview-row,
+  #scope-print-root .sp-grp-band,
+  #scope-print-root .sp-status-badge {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
   .scope-print-close-bar { display: none !important; }
   html, body {
@@ -86,6 +94,53 @@ const PRINT_STYLES = `
   .sp-avoid-break { break-inside: avoid; page-break-inside: avoid; }
   .sp-keep-with-next { break-after: avoid; page-break-after: avoid; }
   .sp-cat-band + div { break-before: avoid; page-break-before: avoid; }
+
+  /* ── CATEGORY BAND — robust print fallback ──
+     When background-graphics is ON: dark fill + white text.
+     When OFF: dark borders + dark text still communicate hierarchy. */
+  .sp-cat-band {
+    background: #1e293b !important;
+    border-top: 3px solid #111827 !important;
+    border-bottom: 3px solid #111827 !important;
+    border-radius: 0 !important;
+    color: #111827 !important;
+  }
+  .sp-cat-band .sp-cat-title { color: white !important; }
+  .sp-cat-band .sp-cat-meta { color: #94a3b8 !important; }
+  .sp-cat-band .sp-cat-pending { color: #fbbf24 !important; }
+  /* Fallback: if background stripped, text must still be dark/readable */
+  @supports not (print-color-adjust: exact) {
+    .sp-cat-band .sp-cat-title { color: #111827 !important; }
+    .sp-cat-band .sp-cat-meta { color: #6b7280 !important; }
+    .sp-cat-band .sp-cat-pending { color: #b45309 !important; }
+  }
+
+  /* ── OVERVIEW ROW — same dual strategy ── */
+  .sp-overview-row {
+    background: #1e293b !important;
+    border-bottom: 2px solid #111827 !important;
+    border-radius: 0 !important;
+    color: #111827 !important;
+  }
+  .sp-overview-row .sp-cat-title { color: white !important; }
+  .sp-overview-row .sp-cat-meta { color: #94a3b8 !important; }
+  .sp-overview-row .sp-cat-pending { color: #fbbf24 !important; }
+  @supports not (print-color-adjust: exact) {
+    .sp-overview-row .sp-cat-title { color: #111827 !important; }
+    .sp-overview-row .sp-cat-meta { color: #6b7280 !important; }
+    .sp-overview-row .sp-cat-pending { color: #b45309 !important; }
+  }
+
+  /* ── GROUP BAND — accent border always prints, pale fill when available ── */
+  .sp-grp-band {
+    background: #f1f5f9 !important;
+    border-left: 4px solid #475569 !important;
+    border-bottom: 1px solid #d1d5db !important;
+    border-radius: 0 !important;
+    color: #1e293b !important;
+  }
+
+  /* ── Running header/footer ── */
   .sp-running-header {
     position: fixed;
     top: 0; left: 0; right: 0;
@@ -151,7 +206,7 @@ const PRINT_STYLES = `
 function StatusBadge({ status }) {
   const s = DECISION_BADGE_STYLES[status] || DECISION_BADGE_STYLES.needs_review;
   return (
-    <span style={{
+    <span className="sp-status-badge" style={{
       display: "inline-block", padding: "1px 7px", borderRadius: 3,
       fontSize: "7.5pt", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em",
       backgroundColor: s.bg, color: s.color, border: `1px solid ${s.border}`,
@@ -402,29 +457,29 @@ export default function ScopeReviewPrintView({
             {hierarchy.map((cat, catIdx) => {
               const s = buildCatSummary(catRollups.get(cat.id));
               return (
-                <div key={cat.id} style={{
+                <div key={cat.id} className="sp-overview-row" style={{
                   padding: "8px 14px", borderRadius: 3,
                   background: T.catBandBg,
                   display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12,
                   flexWrap: "wrap",
                 }}>
-                  <div style={{ fontSize: T.smallSize, fontWeight: 700, textTransform: "uppercase", color: T.catBandText, letterSpacing: "0.04em" }}>
+                  <div className="sp-cat-title" style={{ fontSize: T.smallSize, fontWeight: 700, textTransform: "uppercase", color: T.catBandText, letterSpacing: "0.04em" }}>
                     {catIdx + 1}. {cat.name}
                   </div>
                   <div style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
-                    <span style={{ fontSize: T.smallSize, color: T.catBandMeta }}>
+                    <span className="sp-cat-meta" style={{ fontSize: T.smallSize, color: T.catBandMeta }}>
                       {s.count} item{s.count !== 1 ? "s" : ""}
                     </span>
                     {s.totalLabel && (
-                      <span style={{ fontSize: T.bodySize, fontWeight: 700, color: T.catBandText }}>{s.totalLabel}</span>
+                      <span className="sp-cat-title" style={{ fontSize: T.bodySize, fontWeight: 700, color: T.catBandText }}>{s.totalLabel}</span>
                     )}
                     {s.incompleteCount > 0 && !s.totalLabel && (
-                      <span style={{ fontSize: T.smallSize, color: "#fbbf24" }}>
+                      <span className="sp-cat-pending" style={{ fontSize: T.smallSize, color: "#fbbf24" }}>
                         {s.incompleteCount} pending pricing
                       </span>
                     )}
                     {s.hoursLabel && (
-                      <span style={{ fontSize: T.smallSize, color: T.catBandMeta }}>{s.hoursLabel}</span>
+                      <span className="sp-cat-meta" style={{ fontSize: T.smallSize, color: T.catBandMeta }}>{s.hoursLabel}</span>
                     )}
                   </div>
                 </div>
@@ -493,19 +548,19 @@ export default function ScopeReviewPrintView({
                 borderRadius: 3,
               }}>
                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-                  <h2 style={{
+                  <h2 className="sp-cat-title" style={{
                     fontSize: T.catSize, fontWeight: 800, textTransform: "uppercase",
                     color: T.catBandText, margin: 0, letterSpacing: "0.03em",
                   }}>
                     {catIdx + 1}{"\u2003"}{cat.name}
                   </h2>
-                  <span style={{ fontSize: T.smallSize, fontWeight: 600, color: T.catBandMeta, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  <span className="sp-cat-meta" style={{ fontSize: T.smallSize, fontWeight: 600, color: T.catBandMeta, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.04em" }}>
                     {catSummary.count} item{catSummary.count !== 1 ? "s" : ""}
                   </span>
                 </div>
-                <div style={{ fontSize: T.smallSize, color: T.catBandMeta, marginTop: 4, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "baseline" }}>
+                <div className="sp-cat-meta" style={{ fontSize: T.smallSize, color: T.catBandMeta, marginTop: 4, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "baseline" }}>
                   {catSummary.incompleteCount > 0 && (
-                    <span style={{ color: "#fbbf24" }}>
+                    <span className="sp-cat-pending" style={{ color: "#fbbf24" }}>
                       {catSummary.incompleteCount} item{catSummary.incompleteCount > 1 ? "s" : ""} pending final pricing
                     </span>
                   )}
@@ -525,7 +580,7 @@ export default function ScopeReviewPrintView({
                 return (
                   <div key={grp.id} style={{ marginBottom: 22 }}>
                     {/* GROUP BAND — light subsection with left accent */}
-                    <div className="sp-avoid-break sp-keep-with-next" style={{
+                    <div className="sp-avoid-break sp-keep-with-next sp-grp-band" style={{
                       marginTop: grpIdx > 0 ? 18 : 0,
                       background: T.grpBandBg,
                       borderLeft: `3px solid ${T.grpAccent}`,
