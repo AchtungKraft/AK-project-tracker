@@ -7,115 +7,30 @@ import {
   formatDollarRange,
 } from "./scopePricingHelpers";
 
-/* ──────────────────────────────────────────────
-   Utility: format helpers for print
-   ────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════
+   Utility helpers
+   ══════════════════════════════════════════════ */
 
 const fmtDate = (d) => {
   if (!d) return null;
   try { return format(new Date(d), "MMMM d, yyyy"); } catch { return d; }
 };
 
-const PRINT_DECISION_COLORS = {
-  approved: { bg: "#dcfce7", text: "#166534", border: "#86efac" },
-  not_now: { bg: "#f3f4f6", text: "#6b7280", border: "#d1d5db" },
-  needs_review: { bg: "#fefce8", text: "#854d0e", border: "#fde68a" },
-  request_changes: { bg: "#fff7ed", text: "#9a3412", border: "#fdba74" },
-  reapproval_required: { bg: "#fef2f2", text: "#991b1b", border: "#fca5a5" },
+const fmtDateShort = (d) => {
+  if (!d) return null;
+  try { return format(new Date(d), "MMM d, yyyy"); } catch { return d; }
 };
 
-/* ──────────────────────────────────────────────
-   Sub-components
-   ────────────────────────────────────────────── */
+const DECISION_BADGE_STYLES = {
+  approved:             { bg: "#dcfce7", color: "#166534", border: "#86efac" },
+  not_now:              { bg: "#f3f4f6", color: "#6b7280", border: "#d1d5db" },
+  needs_review:         { bg: "#fefce8", color: "#854d0e", border: "#fde68a" },
+  request_changes:      { bg: "#fff7ed", color: "#9a3412", border: "#fdba74" },
+  reapproval_required:  { bg: "#fef2f2", color: "#991b1b", border: "#fca5a5" },
+};
 
-function PrintBadge({ status }) {
-  const c = PRINT_DECISION_COLORS[status] || PRINT_DECISION_COLORS.needs_review;
-  return (
-    <span style={{
-      display: "inline-block", padding: "2px 8px", borderRadius: 4, fontSize: 9, fontWeight: 600,
-      textTransform: "uppercase", letterSpacing: "0.05em",
-      backgroundColor: c.bg, color: c.text, border: `1px solid ${c.border}`,
-    }}>
-      {DECISION_LABELS[status] || status}
-    </span>
-  );
-}
-
-function PrintItemImages({ images }) {
-  if (!images || images.length === 0) return null;
-  return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
-      {images.map((url, i) => (
-        <img
-          key={i}
-          src={url}
-          alt=""
-          style={{
-            width: images.length === 1 ? 200 : images.length === 2 ? 160 : 120,
-            height: "auto",
-            maxHeight: 140,
-            objectFit: "cover",
-            borderRadius: 4,
-            border: "1px solid #e5e7eb",
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function PricingBlock({ pricing }) {
-  const { pricing_model, total_estimate_min, total_estimate_max, estimate_complete,
-    hard_cost_min, hard_cost_max, hard_cost_tbd, hard_cost_note,
-    ak_labor_min, ak_labor_max, ak_hours_min, ak_hours_max, labor_estimated,
-    legacy_budget_min, legacy_budget_max, legacy_budget_tbd } = pricing;
-
-  if (pricing_model === "legacy_estimate") {
-    const budgetLabel = legacy_budget_tbd ? "TBD" : formatDollarRange(legacy_budget_min, legacy_budget_max);
-    const hoursLabel = formatHoursRange(ak_hours_min, ak_hours_max);
-    return (
-      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginTop: 6 }}>
-        {budgetLabel && <PricingPill label="Estimate" value={budgetLabel} primary />}
-        {hoursLabel && <PricingPill label="AK Hours" value={hoursLabel} />}
-      </div>
-    );
-  }
-
-  const totalLabel = estimate_complete
-    ? formatDollarRange(total_estimate_min, total_estimate_max)
-    : null;
-  const hcLabel = hard_cost_tbd ? "TBD" : formatDollarRange(hard_cost_min, hard_cost_max);
-  const laborLabel = labor_estimated ? formatDollarRange(ak_labor_min, ak_labor_max) : null;
-  const hoursLabel = formatHoursRange(ak_hours_min, ak_hours_max);
-
-  return (
-    <div style={{ marginTop: 6 }}>
-      <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-        {totalLabel && <PricingPill label="Total Estimate" value={totalLabel} primary />}
-        {hoursLabel && <PricingPill label="AK Hours" value={hoursLabel} />}
-      </div>
-      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginTop: 4 }}>
-        {hcLabel && <PricingPill label="Hard Cost" value={hcLabel} secondary />}
-        {laborLabel && <PricingPill label="AK Labor" value={laborLabel} secondary />}
-      </div>
-    </div>
-  );
-}
-
-function PricingPill({ label, value, primary, secondary }) {
-  return (
-    <div>
-      <div style={{ fontSize: 8, textTransform: "uppercase", letterSpacing: "0.06em", color: "#9ca3af" }}>{label}</div>
-      <div style={{
-        fontSize: primary ? 14 : secondary ? 11 : 12,
-        fontWeight: primary ? 700 : 500,
-        color: primary ? "#111827" : "#374151",
-      }}>{value}</div>
-    </div>
-  );
-}
-
-function CategoryRollupLine({ rollup }) {
+/* Helper: build category rollup summary text parts */
+function buildCatSummary(rollup) {
   const { count, total_estimate_min, total_estimate_max, has_incomplete, hard_cost_tbd_count,
     ak_hours_min, ak_hours_max, legacy_count, classified_count,
     legacy_budget_min, legacy_budget_max, legacy_budget_tbd_count } = rollup;
@@ -123,7 +38,6 @@ function CategoryRollupLine({ rollup }) {
   const hoursLabel = formatHoursRange(ak_hours_min, ak_hours_max);
   const incompleteCount = (has_incomplete ? 1 : 0) + hard_cost_tbd_count + legacy_budget_tbd_count;
 
-  // Determine the total line
   let totalLabel = null;
   if (classified_count > 0 && legacy_count === 0 && !has_incomplete && hard_cost_tbd_count === 0) {
     totalLabel = formatDollarRange(total_estimate_min, total_estimate_max);
@@ -131,36 +45,155 @@ function CategoryRollupLine({ rollup }) {
     totalLabel = formatDollarRange(legacy_budget_min, legacy_budget_max);
   }
 
+  return { count, totalLabel, incompleteCount, hoursLabel };
+}
+
+/* ══════════════════════════════════════════════
+   Print CSS (injected once)
+   ══════════════════════════════════════════════ */
+
+const PRINT_STYLES = `
+@media print {
+  #root { display: none !important; }
+  #scope-print-portal { display: block !important; }
+  #scope-print-root {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+    color: #111 !important;
+    transform: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .scope-print-close-bar { display: none !important; }
+  html, body {
+    background: #fff !important;
+    color: #111 !important;
+    width: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+    transform: none !important;
+  }
+  @page {
+    margin: 0.55in 0.6in 0.7in 0.6in;
+    size: letter;
+  }
+  .sp-page-break { page-break-before: always; }
+  .sp-avoid-break { break-inside: avoid; page-break-inside: avoid; }
+  .sp-keep-with-next { break-after: avoid; page-break-after: avoid; }
+  .sp-running-header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    padding: 0 0.6in;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 7.5pt;
+    color: #9ca3af;
+    border-bottom: 0.5px solid #e5e7eb;
+  }
+  .sp-running-footer {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    padding: 0 0.6in;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 7pt;
+    color: #9ca3af;
+    border-top: 0.5px solid #e5e7eb;
+  }
+}
+
+@media screen {
+  #scope-print-portal {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: #e5e7eb;
+    overflow-y: auto;
+  }
+  #scope-print-root {
+    max-width: 816px;
+    margin: 0 auto;
+    padding: 48px 40px 64px;
+    background: white;
+    color: #111;
+    min-height: 100vh;
+    box-shadow: 0 0 40px rgba(0,0,0,0.12);
+  }
+  .scope-print-close-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #1e293b;
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #334155;
+  }
+  .sp-running-header, .sp-running-footer { display: none; }
+}
+`;
+
+/* ══════════════════════════════════════════════
+   Sub-components
+   ══════════════════════════════════════════════ */
+
+function StatusBadge({ status }) {
+  const s = DECISION_BADGE_STYLES[status] || DECISION_BADGE_STYLES.needs_review;
   return (
-    <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>
-      {count} item{count !== 1 ? "s" : ""}
-      {totalLabel && <> · <span style={{ fontWeight: 600, color: "#374151" }}>{totalLabel}</span> estimated</>}
-      {incompleteCount > 0 && !totalLabel && <> · {incompleteCount} item{incompleteCount > 1 ? "s" : ""} pending final pricing</>}
-      {hoursLabel && <> · {hoursLabel.replace(/ hrs$/, "")} AK hrs</>}
+    <span style={{
+      display: "inline-block", padding: "1px 7px", borderRadius: 3,
+      fontSize: "7.5pt", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em",
+      backgroundColor: s.bg, color: s.color, border: `1px solid ${s.border}`,
+      whiteSpace: "nowrap",
+    }}>
+      {DECISION_LABELS[status] || status}
+    </span>
+  );
+}
+
+function ItemImages({ images }) {
+  if (!images || images.length === 0) return null;
+  const size = images.length === 1 ? 180 : images.length === 2 ? 150 : 120;
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ fontSize: "7pt", textTransform: "uppercase", letterSpacing: "0.06em", color: "#9ca3af", fontWeight: 600, marginBottom: 4 }}>
+        Reference Images
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {images.slice(0, 4).map((url, i) => (
+          <img key={i} src={url} alt=""
+            style={{
+              width: size, height: size * 0.75, objectFit: "cover",
+              borderRadius: 3, border: "1px solid #e5e7eb",
+            }}
+          />
+        ))}
+      </div>
     </div>
   );
 }
 
-/* ──────────────────────────────────────────────
+/* ══════════════════════════════════════════════
    MAIN PRINT VIEW
-   ────────────────────────────────────────────── */
+   ══════════════════════════════════════════════ */
 
 export default function ScopeReviewPrintView({
-  request,
-  project,
-  categories,
-  groups,
-  items,
-  laborEstimates,
-  confirmations,
-  onClose,
+  request, project, categories, groups, items, laborEstimates, confirmations, onClose,
 }) {
   const printRef = useRef(null);
 
-  // Build hierarchy
   const hierarchy = useMemo(() => buildScopeHierarchy(categories, groups, items), [categories, groups, items]);
 
-  // Pricing helpers: per-item lookup
   const laborByItem = useMemo(() => {
     const m = new Map();
     for (const le of laborEstimates) {
@@ -171,12 +204,12 @@ export default function ScopeReviewPrintView({
   }, [laborEstimates]);
 
   const isDraft = request?.status === "draft";
+
   const lastConfirmation = useMemo(() => {
     if (!confirmations || confirmations.length === 0) return null;
     return [...confirmations].sort((a, b) => new Date(b.confirmed_at) - new Date(a.confirmed_at))[0];
   }, [confirmations]);
 
-  // Determine if confirmation is stale
   const isConfStale = useMemo(() => {
     if (!lastConfirmation) return false;
     const currentApproved = items.filter(i => i.decision_status === "approved").map(i => i.id).sort();
@@ -185,235 +218,223 @@ export default function ScopeReviewPrintView({
     return currentApproved.some((id, idx) => id !== snapIds[idx]);
   }, [lastConfirmation, items]);
 
-  // Statuses
   const hasDecisions = items.some(i => i.decision_status && i.decision_status !== "needs_review");
   const allNeedsReview = items.every(i => !i.decision_status || i.decision_status === "needs_review");
+  const showItemStatus = hasDecisions && !allNeedsReview;
 
-  // Selection summary
   const selectionSummary = useMemo(() => {
     if (!hasDecisions) return null;
     const statuses = ["approved", "not_now", "needs_review", "request_changes", "reapproval_required"];
     const result = {};
     for (const s of statuses) {
       const si = items.filter(i => (i.decision_status || "needs_review") === s);
-      if (si.length > 0) {
-        result[s] = { count: si.length, rollup: computeScopePricingRollup(si, laborEstimates) };
-      }
+      if (si.length > 0) result[s] = { count: si.length, rollup: computeScopePricingRollup(si, laborEstimates) };
     }
     return result;
   }, [items, laborEstimates, hasDecisions]);
 
-  // Category rollups
   const catRollups = useMemo(() => {
     const m = new Map();
-    for (const cat of hierarchy) {
-      m.set(cat.id, computeScopePricingRollup(cat.allItems, laborEstimates));
-    }
+    for (const cat of hierarchy) m.set(cat.id, computeScopePricingRollup(cat.allItems, laborEstimates));
     return m;
   }, [hierarchy, laborEstimates]);
 
-  // Wait for render, then auto-trigger print
-  const [ready, setReady] = useState(false);
+  // Auto-trigger print after render
   useEffect(() => {
-    // Two rAFs to ensure React commit + browser layout are complete
     let cancelled = false;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        if (!cancelled) {
-          setReady(true);
-          window.print();
-        }
+        if (!cancelled) window.print();
       });
     });
     return () => { cancelled = true; };
   }, []);
 
-  const handlePrint = useCallback(() => {
-    window.print();
-  }, []);
+  const handlePrint = useCallback(() => window.print(), []);
 
-  // Item number generator
-  const getItemNumber = (catIdx, grpIdx, itemIdx) => `${catIdx + 1}.${grpIdx + 1}.${itemIdx + 1}`;
+  const projectName = project?.name || "—";
+  const generatedDate = format(new Date(), "MMMM d, yyyy");
+
+  /* ── FONT / SPACING TOKENS ── */
+  const T = {
+    fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
+    brandSize: "8pt",
+    docTitleSize: "20pt",
+    projectSize: "13pt",
+    metaSize: "9pt",
+    sectionHeadSize: "11pt",
+    catSize: "14pt",
+    grpSize: "11pt",
+    itemTitleSize: "11pt",
+    bodySize: "9.5pt",
+    smallSize: "8pt",
+    tinySize: "7pt",
+    lineHeight: "1.4",
+    colorPrimary: "#111827",
+    colorBody: "#374151",
+    colorMuted: "#6b7280",
+    colorLight: "#9ca3af",
+    colorRule: "#d1d5db",
+    colorRuleHeavy: "#111827",
+    colorAccentBg: "#f8fafc",
+    colorNoticeBg: "#f8fafb",
+    colorNoticeBorder: "#e2e8f0",
+  };
 
   return (
     <>
-      {/* Print/screen CSS — no visibility hacks, clean media separation */}
-      <style>{`
-        @media print {
-          /* Hide the entire app root */
-          #root {
-            display: none !important;
-          }
-          /* The print portal lives outside #root — it renders normally */
-          #scope-print-portal {
-            display: block !important;
-          }
-          #scope-print-root {
-            display: block !important;
-            position: static !important;
-            width: 100% !important;
-            max-width: none !important;
-            height: auto !important;
-            overflow: visible !important;
-            background: white !important;
-            color: black !important;
-            transform: none !important;
-          }
-          /* Hide the screen-only close/print bar */
-          .scope-print-close-bar {
-            display: none !important;
-          }
-          html, body {
-            background: #fff !important;
-            color: #000 !important;
-            width: auto !important;
-            height: auto !important;
-            overflow: visible !important;
-            transform: none !important;
-          }
-          @page {
-            margin: 0.6in 0.65in 0.75in 0.65in;
-            size: letter;
-          }
-          .print-page-break { page-break-before: always; }
-          .print-avoid-break { break-inside: avoid; page-break-inside: avoid; }
-        }
+      <style>{PRINT_STYLES}</style>
 
-        @media screen {
-          #scope-print-portal {
-            position: fixed;
-            inset: 0;
-            z-index: 9999;
-            background: white;
-            overflow-y: auto;
-          }
-          #scope-print-root {
-            max-width: 850px;
-            margin: 0 auto;
-            padding: 40px 32px;
-            background: white;
-            color: #111;
-            min-height: 100vh;
-          }
-          .scope-print-close-bar {
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            background: #1f2937;
-            padding: 12px 24px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid #374151;
-          }
-        }
-      `}</style>
-
-      {/* Screen-only close bar */}
+      {/* ── Screen-only toolbar ── */}
       <div className="scope-print-close-bar">
-        <span style={{ color: "#e5e7eb", fontSize: 14, fontWeight: 600 }}>Scope Review — Print Preview</span>
+        <span style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 600 }}>Scope Review — Print Preview</span>
         <div style={{ display: "flex", gap: 8 }}>
-          <button
-            onClick={handlePrint}
-            style={{ padding: "6px 16px", background: "#2563eb", color: "white", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 600 }}
-          >
+          <button onClick={handlePrint}
+            style={{ padding: "6px 18px", background: "#2563eb", color: "white", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
             Print / Save PDF
           </button>
-          <button
-            onClick={onClose}
-            style={{ padding: "6px 16px", background: "#374151", color: "#e5e7eb", border: "1px solid #4b5563", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
-          >
+          <button onClick={onClose}
+            style={{ padding: "6px 18px", background: "#334155", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 5, cursor: "pointer", fontSize: 13 }}>
             Close
           </button>
         </div>
       </div>
 
-      <div id="scope-print-root" ref={printRef} style={{ fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif", lineHeight: 1.5 }}>
+      {/* ── Running header/footer (print only, position:fixed) ── */}
+      <div className="sp-running-header">
+        <span>ÄCHTUNG KRAFT</span>
+        <span>{projectName} — Scope Review</span>
+      </div>
+      <div className="sp-running-footer">
+        <span>Ächtung Kraft · {projectName} · Scope Review</span>
+        <span>Generated {generatedDate}</span>
+      </div>
+
+      {/* ════════════════════════════════════════
+           DOCUMENT BODY
+         ════════════════════════════════════════ */}
+      <div id="scope-print-root" ref={printRef} style={{ fontFamily: T.fontFamily, lineHeight: T.lineHeight, color: T.colorPrimary }}>
 
         {/* ── DRAFT WATERMARK ── */}
         {isDraft && (
           <div style={{
-            textAlign: "center", padding: "6px 0", marginBottom: 16,
-            background: "#fefce8", border: "1px solid #fde68a", borderRadius: 6,
-            fontSize: 11, fontWeight: 700, color: "#854d0e", textTransform: "uppercase", letterSpacing: "0.1em",
+            textAlign: "center", padding: "5px 0", marginBottom: 20,
+            background: "#fefce8", border: "1px solid #fde68a", borderRadius: 4,
+            fontSize: "8pt", fontWeight: 700, color: "#854d0e", textTransform: "uppercase", letterSpacing: "0.12em",
           }}>
-            DRAFT — FOR REVIEW
+            DRAFT — FOR INTERNAL REVIEW
           </div>
         )}
 
-        {/* ── DOCUMENT HEADER ── */}
-        <div style={{ borderBottom: "2px solid #111", paddingBottom: 16, marginBottom: 20 }}>
-          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.15em", color: "#6b7280", fontWeight: 600 }}>
+        {/* ═══════════════════════════════════════
+            1 — DOCUMENT HEADER
+           ═══════════════════════════════════════ */}
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ fontSize: T.brandSize, textTransform: "uppercase", letterSpacing: "0.2em", color: T.colorMuted, fontWeight: 600 }}>
             ÄCHTUNG KRAFT
           </div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, margin: "4px 0 8px", color: "#111" }}>
+          <h1 style={{ fontSize: T.docTitleSize, fontWeight: 800, margin: "2px 0 6px", color: T.colorPrimary, letterSpacing: "-0.01em" }}>
             PROJECT SCOPE REVIEW
           </h1>
-          <div style={{ fontSize: 11, color: "#374151", lineHeight: 1.7 }}>
-            {project?.client_name && <div><span style={{ color: "#9ca3af" }}>Client:</span> {project.client_name}</div>}
-            <div><span style={{ color: "#9ca3af" }}>Project:</span> {project?.name || "—"}</div>
-            <div><span style={{ color: "#9ca3af" }}>Scope Review:</span> {request?.title || "—"}</div>
-            <div><span style={{ color: "#9ca3af" }}>Date:</span> {fmtDate(request?.posted_at) || fmtDate(request?.created_date) || fmtDate(new Date())}</div>
+          <div style={{ fontSize: T.projectSize, fontWeight: 700, color: T.colorPrimary, marginBottom: 14 }}>
+            {projectName}
           </div>
-        </div>
 
-        {/* ── REQUEST DESCRIPTION ── */}
-        {(request?.body || request?.content_html) && (
-          <div style={{ marginBottom: 20, padding: "10px 14px", background: "#f9fafb", borderRadius: 6, border: "1px solid #e5e7eb" }}>
-            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "#9ca3af", marginBottom: 4, fontWeight: 600 }}>
-              Description
+          <div style={{ borderTop: `2px solid ${T.colorRuleHeavy}`, paddingTop: 10, display: "flex", gap: 40, flexWrap: "wrap" }}>
+            {project?.client_name && (
+              <div>
+                <div style={{ fontSize: T.tinySize, textTransform: "uppercase", letterSpacing: "0.08em", color: T.colorLight, fontWeight: 600 }}>Client</div>
+                <div style={{ fontSize: T.metaSize, color: T.colorBody, marginTop: 1 }}>{project.client_name}</div>
+              </div>
+            )}
+            <div>
+              <div style={{ fontSize: T.tinySize, textTransform: "uppercase", letterSpacing: "0.08em", color: T.colorLight, fontWeight: 600 }}>Prepared</div>
+              <div style={{ fontSize: T.metaSize, color: T.colorBody, marginTop: 1 }}>
+                {fmtDateShort(request?.posted_at) || fmtDateShort(request?.created_date) || fmtDateShort(new Date())}
+              </div>
             </div>
-            <div style={{ fontSize: 11, color: "#374151" }}>
+          </div>
+
+          {/* Description */}
+          {(request?.body || request?.content_html) && (
+            <div style={{ marginTop: 12, fontSize: T.bodySize, color: T.colorBody, lineHeight: "1.45" }}>
               {request.body || request.content_html?.replace(/<[^>]+>/g, "") || ""}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* ── SCOPE ESTIMATE NOTICE ── */}
-        <div style={{
-          marginBottom: 24, padding: "10px 14px", background: "#f0fdf4", borderRadius: 6,
-          border: "1px solid #bbf7d0", fontSize: 9.5, color: "#374151", lineHeight: 1.6,
+        {/* ═══════════════════════════════════════
+            2 — SCOPE ESTIMATE NOTICE
+           ═══════════════════════════════════════ */}
+        <div className="sp-avoid-break" style={{
+          marginBottom: 24, padding: "12px 16px",
+          background: T.colorNoticeBg, borderRadius: 4, border: `1px solid ${T.colorNoticeBorder}`,
         }}>
-          <div style={{ fontWeight: 700, fontSize: 10, color: "#166534", marginBottom: 4 }}>Scope Estimate Notice</div>
-          The costs and labor shown in this Scope Review are estimates intended to help define the anticipated scope of work for the project. They are not intended to be all-inclusive or a guarantee of final cost. Actual parts, materials, labor, outside services, and project requirements may be higher or lower as work progresses and additional conditions are discovered. The purpose of this review is to establish which areas Ächtung Kraft should investigate, develop, source, and build as part of the project.
-          <div style={{ marginTop: 6, fontStyle: "italic" }}>
+          <div style={{ fontSize: T.smallSize, fontWeight: 700, color: T.colorBody, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>
+            Scope Estimate Notice
+          </div>
+          <div style={{ fontSize: T.bodySize, color: T.colorBody, lineHeight: "1.5" }}>
+            The costs and labor shown in this Scope Review are estimates intended to help define the anticipated scope of work for the project. They are not intended to be all-inclusive or a guarantee of final cost. Actual parts, materials, labor, outside services, and project requirements may be higher or lower as work progresses and additional conditions are discovered. The purpose of this review is to establish which areas Ächtung Kraft should investigate, develop, source, and build as part of the project.
+          </div>
+          <div style={{ marginTop: 6, fontStyle: "italic", fontSize: T.bodySize, color: T.colorMuted }}>
             Approving an item confirms that it is part of the agreed project scope to pursue; it does not constitute acceptance of a fixed final price.
           </div>
         </div>
 
-        {/* ── SCOPE OVERVIEW ── */}
-        <div className="print-avoid-break" style={{ marginBottom: 20 }}>
-          <h2 style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#111", borderBottom: "1px solid #d1d5db", paddingBottom: 4, marginBottom: 10 }}>
+        {/* ═══════════════════════════════════════
+            3 — SCOPE OVERVIEW
+           ═══════════════════════════════════════ */}
+        <div className="sp-avoid-break" style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: T.sectionHeadSize, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: T.colorPrimary, borderBottom: `1.5px solid ${T.colorRule}`, paddingBottom: 4, marginBottom: 12 }}>
             Scope Overview
-          </h2>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
             {hierarchy.map((cat, catIdx) => {
-              const rollup = catRollups.get(cat.id);
+              const s = buildCatSummary(catRollups.get(cat.id));
               return (
-                <div key={cat.id} style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#111", minWidth: 180 }}>
+                <div key={cat.id} style={{
+                  flex: "1 1 180px", maxWidth: 260,
+                  padding: "10px 14px", borderRadius: 4,
+                  border: `1px solid ${T.colorRule}`, background: T.colorAccentBg,
+                }}>
+                  <div style={{ fontSize: T.smallSize, fontWeight: 700, textTransform: "uppercase", color: T.colorPrimary, letterSpacing: "0.02em" }}>
                     {catIdx + 1}. {cat.name}
                   </div>
-                  <CategoryRollupLine rollup={rollup} />
+                  <div style={{ fontSize: T.bodySize, color: T.colorBody, marginTop: 4 }}>
+                    {s.count} item{s.count !== 1 ? "s" : ""}
+                  </div>
+                  {s.totalLabel && (
+                    <div style={{ fontSize: "11pt", fontWeight: 700, color: T.colorPrimary, marginTop: 2 }}>{s.totalLabel}</div>
+                  )}
+                  {s.incompleteCount > 0 && !s.totalLabel && (
+                    <div style={{ fontSize: T.bodySize, color: "#b45309", marginTop: 2 }}>
+                      {s.incompleteCount} item{s.incompleteCount > 1 ? "s" : ""} pending final pricing
+                    </div>
+                  )}
+                  {s.hoursLabel && (
+                    <div style={{ fontSize: T.bodySize, color: T.colorMuted, marginTop: 1 }}>{s.hoursLabel}</div>
+                  )}
                 </div>
               );
             })}
           </div>
         </div>
 
-        {/* ── CURRENT SELECTION SUMMARY ── */}
-        {selectionSummary && hasDecisions && !allNeedsReview && (
-          <div className="print-avoid-break" style={{ marginBottom: 24 }}>
-            <h2 style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#111", borderBottom: "1px solid #d1d5db", paddingBottom: 4, marginBottom: 10 }}>
+        {/* ═══════════════════════════════════════
+            4 — CURRENT SELECTION SUMMARY
+           ═══════════════════════════════════════ */}
+        {selectionSummary && showItemStatus && (
+          <div className="sp-avoid-break" style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: T.sectionHeadSize, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: T.colorPrimary, borderBottom: `1.5px solid ${T.colorRule}`, paddingBottom: 4, marginBottom: 12 }}>
               Current Selection
-            </h2>
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               {["approved", "not_now", "needs_review", "request_changes", "reapproval_required"].map(status => {
                 const entry = selectionSummary[status];
                 if (!entry) return null;
                 const r = entry.rollup;
                 const hoursLabel = formatHoursRange(r.ak_hours_min, r.ak_hours_max);
-                const c = PRINT_DECISION_COLORS[status];
+                const c = DECISION_BADGE_STYLES[status];
                 let dollarLabel = null;
                 if (r.classified_count > 0 && r.legacy_count === 0 && !r.has_incomplete && r.hard_cost_tbd_count === 0) {
                   dollarLabel = formatDollarRange(r.total_estimate_min, r.total_estimate_max);
@@ -422,17 +443,17 @@ export default function ScopeReviewPrintView({
                 }
                 return (
                   <div key={status} style={{
-                    padding: "8px 14px", borderRadius: 6, border: `1px solid ${c.border}`,
-                    background: c.bg, minWidth: 140,
+                    padding: "8px 14px", borderRadius: 4, border: `1px solid ${c.border}`,
+                    background: c.bg, minWidth: 130,
                   }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", color: c.text, letterSpacing: "0.05em" }}>
+                    <div style={{ fontSize: T.tinySize, fontWeight: 700, textTransform: "uppercase", color: c.color, letterSpacing: "0.04em" }}>
                       {DECISION_LABELS[status]}
                     </div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#111", marginTop: 2 }}>
+                    <div style={{ fontSize: "12pt", fontWeight: 700, color: T.colorPrimary, marginTop: 2 }}>
                       {entry.count} item{entry.count !== 1 ? "s" : ""}
                     </div>
-                    {dollarLabel && <div style={{ fontSize: 11, color: "#374151" }}>{dollarLabel}</div>}
-                    {hoursLabel && <div style={{ fontSize: 10, color: "#6b7280" }}>{hoursLabel.replace(/ hrs$/, "")} AK hrs</div>}
+                    {dollarLabel && <div style={{ fontSize: T.bodySize, color: T.colorBody }}>{dollarLabel}</div>}
+                    {hoursLabel && <div style={{ fontSize: T.smallSize, color: T.colorMuted }}>{hoursLabel}</div>}
                   </div>
                 );
               })}
@@ -440,180 +461,268 @@ export default function ScopeReviewPrintView({
           </div>
         )}
 
-        {/* ── CATEGORY → GROUP → ITEM HIERARCHY ── */}
+        {/* ═══════════════════════════════════════
+            5 — CATEGORY → GROUP → ITEM
+           ═══════════════════════════════════════ */}
         {hierarchy.map((cat, catIdx) => {
-          const catRollup = catRollups.get(cat.id);
+          const catSummary = buildCatSummary(catRollups.get(cat.id));
           return (
-            <div key={cat.id} style={{ marginBottom: 0 }}>
-              {/* Category page break for second+ categories */}
-              {catIdx > 0 && <div className="print-page-break" />}
+            <div key={cat.id}>
+              {/* Page break before 2nd+ categories */}
+              {catIdx > 0 && <div className="sp-page-break" />}
 
-              {/* Category Header */}
-              <div className="print-avoid-break" style={{
-                borderBottom: "2px solid #111", paddingBottom: 6, marginBottom: 14,
-                marginTop: catIdx > 0 ? 0 : 0,
+              {/* ── Category Header ── */}
+              <div className="sp-avoid-break sp-keep-with-next" style={{
+                borderTop: `3px solid ${T.colorRuleHeavy}`, paddingTop: 12, marginBottom: 16,
+                marginTop: catIdx > 0 ? 0 : 8,
               }}>
-                <h2 style={{ fontSize: 16, fontWeight: 800, textTransform: "uppercase", color: "#111", margin: 0 }}>
-                  {catIdx + 1}. {cat.name}
-                </h2>
-                <CategoryRollupLine rollup={catRollup} />
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+                  <h2 style={{ fontSize: T.catSize, fontWeight: 800, textTransform: "uppercase", color: T.colorPrimary, margin: 0, letterSpacing: "0.01em" }}>
+                    {catIdx + 1}{"\u2003"}{cat.name}
+                  </h2>
+                  <span style={{ fontSize: T.smallSize, color: T.colorMuted, whiteSpace: "nowrap" }}>
+                    {catSummary.count} item{catSummary.count !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                <div style={{ fontSize: T.bodySize, color: T.colorMuted, marginTop: 3 }}>
+                  {catSummary.totalLabel && (
+                    <><span style={{ fontWeight: 600, color: T.colorBody }}>{catSummary.totalLabel}</span> total estimate</>
+                  )}
+                  {catSummary.incompleteCount > 0 && !catSummary.totalLabel && (
+                    <>{catSummary.incompleteCount} item{catSummary.incompleteCount > 1 ? "s" : ""} pending final pricing</>
+                  )}
+                  {catSummary.hoursLabel && (
+                    <>{(catSummary.totalLabel || catSummary.incompleteCount > 0) ? " · " : ""}{catSummary.hoursLabel}</>
+                  )}
+                </div>
               </div>
 
-              {/* Groups */}
-              {cat.groups.map((grp, grpIdx) => (
-                <div key={grp.id} style={{ marginBottom: 16 }}>
-                  {/* Group Header */}
-                  <div className="print-avoid-break" style={{
-                    borderBottom: "1px solid #d1d5db", paddingBottom: 4, marginBottom: 10,
-                  }}>
-                    <h3 style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", color: "#374151", margin: 0 }}>
-                      {catIdx + 1}.{grpIdx + 1} {grp.name}
-                    </h3>
-                    <div style={{ fontSize: 10, color: "#9ca3af" }}>
-                      {grp.items.length} item{grp.items.length !== 1 ? "s" : ""}
+              {/* ── Groups ── */}
+              {cat.groups.map((grp, grpIdx) => {
+                const grpRollup = computeScopePricingRollup(grp.items, laborEstimates);
+                const gs = buildCatSummary(grpRollup);
+                return (
+                  <div key={grp.id} style={{ marginBottom: 20 }}>
+                    {/* Group Header */}
+                    <div className="sp-avoid-break sp-keep-with-next" style={{
+                      display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8,
+                      borderBottom: `1px solid ${T.colorRule}`, paddingBottom: 3, marginBottom: 10,
+                    }}>
+                      <h3 style={{ fontSize: T.grpSize, fontWeight: 700, textTransform: "uppercase", color: T.colorBody, margin: 0 }}>
+                        {catIdx + 1}.{grpIdx + 1}{"\u2003"}{grp.name}
+                      </h3>
+                      <span style={{ fontSize: T.smallSize, color: T.colorLight, whiteSpace: "nowrap" }}>
+                        {gs.count} item{gs.count !== 1 ? "s" : ""}
+                        {gs.totalLabel && <> · {gs.totalLabel}</>}
+                      </span>
                     </div>
-                  </div>
 
-                  {/* Items */}
-                  {grp.items.map((item, itemIdx) => {
-                    const itemNumber = getItemNumber(catIdx, grpIdx, itemIdx);
-                    const pricing = computeScopeItemPricing(item, laborByItem.get(item.id) || []);
-                    const showStatus = !allNeedsReview && hasDecisions;
-                    const status = item.decision_status || "needs_review";
+                    {/* ── Items ── */}
+                    {grp.items.map((item, itemIdx) => {
+                      const num = `${catIdx + 1}.${grpIdx + 1}.${itemIdx + 1}`;
+                      const pricing = computeScopeItemPricing(item, laborByItem.get(item.id) || []);
+                      const status = item.decision_status || "needs_review";
 
-                    return (
-                      <div key={item.id} className="print-avoid-break" style={{
-                        padding: "10px 14px", marginBottom: 10, borderRadius: 6,
-                        border: "1px solid #e5e7eb", background: "#fafafa",
-                      }}>
-                        {/* Item header */}
-                        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 9, color: "#9ca3af", fontWeight: 600 }}>Item {itemNumber}</div>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: "#111", marginTop: 1 }}>
-                              {item.title}
+                      return (
+                        <div key={item.id} className="sp-avoid-break" style={{
+                          padding: "10px 0", borderBottom: `1px solid #e5e7eb`,
+                          marginBottom: 2,
+                        }}>
+                          {/* Item title row */}
+                          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: T.itemTitleSize, fontWeight: 700, color: T.colorPrimary }}>
+                                <span style={{ color: T.colorLight, fontWeight: 500 }}>{num}</span>{"\u2003"}{item.title}
+                              </div>
                             </div>
+                            {showItemStatus && <StatusBadge status={status} />}
                           </div>
-                          {showStatus && <PrintBadge status={status} />}
-                        </div>
 
-                        {/* Pricing */}
-                        <PricingBlock pricing={pricing} />
+                          {/* Pricing */}
+                          <ItemPricing pricing={pricing} T={T} />
 
-                        {/* Description */}
-                        {item.description && (
-                          <div style={{ marginTop: 8 }}>
-                            <div style={{ fontSize: 8, textTransform: "uppercase", letterSpacing: "0.06em", color: "#9ca3af", fontWeight: 600, marginBottom: 2 }}>
-                              Description
-                            </div>
-                            <div style={{ fontSize: 10, color: "#374151", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+                          {/* Description */}
+                          {item.description && (
+                            <div style={{ marginTop: 8, fontSize: T.bodySize, color: T.colorBody, lineHeight: "1.45", whiteSpace: "pre-wrap" }}>
                               {item.description}
                             </div>
-                          </div>
-                        )}
+                          )}
 
-                        {/* Client-facing note */}
-                        {item.budget_note && (
-                          <div style={{ marginTop: 6, fontStyle: "italic", fontSize: 10, color: "#6b7280" }}>
-                            {item.budget_note}
-                          </div>
-                        )}
-                        {item.hard_cost_note && (
-                          <div style={{ marginTop: 6, fontStyle: "italic", fontSize: 10, color: "#6b7280" }}>
-                            {item.hard_cost_note}
-                          </div>
-                        )}
+                          {/* Client-facing notes */}
+                          {item.budget_note && (
+                            <div style={{ marginTop: 5, fontStyle: "italic", fontSize: T.bodySize, color: T.colorMuted }}>
+                              {item.budget_note}
+                            </div>
+                          )}
+                          {item.hard_cost_note && !item.budget_note && (
+                            <div style={{ marginTop: 5, fontStyle: "italic", fontSize: T.bodySize, color: T.colorMuted }}>
+                              {item.hard_cost_note}
+                            </div>
+                          )}
 
-                        {/* Images */}
-                        <PrintItemImages images={item.images} />
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
+                          {/* Images */}
+                          <ItemImages images={item.images} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
             </div>
           );
         })}
 
-        {/* ── CONFIRMATION SECTION ── */}
+        {/* ═══════════════════════════════════════
+            6 — ESTIMATE REMINDER
+           ═══════════════════════════════════════ */}
+        <div style={{
+          marginTop: 28, padding: "10px 16px",
+          background: T.colorNoticeBg, border: `1px solid ${T.colorNoticeBorder}`, borderRadius: 4,
+          fontSize: T.bodySize, color: T.colorMuted, lineHeight: "1.45", fontStyle: "italic",
+        }}>
+          Estimates shown are planning estimates, not fixed-price quotations. Actual project costs may be higher or lower as work is investigated, developed, sourced, and completed.
+        </div>
+
+        {/* ═══════════════════════════════════════
+            7 — CONFIRMATION SECTION
+           ═══════════════════════════════════════ */}
         {lastConfirmation && (
-          <>
-            <div className="print-page-break" />
-            <div className="print-avoid-break" style={{ marginTop: 0 }}>
-              <h2 style={{ fontSize: 14, fontWeight: 800, textTransform: "uppercase", color: "#111", borderBottom: "2px solid #111", paddingBottom: 4, marginBottom: 12 }}>
-                Scope Confirmation
-              </h2>
+          <div style={{ marginTop: 28 }}>
+            <div className="sp-avoid-break">
+              <div style={{ fontSize: T.sectionHeadSize, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: T.colorPrimary, borderBottom: `1.5px solid ${T.colorRule}`, paddingBottom: 4, marginBottom: 12 }}>
+                Last Confirmed Scope
+              </div>
 
               {isConfStale && (
                 <div style={{
-                  padding: "8px 12px", background: "#fefce8", border: "1px solid #fde68a",
-                  borderRadius: 6, marginBottom: 12, fontSize: 10, color: "#854d0e",
+                  padding: "8px 14px", background: "#fefce8", border: "1px solid #fde68a",
+                  borderRadius: 4, marginBottom: 12, fontSize: T.bodySize, color: "#854d0e",
                 }}>
                   <strong>Current scope has changed since last confirmation.</strong><br />
-                  The selections shown in this document differ from the scope confirmed on {fmtDate(lastConfirmation.confirmed_at)}.
+                  The selections shown above differ from the scope confirmed on {fmtDate(lastConfirmation.confirmed_at)}.
                 </div>
               )}
 
-              <div style={{ padding: "10px 14px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 6 }}>
-                <div style={{ fontSize: 10, fontWeight: 600, color: "#166534", marginBottom: 4 }}>
-                  Last Confirmed Scope
-                </div>
-                <div style={{ fontSize: 11, color: "#374151" }}>
-                  <div>Confirmed: {fmtDate(lastConfirmation.confirmed_at)}</div>
-                  {lastConfirmation.confirmed_by_name && <div>By: {lastConfirmation.confirmed_by_name}</div>}
-                  {lastConfirmation.revision > 1 && <div>Revision: {lastConfirmation.revision}</div>}
-                </div>
-
-                {/* Historical snapshot values */}
-                {lastConfirmation.summary_snapshot && (
-                  <div style={{ marginTop: 8, display: "flex", gap: 16, flexWrap: "wrap" }}>
-                    {lastConfirmation.summary_snapshot.approved_item_count != null && (
-                      <div>
-                        <div style={{ fontSize: 8, color: "#9ca3af", textTransform: "uppercase", fontWeight: 600 }}>Approved</div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: "#166534" }}>
-                          {lastConfirmation.summary_snapshot.approved_item_count} items
-                        </div>
-                        {lastConfirmation.summary_snapshot.approved_total_estimate_min != null && (
-                          <div style={{ fontSize: 10, color: "#374151" }}>
-                            {formatDollarRange(lastConfirmation.summary_snapshot.approved_total_estimate_min, lastConfirmation.summary_snapshot.approved_total_estimate_max)}
-                          </div>
-                        )}
-                        {(lastConfirmation.summary_snapshot.approved_ak_hours_min > 0 || lastConfirmation.summary_snapshot.approved_ak_hours_max > 0) && (
-                          <div style={{ fontSize: 10, color: "#6b7280" }}>
-                            {formatHoursRange(lastConfirmation.summary_snapshot.approved_ak_hours_min, lastConfirmation.summary_snapshot.approved_ak_hours_max)?.replace(/ hrs$/, "")} AK hrs
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {lastConfirmation.summary_snapshot.not_now_item_count > 0 && (
-                      <div>
-                        <div style={{ fontSize: 8, color: "#9ca3af", textTransform: "uppercase", fontWeight: 600 }}>Not Now</div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: "#6b7280" }}>
-                          {lastConfirmation.summary_snapshot.not_now_item_count} items
-                        </div>
-                        {lastConfirmation.summary_snapshot.not_now_total_estimate_min != null && (
-                          <div style={{ fontSize: 10, color: "#374151" }}>
-                            {formatDollarRange(lastConfirmation.summary_snapshot.not_now_total_estimate_min, lastConfirmation.summary_snapshot.not_now_total_estimate_max)}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
+              <div style={{ fontSize: T.bodySize, color: T.colorBody, lineHeight: "1.6" }}>
+                <div>Confirmed: <strong>{fmtDate(lastConfirmation.confirmed_at)}</strong></div>
+                {lastConfirmation.confirmed_by_name && <div>By: {lastConfirmation.confirmed_by_name}</div>}
+                {lastConfirmation.revision > 1 && <div>Revision: {lastConfirmation.revision}</div>}
               </div>
+
+              {lastConfirmation.summary_snapshot && (
+                <div style={{ marginTop: 10, display: "flex", gap: 16, flexWrap: "wrap" }}>
+                  {lastConfirmation.summary_snapshot.approved_item_count != null && (
+                    <ConfirmationBlock
+                      label="Approved" color="#166534" T={T}
+                      count={lastConfirmation.summary_snapshot.approved_item_count}
+                      dollars={formatDollarRange(lastConfirmation.summary_snapshot.approved_total_estimate_min, lastConfirmation.summary_snapshot.approved_total_estimate_max)}
+                      hours={formatHoursRange(lastConfirmation.summary_snapshot.approved_ak_hours_min, lastConfirmation.summary_snapshot.approved_ak_hours_max)}
+                    />
+                  )}
+                  {lastConfirmation.summary_snapshot.not_now_item_count > 0 && (
+                    <ConfirmationBlock
+                      label="Not Now" color="#6b7280" T={T}
+                      count={lastConfirmation.summary_snapshot.not_now_item_count}
+                      dollars={formatDollarRange(lastConfirmation.summary_snapshot.not_now_total_estimate_min, lastConfirmation.summary_snapshot.not_now_total_estimate_max)}
+                    />
+                  )}
+                </div>
+              )}
             </div>
-          </>
+          </div>
         )}
 
-        {/* ── GENERATED FOOTER ── */}
+        {/* ═══════════════════════════════════════
+            8 — DOCUMENT FOOTER
+           ═══════════════════════════════════════ */}
         <div style={{
-          marginTop: 32, paddingTop: 12, borderTop: "1px solid #d1d5db",
-          fontSize: 9, color: "#9ca3af", display: "flex", justifyContent: "space-between",
+          marginTop: 36, paddingTop: 10, borderTop: `1px solid ${T.colorRule}`,
+          fontSize: T.smallSize, color: T.colorLight, display: "flex", justifyContent: "space-between",
         }}>
-          <span>Ächtung Kraft · {project?.name} — Scope Review</span>
-          <span>Generated {format(new Date(), "MMMM d, yyyy 'at' h:mm a")}</span>
+          <span>Ächtung Kraft · {projectName} — Scope Review</span>
+          <span>Generated {generatedDate}</span>
         </div>
       </div>
     </>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   Item Pricing — clear hierarchy
+   ══════════════════════════════════════════════ */
+
+function ItemPricing({ pricing, T }) {
+  const { pricing_model, total_estimate_min, total_estimate_max, estimate_complete,
+    hard_cost_min, hard_cost_max, hard_cost_tbd,
+    ak_labor_min, ak_labor_max, ak_hours_min, ak_hours_max, labor_estimated,
+    legacy_budget_min, legacy_budget_max, legacy_budget_tbd } = pricing;
+
+  if (pricing_model === "legacy_estimate") {
+    const budgetLabel = legacy_budget_tbd ? "TBD" : formatDollarRange(legacy_budget_min, legacy_budget_max);
+    const hoursLabel = formatHoursRange(ak_hours_min, ak_hours_max);
+    return (
+      <div style={{ display: "flex", gap: 32, flexWrap: "wrap", marginTop: 6 }}>
+        {budgetLabel && (
+          <div>
+            <div style={{ fontSize: T.tinySize, textTransform: "uppercase", letterSpacing: "0.06em", color: T.colorLight, fontWeight: 600 }}>Estimate</div>
+            <div style={{ fontSize: "12pt", fontWeight: 700, color: T.colorPrimary }}>{budgetLabel}</div>
+          </div>
+        )}
+        {hoursLabel && (
+          <div>
+            <div style={{ fontSize: T.tinySize, textTransform: "uppercase", letterSpacing: "0.06em", color: T.colorLight, fontWeight: 600 }}>AK Hours</div>
+            <div style={{ fontSize: T.bodySize, fontWeight: 600, color: T.colorBody }}>{hoursLabel}</div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const totalLabel = estimate_complete ? formatDollarRange(total_estimate_min, total_estimate_max) : null;
+  const hcLabel = hard_cost_tbd ? "TBD" : formatDollarRange(hard_cost_min, hard_cost_max);
+  const laborLabel = labor_estimated ? formatDollarRange(ak_labor_min, ak_labor_max) : null;
+  const hoursLabel = formatHoursRange(ak_hours_min, ak_hours_max);
+
+  return (
+    <div style={{ marginTop: 6 }}>
+      {/* Primary row: Total Estimate + AK Hours */}
+      <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
+        {totalLabel && (
+          <div>
+            <div style={{ fontSize: T.tinySize, textTransform: "uppercase", letterSpacing: "0.06em", color: T.colorLight, fontWeight: 600 }}>Total Estimate</div>
+            <div style={{ fontSize: "12pt", fontWeight: 700, color: T.colorPrimary }}>{totalLabel}</div>
+          </div>
+        )}
+        {hoursLabel && (
+          <div>
+            <div style={{ fontSize: T.tinySize, textTransform: "uppercase", letterSpacing: "0.06em", color: T.colorLight, fontWeight: 600 }}>AK Hours</div>
+            <div style={{ fontSize: T.bodySize, fontWeight: 600, color: T.colorBody }}>{hoursLabel}</div>
+          </div>
+        )}
+      </div>
+      {/* Secondary row: Hard Cost · AK Labor */}
+      {(hcLabel || laborLabel) && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 3, fontSize: T.smallSize, color: T.colorMuted }}>
+          {hcLabel && <span>Hard Cost {hcLabel}</span>}
+          {hcLabel && laborLabel && <span style={{ color: T.colorLight }}>·</span>}
+          {laborLabel && <span>AK Labor {laborLabel}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   Confirmation snapshot block
+   ══════════════════════════════════════════════ */
+
+function ConfirmationBlock({ label, color, count, dollars, hours, T }) {
+  return (
+    <div>
+      <div style={{ fontSize: T.tinySize, textTransform: "uppercase", letterSpacing: "0.06em", color: T.colorLight, fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: "12pt", fontWeight: 700, color }}>{count} items</div>
+      {dollars && <div style={{ fontSize: T.bodySize, color: T.colorBody }}>{dollars}</div>}
+      {hours && <div style={{ fontSize: T.smallSize, color: T.colorMuted }}>{hours}</div>}
+    </div>
   );
 }

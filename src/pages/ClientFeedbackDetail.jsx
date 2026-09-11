@@ -995,17 +995,17 @@ export default function ClientFeedbackDetail() {
  * remains in normal document flow for multi-page pagination.
  */
 function ScopePrintLoader({ requestId, request, project, onClose }) {
-  const portalRef = useRef(null);
+  const [portalEl, setPortalEl] = useState(null);
 
   // Create a persistent portal container on document.body
   useEffect(() => {
     const el = document.createElement("div");
     el.id = "scope-print-portal";
     document.body.appendChild(el);
-    portalRef.current = el;
+    setPortalEl(el);
     return () => {
       document.body.removeChild(el);
-      portalRef.current = null;
+      setPortalEl(null);
     };
   }, []);
 
@@ -1024,14 +1024,14 @@ function ScopePrintLoader({ requestId, request, project, onClose }) {
     enabled: !!requestId,
   });
 
-  if (!portalRef.current) return null;
+  if (!portalEl) return null;
 
   if (isLoading || !data) {
     return createPortal(
       <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
       </div>,
-      portalRef.current
+      portalEl
     );
   }
 
@@ -1046,6 +1046,6 @@ function ScopePrintLoader({ requestId, request, project, onClose }) {
       confirmations={data.confirmations}
       onClose={onClose}
     />,
-    portalRef.current
+    portalEl
   );
 }
