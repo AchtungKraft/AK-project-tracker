@@ -19,6 +19,7 @@ import {
   Eye,
   EyeOff,
   Square,
+  Printer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isQueueHidden } from "./attentionHelpers";
@@ -44,6 +45,7 @@ export default function DetailActionBar({
   onShowLaterModal,
   onResumeInQueue,
   onMoveToDraft,
+  onPrintScopeReview,
 }) {
   if (!canonicalState || !request) return null;
 
@@ -112,6 +114,25 @@ export default function DetailActionBar({
     }
   }
 
+  // --- Print Scope Review ---
+  let printAction = null;
+  if (onPrintScopeReview) {
+    printAction = (
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={onPrintScopeReview}
+        className={cn(
+          "border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white",
+          isMobile ? "flex-1 h-10" : "h-8 text-xs"
+        )}
+      >
+        <Printer className="w-3.5 h-3.5 mr-1" />
+        Print Scope Review
+      </Button>
+    );
+  }
+
   // --- Overflow Menu items ---
   const overflowItems = [];
 
@@ -139,6 +160,7 @@ export default function DetailActionBar({
           {primaryAction}
           {secondaryAction}
         </div>
+        {printAction && <div className="flex gap-2">{printAction}</div>}
         {overflowItems.length > 0 && (
           <div className="flex items-center justify-end">
             <OverflowMenu items={overflowItems} />
@@ -152,6 +174,7 @@ export default function DetailActionBar({
     <div className="flex items-center gap-2 flex-wrap">
       {primaryAction}
       {secondaryAction}
+      {printAction}
       {overflowItems.length > 0 && (
         <OverflowMenu items={overflowItems} />
       )}

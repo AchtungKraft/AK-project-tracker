@@ -40,6 +40,7 @@ import HtmlContent from "@/components/shared/HtmlContent";
 import LinkPreviewGrid from "@/components/shared/LinkPreviewGrid";
 import { extractLinks } from "@/utils/extractLinks";
 import ScopeReviewDisplay from "@/components/scope/ScopeReviewDisplay";
+import ScopeReviewPrintView from "@/components/scope/ScopeReviewPrintView";
 
 export default function ClientFeedbackDetail() {
   const isMobile = useIsMobile();
@@ -69,6 +70,7 @@ export default function ClientFeedbackDetail() {
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showHideModal, setShowHideModal] = useState(false);
+  const [showScopePrint, setShowScopePrint] = useState(false);
 
   // Track if view has been logged this session to prevent duplicate tracking
   const viewTrackedRef = useRef(false);
@@ -671,6 +673,7 @@ export default function ClientFeedbackDetail() {
                 onResend={handleResendForApproval}
                 onArchive={handleArchive}
                 onDelete={handleDeleteRequest}
+                onPrintScopeReview={request?.request_type === 'client_scope_review' ? () => setShowScopePrint(true) : undefined}
                 onStartReviewing={() => updateRequestMutation.mutate({
                   id: requestId,
                   data: { review_state: 'in_review', review_started_at: new Date().toISOString() }
@@ -971,6 +974,56 @@ export default function ClientFeedbackDetail() {
           isSaving={updateRequestMutation.isPending}
         />
       )}
+
+      {showScopePrint && (
+        <ScopePrintLoader
+          requestId={requestId}
+          request={request}
+          project={project}
+          onClose={() => setShowScopePrint(false)}
+        />
+      )}
     </>);
 
+}
+
+/** Lazy loader that fetches scope data and renders the print view full-screen */
+function ScopePrintLoader({ requestId, request, project, onClose }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['scopeReviewPrintData', requestId],
+    queryFn: async () => {
+      const [categories, groups, items, laborEstimates, confirmations] = await Promise.all([
+        base44.entities.ScopeCategory.filter({ request_id: requestId }),
+        base44.entities.ScopeGroup.filter({ request_id: requestId }),
+        base44.entities.ScopeItem.filter({ request_id: requestId }),
+        base44.entities.ScopeItemLaborEstimate.filter({ request_id: requestId }),
+        base44.entities.ScopeConfirmation.filter({ request_id: requestId }),
+      ]);
+      return { categories, groups, items, laborEstimates, confirmations };
+    },
+    enabled: !!requestId,
+  });
+
+  if (isLoading || !data) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'white', overflowY: 'auto' }}>
+      <ScopeReviewPrintView
+        request={request}
+        project={project}
+        categories={data.categories}
+        groups={data.groups}
+        items={data.items}
+        laborEstimates={data.laborEstimates}
+        confirmations={data.confirmations}
+        onClose={onClose}
+      />
+    </div>
+  );
 }
