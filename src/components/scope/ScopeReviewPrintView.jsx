@@ -66,7 +66,7 @@ const PRINT_STYLES = `
     background: white !important;
     color: #111 !important;
     transform: none !important;
-    padding: 32px 0 0 0 !important;
+    padding: 0 !important;
     margin: 0 !important;
   }
   /* Force background printing for hierarchy elements */
@@ -91,9 +91,14 @@ const PRINT_STYLES = `
     size: letter;
   }
   .sp-page-break { page-break-before: always; }
-  .sp-avoid-break { break-inside: avoid; page-break-inside: avoid; }
+  /* Keep header bands from being orphaned at page bottom — but allow content to flow */
   .sp-keep-with-next { break-after: avoid; page-break-after: avoid; }
-  .sp-cat-band + div { break-before: avoid; page-break-before: avoid; }
+  /* Item header region (title + pricing) kept together, but full item may split */
+  .sp-item-header { break-inside: avoid; page-break-inside: avoid; }
+  /* Images may move independently */
+  .sp-item-images { break-inside: avoid; page-break-inside: avoid; }
+  /* Scope overview & notice kept together */
+  .sp-avoid-break { break-inside: avoid; page-break-inside: avoid; }
 
   /* ── CATEGORY BAND — robust print fallback ──
      When background-graphics is ON: dark fill + white text.
@@ -140,31 +145,6 @@ const PRINT_STYLES = `
     color: #1e293b !important;
   }
 
-  /* ── Running header/footer ── */
-  .sp-running-header {
-    position: fixed;
-    top: 0; left: 0; right: 0;
-    padding: 0 0.6in;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 7.5pt;
-    color: #9ca3af;
-    border-bottom: 0.5px solid #e5e7eb;
-  }
-  .sp-running-footer {
-    position: fixed;
-    bottom: 0; left: 0; right: 0;
-    padding: 0 0.6in;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 7pt;
-    color: #9ca3af;
-    border-top: 0.5px solid #e5e7eb;
-  }
 }
 
 @media screen {
@@ -195,7 +175,7 @@ const PRINT_STYLES = `
     justify-content: space-between;
     border-bottom: 1px solid #334155;
   }
-  .sp-running-header, .sp-running-footer { display: none; }
+  /* No running header/footer elements to hide */
 }
 `;
 
@@ -365,16 +345,6 @@ export default function ScopeReviewPrintView({
         </div>
       </div>
 
-      {/* ── Running header/footer (print only, position:fixed) ── */}
-      <div className="sp-running-header">
-        <span>ÄCHTUNG KRAFT</span>
-        <span>{projectName} — Scope Review</span>
-      </div>
-      <div className="sp-running-footer">
-        <span>Ächtung Kraft · {projectName} · Scope Review</span>
-        <span>Generated {generatedDate}</span>
-      </div>
-
       {/* ════════════════════════════════════════
            DOCUMENT BODY
          ════════════════════════════════════════ */}
@@ -540,7 +510,7 @@ export default function ScopeReviewPrintView({
               {catIdx > 0 && <div className="sp-page-break" />}
 
               {/* ── CATEGORY BAND — dark full-width header ── */}
-              <div className="sp-avoid-break sp-keep-with-next sp-cat-band" style={{
+              <div className="sp-keep-with-next sp-cat-band" style={{
                 marginTop: catIdx > 0 ? 0 : 12,
                 marginBottom: 16,
                 background: T.catBandBg,
@@ -580,7 +550,7 @@ export default function ScopeReviewPrintView({
                 return (
                   <div key={grp.id} style={{ marginBottom: 22 }}>
                     {/* GROUP BAND — light subsection with left accent */}
-                    <div className="sp-avoid-break sp-keep-with-next sp-grp-band" style={{
+                    <div className="sp-keep-with-next sp-grp-band" style={{
                       marginTop: grpIdx > 0 ? 18 : 0,
                       background: T.grpBandBg,
                       borderLeft: `3px solid ${T.grpAccent}`,
@@ -607,24 +577,28 @@ export default function ScopeReviewPrintView({
                         const isLast = itemIdx === grp.items.length - 1;
 
                         return (
-                          <div key={item.id} className="sp-avoid-break" style={{
+                          <div key={item.id} style={{
                             padding: "8px 0 10px",
                             borderBottom: isLast ? "none" : `1px solid ${T.itemDivider}`,
                           }}>
-                            {/* Item title row — muted number, bold title */}
-                            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-                              <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: T.itemTitleSize, fontWeight: 700, color: T.colorPrimary }}>
-                                  <span style={{ color: T.colorLight, fontWeight: 400, fontSize: T.bodySize }}>{num}</span>
-                                  {"\u2003"}{item.title}
+                            {/* ── Item header region — kept together ── */}
+                            <div className="sp-item-header">
+                              {/* Item title row — muted number, bold title */}
+                              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontSize: T.itemTitleSize, fontWeight: 700, color: T.colorPrimary }}>
+                                    <span style={{ color: T.colorLight, fontWeight: 400, fontSize: T.bodySize }}>{num}</span>
+                                    {"\u2003"}{item.title}
+                                  </div>
                                 </div>
+                                {showItemStatus && <StatusBadge status={status} />}
                               </div>
-                              {showItemStatus && <StatusBadge status={status} />}
+
+                              {/* Pricing */}
+                              <ItemPricing pricing={pricing} T={T} />
                             </div>
 
-                            {/* Pricing */}
-                            <ItemPricing pricing={pricing} T={T} />
-
+                            {/* ── Flowing body — may split across pages ── */}
                             {/* Description */}
                             {item.description && (
                               <div style={{ marginTop: 8, fontSize: T.bodySize, color: T.colorBody, lineHeight: "1.45", whiteSpace: "pre-wrap" }}>
@@ -644,8 +618,12 @@ export default function ScopeReviewPrintView({
                               </div>
                             )}
 
-                            {/* Images */}
-                            <ItemImages images={item.images} />
+                            {/* Images — kept as block, may move independently */}
+                            {item.images && item.images.length > 0 && (
+                              <div className="sp-item-images">
+                                <ItemImages images={item.images} />
+                              </div>
+                            )}
                           </div>
                         );
                       })}
