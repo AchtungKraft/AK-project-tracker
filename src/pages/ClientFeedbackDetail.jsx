@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -987,8 +988,27 @@ export default function ClientFeedbackDetail() {
 
 }
 
-/** Lazy loader that fetches scope data and renders the print view full-screen */
+/**
+ * Lazy loader that fetches scope data and renders the print view
+ * via a React portal mounted directly on document.body — outside #root.
+ * This ensures @media print can hide #root while the print content
+ * remains in normal document flow for multi-page pagination.
+ */
 function ScopePrintLoader({ requestId, request, project, onClose }) {
+  const portalRef = useRef(null);
+
+  // Create a persistent portal container on document.body
+  useEffect(() => {
+    const el = document.createElement("div");
+    el.id = "scope-print-portal";
+    document.body.appendChild(el);
+    portalRef.current = el;
+    return () => {
+      document.body.removeChild(el);
+      portalRef.current = null;
+    };
+  }, []);
+
   const { data, isLoading } = useQuery({
     queryKey: ['scopeReviewPrintData', requestId],
     queryFn: async () => {
@@ -1004,26 +1024,28 @@ function ScopePrintLoader({ requestId, request, project, onClose }) {
     enabled: !!requestId,
   });
 
+  if (!portalRef.current) return null;
+
   if (isLoading || !data) {
-    return (
+    return createPortal(
       <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-      </div>
+      </div>,
+      portalRef.current
     );
   }
 
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'white', overflowY: 'auto' }}>
-      <ScopeReviewPrintView
-        request={request}
-        project={project}
-        categories={data.categories}
-        groups={data.groups}
-        items={data.items}
-        laborEstimates={data.laborEstimates}
-        confirmations={data.confirmations}
-        onClose={onClose}
-      />
-    </div>
+  return createPortal(
+    <ScopeReviewPrintView
+      request={request}
+      project={project}
+      categories={data.categories}
+      groups={data.groups}
+      items={data.items}
+      laborEstimates={data.laborEstimates}
+      confirmations={data.confirmations}
+      onClose={onClose}
+    />,
+    portalRef.current
   );
 }

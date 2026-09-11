@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useRef } from "react";
+import React, { useMemo, useEffect, useRef, useState, useCallback } from "react";
 import { format } from "date-fns";
 import { buildScopeHierarchy, DECISION_LABELS, formatHoursRange } from "./scopeHelpers";
 import {
@@ -212,32 +212,64 @@ export default function ScopeReviewPrintView({
     return m;
   }, [hierarchy, laborEstimates]);
 
-  // Auto-trigger print
+  // Wait for render, then auto-trigger print
+  const [ready, setReady] = useState(false);
   useEffect(() => {
-    const timer = setTimeout(() => {
-      window.print();
-    }, 600);
-    return () => clearTimeout(timer);
+    // Two rAFs to ensure React commit + browser layout are complete
+    let cancelled = false;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!cancelled) {
+          setReady(true);
+          window.print();
+        }
+      });
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handlePrint = useCallback(() => {
+    window.print();
   }, []);
 
   // Item number generator
-  let globalItemCounter = 0;
   const getItemNumber = (catIdx, grpIdx, itemIdx) => `${catIdx + 1}.${grpIdx + 1}.${itemIdx + 1}`;
 
   return (
     <>
-      {/* Print-only CSS */}
+      {/* Print/screen CSS — no visibility hacks, clean media separation */}
       <style>{`
         @media print {
-          body * { visibility: hidden !important; }
-          #scope-print-root, #scope-print-root * { visibility: visible !important; }
+          /* Hide the entire app root */
+          #root {
+            display: none !important;
+          }
+          /* The print portal lives outside #root — it renders normally */
+          #scope-print-portal {
+            display: block !important;
+          }
           #scope-print-root {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
+            display: block !important;
+            position: static !important;
             width: 100% !important;
+            max-width: none !important;
+            height: auto !important;
+            overflow: visible !important;
             background: white !important;
             color: black !important;
+            transform: none !important;
+          }
+          /* Hide the screen-only close/print bar */
+          .scope-print-close-bar {
+            display: none !important;
+          }
+          html, body {
+            background: #fff !important;
+            color: #000 !important;
+            width: auto !important;
+            height: auto !important;
+            overflow: visible !important;
+            transform: none !important;
           }
           @page {
             margin: 0.6in 0.65in 0.75in 0.65in;
@@ -245,10 +277,16 @@ export default function ScopeReviewPrintView({
           }
           .print-page-break { page-break-before: always; }
           .print-avoid-break { break-inside: avoid; page-break-inside: avoid; }
-          .print-footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 0 0.65in 0.35in; }
         }
 
         @media screen {
+          #scope-print-portal {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: white;
+            overflow-y: auto;
+          }
           #scope-print-root {
             max-width: 850px;
             margin: 0 auto;
@@ -257,7 +295,7 @@ export default function ScopeReviewPrintView({
             color: #111;
             min-height: 100vh;
           }
-          .print-close-bar {
+          .scope-print-close-bar {
             position: sticky;
             top: 0;
             z-index: 100;
@@ -272,11 +310,11 @@ export default function ScopeReviewPrintView({
       `}</style>
 
       {/* Screen-only close bar */}
-      <div className="print-close-bar" style={{ display: "flex" }}>
+      <div className="scope-print-close-bar">
         <span style={{ color: "#e5e7eb", fontSize: 14, fontWeight: 600 }}>Scope Review — Print Preview</span>
         <div style={{ display: "flex", gap: 8 }}>
           <button
-            onClick={() => window.print()}
+            onClick={handlePrint}
             style={{ padding: "6px 16px", background: "#2563eb", color: "white", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 600 }}
           >
             Print / Save PDF
