@@ -89,7 +89,25 @@ export default function ProcedurePrintView({ item, entries, categories, parts, p
   let currentPhase = null;
   let stepNum = 0;
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    // Wait for all images in the print DOM to load before triggering print
+    const printRoot = document.querySelector('.knowledge-print-root');
+    if (printRoot) {
+      const images = Array.from(printRoot.querySelectorAll('img'));
+      if (images.length > 0) {
+        await Promise.all(
+          images.map(img => {
+            if (img.complete) return Promise.resolve();
+            return new Promise(resolve => {
+              img.addEventListener('load', resolve, { once: true });
+              img.addEventListener('error', resolve, { once: true });
+              // Safety timeout — don't block print indefinitely
+              setTimeout(resolve, 5000);
+            });
+          })
+        );
+      }
+    }
     window.print();
   };
 

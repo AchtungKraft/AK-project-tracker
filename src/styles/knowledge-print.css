@@ -420,9 +420,17 @@
   word-break: break-all;
 }
 
-/* Hide inline images in content_html (shown separately in gallery) */
+/* Inline images in content_html — display them (they are canonical content) */
 .print-body-content img {
-  display: none;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  margin: 0.4em 0;
+  display: block;
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .print-body-content blockquote {
@@ -438,6 +446,12 @@
   border-collapse: collapse;
   margin: 0.4em 0;
   font-size: 10px;
+  break-inside: auto;
+  page-break-inside: auto;
+}
+
+.print-body-content thead {
+  display: table-header-group;
 }
 
 .print-body-content th,
@@ -450,6 +464,8 @@
 .print-body-content th {
   background: #f5f5f5;
   font-weight: 600;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
 
 .print-body-content code {
@@ -924,6 +940,33 @@
   .print-procedure img {
     max-width: 100% !important;
     height: auto !important;
+  }
+
+  /* Inline content images — keep together, constrain for print */
+  .print-body-content img {
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: 4in;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    display: block !important;
+  }
+
+  /* Tables — allow break but repeat headers */
+  .print-body-content table {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  .print-body-content thead {
+    display: table-header-group;
+  }
+
+  /* Table header background preserved in print */
+  .print-body-content th {
+    background: #f0f0f0 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }
 

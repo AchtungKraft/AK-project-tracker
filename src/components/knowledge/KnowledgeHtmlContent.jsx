@@ -44,7 +44,7 @@ export default function KnowledgeHtmlContent({ html, className, size = 'sm' }) {
         "text-gray-300",
         // Links
         "[&_a]:text-blue-400 [&_a]:underline [&_a]:break-words",
-        // Images — responsive, no overflow
+        // Images — responsive, natural size
         "[&_img]:rounded-lg [&_img]:my-2 [&_img]:max-w-full [&_img]:h-auto",
         // Headings
         "[&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-white [&_h1]:mt-4 [&_h1]:mb-1",
@@ -57,14 +57,15 @@ export default function KnowledgeHtmlContent({ html, className, size = 'sm' }) {
         // Code
         "[&_code]:bg-gray-800 [&_code]:text-red-400 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs",
         "[&_pre]:bg-gray-800 [&_pre]:rounded-lg [&_pre]:p-3 [&_pre]:overflow-x-auto [&_pre]:my-2 [&_pre]:text-xs",
-        // Tables — responsive
-        "[&_table]:w-full [&_table]:border-collapse [&_table]:my-2 [&_table]:text-sm",
-        "[&_th]:border [&_th]:border-gray-700 [&_th]:bg-gray-800/50 [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_th]:text-gray-300",
-        "[&_td]:border [&_td]:border-gray-700 [&_td]:px-2 [&_td]:py-1 [&_td]:text-gray-400",
+        // Tables — full width, responsive with scroll
+        "[&_table]:w-full [&_table]:border-collapse [&_table]:my-3 [&_table]:text-sm",
+        "[&_th]:border [&_th]:border-gray-700 [&_th]:bg-gray-800/50 [&_th]:px-3 [&_th]:py-1.5 [&_th]:text-left [&_th]:text-gray-300 [&_th]:font-semibold [&_th]:whitespace-nowrap",
+        "[&_td]:border [&_td]:border-gray-700 [&_td]:px-3 [&_td]:py-1.5 [&_td]:text-gray-400",
         // Horizontal rules
         "[&_hr]:border-gray-700 [&_hr]:my-4",
-        // Prevent overflow
-        "overflow-x-hidden break-words",
+        // Allow table horizontal scroll, prevent page overflow
+        "break-words",
+        "[&_table]:block [&_table]:overflow-x-auto [&_table]:max-w-full",
         className
       )}
       dangerouslySetInnerHTML={{ __html: normalized }}

@@ -216,7 +216,7 @@ export default function ExecutionModeView({ item, onClose }) {
 
         {/* ── MAIN CONTENT ── */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
-          <div className="max-w-2xl mx-auto px-5 py-6">
+          <div className="max-w-5xl mx-auto px-5 py-6">
             {isLoading ? (
               <div className="text-center py-16 text-gray-600 text-sm">Loading…</div>
             ) : steps.length === 0 ? (
@@ -251,7 +251,7 @@ export default function ExecutionModeView({ item, onClose }) {
         {!isPrepScreen && steps.length > 0 && (
           <div className="shrink-0 bg-gray-950 border-t border-gray-800/40 px-4 py-3"
             style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))' }}>
-            <div className="max-w-2xl mx-auto flex items-center justify-between">
+            <div className="max-w-5xl mx-auto flex items-center justify-between">
               <button
                 onClick={goPrev}
                 disabled={activeIndex <= minIndex}
@@ -410,19 +410,19 @@ function PrepEntryCard({ entry, parts, onImageClick }) {
       </div>
 
       {hasContent && (
-        <div className="ml-8">
-          <KnowledgeHtmlContent html={entry.content_html} size="sm" />
+        <div className="ml-8 execution-rich-content">
+          <KnowledgeHtmlContent html={entry.content_html} size="base" />
         </div>
       )}
 
       {images.length > 0 && (
-        <div className="ml-8 mt-2">
-          <div className={cn("grid gap-1.5", images.length === 1 ? "" : "grid-cols-2")}>
+        <div className="ml-8 mt-3">
+          <div className={cn("grid gap-2", images.length === 1 ? "" : "grid-cols-1 md:grid-cols-2")}>
             {images.map((url, i) => (
               <button key={i} onClick={() => onImageClick(images, i)}
                 className="block rounded-lg overflow-hidden bg-gray-900 active:opacity-90 transition-opacity">
                 <img src={url} alt="" loading="lazy"
-                  className={cn("w-full object-cover", images.length === 1 ? "max-h-[40vh]" : "h-32")} />
+                  className={cn("w-full object-cover", images.length === 1 ? "max-h-[50vh]" : "h-40 md:h-52")} />
               </button>
             ))}
           </div>
@@ -474,9 +474,9 @@ function ExecutionStepContent({ step, stepNumber, totalSteps, parts, onImageClic
         </div>
       </div>
 
-      {/* Instructions */}
+      {/* Instructions — prose has comfortable max-width, tables/images use full container */}
       {hasContent && (
-        <div className="text-[15px]">
+        <div className="execution-rich-content">
           <KnowledgeHtmlContent html={step.content_html} className="text-gray-300" size="base" />
         </div>
       )}
@@ -519,9 +519,9 @@ function ExecutionImageGallery({ images, onImageClick }) {
     return (
       <div className="flex justify-center">
         <button onClick={() => onImageClick(images, 0)}
-          className="block rounded-lg overflow-hidden bg-gray-900 active:opacity-90 transition-opacity max-w-[90%]">
+          className="block rounded-lg overflow-hidden bg-gray-900 active:opacity-90 transition-opacity">
           <img src={images[0]} alt="" loading="lazy"
-            className="w-full max-h-[50vh] object-contain" />
+            className="max-w-full max-h-[60vh] object-contain" />
         </button>
       </div>
     );
@@ -529,12 +529,12 @@ function ExecutionImageGallery({ images, onImageClick }) {
 
   if (images.length === 2) {
     return (
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {images.map((url, i) => (
           <button key={i} onClick={() => onImageClick(images, i)}
             className="block rounded-lg overflow-hidden bg-gray-900 active:opacity-90 transition-opacity">
             <img src={url} alt="" loading="lazy"
-              className="w-full h-40 md:h-48 object-cover" />
+              className="w-full h-48 md:h-64 object-cover" />
           </button>
         ))}
       </div>
@@ -543,12 +543,12 @@ function ExecutionImageGallery({ images, onImageClick }) {
 
   // 3+ images — two-column gallery
   return (
-    <div className="grid grid-cols-2 gap-2">
+    <div className="grid grid-cols-2 gap-3">
       {images.map((url, i) => (
         <button key={i} onClick={() => onImageClick(images, i)}
           className="block rounded-lg overflow-hidden bg-gray-900 active:opacity-90 transition-opacity">
           <img src={url} alt="" loading="lazy"
-            className="w-full h-36 md:h-44 object-cover" />
+            className="w-full h-44 md:h-56 object-cover" />
         </button>
       ))}
     </div>

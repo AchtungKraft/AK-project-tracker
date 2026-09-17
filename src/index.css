@@ -327,6 +327,22 @@ button:focus-visible {
   margin: 0.1rem 0;
 }
 
+/* ============================================
+   EXECUTION MODE — Rich content layout
+   Prose stays readable; tables/images use full width
+   ============================================ */
+.execution-rich-content .knowledge-html-content > p,
+.execution-rich-content .knowledge-html-content > blockquote,
+.execution-rich-content .knowledge-html-content > ul,
+.execution-rich-content .knowledge-html-content > ol {
+  max-width: 42rem;
+}
+/* Tables and images use full container width */
+.execution-rich-content .knowledge-html-content > table,
+.execution-rich-content .knowledge-html-content img {
+  max-width: 100%;
+}
+
 /* Fallback: if ql-indent classes survive (legacy unconverted content),
    render them with indent padding so they're at least visually nested */
 .knowledge-html-content li.ql-indent-1 {
