@@ -102,9 +102,19 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
           );
         }
       } catch (emailError) {
-        // Access was created successfully, but email failed — don't roll back
+        // Distinguish "no channels opted in" (400 with known message) from true failures
+        const errData = emailError?.response?.data;
+        const isNoChannels = errData?.channels_sent?.length === 0 ||
+          (typeof errData?.error === 'string' && errData.error.toLowerCase().includes('not opted into any communication'));
+        
         setJustAdded(prev => prev?.accessId === newAccess.id
-          ? { ...prev, emailStatus: 'failed', emailDetail: 'Access email could not be sent.' }
+          ? {
+              ...prev,
+              emailStatus: isNoChannels ? 'no_email' : 'failed',
+              emailDetail: isNoChannels
+                ? 'No valid email address or communication channel available.'
+                : 'Access email could not be sent.',
+            }
           : prev
         );
       }
