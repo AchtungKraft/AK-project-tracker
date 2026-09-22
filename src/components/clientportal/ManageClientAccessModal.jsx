@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Mail, Loader2, Copy, Pencil, Check, X, Send } from "lucide-react";
+import { Plus, Trash2, Mail, Loader2, Copy, Pencil, Check, X, Send, UserPlus } from "lucide-react";
 import CommPrefsDisplay from "@/components/clientportal/CommPrefsDisplay";
+import ClientSearchPicker from "@/components/clientportal/ClientSearchPicker";
 import { useToast } from "@/components/ui/use-toast";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -21,6 +22,11 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
   const [newClient, setNewClient] = useState({ name: '', email: '', phone: '', role_title: '', url_slug: '' });
   const [editingSlugId, setEditingSlugId] = useState(null);
   const [slugValue, setSlugValue] = useState('');
+
+  // Search + select + explicit-add state
+  const [selectedClient, setSelectedClient] = useState(null);
+  const [selectedRole, setSelectedRole] = useState('approver');
+  const [justAdded, setJustAdded] = useState(null);
 
   const { data: projectAccess = [] } = useQuery({
     queryKey: ['projectClientAccess', projectId],
@@ -65,13 +71,17 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
     mutationFn: (data) => base44.entities.ProjectClientAccess.create(data),
     onSuccess: (newAccess, variables) => {
       queryClient.invalidateQueries({ queryKey: ['projectClientAccess'] });
-      toast({ description: 'Access granted' });
-      // Send welcome email
-      base44.functions.invoke('sendWelcomeEmail', {
-        clientContactId: variables.client_contact_id,
-        projectId: variables.project_id,
-        accessId: newAccess.id
-      });
+      const client = allClients.find(c => c.id === variables.client_contact_id);
+      const clientName = client?.name || 'Client';
+      toast({ description: `${clientName} added to project access.` });
+      setJustAdded({ accessId: newAccess.id, clientContactId: variables.client_contact_id });
+      setSelectedClient(null);
+      setSelectedRole('approver');
+      // NOTE: No automatic email/invite — Send Access Link is a separate explicit action
+    },
+    onError: (error) => {
+      const msg = error?.response?.data?.error || error.message;
+      toast({ variant: "destructive", description: msg || 'Failed to add client access. Please try again.' });
     },
   });
 
@@ -140,7 +150,7 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
     createClientMutation.mutate(newClient);
   };
 
-  const handleAddAccessWithClient = (client) => {
+  const handleAddAccessWithClient = (client, role = 'approver') => {
     // Generate unique share token
     const shareToken = Array.from(crypto.getRandomValues(new Uint8Array(32)))
       .map(b => b.toString(16).padStart(2, '0'))
@@ -149,20 +159,17 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
     addAccessMutation.mutate({
       project_id: projectId,
       client_contact_id: client.id,
-      access_role: 'approver',
+      access_role: role,
       access_status: 'active',
       share_token: shareToken,
       url_slug: client.url_slug || null,
     });
   };
 
-  const handleAddAccess = (clientId) => {
-    // Get client details to copy url_slug
-    const client = allClients.find(c => c.id === clientId);
-    if (client) {
-      handleAddAccessWithClient(client);
-    }
-  };
+  const handleAddAccess = useCallback(() => {
+    if (!selectedClient || addAccessMutation.isPending) return;
+    handleAddAccessWithClient(selectedClient, selectedRole);
+  }, [selectedClient, selectedRole, addAccessMutation.isPending]);
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -247,21 +254,110 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
               </form>
             )}
 
-            {availableClients.length > 0 && !showAddClient && (
-              <div className="mb-4">
-                <Label className="text-xs text-gray-400 mb-2 block">Add existing client</Label>
-                <Select onValueChange={handleAddAccess}>
-                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                    <SelectValue placeholder="Select a client to add" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableClients.map(client => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.name} ({client.email})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            {!showAddClient && (
+              <div className="mb-4 bg-gray-800/50 border border-gray-700/50 rounded-lg p-4 space-y-3">
+                <Label className="text-xs text-gray-300 font-semibold uppercase tracking-wide block">
+                  Add Existing Client
+                </Label>
+
+                {/* SELECTED CLIENT PREVIEW */}
+                {selectedClient ? (
+                  <div className="space-y-3">
+                    <div className="bg-gray-900 border border-gray-700 rounded-md p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Selected Client</div>
+                          <div className="text-sm font-medium text-white">{selectedClient.name}</div>
+                          {selectedClient.email && (
+                            <div className="text-xs text-gray-400">{selectedClient.email}</div>
+                          )}
+                          {selectedClient.role_title && (
+                            <div className="text-xs text-gray-500 mt-0.5">{selectedClient.role_title}</div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { setSelectedClient(null); setJustAdded(null); }}
+                          className="text-gray-500 hover:text-gray-300 p-1 rounded"
+                          title="Change client"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3">
+                      <div className="flex-1 min-w-0">
+                        <Label className="text-xs text-gray-400 mb-1 block">Access Role</Label>
+                        <Select value={selectedRole} onValueChange={setSelectedRole}>
+                          <SelectTrigger className="bg-gray-900 border-gray-700 text-white h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="viewer">Viewer</SelectItem>
+                            <SelectItem value="commenter">Commenter</SelectItem>
+                            <SelectItem value="approver">Approver</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => { setSelectedClient(null); setJustAdded(null); }}
+                          className="border-gray-700 h-9"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          disabled={addAccessMutation.isPending}
+                          onClick={handleAddAccess}
+                          className="bg-red-600 hover:bg-red-700 h-9 gap-1.5 whitespace-nowrap"
+                        >
+                          {addAccessMutation.isPending ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <UserPlus className="w-4 h-4" />
+                          )}
+                          Add Client Access
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* SEARCH PICKER */
+                  <ClientSearchPicker
+                    allClients={allClients}
+                    assignedClientIds={clientsWithAccess}
+                    onSelect={(client) => { setSelectedClient(client); setJustAdded(null); }}
+                  />
+                )}
+
+                {/* Just-added convenience: offer Send Access Link */}
+                {justAdded && !selectedClient && (
+                  <div className="flex items-center gap-3 bg-green-950/30 border border-green-900/40 rounded-md px-3 py-2">
+                    <Check className="w-4 h-4 text-green-400 shrink-0" />
+                    <span className="text-sm text-green-300 flex-1">Client access added successfully.</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={sendingNotifId === justAdded.accessId || sendNotificationMutation.isPending}
+                      onClick={() => {
+                        setSendingNotifId(justAdded.accessId);
+                        sendNotificationMutation.mutate({
+                          clientContactId: justAdded.clientContactId,
+                          accessId: justAdded.accessId,
+                        });
+                        setJustAdded(null);
+                      }}
+                      className="h-8 text-xs border-green-800 text-green-300 hover:bg-green-950/50 gap-1 whitespace-nowrap"
+                    >
+                      <Send className="w-3 h-3" />
+                      Send Access Link
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
 
