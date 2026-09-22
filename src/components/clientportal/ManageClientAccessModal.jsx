@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Mail, Loader2, Copy, Pencil, Check, X, Send, UserPlus } from "lucide-react";
+import { Plus, Trash2, Mail, Loader2, Copy, Pencil, Check, X, Send, UserPlus, AlertTriangle } from "lucide-react";
 import CommPrefsDisplay from "@/components/clientportal/CommPrefsDisplay";
 import ClientSearchPicker from "@/components/clientportal/ClientSearchPicker";
 import { useToast } from "@/components/ui/use-toast";
@@ -26,7 +26,7 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
   // Search + select + explicit-add state
   const [selectedClient, setSelectedClient] = useState(null);
   const [selectedRole, setSelectedRole] = useState('approver');
-  const [justAdded, setJustAdded] = useState(null);
+  const [justAdded, setJustAdded] = useState(null); // { accessId, clientContactId, emailStatus: 'sending'|'sent'|'failed'|'no_email', emailDetail? }
 
   const { data: projectAccess = [] } = useQuery({
     queryKey: ['projectClientAccess', projectId],
@@ -69,15 +69,45 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
 
   const addAccessMutation = useMutation({
     mutationFn: (data) => base44.entities.ProjectClientAccess.create(data),
-    onSuccess: (newAccess, variables) => {
+    onSuccess: async (newAccess, variables) => {
       queryClient.invalidateQueries({ queryKey: ['projectClientAccess'] });
       const client = allClients.find(c => c.id === variables.client_contact_id);
       const clientName = client?.name || 'Client';
-      toast({ description: `${clientName} added to project access.` });
-      setJustAdded({ accessId: newAccess.id, clientContactId: variables.client_contact_id });
+      const clientEmail = client?.email;
+
+      // Show immediate "sending" state
+      setJustAdded({ accessId: newAccess.id, clientContactId: variables.client_contact_id, emailStatus: 'sending' });
       setSelectedClient(null);
       setSelectedRole('approver');
-      // NOTE: No automatic email/invite — Send Access Link is a separate explicit action
+
+      // Automatically send the access notification (separate from access creation)
+      try {
+        const response = await base44.functions.invoke('sendClientAccessNotification', {
+          clientContactId: variables.client_contact_id,
+          projectId,
+          accessId: newAccess.id,
+        });
+        const data = response.data;
+        if (data.success && data.channels_sent?.length > 0) {
+          setJustAdded(prev => prev?.accessId === newAccess.id
+            ? { ...prev, emailStatus: 'sent', emailDetail: `Access email sent to ${clientEmail || clientName}.` }
+            : prev
+          );
+          queryClient.invalidateQueries({ queryKey: ['projectClientAccess'] });
+        } else {
+          // Notification function succeeded but didn't send (e.g. no valid email/channel)
+          setJustAdded(prev => prev?.accessId === newAccess.id
+            ? { ...prev, emailStatus: 'no_email', emailDetail: 'No valid email address or communication channel available.' }
+            : prev
+          );
+        }
+      } catch (emailError) {
+        // Access was created successfully, but email failed — don't roll back
+        setJustAdded(prev => prev?.accessId === newAccess.id
+          ? { ...prev, emailStatus: 'failed', emailDetail: 'Access email could not be sent.' }
+          : prev
+        );
+      }
     },
     onError: (error) => {
       const msg = error?.response?.data?.error || error.message;
@@ -311,11 +341,11 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
                         </Button>
                         <Button
                           size="sm"
-                          disabled={addAccessMutation.isPending}
+                          disabled={addAccessMutation.isPending || (justAdded?.emailStatus === 'sending')}
                           onClick={handleAddAccess}
                           className="bg-red-600 hover:bg-red-700 h-9 gap-1.5 whitespace-nowrap"
                         >
-                          {addAccessMutation.isPending ? (
+                          {(addAccessMutation.isPending || justAdded?.emailStatus === 'sending') ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
                           ) : (
                             <UserPlus className="w-4 h-4" />
@@ -334,28 +364,51 @@ export default function ManageClientAccessModal({ open, onClose, projectId }) {
                   />
                 )}
 
-                {/* Just-added convenience: offer Send Access Link */}
+                {/* Post-add status banner */}
                 {justAdded && !selectedClient && (
-                  <div className="flex items-center gap-3 bg-green-950/30 border border-green-900/40 rounded-md px-3 py-2">
-                    <Check className="w-4 h-4 text-green-400 shrink-0" />
-                    <span className="text-sm text-green-300 flex-1">Client access added successfully.</span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={sendingNotifId === justAdded.accessId || sendNotificationMutation.isPending}
-                      onClick={() => {
-                        setSendingNotifId(justAdded.accessId);
-                        sendNotificationMutation.mutate({
-                          clientContactId: justAdded.clientContactId,
-                          accessId: justAdded.accessId,
-                        });
-                        setJustAdded(null);
-                      }}
-                      className="h-8 text-xs border-green-800 text-green-300 hover:bg-green-950/50 gap-1 whitespace-nowrap"
-                    >
-                      <Send className="w-3 h-3" />
-                      Send Access Link
-                    </Button>
+                  <div className={cn(
+                    "flex items-center gap-3 rounded-md px-3 py-2",
+                    justAdded.emailStatus === 'sending' ? "bg-blue-950/30 border border-blue-900/40" :
+                    justAdded.emailStatus === 'sent' ? "bg-green-950/30 border border-green-900/40" :
+                    "bg-amber-950/30 border border-amber-900/40"
+                  )}>
+                    {justAdded.emailStatus === 'sending' ? (
+                      <>
+                        <Loader2 className="w-4 h-4 text-blue-400 shrink-0 animate-spin" />
+                        <span className="text-sm text-blue-300 flex-1">Adding client access and sending invite…</span>
+                      </>
+                    ) : justAdded.emailStatus === 'sent' ? (
+                      <>
+                        <Check className="w-4 h-4 text-green-400 shrink-0" />
+                        <span className="text-sm text-green-300 flex-1">
+                          {justAdded.emailDetail || 'Client added and access email sent.'}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span className="text-sm text-amber-300 flex-1">
+                          Client access added{justAdded.emailStatus === 'failed' ? ', but the access email could not be sent.' : '. ' + (justAdded.emailDetail || 'No email was sent.')}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={sendingNotifId === justAdded.accessId || sendNotificationMutation.isPending}
+                          onClick={() => {
+                            setSendingNotifId(justAdded.accessId);
+                            sendNotificationMutation.mutate({
+                              clientContactId: justAdded.clientContactId,
+                              accessId: justAdded.accessId,
+                            });
+                            setJustAdded(null);
+                          }}
+                          className="h-8 text-xs border-amber-800 text-amber-300 hover:bg-amber-950/50 gap-1 whitespace-nowrap"
+                        >
+                          <Send className="w-3 h-3" />
+                          Send Access Link
+                        </Button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
