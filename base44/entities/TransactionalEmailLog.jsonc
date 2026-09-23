@@ -1,0 +1,58 @@
+{
+  "name": "TransactionalEmailLog",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "description": "Caller-supplied idempotency key (unique per send)"
+    },
+    "source": {
+      "type": "string",
+      "description": "Calling system identifier (e.g. AK_COMMS)"
+    },
+    "template": {
+      "type": "string",
+      "description": "Template key used for this send"
+    },
+    "recipient_email": {
+      "type": "string",
+      "description": "Recipient email address"
+    },
+    "recipient_name": {
+      "type": "string",
+      "description": "Recipient display name"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "sent",
+        "failed"
+      ],
+      "description": "Delivery outcome"
+    },
+    "provider_message_id": {
+      "type": "string",
+      "description": "Resend email ID returned by provider"
+    },
+    "error": {
+      "type": "string",
+      "description": "Error message if status=failed"
+    },
+    "retryable": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the failure is retryable"
+    },
+    "variables_snapshot": {
+      "type": "object",
+      "description": "Snapshot of template variables for audit"
+    }
+  },
+  "required": [
+    "request_id",
+    "source",
+    "template",
+    "recipient_email",
+    "status"
+  ]
+}
