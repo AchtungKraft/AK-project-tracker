@@ -91,6 +91,15 @@ const ADMIN_GROUPS = [
     ],
   },
   {
+    key: "client-portal",
+    label: "Client Portal",
+    icon: Shield,
+    color: "text-teal-400",
+    items: [
+      { key: "client-portal-access", label: "Client Access" },
+    ],
+  },
+  {
     key: "communication",
     label: "Communication",
     icon: Mail,

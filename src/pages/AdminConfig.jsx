@@ -21,6 +21,7 @@ import ServiceVendorsConfig from "../components/admin/ServiceVendorsConfig";
 import ProjectStorageTemplatesConfig from "../components/admin/ProjectStorageTemplatesConfig";
 import ScopeLaborGroupsConfig from "../components/admin/ScopeLaborGroupsConfig";
 import ProjectAssignmentsConfig from "../components/admin/ProjectAssignmentsConfig";
+import ClientPortalAccessConfig from "../components/admin/ClientPortalAccessConfig";
 
 const PANEL_MAP = {
   "users": UsersConfig,
@@ -43,6 +44,7 @@ const PANEL_MAP = {
   "car-years": CarYearsConfig,
   "email-templates": EmailTemplatesConfig,
   "project-assignments": ProjectAssignmentsConfig,
+  "client-portal-access": ClientPortalAccessConfig,
 };
 
 export default function AdminConfig() {
