@@ -76,6 +76,11 @@ Deno.serve(async (req) => {
       case 'REVERSE_INSTALL': result = await reverseInstall(ctx, commitment_ids, payload); break;
       case 'ALLOCATE_POOL': throw new Error('ALLOCATE_POOL removed. Use InvoiceBatch.');
       case 'CANCEL_COMMITMENT': result = await cancelCommitment(ctx, commitment_ids, payload); break;
+      case 'RECEIVE_WITHOUT_PO': result = await receiveWithoutPO(ctx, payload); break;
+      case 'RESOLVE_WITHOUT_PO': result = await resolveWithoutPO(ctx, commitment_ids, payload); break;
+      case 'MARK_ORDERED_EXTERNALLY': result = await markOrderedExternally(ctx, commitment_ids, payload); break;
+      case 'RECEIVE_EXTERNAL_INBOUND': result = await receiveExternalInbound(ctx, payload); break;
+      case 'CANCEL_EXTERNAL_INBOUND': result = await cancelExternalInbound(ctx, payload); break;
       case 'SYNC_PO_COST': result = await syncPOCost(ctx, commitment_ids, payload); break;
       case 'DELETE_PO': result = await deletePO(ctx, payload); break;
       case 'MARK_ORDERED': result = await markOrdered(ctx, payload); break;
@@ -109,13 +114,13 @@ Deno.serve(async (req) => {
 // - remaining gap becomes to_order
 // CANONICAL: Supply invariant uses effective_required (required_total - qty_removed)
 // This prevents over-allocation when parts have been removed
-function checkSupplyInvariant(commitmentId, effective_required, reserved, covered, ctx, source, installed = 0) {
-  const total = reserved + covered + installed;
+function checkSupplyInvariant(commitmentId, effective_required, reserved, covered, ctx, source, installed = 0, covered_ext = 0) {
+  const total = reserved + covered + covered_ext + installed;
   if (total > effective_required + 0.001) {
-    const msg = `SUPPLY_INVARIANT_VIOLATION [${source}]: commitment=${commitmentId} reserved(${reserved})+covered_po(${covered})+installed(${installed})=${total} > effective_required(${effective_required})`;
+    const msg = `SUPPLY_INVARIANT_VIOLATION [${source}]: commitment=${commitmentId} reserved(${reserved})+covered_po(${covered})+covered_ext(${covered_ext})+installed(${installed})=${total} > effective_required(${effective_required})`;
     console.error(msg);
     if (ctx) ctx.warnings.push({ type: 'INVARIANT_VIOLATION', id: commitmentId, msg, source });
-    return { violated: true, overallocation: total - effective_required, corrected_reserved: Math.max(0, effective_required - covered - installed) };
+    return { violated: true, overallocation: total - effective_required, corrected_reserved: Math.max(0, effective_required - covered - covered_ext - installed) };
   }
   return { violated: false };
 }
@@ -131,30 +136,30 @@ function validateEffectiveQuantities(c) {
   if ((c.qty_installed ?? 0) > eff + TOL) violations.push({ field: 'qty_installed', value: c.qty_installed, limit: eff, message: `qty_installed(${c.qty_installed}) exceeds effective_required(${eff})` });
   if ((c.reserved_from_stock ?? 0) > eff + TOL) violations.push({ field: 'reserved_from_stock', value: c.reserved_from_stock, limit: eff, message: `reserved(${c.reserved_from_stock}) exceeds effective_required(${eff})` });
   if ((c.covered_from_po ?? 0) > eff + TOL) violations.push({ field: 'covered_from_po', value: c.covered_from_po, limit: eff, message: `covered(${c.covered_from_po}) exceeds effective_required(${eff})` });
+  if ((c.covered_from_external ?? 0) > eff + TOL) violations.push({ field: 'covered_from_external', value: c.covered_from_external, limit: eff, message: `covered_ext(${c.covered_from_external}) exceeds effective_required(${eff})` });
   if ((c.invoiced_qty ?? 0) > eff + TOL) violations.push({ field: 'invoiced_qty', value: c.invoiced_qty, limit: eff, message: `invoiced(${c.invoiced_qty}) exceeds effective_required(${eff})` });
-  const total = (c.reserved_from_stock ?? 0) + (c.covered_from_po ?? 0) + (c.qty_installed ?? 0);
+  const total = (c.reserved_from_stock ?? 0) + (c.covered_from_po ?? 0) + (c.covered_from_external ?? 0) + (c.qty_installed ?? 0);
   if (total > eff + TOL) violations.push({ field: '_combined', value: total, limit: eff, message: `combined coverage(${total}) exceeds effective_required(${eff})` });
   return { valid: violations.length === 0, violations, blocking: violations.length > 0, effective_required: eff, commitment_id: c.id };
 }
 
 function readCanonical(c, ctx) {
   const qty_removed = c.qty_removed ?? 0;
-  const cn = { required_total: c.required_total ?? 0, qty_removed, reserved_from_stock: c.reserved_from_stock ?? 0, covered_from_po: c.covered_from_po ?? 0, qty_installed: c.qty_installed ?? 0 };
+  const cn = { required_total: c.required_total ?? 0, qty_removed, reserved_from_stock: c.reserved_from_stock ?? 0, covered_from_po: c.covered_from_po ?? 0, covered_from_external: c.covered_from_external ?? 0, qty_installed: c.qty_installed ?? 0 };
   cn.effective_required = Math.max(0, cn.required_total - qty_removed);
   if (ctx && c.qty_committed !== undefined && c.qty_committed !== cn.required_total)
     ctx.warnings.push({ type: 'MISMATCH', id: c.id, msg: `qty_committed(${c.qty_committed})!=required_total(${cn.required_total})` });
   if (ctx && c.qty_reserved !== undefined && c.qty_reserved !== cn.reserved_from_stock)
     ctx.warnings.push({ type: 'MISMATCH', id: c.id, msg: `qty_reserved(${c.qty_reserved})!=reserved_from_stock(${cn.reserved_from_stock})` });
-  checkSupplyInvariant(c.id, cn.effective_required, cn.reserved_from_stock, cn.covered_from_po, ctx, 'readCanonical', cn.qty_installed);
-  cn.gap = Math.max(0, cn.effective_required - cn.reserved_from_stock - cn.covered_from_po - cn.qty_installed);
-  cn.coverage = cn.reserved_from_stock + cn.covered_from_po + cn.qty_installed;
-  // PHASE 2: Hard validation — attach result for callers that need blocking check
+  checkSupplyInvariant(c.id, cn.effective_required, cn.reserved_from_stock, cn.covered_from_po, ctx, 'readCanonical', cn.qty_installed, cn.covered_from_external);
+  cn.gap = Math.max(0, cn.effective_required - cn.reserved_from_stock - cn.covered_from_po - cn.covered_from_external - cn.qty_installed);
+  cn.coverage = cn.reserved_from_stock + cn.covered_from_po + cn.covered_from_external + cn.qty_installed;
   cn._validation = validateEffectiveQuantities(c);
   return cn;
 }
 
-function covStatus(req, res, cov) {
-  const t = res + cov; if (t >= req && req > 0) return 'FULLY_COVERED'; if (t > 0) return 'PARTIALLY_COVERED'; return 'NOT_COVERED';
+function covStatus(req, res, cov, covExt = 0) {
+  const t = res + cov + covExt; if (t >= req && req > 0) return 'FULLY_COVERED'; if (t > 0) return 'PARTIALLY_COVERED'; return 'NOT_COVERED';
 }
 
 function mapSrc(s) { return ({ SHOP_PURCHASED:'VENDOR', VENDOR:'VENDOR', CLIENT_SUPPLIED:'CLIENT_SUPPLIED', AK_CUSTOM:'AK_CUSTOM', TAKE_OFF:'TAKE_OFF', STOCK:'STOCK' })[s] || 'VENDOR'; }
@@ -165,38 +170,62 @@ async function inlineRebalance(ctx, part_id, isDry) {
   const [part] = await ctx.base44.asServiceRole.entities.Part.filter({ id: part_id });
   if (!part) throw new Error(`REBALANCE_PART_NOT_FOUND: ${part_id}`);
   const phys = part.physical_stock ?? 0;
+
+  // RESTRICTED INVENTORY: Sum restricted InventoryItem qty per commitment
+  const allInvItems = await ctx.base44.asServiceRole.entities.InventoryItem.filter({ part_id });
+  const restrictedByCommitment = new Map();
+  let totalRestricted = 0;
+  for (const ii of allInvItems) {
+    if (ii.restricted_commitment_id && (ii.quantity_on_hand ?? 0) > 0) {
+      const cur = restrictedByCommitment.get(ii.restricted_commitment_id) || 0;
+      restrictedByCommitment.set(ii.restricted_commitment_id, cur + (ii.quantity_on_hand ?? 0));
+      totalRestricted += (ii.quantity_on_hand ?? 0);
+    }
+  }
+  // General (unrestricted) physical stock available for priority-based distribution
+  const generalPhys = Math.max(0, phys - totalRestricted);
+
   const all = await ctx.base44.asServiceRole.entities.PartCommitment.filter({ part_id });
   const open = all.filter(c => c.commitment_status !== 'cancelled' && c.commitment_status !== 'closed');
   const prio = { Critical:4, High:3, Normal:2, Low:1 };
   open.sort((a,b) => { const ap=prio[a.priority]||2, bp=prio[b.priority]||2; if(bp!==ap) return bp-ap; const ad=new Date(a.created_date), bd=new Date(b.created_date); if(ad.getTime()!==bd.getTime()) return ad-bd; return (a.id||'').localeCompare(b.id||''); });
-  let rem = phys; const ups = [];
+
+  let rem = generalPhys; const ups = [];
   for (const c of open) {
     const cn = readCanonical(c, ctx);
     const remReq = Math.max(0, cn.effective_required - cn.qty_installed);
-    const need = Math.max(0, remReq - cn.covered_from_po);
-    let newRes = Math.min(rem, need);
-    // INVARIANT ENFORCEMENT: ensure reserved + covered_from_po + installed <= effective_required
-    const invCheck = checkSupplyInvariant(c.id, cn.effective_required, newRes, cn.covered_from_po, ctx, 'inlineRebalance', cn.qty_installed);
+    // Deduct BOTH PO inbound AND external inbound from allocation need
+    const need = Math.max(0, remReq - cn.covered_from_po - cn.covered_from_external);
+
+    // RESTRICTED: If this commitment has restricted inventory, guarantee it gets that qty
+    const restrictedQty = restrictedByCommitment.get(c.id) || 0;
+    // General allocation from the shared pool on top of restricted qty
+    const needFromGeneral = Math.max(0, need - restrictedQty);
+    const generalAlloc = Math.min(rem, needFromGeneral);
+    let newRes = restrictedQty + generalAlloc;
+
+    // INVARIANT ENFORCEMENT: ensure reserved + covered_from_po + covered_from_external + installed <= effective_required
+    const invCheck = checkSupplyInvariant(c.id, cn.effective_required, newRes, cn.covered_from_po, ctx, 'inlineRebalance', cn.qty_installed, cn.covered_from_external);
     if (invCheck.violated) {
       newRes = invCheck.corrected_reserved;
-      console.warn(`[REBALANCE_INVARIANT_CORRECTED] c=${c.id}: reserved corrected from ${Math.min(rem, need)} to ${newRes}`);
+      console.warn(`[REBALANCE_INVARIANT_CORRECTED] c=${c.id}: reserved corrected to ${newRes}`);
     }
-    const newTO = Math.max(0, remReq - newRes - cn.covered_from_po);
-    rem = Math.max(0, rem - newRes);
+    const newTO = Math.max(0, remReq - newRes - cn.covered_from_po - cn.covered_from_external);
+    rem = Math.max(0, rem - generalAlloc);
     if (newRes !== cn.reserved_from_stock || newTO !== (c.qty_to_order ?? 0))
-      ups.push({ commitment_id:c.id, project_id:c.project_id, required_total:cn.required_total, effective_required:cn.effective_required, qty_removed:cn.qty_removed, qty_installed:cn.qty_installed, covered_from_po:cn.covered_from_po, old_reserved:cn.reserved_from_stock, new_reserved:newRes, old_to_order:c.qty_to_order??0, new_to_order:newTO, delta_reserved:newRes-cn.reserved_from_stock });
-    const sum = newRes + cn.covered_from_po + newTO;
+      ups.push({ commitment_id:c.id, project_id:c.project_id, required_total:cn.required_total, effective_required:cn.effective_required, qty_removed:cn.qty_removed, qty_installed:cn.qty_installed, covered_from_po:cn.covered_from_po, covered_from_external:cn.covered_from_external, old_reserved:cn.reserved_from_stock, new_reserved:newRes, old_to_order:c.qty_to_order??0, new_to_order:newTO, delta_reserved:newRes-cn.reserved_from_stock });
+    const sum = newRes + cn.covered_from_po + cn.covered_from_external + newTO;
     if (Math.abs(sum - remReq) > 0.001) {
-      console.error(`[REBALANCE_INVARIANT] c=${c.id} sum=${sum} exp=${remReq} reserved=${newRes} covered=${cn.covered_from_po} installed=${cn.qty_installed} to_order=${newTO}`);
+      console.error(`[REBALANCE_INVARIANT] c=${c.id} sum=${sum} exp=${remReq} reserved=${newRes} covered_po=${cn.covered_from_po} covered_ext=${cn.covered_from_external} installed=${cn.qty_installed} to_order=${newTO}`);
       throw new Error(`REBALANCE_INVARIANT: c=${c.id} sum=${sum} exp=${remReq}`);
     }
   }
   const totRes = open.reduce((s,c) => { const u=ups.find(x=>x.commitment_id===c.id); return s+(u?u.new_reserved:(c.reserved_from_stock??0)); }, 0);
-  if (totRes > phys + 0.001) throw new Error(`REBALANCE_OVER_ALLOC: phys=${phys} tot=${totRes}`);
+  if (totRes > phys + 0.001) throw new Error(`REBALANCE_OVER_ALLOC: phys=${phys} tot=${totRes} (restricted=${totalRestricted} general=${generalPhys})`);
   if (!isDry && ups.length > 0) {
     for (const u of ups) await ctx.base44.asServiceRole.entities.PartCommitment.update(u.commitment_id, { reserved_from_stock:u.new_reserved, last_recomputed_at:ctx.timestamp });
   }
-  return { success:true, part_id, physical_stock:phys, commitments_updated:ups.length, remaining_stock_after:rem, updates:ups };
+  return { success:true, part_id, physical_stock:phys, general_stock:generalPhys, restricted_stock:totalRestricted, commitments_updated:ups.length, remaining_stock_after:rem, updates:ups };
 }
 
 async function inlineRecompute(ctx, part_id, isDry) {
@@ -275,7 +304,7 @@ async function adjustRequired(ctx, commitment_ids, payload) {
 
   // Scope addition for increases with lifecycle progress
   if (!isNew && delta>0 && cid) {
-    const hasProg = (commitment?.invoiced_qty||0)>0 || cn.qty_installed>0 || cn.covered_from_po>0;
+    const hasProg = (commitment?.invoiced_qty||0)>0 || cn.qty_installed>0 || cn.covered_from_po>0 || cn.covered_from_external>0;
     if (hasProg) {
       if (ctx.dry_run) return {preview:{action:'WILL_CREATE_SCOPE_ADDITION',commitment_id:cid,delta}};
       const ucs=part.cost||0, pm=part.pricing_mode||'matrix', urs=pm==='manual'?(part.retail_override||0):(part.retail_matrix_price||0);
@@ -823,7 +852,7 @@ async function install(ctx,commitment_ids,payload) {
     newInstallStatus = 'installed';
   } else if (newRes > 0) {
     newInstallStatus = 'allocated';
-  } else if (cn.covered_from_po > 0) {
+  } else if ((cn.covered_from_po > 0) || (cn.covered_from_external > 0)) {
     newInstallStatus = 'ordered';
   } else {
     newInstallStatus = c.commitment_status; // preserve current if no clear transition
@@ -891,7 +920,7 @@ async function reverseInstall(ctx,commitment_ids,payload) {
     newStatus = 'installed';
   } else if (cn.reserved_from_stock > 0) {
     newStatus = 'allocated';
-  } else if (cn.covered_from_po > 0) {
+  } else if ((cn.covered_from_po > 0) || (cn.covered_from_external > 0)) {
     newStatus = 'ordered';
   } else {
     newStatus = 'planned';
@@ -940,7 +969,7 @@ async function cancelCommitment(ctx,commitment_ids,payload) {
   const [c]=await ctx.base44.entities.PartCommitment.filter({id:cid}); if(!c) throw new Error('Commitment not found');
   if(c.commitment_status==='cancelled') throw new Error('Already cancelled');
   const cn=readCanonical(c,ctx);
-  let ct='before_order'; if(c.billing_status==='paid') ct='after_paid'; else if(c.billing_status==='invoiced') ct='after_invoice'; else if(cn.covered_from_po>0) ct='before_invoice';
+  let ct='before_order'; if(c.billing_status==='paid') ct='after_paid'; else if(c.billing_status==='invoiced') ct='after_invoice'; else if(cn.covered_from_po>0||cn.covered_from_external>0) ct='before_invoice';
   if(ctx.dry_run) return {preview:{commitment_id:cid,cancellation_type:ct}};
   await ctx.base44.asServiceRole.entities.PartCommitment.update(cid,{commitment_status:'cancelled',cancelled_at:ctx.timestamp,cancelled_by:ctx.user.email,cancelled_reason:reason,cancellation_type:ct,commitment_version:(c.commitment_version??0)+1});
   ctx.mutations.push({entity:'PartCommitment',id:cid,action:'CANCEL'});
@@ -1229,6 +1258,545 @@ async function adjustStock(ctx, payload) {
     new_physical_stock: rr.computed_physical_stock,
     location_id,
     invalidation_context: { part_ids: [part_id], invalidateAll: true },
+  };
+}
+
+// ── IDEMPOTENCY HELPER ──
+async function checkIdempotency(ctx, action_id) {
+  if (!action_id) return null;
+  const existing = await ctx.base44.asServiceRole.entities.InventoryAuditLog.filter({ action_id });
+  if (existing.length > 0) return existing[0];
+  return null;
+}
+
+// ── EXTERNAL INBOUND COVERAGE RECALCULATOR ──
+async function recalcCoveredFromExternal(ctx, commitment_id) {
+  const records = await ctx.base44.asServiceRole.entities.ExternalInbound.filter({ commitment_id });
+  let total = 0;
+  for (const r of records) {
+    if (r.status === 'cancelled') continue;
+    total += Math.max(0, (r.qty_ordered ?? 0) - (r.qty_received ?? 0) - (r.qty_cancelled ?? 0));
+  }
+  await ctx.base44.asServiceRole.entities.PartCommitment.update(commitment_id, { covered_from_external: total });
+  return total;
+}
+
+// ── RECEIVE_WITHOUT_PO ──
+async function receiveWithoutPO(ctx, payload) {
+  const { commitment_id, part_id, qty, source_type, unit_cost, vendor_name, external_reference, location_id: rawLocId, note, action_id, external_inbound_id } = payload;
+  if (!commitment_id || !part_id) throw new Error('commitment_id and part_id required');
+  const quantity = Number(qty) || 0;
+  if (quantity <= 0) throw new Error('qty must be positive');
+  if (!source_type) throw new Error('source_type required');
+
+  // IDEMPOTENCY CHECK
+  if (action_id) {
+    const dup = await checkIdempotency(ctx, action_id);
+    if (dup) {
+      console.log(`[RECEIVE_WITHOUT_PO] Idempotent duplicate: action_id=${action_id}`);
+      return { success: true, idempotent: true, action_id, message: 'Duplicate action — no new mutation.' };
+    }
+  }
+
+  const [commitment] = await ctx.base44.asServiceRole.entities.PartCommitment.filter({ id: commitment_id });
+  if (!commitment) throw new Error('Commitment not found');
+  if (commitment.part_id !== part_id) throw new Error('part_id does not match commitment');
+  const [part] = await ctx.base44.asServiceRole.entities.Part.filter({ id: part_id });
+  if (!part) throw new Error('Part not found');
+
+  const cn = readCanonical(commitment, ctx);
+  const maxReceivable = Math.max(0, cn.effective_required - cn.qty_installed - cn.reserved_from_stock);
+  if (quantity > maxReceivable + 0.001) {
+    console.warn(`[RECEIVE_WITHOUT_PO] qty=${quantity} > maxReceivable=${maxReceivable} for commitment=${commitment_id}`);
+  }
+
+  const location_id = rawLocId || await getOrCreateDefaultLocation(ctx);
+  const oldPhys = part.physical_stock ?? 0;
+  const isRestricted = ['CLIENT_SUPPLIED', 'client_supplied', 'client_shipped'].includes(source_type) || !!(commitment_id);
+  const costVal = Number(unit_cost) || 0;
+
+  if (ctx.dry_run) return { preview: { commitment_id, part_id, qty: quantity, source_type, unit_cost: costVal, restricted: isRestricted } };
+
+  // CREATE separate InventoryItem batch (preserve provenance)
+  const invItem = await ctx.base44.asServiceRole.entities.InventoryItem.create({
+    part_id,
+    location_id,
+    quantity_on_hand: quantity,
+    quantity_reserved: 0,
+    purchase_cost: costVal,
+    source_type: source_type.toLowerCase().replace(/ /g, '_'),
+    source_reference_id: external_inbound_id || null,
+    received_date: new Date().toISOString().split('T')[0],
+    notes: [vendor_name, external_reference, note].filter(Boolean).join(' — '),
+    restricted_commitment_id: isRestricted ? commitment_id : null,
+    external_inbound_id: external_inbound_id || null,
+  });
+  ctx.mutations.push({ entity: 'InventoryItem', id: invItem.id, action: 'RECEIVE_WITHOUT_PO_CREATE' });
+
+  // Recompute physical stock
+  const rr = await inlineRecompute(ctx, part_id, false);
+  ctx.mutations.push({ entity: 'Part', id: part_id, action: 'PHYSICAL_STOCK_RECOMPUTED' });
+
+  // TARGETED ALLOCATION — directly reserve to this commitment
+  const oldReserved = commitment.reserved_from_stock ?? 0;
+  const newReserved = oldReserved + quantity;
+
+  // Validate: total reserved for this part must not exceed physical
+  const allCommitments = await ctx.base44.asServiceRole.entities.PartCommitment.filter({ part_id });
+  const otherReserved = allCommitments.filter(c => c.id !== commitment_id && c.commitment_status !== 'cancelled').reduce((s, c) => s + (c.reserved_from_stock ?? 0), 0);
+  const totalAfter = otherReserved + newReserved;
+  const newPhys = rr.computed_physical_stock;
+  if (totalAfter > newPhys + 0.001) {
+    throw new Error(`TARGETED_OVER_ALLOC: totalReserved(${totalAfter}) > physical(${newPhys})`);
+  }
+
+  // Derive status
+  const totalCoverage = newReserved + cn.covered_from_po + cn.covered_from_external + cn.qty_installed;
+  let newStatus = commitment.commitment_status;
+  if (cn.qty_installed + quantity >= cn.effective_required) newStatus = 'installed';
+  else if (newReserved > 0) newStatus = 'allocated';
+  else if (cn.covered_from_po > 0 || cn.covered_from_external > 0) newStatus = 'ordered';
+
+  await ctx.base44.asServiceRole.entities.PartCommitment.update(commitment_id, {
+    reserved_from_stock: newReserved,
+    commitment_status: newStatus,
+    commitment_version: (commitment.commitment_version ?? 0) + 1,
+    last_recomputed_at: ctx.timestamp,
+  });
+  ctx.mutations.push({ entity: 'PartCommitment', id: commitment_id, action: 'RECEIVE_WITHOUT_PO' });
+
+  // Rebalance OTHER commitments (general stock only — restricted inventory already assigned)
+  await inlineRebalance(ctx, part_id, false);
+
+  // Create audit log
+  const auditLog = {
+    part_id,
+    project_id: commitment.project_id,
+    commitment_id,
+    inventory_item_id: invItem.id,
+    action_type: 'RECEIVE_WITHOUT_PO',
+    qty_delta: quantity,
+    old_qty: oldPhys,
+    new_qty: newPhys,
+    location_id,
+    notes: [source_type, vendor_name, external_reference, note].filter(Boolean).join(' — '),
+    performed_by: ctx.user.email,
+    performed_at: ctx.timestamp,
+    action_id: action_id || null,
+  };
+  await ctx.base44.asServiceRole.entities.InventoryAuditLog.create(auditLog);
+
+  // Create receipt
+  await ctx.base44.asServiceRole.entities.InventoryReceipt.create({
+    received_by: ctx.user.email,
+    received_at: ctx.timestamp,
+    notes: `Non-PO receive: ${quantity}x ${part.part_name} (${source_type}) for commitment ${commitment_id}`,
+    receipt_status: 'completed',
+  });
+
+  // Lifecycle event
+  ctx.lifecycle_events.push({
+    commitment_id,
+    event_type: 'NON_PO_RECEIVED',
+    trigger_source: 'NON_PO_RECEIVE',
+    triggered_by: ctx.user.email,
+    actor_email: ctx.user.email,
+    part_id,
+    project_id: commitment.project_id,
+    qty_delta: quantity,
+    metadata: JSON.stringify({ source_type, unit_cost: costVal, vendor_name, external_reference, restricted: isRestricted, inventory_item_id: invItem.id, action_id }),
+    event_date: ctx.timestamp,
+    action_id: action_id || null,
+  });
+
+  return {
+    success: true,
+    commitment_id,
+    part_id,
+    qty_received: quantity,
+    source_type,
+    unit_cost: costVal,
+    inventory_item_id: invItem.id,
+    old_physical_stock: oldPhys,
+    new_physical_stock: newPhys,
+    old_reserved: oldReserved,
+    new_reserved: newReserved,
+    restricted: isRestricted,
+    invalidation_context: { part_ids: [part_id], invalidateAll: true },
+  };
+}
+
+// ── RESOLVE_WITHOUT_PO ──
+async function resolveWithoutPO(ctx, commitment_ids, payload) {
+  const cid = commitment_ids?.[0];
+  if (!cid) throw new Error('commitment_id required');
+  const { qty_to_resolve, note, action_id } = payload;
+  const quantity = Number(qty_to_resolve) || 1;
+  if (quantity <= 0) throw new Error('qty must be positive');
+
+  if (action_id) {
+    const dup = await checkIdempotency(ctx, action_id);
+    if (dup) return { success: true, idempotent: true, action_id };
+  }
+
+  const [commitment] = await ctx.base44.asServiceRole.entities.PartCommitment.filter({ id: cid });
+  if (!commitment) throw new Error('Commitment not found');
+  const part_id = commitment.part_id;
+  const [part] = await ctx.base44.asServiceRole.entities.Part.filter({ id: part_id });
+  if (!part) throw new Error('Part not found');
+
+  const phys = part.physical_stock ?? 0;
+
+  // Calculate unreserved GENERAL stock (exclude restricted inventory)
+  const allInvItems = await ctx.base44.asServiceRole.entities.InventoryItem.filter({ part_id });
+  let restrictedTotal = 0;
+  for (const ii of allInvItems) {
+    if (ii.restricted_commitment_id && (ii.quantity_on_hand ?? 0) > 0) {
+      restrictedTotal += (ii.quantity_on_hand ?? 0);
+    }
+  }
+  const generalPhys = Math.max(0, phys - restrictedTotal);
+
+  const allCommitments = await ctx.base44.asServiceRole.entities.PartCommitment.filter({ part_id });
+  const totalReserved = allCommitments.filter(c => c.commitment_status !== 'cancelled').reduce((s, c) => s + (c.reserved_from_stock ?? 0), 0);
+  const unreservedGeneral = Math.max(0, generalPhys - totalReserved + restrictedTotal);
+  // More precisely: unreserved general = generalPhys - (totalReserved - restrictedReservations for those commitments)
+  // Simplified: available = phys - totalReserved (since restricted items are already counted in reserved for their commitments)
+  const available = Math.max(0, phys - totalReserved);
+
+  if (available < quantity) {
+    return {
+      success: false,
+      error: `No unreserved stock available (${available} unreserved, need ${quantity}). Use Receive Now if the physical part has not yet been entered into inventory.`,
+      available,
+      requested: quantity,
+    };
+  }
+
+  if (ctx.dry_run) return { preview: { commitment_id: cid, qty: quantity, available } };
+
+  // Targeted reservation
+  const oldReserved = commitment.reserved_from_stock ?? 0;
+  const newReserved = oldReserved + quantity;
+  const cn = readCanonical(commitment, ctx);
+
+  let newStatus = commitment.commitment_status;
+  if (newReserved > 0) newStatus = 'allocated';
+
+  await ctx.base44.asServiceRole.entities.PartCommitment.update(cid, {
+    reserved_from_stock: newReserved,
+    commitment_status: newStatus,
+    commitment_version: (commitment.commitment_version ?? 0) + 1,
+    last_recomputed_at: ctx.timestamp,
+  });
+  ctx.mutations.push({ entity: 'PartCommitment', id: cid, action: 'RESOLVE_WITHOUT_PO' });
+
+  // Audit log
+  await ctx.base44.asServiceRole.entities.InventoryAuditLog.create({
+    part_id,
+    project_id: commitment.project_id,
+    commitment_id: cid,
+    action_type: 'RECEIVE_WITHOUT_PO',
+    qty_delta: quantity,
+    notes: `Already Have It: reserved ${quantity} from existing stock. ${note || ''}`,
+    performed_by: ctx.user.email,
+    performed_at: ctx.timestamp,
+    action_id: action_id || null,
+  });
+
+  ctx.lifecycle_events.push({
+    commitment_id: cid,
+    event_type: 'RESOLVE_WITHOUT_PO',
+    trigger_source: 'USER_ACTION',
+    triggered_by: ctx.user.email,
+    actor_email: ctx.user.email,
+    part_id,
+    project_id: commitment.project_id,
+    qty_delta: quantity,
+    metadata: JSON.stringify({ resolution: 'already_in_stock', note, action_id }),
+    event_date: ctx.timestamp,
+    action_id: action_id || null,
+  });
+
+  return {
+    success: true,
+    commitment_id: cid,
+    part_id,
+    qty_resolved: quantity,
+    old_reserved: oldReserved,
+    new_reserved: newReserved,
+    physical_stock: phys,
+    message: `Reserved ${quantity} from existing stock.`,
+    invalidation_context: { part_ids: [part_id], invalidateAll: true },
+  };
+}
+
+// ── MARK_ORDERED_EXTERNALLY ──
+async function markOrderedExternally(ctx, commitment_ids, payload) {
+  const cid = commitment_ids?.[0];
+  if (!cid) throw new Error('commitment_id required');
+  const { qty, source_type, vendor_name, external_reference, eta, unit_cost, note, action_id } = payload;
+  const quantity = Number(qty) || 0;
+  if (quantity <= 0) throw new Error('qty must be positive');
+
+  if (action_id) {
+    const dup = await checkIdempotency(ctx, action_id);
+    if (dup) return { success: true, idempotent: true, action_id };
+  }
+
+  const [commitment] = await ctx.base44.asServiceRole.entities.PartCommitment.filter({ id: cid });
+  if (!commitment) throw new Error('Commitment not found');
+
+  if (ctx.dry_run) return { preview: { commitment_id: cid, qty: quantity, source_type } };
+
+  const costVal = Number(unit_cost) || 0;
+
+  // Create ExternalInbound record
+  const extRecord = await ctx.base44.asServiceRole.entities.ExternalInbound.create({
+    commitment_id: cid,
+    part_id: commitment.part_id,
+    project_id: commitment.project_id,
+    qty_ordered: quantity,
+    qty_received: 0,
+    qty_cancelled: 0,
+    source_type: source_type || 'EXTERNAL_PURCHASE',
+    vendor_name: vendor_name || null,
+    external_reference: external_reference || null,
+    eta: eta || null,
+    unit_cost: costVal,
+    extended_cost: costVal * quantity,
+    note: note || null,
+    status: 'inbound',
+    action_id: action_id || null,
+  });
+  ctx.mutations.push({ entity: 'ExternalInbound', id: extRecord.id, action: 'CREATE' });
+
+  // Recalculate covered_from_external from source records
+  const newCovExt = await recalcCoveredFromExternal(ctx, cid);
+
+  // Lifecycle event
+  ctx.lifecycle_events.push({
+    commitment_id: cid,
+    event_type: 'EXTERNAL_ORDER_RECORDED',
+    trigger_source: 'EXTERNAL_ORDER',
+    triggered_by: ctx.user.email,
+    actor_email: ctx.user.email,
+    part_id: commitment.part_id,
+    project_id: commitment.project_id,
+    qty_delta: quantity,
+    metadata: JSON.stringify({ source_type, vendor_name, external_reference, eta, unit_cost: costVal, external_inbound_id: extRecord.id, action_id }),
+    event_date: ctx.timestamp,
+    action_id: action_id || null,
+  });
+
+  // Audit log for traceability
+  await ctx.base44.asServiceRole.entities.InventoryAuditLog.create({
+    part_id: commitment.part_id,
+    project_id: commitment.project_id,
+    commitment_id: cid,
+    action_type: 'RECEIVE_WITHOUT_PO',
+    qty_delta: 0,
+    notes: `External order recorded: ${quantity}x via ${vendor_name || source_type}. Ref: ${external_reference || 'none'}. ETA: ${eta || 'unknown'}`,
+    performed_by: ctx.user.email,
+    performed_at: ctx.timestamp,
+    action_id: action_id || null,
+  });
+
+  return {
+    success: true,
+    commitment_id: cid,
+    external_inbound_id: extRecord.id,
+    qty_ordered: quantity,
+    covered_from_external: newCovExt,
+    message: `External order recorded: ${quantity} units.`,
+    invalidation_context: { part_ids: [commitment.part_id], invalidateAll: true },
+  };
+}
+
+// ── RECEIVE_EXTERNAL_INBOUND ──
+async function receiveExternalInbound(ctx, payload) {
+  const { external_inbound_id, qty_receiving, location_id: rawLocId, note, action_id } = payload;
+  if (!external_inbound_id) throw new Error('external_inbound_id required');
+  const quantity = Number(qty_receiving) || 0;
+  if (quantity <= 0) throw new Error('qty_receiving must be positive');
+
+  if (action_id) {
+    const dup = await checkIdempotency(ctx, action_id);
+    if (dup) return { success: true, idempotent: true, action_id };
+  }
+
+  const [ext] = await ctx.base44.asServiceRole.entities.ExternalInbound.filter({ id: external_inbound_id });
+  if (!ext) throw new Error('ExternalInbound record not found');
+  const remaining = Math.max(0, (ext.qty_ordered ?? 0) - (ext.qty_received ?? 0) - (ext.qty_cancelled ?? 0));
+  if (quantity > remaining + 0.001) throw new Error(`RECEIVE_OVERFLOW: ${quantity} > remaining ${remaining}`);
+
+  const [commitment] = await ctx.base44.asServiceRole.entities.PartCommitment.filter({ id: ext.commitment_id });
+  if (!commitment) throw new Error('Commitment not found');
+  const [part] = await ctx.base44.asServiceRole.entities.Part.filter({ id: ext.part_id });
+  if (!part) throw new Error('Part not found');
+
+  if (ctx.dry_run) return { preview: { external_inbound_id, qty_receiving: quantity, remaining_after: remaining - quantity } };
+
+  const location_id = rawLocId || await getOrCreateDefaultLocation(ctx);
+  const oldPhys = part.physical_stock ?? 0;
+  const costVal = ext.unit_cost ?? 0;
+
+  // Create separate InventoryItem batch
+  const invItem = await ctx.base44.asServiceRole.entities.InventoryItem.create({
+    part_id: ext.part_id,
+    location_id,
+    quantity_on_hand: quantity,
+    quantity_reserved: 0,
+    purchase_cost: costVal,
+    source_type: (ext.source_type || 'external_purchase').toLowerCase().replace(/ /g, '_'),
+    source_reference_id: external_inbound_id,
+    received_date: new Date().toISOString().split('T')[0],
+    notes: [ext.vendor_name, ext.external_reference, note].filter(Boolean).join(' — '),
+    restricted_commitment_id: ext.commitment_id,
+    external_inbound_id,
+  });
+  ctx.mutations.push({ entity: 'InventoryItem', id: invItem.id, action: 'RECEIVE_EXTERNAL_CREATE' });
+
+  // Update ExternalInbound
+  const newReceived = (ext.qty_received ?? 0) + quantity;
+  const newRemaining = Math.max(0, (ext.qty_ordered ?? 0) - newReceived - (ext.qty_cancelled ?? 0));
+  let newStatus = ext.status;
+  if (newRemaining <= 0) newStatus = 'received';
+  else if (newReceived > 0) newStatus = 'partially_received';
+
+  await ctx.base44.asServiceRole.entities.ExternalInbound.update(external_inbound_id, {
+    qty_received: newReceived,
+    status: newStatus,
+    received_at: ctx.timestamp,
+  });
+
+  // Recompute physical stock
+  const rr = await inlineRecompute(ctx, ext.part_id, false);
+
+  // Recalculate covered_from_external
+  const newCovExt = await recalcCoveredFromExternal(ctx, ext.commitment_id);
+
+  // Targeted allocation
+  const oldReserved = commitment.reserved_from_stock ?? 0;
+  const newReserved = oldReserved + quantity;
+  const cn = readCanonical(commitment, ctx);
+  let cStatus = commitment.commitment_status;
+  if (newReserved > 0) cStatus = 'allocated';
+
+  await ctx.base44.asServiceRole.entities.PartCommitment.update(ext.commitment_id, {
+    reserved_from_stock: newReserved,
+    commitment_status: cStatus,
+    commitment_version: (commitment.commitment_version ?? 0) + 1,
+    last_recomputed_at: ctx.timestamp,
+  });
+
+  // Rebalance others
+  await inlineRebalance(ctx, ext.part_id, false);
+
+  // Audit + lifecycle
+  await ctx.base44.asServiceRole.entities.InventoryAuditLog.create({
+    part_id: ext.part_id,
+    project_id: ext.project_id,
+    commitment_id: ext.commitment_id,
+    inventory_item_id: invItem.id,
+    action_type: 'RECEIVE_EXTERNAL_INBOUND',
+    qty_delta: quantity,
+    old_qty: oldPhys,
+    new_qty: rr.computed_physical_stock,
+    location_id,
+    notes: `External inbound receipt: ${quantity}x. Remaining inbound: ${newRemaining}`,
+    performed_by: ctx.user.email,
+    performed_at: ctx.timestamp,
+    action_id: action_id || null,
+    related_entity_type: 'ExternalInbound',
+    related_entity_id: external_inbound_id,
+  });
+
+  ctx.lifecycle_events.push({
+    commitment_id: ext.commitment_id,
+    event_type: 'EXTERNAL_ORDER_RECEIVED',
+    trigger_source: 'NON_PO_RECEIVE',
+    triggered_by: ctx.user.email,
+    actor_email: ctx.user.email,
+    part_id: ext.part_id,
+    project_id: ext.project_id,
+    qty_delta: quantity,
+    metadata: JSON.stringify({ external_inbound_id, qty_received: quantity, remaining: newRemaining, cost: costVal, action_id }),
+    event_date: ctx.timestamp,
+    action_id: action_id || null,
+  });
+
+  return {
+    success: true,
+    external_inbound_id,
+    commitment_id: ext.commitment_id,
+    qty_received: quantity,
+    remaining_inbound: newRemaining,
+    covered_from_external: newCovExt,
+    old_physical_stock: oldPhys,
+    new_physical_stock: rr.computed_physical_stock,
+    old_reserved: oldReserved,
+    new_reserved: newReserved,
+    invalidation_context: { part_ids: [ext.part_id], invalidateAll: true },
+  };
+}
+
+// ── CANCEL_EXTERNAL_INBOUND ──
+async function cancelExternalInbound(ctx, payload) {
+  const { external_inbound_id, qty_to_cancel, reason, action_id } = payload;
+  if (!external_inbound_id) throw new Error('external_inbound_id required');
+
+  if (action_id) {
+    const dup = await checkIdempotency(ctx, action_id);
+    if (dup) return { success: true, idempotent: true, action_id };
+  }
+
+  const [ext] = await ctx.base44.asServiceRole.entities.ExternalInbound.filter({ id: external_inbound_id });
+  if (!ext) throw new Error('ExternalInbound record not found');
+  const remaining = Math.max(0, (ext.qty_ordered ?? 0) - (ext.qty_received ?? 0) - (ext.qty_cancelled ?? 0));
+  const cancelQty = qty_to_cancel != null ? Math.min(Number(qty_to_cancel), remaining) : remaining;
+  if (cancelQty <= 0) throw new Error('Nothing to cancel');
+
+  if (ctx.dry_run) return { preview: { external_inbound_id, cancelling: cancelQty, remaining_after: remaining - cancelQty } };
+
+  const newCancelled = (ext.qty_cancelled ?? 0) + cancelQty;
+  const newRemaining = Math.max(0, (ext.qty_ordered ?? 0) - (ext.qty_received ?? 0) - newCancelled);
+  let newStatus = ext.status;
+  if (newRemaining <= 0 && (ext.qty_received ?? 0) <= 0) newStatus = 'cancelled';
+  else if (newRemaining <= 0) newStatus = 'received';
+
+  await ctx.base44.asServiceRole.entities.ExternalInbound.update(external_inbound_id, {
+    qty_cancelled: newCancelled,
+    status: newStatus,
+    cancelled_at: ctx.timestamp,
+    cancelled_by: ctx.user.email,
+    cancellation_reason: reason || null,
+  });
+
+  const newCovExt = await recalcCoveredFromExternal(ctx, ext.commitment_id);
+
+  ctx.lifecycle_events.push({
+    commitment_id: ext.commitment_id,
+    event_type: 'EXTERNAL_ORDER_CANCELLED',
+    trigger_source: 'EXTERNAL_ORDER',
+    triggered_by: ctx.user.email,
+    actor_email: ctx.user.email,
+    part_id: ext.part_id,
+    project_id: ext.project_id,
+    qty_delta: -cancelQty,
+    metadata: JSON.stringify({ external_inbound_id, qty_cancelled: cancelQty, reason, action_id }),
+    event_date: ctx.timestamp,
+    action_id: action_id || null,
+  });
+
+  return {
+    success: true,
+    external_inbound_id,
+    commitment_id: ext.commitment_id,
+    qty_cancelled: cancelQty,
+    covered_from_external: newCovExt,
+    message: `Cancelled ${cancelQty} external inbound units.`,
+    invalidation_context: { part_ids: [ext.part_id], invalidateAll: true },
   };
 }
 

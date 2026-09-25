@@ -31,7 +31,12 @@
     "covered_from_po": {
       "type": "number",
       "default": 0,
-      "description": "CANONICAL: Quantity covered by purchase orders (ordered - received goes here until received)"
+      "description": "CANONICAL: Quantity covered by AK Purchase Orders only (ordered - received goes here until received)"
+    },
+    "covered_from_external": {
+      "type": "number",
+      "default": 0,
+      "description": "CANONICAL: Quantity covered by non-AK-PO external orders (inbound but not yet physical). Recalculated from ExternalInbound records after each mutation."
     },
     "qty_installed": {
       "type": "number",

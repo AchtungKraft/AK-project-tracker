@@ -33,7 +33,16 @@
         "ADDED_TO_ORDER_QUEUE_MANUAL",
         "REMOVED_FROM_ORDER_QUEUE",
         "ACTION_UNDONE",
-        "DRIFT_REPAIRED"
+        "DRIFT_REPAIRED",
+        "PO_RECEIVED_CONVERT",
+        "PO_DELETED",
+        "AUTO_RESERVE",
+        "REVERSE_INSTALL",
+        "EXTERNAL_ORDER_RECORDED",
+        "EXTERNAL_ORDER_RECEIVED",
+        "EXTERNAL_ORDER_CANCELLED",
+        "NON_PO_RECEIVED",
+        "RESOLVE_WITHOUT_PO"
       ],
       "description": "Type of lifecycle event"
     },
@@ -79,7 +88,9 @@
         "QTY_MUTATION",
         "COVERAGE_ACTION",
         "UNDO_ACTION",
-        "UNIFIED_ENGINE"
+        "UNIFIED_ENGINE",
+        "NON_PO_RECEIVE",
+        "EXTERNAL_ORDER"
       ],
       "description": "What triggered this event"
     },
@@ -153,6 +164,10 @@
     "undone_by_event_id": {
       "type": "string",
       "description": "Reference to the ACTION_UNDONE event that reversed this"
+    },
+    "action_id": {
+      "type": "string",
+      "description": "Idempotency key linking to the originating action"
     }
   },
   "required": [

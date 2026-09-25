@@ -1,0 +1,109 @@
+{
+  "name": "ExternalInbound",
+  "type": "object",
+  "properties": {
+    "commitment_id": {
+      "type": "string",
+      "description": "Reference to PartCommitment this inbound covers"
+    },
+    "part_id": {
+      "type": "string",
+      "description": "Reference to Part (denormalized for queries)"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project (denormalized for queries)"
+    },
+    "qty_ordered": {
+      "type": "number",
+      "default": 0,
+      "description": "Quantity ordered/expected externally"
+    },
+    "qty_received": {
+      "type": "number",
+      "default": 0,
+      "description": "Quantity physically received so far"
+    },
+    "qty_cancelled": {
+      "type": "number",
+      "default": 0,
+      "description": "Quantity cancelled from this external order"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "CLIENT_SUPPLIED",
+        "EXTERNAL_PURCHASE",
+        "VENDOR_SUPPLIED",
+        "CASH_PURCHASE",
+        "OTHER"
+      ],
+      "default": "EXTERNAL_PURCHASE",
+      "description": "Acquisition source classification"
+    },
+    "vendor_name": {
+      "type": "string",
+      "description": "Free-text vendor/supplier name"
+    },
+    "external_reference": {
+      "type": "string",
+      "description": "External order number, tracking, invoice reference"
+    },
+    "eta": {
+      "type": "string",
+      "format": "date",
+      "description": "Expected arrival date"
+    },
+    "unit_cost": {
+      "type": "number",
+      "description": "Acquisition cost per unit (0 for client-supplied)"
+    },
+    "extended_cost": {
+      "type": "number",
+      "description": "unit_cost \u00d7 qty_ordered"
+    },
+    "note": {
+      "type": "string",
+      "description": "Free-text notes"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "inbound",
+        "partially_received",
+        "received",
+        "cancelled"
+      ],
+      "default": "inbound",
+      "description": "Lifecycle status of this external inbound record"
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When last receipt occurred"
+    },
+    "cancelled_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When cancellation occurred"
+    },
+    "cancelled_by": {
+      "type": "string",
+      "description": "User who cancelled"
+    },
+    "cancellation_reason": {
+      "type": "string",
+      "description": "Reason for cancellation"
+    },
+    "action_id": {
+      "type": "string",
+      "description": "Idempotency key for the creation action"
+    }
+  },
+  "required": [
+    "commitment_id",
+    "part_id",
+    "qty_ordered",
+    "source_type"
+  ]
+}

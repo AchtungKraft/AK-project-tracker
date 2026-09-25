@@ -36,7 +36,9 @@
         "ADD_STOCK",
         "REMOVE_STOCK",
         "ADJUST_STOCK_ADD",
-        "ADJUST_STOCK_REMOVE"
+        "ADJUST_STOCK_REMOVE",
+        "RECEIVE_WITHOUT_PO",
+        "RECEIVE_EXTERNAL_INBOUND"
       ],
       "description": "Type of action performed"
     },
@@ -103,11 +105,15 @@
     },
     "related_entity_type": {
       "type": "string",
-      "description": "Type of related entity (e.g., VendorInvoice, Order)"
+      "description": "Type of related entity (e.g., VendorInvoice, Order, ExternalInbound)"
     },
     "related_entity_id": {
       "type": "string",
       "description": "ID of related entity"
+    },
+    "action_id": {
+      "type": "string",
+      "description": "Idempotency key \u2014 if set, duplicate action_id submissions are rejected"
     }
   },
   "required": [

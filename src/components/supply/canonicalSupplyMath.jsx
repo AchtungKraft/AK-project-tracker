@@ -65,9 +65,10 @@ export function readCanonicalQty(c, options = {}) {
   const effective_required = Math.max(0, required_total - qty_removed);
   const reserved_from_stock = c.reserved_from_stock ?? 0;
   const covered_from_po = c.covered_from_po ?? 0;
+  const covered_from_external = c.covered_from_external ?? 0;
   const qty_installed = c.qty_installed ?? 0;
 
-  const coverage_total = reserved_from_stock + covered_from_po + qty_installed;
+  const coverage_total = reserved_from_stock + covered_from_po + covered_from_external + qty_installed;
   
   // AK STOCK legacy PROJECT holding records: ZERO demand
   const isLegacyHolding = options.isAkStockLegacy === true;
@@ -84,6 +85,7 @@ export function readCanonicalQty(c, options = {}) {
     effective_required,
     reserved_from_stock,
     covered_from_po,
+    covered_from_external,
     qty_installed,
     coverage_total,
     to_order,
@@ -111,6 +113,7 @@ export function aggregatePartSupply(commitments) {
   let reserved_total = 0;
   let required_total = 0;
   let on_order = 0;
+  let external_inbound = 0;
   let to_order = 0;
   let installed_total = 0;
 
@@ -119,11 +122,12 @@ export function aggregatePartSupply(commitments) {
     reserved_total += q.reserved_from_stock;
     required_total += q.required_total;
     on_order += q.covered_from_po;
+    external_inbound += q.covered_from_external;
     to_order += q.to_order;
     installed_total += q.qty_installed;
   }
 
-  return { reserved_total, required_total, on_order, to_order, installed_total };
+  return { reserved_total, required_total, on_order, external_inbound, to_order, installed_total };
 }
 
 /**

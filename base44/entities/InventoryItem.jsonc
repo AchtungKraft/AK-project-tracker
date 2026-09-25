@@ -57,9 +57,12 @@
         "material_conversion",
         "manual_entry",
         "client_supplied",
-        "vehicle_removed"
+        "vehicle_removed",
+        "external_purchase",
+        "vendor_supplied_no_po",
+        "cash_purchase"
       ],
-      "description": "Origin type for provenance tracking (Phase 1)"
+      "description": "Origin type for provenance tracking"
     },
     "source_reference_id": {
       "type": "string",
@@ -73,6 +76,14 @@
     "material_instance_id": {
       "type": "string",
       "description": "Optional reference to MaterialInstance for unique physical part tracking (Phase 1 Stabilization)"
+    },
+    "restricted_commitment_id": {
+      "type": "string",
+      "description": "If set, this inventory quantity is restricted exclusively to this PartCommitment. Null = general/fungible inventory. Used for client-supplied and project-specific non-PO receipts."
+    },
+    "external_inbound_id": {
+      "type": "string",
+      "description": "Reference to ExternalInbound record if this batch came from external receiving"
     }
   },
   "required": [

@@ -309,6 +309,51 @@ export async function refreshForGenericSupply(queryClient, rawCtx, result = {}) 
 /**
  * Route to the correct tiered refresh based on action_type
  */
+/**
+ * RECEIVE_WITHOUT_PO / RECEIVE_EXTERNAL_INBOUND: Tier 1 + Tier 3
+ * Physical inventory changes but no PO involvement
+ */
+export async function refreshForNonPOReceive(queryClient, rawCtx, result = {}) {
+  const ctx = normalizeCtx(rawCtx);
+  const invalidations = [
+    ...tier1CoreSupply(queryClient, ctx),
+    ...tier3Inventory(queryClient, ctx),
+    // Also invalidate external inbound queries
+    queryClient.invalidateQueries({ queryKey: ['externalInbound'] }),
+  ];
+  await Promise.all(invalidations);
+  const refetches = [...tier1Refetches(queryClient, ctx)];
+  await Promise.all(refetches);
+  bumpSupplyStateVersion('refreshForNonPOReceive');
+}
+
+/**
+ * MARK_ORDERED_EXTERNALLY / CANCEL_EXTERNAL_INBOUND: Tier 1 only (no physical change)
+ */
+export async function refreshForExternalOrder(queryClient, rawCtx, result = {}) {
+  const ctx = normalizeCtx(rawCtx);
+  const invalidations = [
+    ...tier1CoreSupply(queryClient, ctx),
+    queryClient.invalidateQueries({ queryKey: ['externalInbound'] }),
+  ];
+  await Promise.all(invalidations);
+  const refetches = [...tier1Refetches(queryClient, ctx)];
+  await Promise.all(refetches);
+  bumpSupplyStateVersion('refreshForExternalOrder');
+}
+
+/**
+ * RESOLVE_WITHOUT_PO: Tier 1 only (no physical change, just reservation)
+ */
+export async function refreshForResolve(queryClient, rawCtx, result = {}) {
+  const ctx = normalizeCtx(rawCtx);
+  const invalidations = [...tier1CoreSupply(queryClient, ctx)];
+  await Promise.all(invalidations);
+  const refetches = [...tier1Refetches(queryClient, ctx)];
+  await Promise.all(refetches);
+  bumpSupplyStateVersion('refreshForResolve');
+}
+
 export function getTieredRefresh(actionType) {
   switch (actionType) {
     case 'CREATE_PO':
@@ -321,6 +366,14 @@ export function getTieredRefresh(actionType) {
       return refreshForInstall;
     case 'ADJUST_STOCK':
       return refreshForAdjustStock;
+    case 'RECEIVE_WITHOUT_PO':
+    case 'RECEIVE_EXTERNAL_INBOUND':
+      return refreshForNonPOReceive;
+    case 'MARK_ORDERED_EXTERNALLY':
+    case 'CANCEL_EXTERNAL_INBOUND':
+      return refreshForExternalOrder;
+    case 'RESOLVE_WITHOUT_PO':
+      return refreshForResolve;
     default:
       return refreshForGenericSupply;
   }

@@ -10,56 +10,66 @@ import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Loader2, CheckCircle2, Package, Truck, Wrench, User, AlertTriangle } from "lucide-react";
+import { Loader2, CheckCircle2, Package, Truck, Wrench, XCircle } from "lucide-react";
 import { base44 } from "@/api/base44Client";
-import { toast } from "sonner";
+import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 
 /**
  * ResolveNeedModal — Unified "Resolve Need Without PO" modal
- * 
+ *
  * Routes through executeSupplyAction with:
- * - RESOLVE_WITHOUT_PO (client supplied, shop supplied, already in stock, etc.)
- * - MARK_ORDERED_EXTERNALLY (ordered outside system)
+ * - RESOLVE_WITHOUT_PO (already have it — stock exists)
  * - RECEIVE_WITHOUT_PO (receive into inventory without PO)
- * 
- * CANONICAL: All mutations go through executeSupplyAction. No direct entity writes.
+ * - MARK_ORDERED_EXTERNALLY (ordered outside system — not here yet)
  */
 
 const RESOLUTION_MODES = [
-  { value: 'resolve', label: 'Already Have It', description: 'Part is on hand — no purchase needed', icon: CheckCircle2, color: 'text-emerald-400' },
-  { value: 'external_order', label: 'Ordered Elsewhere', description: 'Ordered outside this system — mark as on its way', icon: Truck, color: 'text-blue-400' },
-  { value: 'receive', label: 'Receive Now', description: 'Receive into inventory without a PO', icon: Package, color: 'text-yellow-400' },
-];
-
-const RESOLUTION_TYPES = [
-  { value: 'client_supplied', label: 'Client Supplied', description: 'Client provided this part' },
-  { value: 'already_in_stock', label: 'Already In Stock', description: 'Found on shelf' },
-  { value: 'shop_supplied', label: 'Shop Supplied', description: 'Using existing shop stock' },
-  { value: 'local_purchase', label: 'Local Purchase', description: 'Bought locally (cash/card)' },
-  { value: 'externally_purchased', label: 'Externally Purchased', description: 'Ordered outside this system' },
-  { value: 'vendor_warranty', label: 'Vendor Warranty', description: 'Warranty replacement' },
-  { value: 'inventory_correction', label: 'Inventory Correction', description: 'Count correction' },
+  { value: 'resolve', label: 'Already Have It', description: 'Part is in existing stock — just reserve it', icon: CheckCircle2, color: 'text-emerald-400' },
+  { value: 'receive', label: 'Receive Now', description: 'Part is here physically — receive into inventory', icon: Package, color: 'text-yellow-400' },
+  { value: 'external_order', label: 'Ordered Elsewhere', description: 'Ordered outside AK PO — not arrived yet', icon: Truck, color: 'text-blue-400' },
 ];
 
 const RECEIVE_SOURCE_TYPES = [
-  { value: 'client_shipped', label: 'Client Shipped' },
-  { value: 'walk_in_purchase', label: 'Walk-in Purchase' },
-  { value: 'emergency_sourcing', label: 'Emergency Sourcing' },
-  { value: 'shelf_stock_found', label: 'Shelf Stock Found' },
-  { value: 'manual_receive', label: 'Manual Receive' },
+  { value: 'CLIENT_SUPPLIED', label: 'Client Supplied', showCost: false },
+  { value: 'EXTERNAL_PURCHASE', label: 'External Purchase', showCost: true },
+  { value: 'CASH_PURCHASE', label: 'Cash Purchase', showCost: true },
+  { value: 'VENDOR_SUPPLIED', label: 'Vendor Supplied (no PO)', showCost: true },
+  { value: 'OTHER', label: 'Other', showCost: true },
 ];
+
+const EXTERNAL_SOURCE_TYPES = [
+  { value: 'CLIENT_SUPPLIED', label: 'Client Shipping' },
+  { value: 'EXTERNAL_PURCHASE', label: 'External Purchase' },
+  { value: 'VENDOR_SUPPLIED', label: 'Vendor Supplied' },
+  { value: 'CASH_PURCHASE', label: 'Cash Purchase' },
+  { value: 'OTHER', label: 'Other' },
+];
+
+function generateActionId() {
+  return `act_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
 
 export default function ResolveNeedModal({ open, onClose, item, onSuccess }) {
   const [mode, setMode] = useState('resolve');
-  const [resolutionType, setResolutionType] = useState('already_in_stock');
-  const [receiveSourceType, setReceiveSourceType] = useState('manual_receive');
   const [qty, setQty] = useState(item?.to_order ?? 1);
   const [note, setNote] = useState('');
+  // Receive Now fields
+  const [receiveSource, setReceiveSource] = useState('EXTERNAL_PURCHASE');
+  const [unitCost, setUnitCost] = useState('');
   const [vendorName, setVendorName] = useState('');
-  const [eta, setEta] = useState('');
-  const [externalOrderNumber, setExternalOrderNumber] = useState('');
+  const [externalRef, setExternalRef] = useState('');
+  // Ordered Elsewhere fields
+  const [extSource, setExtSource] = useState('EXTERNAL_PURCHASE');
+  const [extQty, setExtQty] = useState(item?.to_order ?? 1);
+  const [extCost, setExtCost] = useState('');
+  const [extVendor, setExtVendor] = useState('');
+  const [extRef, setExtRef] = useState('');
+  const [extEta, setExtEta] = useState('');
+
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [actionId] = useState(() => generateActionId());
+  const { toast } = useToast();
 
   if (!item) return null;
 
@@ -68,45 +78,65 @@ export default function ResolveNeedModal({ open, onClose, item, onSuccess }) {
   const projectName = item.project_name || 'Unknown Project';
   const gap = item.to_order ?? 0;
 
-  const handleSubmit = async () => {
-    if (qty <= 0) { toast.error('Quantity must be positive'); return; }
-    setIsSubmitting(true);
+  const showCost = RECEIVE_SOURCE_TYPES.find(s => s.value === receiveSource)?.showCost ?? true;
 
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
     try {
-      let actionType, payload;
+      let invokePayload;
 
       if (mode === 'resolve') {
-        actionType = 'RESOLVE_WITHOUT_PO';
-        payload = {
-          action_type: actionType,
+        if (qty <= 0) { toast({ title: 'Quantity must be positive', variant: 'destructive' }); return; }
+        invokePayload = {
+          action_type: 'RESOLVE_WITHOUT_PO',
           commitment_ids: [commitmentId],
-          payload: { resolution_type: resolutionType, qty_to_resolve: qty, note, allocate_inventory: true },
+          payload: { qty_to_resolve: qty, note, action_id: actionId },
         };
-      } else if (mode === 'external_order') {
-        actionType = 'MARK_ORDERED_EXTERNALLY';
-        payload = {
-          action_type: actionType,
-          commitment_ids: [commitmentId],
-          payload: { vendor_name: vendorName, eta, external_order_number: externalOrderNumber, note },
+      } else if (mode === 'receive') {
+        if (qty <= 0) { toast({ title: 'Quantity must be positive', variant: 'destructive' }); return; }
+        invokePayload = {
+          action_type: 'RECEIVE_WITHOUT_PO',
+          payload: {
+            commitment_id: commitmentId,
+            part_id: item.part_id,
+            qty,
+            source_type: receiveSource,
+            unit_cost: showCost ? (Number(unitCost) || 0) : 0,
+            vendor_name: vendorName || null,
+            external_reference: externalRef || null,
+            note,
+            action_id: actionId,
+          },
         };
       } else {
-        actionType = 'RECEIVE_WITHOUT_PO';
-        payload = {
-          action_type: actionType,
-          payload: { part_id: item.part_id, qty, commitment_id: commitmentId, note, source_type: receiveSourceType },
+        if (extQty <= 0) { toast({ title: 'Quantity must be positive', variant: 'destructive' }); return; }
+        invokePayload = {
+          action_type: 'MARK_ORDERED_EXTERNALLY',
+          commitment_ids: [commitmentId],
+          payload: {
+            qty: extQty,
+            source_type: extSource,
+            unit_cost: Number(extCost) || 0,
+            vendor_name: extVendor || null,
+            external_reference: extRef || null,
+            eta: extEta || null,
+            note,
+            action_id: actionId,
+          },
         };
       }
 
-      const response = await base44.functions.invoke('executeSupplyAction', payload);
-      if (response.data?.success || response.data?.results) {
-        toast.success(response.data?.message || 'Done — need resolved.');
+      const response = await base44.functions.invoke('executeSupplyAction', invokePayload);
+      const data = response.data || response;
+      if (data.success) {
+        toast({ title: data.message || 'Need resolved successfully' });
         onSuccess?.();
         onClose();
       } else {
-        toast.error(response.data?.error || 'Failed to resolve');
+        toast({ title: data.error || 'Failed to resolve', variant: 'destructive' });
       }
     } catch (error) {
-      toast.error(error.message || 'Action failed');
+      toast({ title: error.message || 'Action failed', variant: 'destructive' });
     } finally {
       setIsSubmitting(false);
     }
@@ -150,62 +180,24 @@ export default function ResolveNeedModal({ open, onClose, item, onSuccess }) {
             })}
           </div>
 
-          {/* Mode-specific fields */}
+          {/* ── ALREADY HAVE IT ── */}
           {mode === 'resolve' && (
             <div className="space-y-3">
               <div>
-                <Label className="text-gray-400 text-xs">Resolution Type</Label>
-                <Select value={resolutionType} onValueChange={setResolutionType}>
-                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {RESOLUTION_TYPES.map(t => (
-                      <SelectItem key={t.value} value={t.value}>
-                        <div>
-                          <span>{t.label}</span>
-                          <span className="text-gray-500 ml-2 text-xs">— {t.description}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-gray-400 text-xs">Quantity to Resolve</Label>
+                <Label className="text-gray-400 text-xs">Quantity to Reserve</Label>
                 <Input type="number" value={qty} onChange={e => setQty(Number(e.target.value))} min={1} max={gap || 999}
                   className="bg-gray-800 border-gray-700 text-white mt-1" />
               </div>
+              <p className="text-[11px] text-gray-500">Reserves existing general stock for this commitment. No new inventory is created.</p>
             </div>
           )}
 
-          {mode === 'external_order' && (
-            <div className="space-y-3">
-              <div>
-                <Label className="text-gray-400 text-xs">Vendor / Supplier Name</Label>
-                <Input value={vendorName} onChange={e => setVendorName(e.target.value)} placeholder="e.g. Pelican Parts"
-                  className="bg-gray-800 border-gray-700 text-white mt-1" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-gray-400 text-xs">External Order #</Label>
-                  <Input value={externalOrderNumber} onChange={e => setExternalOrderNumber(e.target.value)} placeholder="Optional"
-                    className="bg-gray-800 border-gray-700 text-white mt-1" />
-                </div>
-                <div>
-                  <Label className="text-gray-400 text-xs">Expected ETA</Label>
-                  <Input type="date" value={eta} onChange={e => setEta(e.target.value)}
-                    className="bg-gray-800 border-gray-700 text-white mt-1" />
-                </div>
-              </div>
-            </div>
-          )}
-
+          {/* ── RECEIVE NOW ── */}
           {mode === 'receive' && (
             <div className="space-y-3">
               <div>
-                <Label className="text-gray-400 text-xs">Source Type</Label>
-                <Select value={receiveSourceType} onValueChange={setReceiveSourceType}>
+                <Label className="text-gray-400 text-xs">Source</Label>
+                <Select value={receiveSource} onValueChange={setReceiveSource}>
                   <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1">
                     <SelectValue />
                   </SelectTrigger>
@@ -216,9 +208,78 @@ export default function ResolveNeedModal({ open, onClose, item, onSuccess }) {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-gray-400 text-xs">Quantity</Label>
+                  <Input type="number" value={qty} onChange={e => setQty(Number(e.target.value))} min={1}
+                    className="bg-gray-800 border-gray-700 text-white mt-1" />
+                </div>
+                {showCost && (
+                  <div>
+                    <Label className="text-gray-400 text-xs">Unit Cost ($)</Label>
+                    <Input type="number" value={unitCost} onChange={e => setUnitCost(e.target.value)} min={0} step="0.01" placeholder="0.00"
+                      className="bg-gray-800 border-gray-700 text-white mt-1" />
+                  </div>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-gray-400 text-xs">Vendor / Source</Label>
+                  <Input value={vendorName} onChange={e => setVendorName(e.target.value)} placeholder="Optional"
+                    className="bg-gray-800 border-gray-700 text-white mt-1" />
+                </div>
+                <div>
+                  <Label className="text-gray-400 text-xs">Reference #</Label>
+                  <Input value={externalRef} onChange={e => setExternalRef(e.target.value)} placeholder="Optional"
+                    className="bg-gray-800 border-gray-700 text-white mt-1" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── ORDERED ELSEWHERE ── */}
+          {mode === 'external_order' && (
+            <div className="space-y-3">
               <div>
-                <Label className="text-gray-400 text-xs">Quantity to Receive</Label>
-                <Input type="number" value={qty} onChange={e => setQty(Number(e.target.value))} min={1}
+                <Label className="text-gray-400 text-xs">Source</Label>
+                <Select value={extSource} onValueChange={setExtSource}>
+                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EXTERNAL_SOURCE_TYPES.map(t => (
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-gray-400 text-xs">Quantity</Label>
+                  <Input type="number" value={extQty} onChange={e => setExtQty(Number(e.target.value))} min={1}
+                    className="bg-gray-800 border-gray-700 text-white mt-1" />
+                </div>
+                <div>
+                  <Label className="text-gray-400 text-xs">Unit Cost ($)</Label>
+                  <Input type="number" value={extCost} onChange={e => setExtCost(e.target.value)} min={0} step="0.01" placeholder="If known"
+                    className="bg-gray-800 border-gray-700 text-white mt-1" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-gray-400 text-xs">Vendor / Supplier</Label>
+                  <Input value={extVendor} onChange={e => setExtVendor(e.target.value)} placeholder="e.g. Pelican Parts"
+                    className="bg-gray-800 border-gray-700 text-white mt-1" />
+                </div>
+                <div>
+                  <Label className="text-gray-400 text-xs">Reference #</Label>
+                  <Input value={extRef} onChange={e => setExtRef(e.target.value)} placeholder="Order / tracking #"
+                    className="bg-gray-800 border-gray-700 text-white mt-1" />
+                </div>
+              </div>
+              <div>
+                <Label className="text-gray-400 text-xs">Expected Arrival</Label>
+                <Input type="date" value={extEta} onChange={e => setExtEta(e.target.value)}
                   className="bg-gray-800 border-gray-700 text-white mt-1" />
               </div>
             </div>
@@ -239,7 +300,7 @@ export default function ResolveNeedModal({ open, onClose, item, onSuccess }) {
           <Button onClick={handleSubmit} disabled={isSubmitting}
             className="bg-emerald-600 hover:bg-emerald-700 text-white">
             {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-            {mode === 'resolve' ? 'Confirm' : mode === 'external_order' ? 'Mark Ordered' : 'Receive'}
+            {mode === 'resolve' ? 'Reserve Stock' : mode === 'receive' ? 'Receive' : 'Mark Ordered'}
           </Button>
         </DialogFooter>
       </DialogContent>
