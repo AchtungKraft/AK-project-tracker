@@ -26,13 +26,8 @@ export function useViewReconciliation({ savedViews, activeViewName, filters, app
     // Only reconcile once per component mount
     if (reconciledRef.current) return;
 
-    // Wait until savedViews are loaded from DB (more than just the default)
-    // If user has no saved views at all, savedViews will still be length 1 (the default).
-    // We detect DB readiness by checking if we've seen an async render —
-    // the default view "All Projects" needs no reconciliation anyway.
+    // "All Projects" means selectedTypes=[] — which is the default.
     if (activeViewName === 'All Projects') {
-      // "All Projects" means selectedTypes=[] — which is the default.
-      // If localStorage has stale selectedTypes, clear them.
       if (filters.selectedTypes && filters.selectedTypes.length > 0) {
         applyView({ selectedTypes: [], statusFilter: filters.statusFilter || 'all' });
       }
@@ -43,32 +38,34 @@ export function useViewReconciliation({ savedViews, activeViewName, filters, app
     // Active view is not "All Projects" — find it in savedViews
     const view = savedViews.find(v => v.name === activeViewName);
     if (!view) {
-      // View not yet loaded from DB (savedViews is still just [default]).
-      // Wait for the next render when the query resolves.
-      // But if savedViews has more than 1 entry and still no match,
-      // the view was deleted — fall back to All Projects.
+      // savedViews hasn't loaded from DB yet (only the default entry).
+      // Once DB views arrive savedViews.length > 1, so if the view is
+      // still missing the name was deleted — fall back.
       if (savedViews.length > 1) {
         applyView({ selectedTypes: [], statusFilter: 'all' });
         reconciledRef.current = true;
       }
+      // Don't set reconciledRef — wait for the DB query to populate savedViews
       return;
     }
 
-    // View found — compare its selectedTypes with the current filter state
+    // View found — always apply its canonical filters on mount.
+    // This fixes the split-brain where localStorage selectedTypes is stale.
+    // We compare first to avoid a no-op re-render when already in sync.
     const viewTypes = view.selectedTypes || [];
     const currentTypes = filters.selectedTypes || [];
 
-    const needsReconciliation =
-      viewTypes.length !== currentTypes.length ||
-      !viewTypes.every(t => currentTypes.includes(t));
+    const typesInSync =
+      viewTypes.length === currentTypes.length &&
+      viewTypes.every(t => currentTypes.includes(t));
 
-    const statusNeedsReconciliation =
-      (view.statusFilter || 'all') !== (filters.statusFilter || 'all');
+    const statusInSync =
+      (view.statusFilter || 'all') === (filters.statusFilter || 'all');
 
-    if (needsReconciliation || statusNeedsReconciliation) {
+    if (!typesInSync || !statusInSync) {
       applyView(view);
     }
 
     reconciledRef.current = true;
-  }, [savedViews, activeViewName, filters.selectedTypes, filters.statusFilter, applyView]);
+  }, [savedViews, activeViewName, filters, applyView]);
 }
