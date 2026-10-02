@@ -32,6 +32,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSavedProjectViews } from "@/components/common/useSavedProjectViews";
 import SavedViewsSelector from "@/components/common/SavedViewsSelector";
 import { useFilterState, DASHBOARD_DEFAULTS } from "@/components/common/useFilterState";
+import { useViewReconciliation } from "@/components/common/useViewReconciliation";
 import { operationalDataConfig, referenceDataConfig } from "@/components/common/queryConfig";
 
 export default function Dashboard() {
@@ -66,6 +67,9 @@ export default function Dashboard() {
     renameView,
     selectView,
   } = useSavedProjectViews();
+
+  // Reconcile view label ↔ actual filter state on mount/hydration
+  useViewReconciliation({ savedViews, activeViewName, filters, applyView });
 
   // Handle saved view selection - apply filters immediately
   const handleSelectView = useCallback((name) => {

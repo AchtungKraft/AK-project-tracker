@@ -37,6 +37,7 @@ import WeeklyWorkloadView from "../components/priorities/WeeklyWorkloadView";
 import { useSavedProjectViews } from "@/components/common/useSavedProjectViews";
 import SavedViewsSelector from "@/components/common/SavedViewsSelector";
 import { useFilterState, PRIORITY_DEFAULTS } from "@/components/common/useFilterState";
+import { useViewReconciliation } from "@/components/common/useViewReconciliation";
 import { useTaskData } from "../components/tasks/useTaskData";
 import { computePartsProgressByTaskId } from "@/utils/taskPartsProgress";
 import { sortTasksByPriority, isUrgentPriority } from "@/utils/taskPrioritySort";
@@ -141,6 +142,9 @@ export default function PriorityDashboard() {
     renameView,
     selectView,
   } = useSavedProjectViews();
+
+  // Reconcile view label ↔ actual filter state on mount/hydration
+  useViewReconciliation({ savedViews, activeViewName, filters, applyView });
 
   // Handle saved view selection - apply filters immediately
   const handleSelectView = useCallback((name) => {
