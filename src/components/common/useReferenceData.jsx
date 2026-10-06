@@ -152,22 +152,22 @@ export function useReferenceData(options = {}) {
 
   // Determine ready state
   const isLoading = 
-    categoriesQuery.isLoading ||
-    vendorsQuery.isLoading ||
-    makesQuery.isLoading ||
-    modelsQuery.isLoading ||
-    yearsQuery.isLoading ||
-    locationsQuery.isLoading ||
-    vendorGroupsQuery.isLoading;
+    (includeCategories && categoriesQuery.isLoading) ||
+    (includeVendors && vendorsQuery.isLoading) ||
+    (includeMakes && makesQuery.isLoading) ||
+    (includeModels && modelsQuery.isLoading) ||
+    (includeYears && yearsQuery.isLoading) ||
+    (includeLocations && locationsQuery.isLoading) ||
+    (includeVendorGroups && vendorGroupsQuery.isLoading);
 
   const isError = 
-    categoriesQuery.isError ||
-    vendorsQuery.isError ||
-    makesQuery.isError ||
-    modelsQuery.isError ||
-    yearsQuery.isError ||
-    locationsQuery.isError ||
-    vendorGroupsQuery.isError;
+    (includeCategories && categoriesQuery.isError) ||
+    (includeVendors && vendorsQuery.isError) ||
+    (includeMakes && makesQuery.isError) ||
+    (includeModels && modelsQuery.isError) ||
+    (includeYears && yearsQuery.isError) ||
+    (includeLocations && locationsQuery.isError) ||
+    (includeVendorGroups && vendorGroupsQuery.isError);
 
   const error = 
     categoriesQuery.error ||
@@ -180,13 +180,13 @@ export function useReferenceData(options = {}) {
 
   // Ready = all queries succeeded and have data
   const ready = 
-    categoriesQuery.isSuccess &&
-    vendorsQuery.isSuccess &&
-    makesQuery.isSuccess &&
-    modelsQuery.isSuccess &&
-    yearsQuery.isSuccess &&
-    locationsQuery.isSuccess &&
-    vendorGroupsQuery.isSuccess;
+    (!includeCategories || categoriesQuery.isSuccess) &&
+    (!includeVendors || vendorsQuery.isSuccess) &&
+    (!includeMakes || makesQuery.isSuccess) &&
+    (!includeModels || modelsQuery.isSuccess) &&
+    (!includeYears || yearsQuery.isSuccess) &&
+    (!includeLocations || locationsQuery.isSuccess) &&
+    (!includeVendorGroups || vendorGroupsQuery.isSuccess);
 
   // Raw data arrays (with fallback to empty arrays)
   const categories = categoriesQuery.data ?? [];
