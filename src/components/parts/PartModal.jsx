@@ -32,6 +32,7 @@ import PartVendorSourcesSection from "./PartVendorSourcesSection";
 import LocationSelect from "@/components/common/LocationSelect";
 import RecursiveCategorySelect from "./RecursiveCategorySelect";
 import { getCategoryPathLabel } from "@/lib/categoryTreeHelpers";
+import { useReferenceData } from "@/components/common/useReferenceData";
 import AdjustInventoryModal from "../inventory/AdjustInventoryModal";
 import AddToBuildModal from "./AddToBuildModal";
 // forceAppRefresh removed — PartModal now uses targeted invalidation only
@@ -246,78 +247,16 @@ export default function PartModal({ part, partId, onClose }) {
     }
   }, [formData?.cost, formData?.pricing_mode]);
 
-  // PHASE 2: Use centralized reference data via useReferenceData hook
-  // This prevents duplicate fetches and provides O(1) lookups
-  // Note: Import moved to top of file, we'll use the data directly
-  // For PartModal we still use local queries but with extended caching from queryConfig
-  const refDataOptions = {
-    staleTime: 300000,  // 5 minutes - aligned with referenceDataConfig
-    gcTime: 600000,     // 10 minutes
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    refetchOnMount: false,
-    retry: 0, // Reference data: no retry, just use cache
-  };
-
-  const { data: categories = [] } = useQuery({
-    queryKey: ['referenceData', 'partCategories'],
-    queryFn: async () => {
-      const list = await base44.entities.PartCategory.list();
-      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-    },
-    enabled: isOpen,
-    ...refDataOptions,
-  });
-
-  const { data: vendors = [] } = useQuery({
-    queryKey: ['referenceData', 'vendors'],
-    queryFn: async () => {
-      const list = await base44.entities.Vendor.list();
-      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-    },
-    enabled: isOpen,
-    ...refDataOptions,
-  });
-
-  const { data: locations = [] } = useQuery({
-    queryKey: ['referenceData', 'locations'],
-    queryFn: async () => {
-      const list = await base44.entities.Location.list();
-      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-    },
-    enabled: isOpen,
-    ...refDataOptions,
-  });
-
-  const { data: makes = [] } = useQuery({
-    queryKey: ['referenceData', 'carMakes'],
-    queryFn: async () => {
-      const list = await base44.entities.CarMake.list();
-      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-    },
-    enabled: isOpen,
-    ...refDataOptions,
-  });
-
-  const { data: models = [] } = useQuery({
-    queryKey: ['referenceData', 'carModels'],
-    queryFn: async () => {
-      const list = await base44.entities.CarModel.list();
-      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-    },
-    enabled: isOpen,
-    ...refDataOptions,
-  });
-
-  const { data: years = [] } = useQuery({
-    queryKey: ['referenceData', 'carYears'],
-    queryFn: async () => {
-      const list = await base44.entities.CarYear.list();
-      return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-    },
-    enabled: isOpen,
-    ...refDataOptions,
-  });
+  // Reference data is shared with the catalog through one canonical cached layer.
+  // This avoids six modal-local query subscriptions/fetch definitions on every open.
+  const {
+    categories,
+    vendors,
+    locations,
+    makes,
+    models,
+    years,
+  } = useReferenceData();
 
   // PHASE 16: Single canonical source for inventory - scoped to this part only
   // PHASE 1: Extended caching to prevent refetch storms
