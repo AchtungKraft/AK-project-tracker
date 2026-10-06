@@ -68,6 +68,7 @@ export async function forceAppRefresh(queryClient, options = {}) {
     commitmentIds = [],
     orderIds = [],
     refetchActive = true,
+    preservePartsCatalog = false,
   } = options;
 
   // Normalize project IDs to strings - filter out null/undefined/empty
@@ -78,10 +79,6 @@ export async function forceAppRefresh(queryClient, options = {}) {
   
   // Global invalidation for cross-cutting queries
   const invalidations = [
-    // Parts domain
-    queryClient.invalidateQueries({ queryKey: ['parts'] }),
-    queryClient.invalidateQueries({ queryKey: ['partsInventoryView'] }),
-    
     // Supply domain
     queryClient.invalidateQueries({ queryKey: ['opsSupplyView'] }),
     queryClient.invalidateQueries({ queryKey: ['projectSupplyView'] }),
@@ -117,12 +114,24 @@ export async function forceAppRefresh(queryClient, options = {}) {
     queryClient.invalidateQueries({ queryKey: ['stockReorder'] }),
     queryClient.invalidateQueries({ queryKey: ['akStockProject'] }),
   ];
+
+  // Parts catalog is normally invalidated globally. Callers that have already
+  // patched the catalog with an authoritative single-part server read model can
+  // preserve it and avoid reloading every Part.
+  if (!preservePartsCatalog) {
+    invalidations.push(
+      queryClient.invalidateQueries({ queryKey: ['parts'] }),
+      queryClient.invalidateQueries({ queryKey: ['partsInventoryView'] }),
+    );
+  }
   
   // Scoped part invalidations
   partIds.forEach(id => {
     const normalizedPartId = normalizeId(id);
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['part', normalizedPartId] }));
-    invalidations.push(queryClient.invalidateQueries({ queryKey: ['partsInventoryView', normalizedPartId] }));
+    if (!preservePartsCatalog) {
+      invalidations.push(queryClient.invalidateQueries({ queryKey: ['partsInventoryView', normalizedPartId] }));
+    }
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['partSupplyUsage', normalizedPartId] }));
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['inventoryItems', 'forPart', normalizedPartId] }));
     invalidations.push(queryClient.invalidateQueries({ queryKey: ['inventoryLocations', normalizedPartId] }));
@@ -175,16 +184,22 @@ export async function forceAppRefresh(queryClient, options = {}) {
   const refetches = [];
   
   // Core parts query — only if someone is looking at the list right now
-  refetches.push(
-    queryClient.refetchQueries({ queryKey: ['parts'], type: 'active' }),
-  );
+  if (!preservePartsCatalog) {
+    refetches.push(
+      queryClient.refetchQueries({ queryKey: ['parts'], type: 'active' }),
+    );
+  }
   
   // Scoped refetches for affected parts — only active observers
   partIds.forEach(id => {
     refetches.push(
       queryClient.refetchQueries({ queryKey: ['part', id], type: 'active' }),
-      queryClient.refetchQueries({ queryKey: ['partsInventoryView', id], type: 'active' }),
     );
+    if (!preservePartsCatalog) {
+      refetches.push(
+        queryClient.refetchQueries({ queryKey: ['partsInventoryView', id], type: 'active' }),
+      );
+    }
   });
   
   // Supply views — only if actively mounted
