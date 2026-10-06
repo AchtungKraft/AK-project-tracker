@@ -259,7 +259,7 @@ export default function PartModal({ part, partId, onClose }) {
     makes,
     models,
     years,
-  } = useReferenceData();
+  } = useReferenceData({ includeVendorGroups: false });
 
   // PHASE 16: Single canonical source for inventory - scoped to this part only
   // PHASE 1: Extended caching to prevent refetch storms
@@ -286,6 +286,15 @@ export default function PartModal({ part, partId, onClose }) {
     refetchOnMount: false, // PHASE 1: Don't refetch on every mount
     retry: 3,
     retryDelay: (attempt) => Math.min(1000 * Math.pow(2, attempt), 8000),
+    // The catalog already owns the canonical all-parts read model. Reuse that row
+    // immediately when available instead of making the modal wait for the same math again.
+    initialData: () => {
+      const allParts = queryClient.getQueryData(['partsInventoryView']);
+      return Array.isArray(allParts)
+        ? allParts.find(row => row.part_id === effectivePartId) ?? undefined
+        : undefined;
+    },
+    initialDataUpdatedAt: () => queryClient.getQueryState(['partsInventoryView'])?.dataUpdatedAt,
   });
 
   // Location breakdown - ONLY used for location display, NOT for totals
