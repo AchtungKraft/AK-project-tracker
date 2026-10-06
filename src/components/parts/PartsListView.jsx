@@ -43,6 +43,7 @@ export default function PartsListView({
     makes, 
     models, 
     years,
+    categoriesMap,
     vendorsMap,
     locationMap,
     makeMap,
@@ -105,11 +106,11 @@ export default function PartsListView({
 
   const getCategoryPath = (categoryId) => {
     if (!categoryId) return null;
-    const category = categories.find(c => c.id === categoryId);
+    const category = categoriesMap[categoryId];
     if (!category) return null;
     
     if (category.parent_id) {
-      const parent = categories.find(c => c.id === category.parent_id);
+      const parent = categoriesMap[category.parent_id];
       if (parent) {
         return `${parent.name} > ${category.name}`;
       }
@@ -220,10 +221,10 @@ export default function PartsListView({
     const featuredPhoto = part.featured_photo || images[0];
     const stats = getInventoryStats(part); // Now pass full part object
     const hasMultipleImages = images.length > 1;
-    const vendor = vendors.find(v => v.id === part.default_vendor_id);
-    const make = makes.find(m => m.id === part.car_make_id);
-    const model = models.find(m => m.id === part.car_model_id);
-    const year = years.find(y => y.id === part.car_year_id);
+    const vendor = vendorsMap[part.default_vendor_id];
+    const make = makeMap[part.car_make_id];
+    const model = modelMap[part.car_model_id];
+    const year = yearMap[part.car_year_id];
 
     return (
       <div
