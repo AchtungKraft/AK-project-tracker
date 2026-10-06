@@ -419,7 +419,7 @@ export default function PartsExplorerLayout({ onPartClick }) {
 
             {/* Parts Display */}
             <div className="flex-1 flex flex-col md:overflow-hidden">
-              <div className="flex-1 p-4 md:overflow-y-auto">
+              <div className="flex-1 p-4 md:overflow-y-auto parts-tracker-scrollbar">
                 {viewMode === 'cards' ? (
                   <PartsGrid
                     parts={paginatedParts}
