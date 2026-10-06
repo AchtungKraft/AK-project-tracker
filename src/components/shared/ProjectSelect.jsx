@@ -34,32 +34,21 @@ export default function ProjectSelect({
   className,
   renderItem,
 }) {
-  const { data: projects = [] } = useQuery({
-    queryKey: ["projects"],
-    queryFn: () => base44.entities.Project.list("-created_date", 200),
+  const { data: projectSelectData } = useQuery({
+    queryKey: ["projectSelectData"],
+    queryFn: async () => {
+      const res = await base44.functions.invoke("getProjectSelectData", {});
+      return res.data || {};
+    },
     staleTime: 300000,
     gcTime: 900000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });
 
-  const { data: projectTypes = [] } = useQuery({
-    queryKey: ["projectTypes"],
-    queryFn: () => base44.entities.ProjectType.list("sort_order", 100),
-    staleTime: 300000,
-    gcTime: 900000,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-  });
-
-  const { data: statuses = [] } = useQuery({
-    queryKey: ["statuses"],
-    queryFn: () => base44.entities.StatusList.list(),
-    staleTime: 300000,
-    gcTime: 900000,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-  });
+  const projects = projectSelectData?.projects || [];
+  const projectTypes = projectSelectData?.projectTypes || [];
+  const statuses = projectSelectData?.statuses || [];
 
   // O(1) lookup map
   const projectMap = useMemo(
