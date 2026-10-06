@@ -127,16 +127,15 @@ Deno.serve(async (req) => {
       const all_installed = installed_total >= required_total && required_total > 0;
 
       return {
+        // Preserve the complete Part record so PartsTracker does not need a second
+        // Part.list() request. Derived canonical supply fields below intentionally
+        // override any legacy/denormalized values with the authoritative read model.
+        ...part,
+        id: part.id,
         part_id: part.id,
-        part_name: part.part_name,
-        vendor_part_number: part.vendor_part_number,
         part_type: part.part_type || 'PURCHASED_VENDOR',
         is_archived: part.is_archived || false,
         featured_photo: part.featured_photo || part.photos?.[0],
-        part_category_id: part.part_category_id,
-        default_vendor_id: part.default_vendor_id,
-        car_make_id: part.car_make_id,
-        car_model_id: part.car_model_id,
         physical_stock,
         reserved_total,
         allocated_total: reserved_total,
