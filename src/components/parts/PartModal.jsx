@@ -261,8 +261,16 @@ export default function PartModal({ part, partId, onClose }) {
     years,
   } = useReferenceData({ includeVendorGroups: false });
 
+  // Prefer the canonical catalog row when it is already in cache. A modal opened
+  // from PartsTracker should not invoke the same backend inventory function again.
+  const cachedCatalogInventory = (() => {
+    const allParts = queryClient.getQueryData(['partsInventoryView']);
+    return Array.isArray(allParts)
+      ? allParts.find(row => row.part_id === effectivePartId) ?? null
+      : null;
+  })();
+
   // PHASE 16: Single canonical source for inventory - scoped to this part only
-  // PHASE 1: Extended caching to prevent refetch storms
   const {
     data: partInventoryView,
     isLoading: inventoryLoading,
@@ -276,7 +284,7 @@ export default function PartModal({ part, partId, onClose }) {
       const res = await base44.functions.invoke('getPartsInventoryView', { part_id: effectivePartId });
       return res.data?.parts?.[0] ?? null;
     },
-    enabled: Boolean(isOpen && effectivePartId && !partNotFound),
+    enabled: Boolean(isOpen && effectivePartId && !partNotFound && !cachedCatalogInventory),
     staleTime: 60000,      // PHASE 1: 1 minute
     gcTime: 300000,        // PHASE 1: 5 minutes
     placeholderData: (prev) => prev,
@@ -288,12 +296,7 @@ export default function PartModal({ part, partId, onClose }) {
     retryDelay: (attempt) => Math.min(1000 * Math.pow(2, attempt), 8000),
     // The catalog already owns the canonical all-parts read model. Reuse that row
     // immediately when available instead of making the modal wait for the same math again.
-    initialData: () => {
-      const allParts = queryClient.getQueryData(['partsInventoryView']);
-      return Array.isArray(allParts)
-        ? allParts.find(row => row.part_id === effectivePartId) ?? undefined
-        : undefined;
-    },
+    initialData: () => cachedCatalogInventory ?? undefined,
     initialDataUpdatedAt: () => queryClient.getQueryState(['partsInventoryView'])?.dataUpdatedAt,
   });
 
