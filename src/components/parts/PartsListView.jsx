@@ -166,58 +166,65 @@ export default function PartsListView({
     return null;
   };
 
-  // Group parts hierarchically by category — recursive to arbitrary depth
-  const buildHierarchicalGroups = () => {
+  // Group once per data change. The previous recursive implementation repeatedly
+  // filtered the entire parts + categories arrays for every category on every render.
+  const hierarchicalGroups = useMemo(() => {
     if (!showGrouping) {
       return [{ label: 'All Parts', parts, color: '#6B7280', children: [] }];
     }
 
-    // Build a group node for a category: direct parts + recursive children
+    const partsByCategory = new Map();
+    const noCategoryParts = [];
+    for (const part of parts) {
+      const categoryId = part.part_category_id ||
+        (part.category ? categoryNameMap[part.category.toLowerCase()]?.id : null);
+      if (!categoryId) {
+        noCategoryParts.push(part);
+        continue;
+      }
+      if (!partsByCategory.has(categoryId)) partsByCategory.set(categoryId, []);
+      partsByCategory.get(categoryId).push(part);
+    }
+
+    const childrenByParent = new Map();
+    const roots = [];
+    for (const category of categories) {
+      if (!category.active) continue;
+      if (!category.parent_id) {
+        roots.push(category);
+      } else {
+        if (!childrenByParent.has(category.parent_id)) childrenByParent.set(category.parent_id, []);
+        childrenByParent.get(category.parent_id).push(category);
+      }
+    }
+    const bySortOrder = (a, b) => (a.sort_order || 0) - (b.sort_order || 0);
+    roots.sort(bySortOrder);
+    for (const children of childrenByParent.values()) children.sort(bySortOrder);
+
     const buildGroupNode = (cat) => {
-      const directParts = parts.filter(p => getPartCategoryId(p) === cat.id);
-      const childCats = categories
-        .filter(c => c.parent_id === cat.id && c.active)
-        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-
-      const children = [];
-      for (const child of childCats) {
-        const childGroup = buildGroupNode(child);
-        if (childGroup) children.push(childGroup);
-      }
-
-      if (directParts.length > 0 || children.length > 0) {
-        return {
-          label: cat.name,
-          parts: directParts,
-          color: cat.color || '#6B7280',
-          children,
-        };
-      }
-      return null;
+      const children = (childrenByParent.get(cat.id) || [])
+        .map(buildGroupNode)
+        .filter(Boolean);
+      const directParts = partsByCategory.get(cat.id) || [];
+      if (directParts.length === 0 && children.length === 0) return null;
+      return {
+        label: cat.name,
+        parts: directParts,
+        color: cat.color || '#6B7280',
+        children,
+      };
     };
 
     const groups = [];
-
-    // Group for parts with no category
-    const noCategoryParts = parts.filter(p => !getPartCategoryId(p));
     if (noCategoryParts.length > 0) {
       groups.push({ label: 'No Category', parts: noCategoryParts, color: '#6B7280', children: [] });
     }
-
-    // Build hierarchy from root categories
-    const rootCategories = categories
-      .filter(c => !c.parent_id && c.active)
-      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-
-    for (const root of rootCategories) {
+    for (const root of roots) {
       const group = buildGroupNode(root);
       if (group) groups.push(group);
     }
-
     return groups;
-  };
-
-  const hierarchicalGroups = buildHierarchicalGroups();
+  }, [parts, categories, categoryNameMap, showGrouping]);
 
   const PartRow = ({ part }) => {
     const images = part.photos || [];
