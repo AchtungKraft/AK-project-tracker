@@ -252,19 +252,19 @@ export default function PartsExplorerLayout({ onPartClick }) {
   // Heavy print datasets are dormant during normal browsing and load only while
   // a report dialog is open. Keeping them in React Query also preserves caching
   // and avoids moving window.open() behind an async boundary.
-  const { data: inventoryItems = [] } = useQuery({
+  const { data: inventoryItems = [], isLoading: printInventoryLoading } = useQuery({
     queryKey: ['inventoryItems-print'],
     queryFn: () => base44.entities.InventoryItem.list(),
     enabled: printReportType === 'illustrated',
     staleTime: 60000,
   });
-  const { data: locationsList = [] } = useQuery({
+  const { data: locationsList = [], isLoading: printLocationsLoading } = useQuery({
     queryKey: ['locations-print'],
     queryFn: () => base44.entities.Location.list(),
     enabled: printReportType === 'illustrated',
     staleTime: 300000,
   });
-  const { data: vendorSources = [] } = useQuery({
+  const { data: vendorSources = [], isLoading: printSourcesLoading } = useQuery({
     queryKey: ['vendorSources-print'],
     queryFn: () => base44.entities.PartVendorSource.list(),
     enabled: printReportType === 'summary' || printReportType === 'illustrated',
@@ -520,6 +520,10 @@ export default function PartsExplorerLayout({ onPartClick }) {
           reportType={printReportType}
           onClose={() => setPrintReportType(null)}
           onPrint={executePrint}
+          isLoading={
+            (printReportType === 'illustrated' && (printInventoryLoading || printLocationsLoading || printSourcesLoading)) ||
+            (printReportType === 'summary' && printSourcesLoading)
+          }
         />
       )}
     </>
