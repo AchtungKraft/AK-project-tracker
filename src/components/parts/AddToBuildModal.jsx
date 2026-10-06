@@ -183,11 +183,31 @@ export default function AddToBuildModal({ part, onClose }) {
       };
     },
     onSuccess: async ({ commitment, qtyAllocated, needs_cost_review, project_id, part_id, wasUpdate }) => {
-      // PHASE 17: Deterministic refresh
+      // Refresh the affected catalog row from the canonical server read model.
+      // Never reproduce supply math in the browser and never reload all ~300 Parts
+      // just because one commitment changed.
+      const canonicalResponse = await base44.functions.invoke('getPartsInventoryView', { part_id });
+      const canonicalPartRow = canonicalResponse.data?.parts?.[0] ?? null;
+
+      if (canonicalPartRow) {
+        queryClient.setQueryData(['partsInventoryView', part_id], canonicalPartRow);
+        queryClient.setQueryData(['partsInventoryView'], (current = []) => {
+          if (!Array.isArray(current)) return [canonicalPartRow];
+          const index = current.findIndex(row => row.part_id === part_id);
+          if (index < 0) return [canonicalPartRow, ...current];
+          const next = current.slice();
+          next[index] = canonicalPartRow;
+          return next;
+        });
+      }
+
+      // Preserve the freshly patched canonical catalog while refreshing the
+      // project/supply/commitment surfaces affected by this mutation.
       await forceAppRefresh(queryClient, {
         partIds: [part_id],
         projectIds: [project_id],
         commitmentIds: commitment ? [commitment.id] : [],
+        preservePartsCatalog: Boolean(canonicalPartRow),
       });
       
       let message = wasUpdate ? 'Commitment updated' : 'Part added to build';
