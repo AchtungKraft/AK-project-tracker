@@ -49,7 +49,10 @@ export default function PartsListView({
     makeMap,
     modelMap,
     yearMap,
-  } = useReferenceData();
+  } = useReferenceData({
+    includeLocations: false,
+    includeVendorGroups: false,
+  });
 
   // CANONICAL: Use read model for inventory view - NO local InventoryItem math
   const { data: partsInventoryView = [] } = useQuery({
