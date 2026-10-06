@@ -61,7 +61,10 @@ export default function PartModal({ part, partId, onClose }) {
   const [uploading, setUploading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(null);
   const [mediaSectionOpen, setMediaSectionOpen] = useState(true);
-  const [journalSectionOpen, setJournalSectionOpen] = useState(true);
+  // Secondary/heavy sections stay collapsed until explicitly requested.
+  // This keeps the initial detail modal limited to part, inventory and source data.
+  const [projectUsageOpen, setProjectUsageOpen] = useState(false);
+  const [journalSectionOpen, setJournalSectionOpen] = useState(false);
   
   // Action modals
   const [showAddInventoryModal, setShowAddInventoryModal] = useState(false);
@@ -701,7 +704,7 @@ export default function PartModal({ part, partId, onClose }) {
 
   // --- VIEW MODE ---
   const renderViewMode = () => (
-    <div className="space-y-6 p-4 overflow-y-auto max-h-[70vh]">
+    <div className="space-y-6 p-4 overflow-y-auto max-h-[70vh] parts-tracker-scrollbar">
       {/* Photos Gallery - Click to open step-through viewer */}
       {formData.photos && formData.photos.length > 0 && (
         <div className="grid grid-cols-4 gap-2">
@@ -955,10 +958,23 @@ export default function PartModal({ part, partId, onClose }) {
         </div>
       )}
 
-      {/* Project Usage - PERF FIX: Pass isOpen to gate query */}
-      <div className="pt-4 border-t border-gray-700">
-        <PartProjectUsageSection partId={activePart.id} isOpen={isOpen} />
-      </div>
+      {/* Project Usage — intentionally lazy. getPartSupplyUsage can traverse project/build demand,
+          so do not invoke it merely because the Part Detail modal opened. */}
+      <Collapsible open={projectUsageOpen} onOpenChange={setProjectUsageOpen}>
+        <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-left border-t border-gray-700 pt-4">
+          <span className="text-sm font-medium text-gray-300">Project Usage & Allocation</span>
+          {projectUsageOpen ? (
+            <ChevronDown className="w-4 h-4 text-gray-400" />
+          ) : (
+            <ChevronRight className="w-4 h-4 text-gray-400" />
+          )}
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="pt-2">
+            <PartProjectUsageSection partId={activePart.id} isOpen={isOpen && projectUsageOpen} />
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Journal Section (Collapsible) */}
       <Collapsible open={journalSectionOpen} onOpenChange={setJournalSectionOpen}>
@@ -981,7 +997,7 @@ export default function PartModal({ part, partId, onClose }) {
 
   // --- EDIT MODE ---
   const renderEditMode = () => (
-    <form onSubmit={handleSave} className="space-y-6 p-4 overflow-y-auto max-h-[70vh]">
+    <form onSubmit={handleSave} className="space-y-6 p-4 overflow-y-auto max-h-[70vh] parts-tracker-scrollbar">
       {/* Basic Info */}
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
