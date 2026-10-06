@@ -926,6 +926,15 @@ export default function PartModal({ part, partId, onClose }) {
           partId={activePart.id}
           vendors={vendors}
           isEditing={false}
+          placeholderSources={activePart.default_vendor_id ? [{
+            part_id: activePart.id,
+            vendor_id: activePart.default_vendor_id,
+            vendor_part_number: activePart.vendor_part_number || '',
+            unit_cost: activePart.cost ?? 0,
+            order_url: activePart.order_url || '',
+            is_preferred: true,
+            is_active: true,
+          }] : undefined}
         />
       </div>
 
