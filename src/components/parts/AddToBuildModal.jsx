@@ -98,8 +98,7 @@ export default function AddToBuildModal({ part, onClose }) {
       if (existing) {
         // CASE A/B/C: Commitment exists - handle lifecycle states
         const isArchived = existing.is_archived;
-        const isClosed = existing.commitment_status === 'closed' || existing.commitment_status === 'cancelled';
-        
+
         // Calculate new required_total (add to existing)
         const requiredTotalSet = (existing.required_total || 0) + qtyNeeded;
 
@@ -323,11 +322,9 @@ export default function AddToBuildModal({ part, onClose }) {
                 <Label htmlFor="allocateImmediately" className={availableInventory > 0 ? "text-gray-300 cursor-pointer text-sm" : "text-gray-500 text-sm"}>
                   Allocate from inventory immediately (if available)
                 </Label>
-                {allocateImmediately && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Available: {availableInventory} unit(s)
-                  </p>
-                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  Available: {availableInventory} unit(s)
+                </p>
               </div>
             </div>
             
