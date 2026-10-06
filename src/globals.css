@@ -257,6 +257,32 @@ button[disabled]:not([data-tooltip]) {
   display: none;
 }
 
+/* Parts Tracker dark native scrollbar */
+.parts-tracker-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #475569 #111827;
+}
+
+.parts-tracker-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.parts-tracker-scrollbar::-webkit-scrollbar-track {
+  background: #111827;
+  border-radius: 999px;
+}
+
+.parts-tracker-scrollbar::-webkit-scrollbar-thumb {
+  background: #475569;
+  border: 2px solid #111827;
+  border-radius: 999px;
+}
+
+.parts-tracker-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
 /* ============================================
    SUBTLE PULSE FOR FRESH APPROVALS
    ============================================ */
