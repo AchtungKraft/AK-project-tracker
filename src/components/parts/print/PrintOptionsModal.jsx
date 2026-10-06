@@ -19,7 +19,7 @@ const STORAGE_KEY = "ak_print_options";
  * Print options modal for Parts Catalog.
  * Uses canonical pricingMode — same control as Parts Group.
  */
-export default function PrintOptionsModal({ reportType, onClose, onPrint }) {
+export default function PrintOptionsModal({ reportType, onClose, onPrint, isLoading = false }) {
   const config = CATALOG_REPORT_CONFIGS[reportType];
   const [opts, setOpts] = useState(() =>
     loadReportOptions(STORAGE_KEY, reportType, CATALOG_REPORT_CONFIGS)
@@ -93,8 +93,8 @@ export default function PrintOptionsModal({ reportType, onClose, onPrint }) {
 
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
-          <Button size="sm" onClick={handlePrint} className="bg-red-600 hover:bg-red-700">
-            Print Report
+          <Button size="sm" onClick={handlePrint} disabled={isLoading} className="bg-red-600 hover:bg-red-700">
+            {isLoading ? 'Loading report data…' : 'Print Report'}
           </Button>
         </DialogFooter>
       </DialogContent>
