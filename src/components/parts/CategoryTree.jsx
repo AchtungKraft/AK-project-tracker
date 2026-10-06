@@ -188,7 +188,7 @@ export default function CategoryTree({
       </div>
 
       {/* Category Tree */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto parts-tracker-scrollbar">
         {rootCategories.length === 0 ? (
           <div className="p-6 text-center text-gray-500 text-sm">
             {searchTerm ? 'No categories found' : 'No categories configured'}
