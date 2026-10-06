@@ -13,7 +13,7 @@ import PartGroupDetail from "@/components/partgroups/PartGroupDetail";
 
 export default function PartsTracker() {
   const queryClient = useQueryClient();
-  const [selectedPartId, setSelectedPartId] = useState(null);
+  const [selectedPart, setSelectedPart] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // URL-based tab + location deep linking
@@ -48,7 +48,9 @@ export default function PartsTracker() {
   }, []);
 
   const handlePartClick = (part) => {
-    setSelectedPartId(part.id);
+    // Carry the already-loaded Part into the modal so opening detail never
+    // requires a duplicate Part.filter({id}) round trip.
+    setSelectedPart(part);
   };
 
   return (
@@ -143,10 +145,11 @@ export default function PartsTracker() {
         </div>
       </MobileSafeAreaContainer>
 
-      {selectedPartId && (
+      {selectedPart?.id && (
         <PartModal
-          partId={selectedPartId}
-          onClose={() => setSelectedPartId(null)}
+          part={selectedPart}
+          partId={selectedPart.id}
+          onClose={() => setSelectedPart(null)}
         />
       )}
     </>
