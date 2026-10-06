@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
+import { useReferenceData } from "@/components/common/useReferenceData";
 import { Badge } from "@/components/ui/badge";
 import { Package, Box, Image as ImageIcon, ChevronDown, ChevronRight, Archive } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -32,25 +33,13 @@ export default function PartsGrid({
   });
   const [expandedGroups, setExpandedGroups] = useState({});
 
-  const { data: vendors = [] } = useQuery({
-    queryKey: ['vendors'],
-    queryFn: () => base44.entities.Vendor.list(),
-  });
-
-  const { data: makes = [] } = useQuery({
-    queryKey: ['carMakes'],
-    queryFn: () => base44.entities.CarMake.list(),
-  });
-
-  const { data: models = [] } = useQuery({
-    queryKey: ['carModels'],
-    queryFn: () => base44.entities.CarModel.list(),
-  });
-
-  const { data: years = [] } = useQuery({
-    queryKey: ['carYears'],
-    queryFn: () => base44.entities.CarYear.list(),
-  });
+  // Reference entities are shared through the canonical cached reference-data layer.
+  const {
+    vendorsMap,
+    makeMap,
+    modelMap,
+    yearMap,
+  } = useReferenceData();
 
   // CANONICAL: Use read model for inventory view - NO local InventoryItem math
   const { data: partsInventoryView = [] } = useQuery({
@@ -268,10 +257,10 @@ export default function PartsGrid({
             {group.parts.length > 0 && (
               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
                 {group.parts.map(part => {
-            const vendor = vendors.find(v => v.id === part.default_vendor_id);
-            const make = makes.find(m => m.id === part.car_make_id);
-            const model = models.find(m => m.id === part.car_model_id);
-            const year = years.find(y => y.id === part.car_year_id);
+            const vendor = vendorsMap[part.default_vendor_id];
+            const make = makeMap[part.car_make_id];
+            const model = modelMap[part.car_model_id];
+            const year = yearMap[part.car_year_id];
             const images = part.photos || [];
             const featuredPhoto = part.featured_photo || images[0];
             const stats = getInventoryStats(part.id);
