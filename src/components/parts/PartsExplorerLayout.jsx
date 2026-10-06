@@ -249,6 +249,28 @@ export default function PartsExplorerLayout({ onPartClick }) {
   // Print suite state
   const [printReportType, setPrintReportType] = useState(null);
 
+  // Heavy print datasets are dormant during normal browsing and load only while
+  // a report dialog is open. Keeping them in React Query also preserves caching
+  // and avoids moving window.open() behind an async boundary.
+  const { data: inventoryItems = [] } = useQuery({
+    queryKey: ['inventoryItems-print'],
+    queryFn: () => base44.entities.InventoryItem.list(),
+    enabled: printReportType === 'illustrated',
+    staleTime: 60000,
+  });
+  const { data: locationsList = [] } = useQuery({
+    queryKey: ['locations-print'],
+    queryFn: () => base44.entities.Location.list(),
+    enabled: printReportType === 'illustrated',
+    staleTime: 300000,
+  });
+  const { data: vendorSources = [] } = useQuery({
+    queryKey: ['vendorSources-print'],
+    queryFn: () => base44.entities.PartVendorSource.list(),
+    enabled: printReportType === 'summary' || printReportType === 'illustrated',
+    staleTime: 60000,
+  });
+
   const categoryByIdMap = useMemo(() => buildCategoryLookups(categories).byId, [categories]);
 
   const getCategoryLabel = () => {
@@ -260,23 +282,7 @@ export default function PartsExplorerLayout({ onPartClick }) {
     setPrintReportType(reportType);
   };
 
-  const executePrint = async (options) => {
-    // Print-only datasets are intentionally loaded on demand so normal catalog browsing
-    // never downloads full inventory/source tables.
-    let inventoryItems = [];
-    let locationsList = [];
-    let vendorSources = [];
-
-    if (printReportType === "summary" || printReportType === "illustrated") {
-      vendorSources = await base44.entities.PartVendorSource.list();
-    }
-    if (printReportType === "illustrated") {
-      [inventoryItems, locationsList] = await Promise.all([
-        base44.entities.InventoryItem.list(),
-        base44.entities.Location.list(),
-      ]);
-    }
-
+  const executePrint = (options) => {
     const baseData = {
       parts: filteredParts,
       categories,
