@@ -92,6 +92,7 @@ export default function AddToBuildModal({ part, onClose }) {
       }
 
       let commitment;
+      let actionResult;
       let needsCostReview = false;
 
       if (existing) {
@@ -122,7 +123,12 @@ export default function AddToBuildModal({ part, onClose }) {
           throw new Error(response.data.error || 'Failed to update commitment');
         }
 
-        commitment = response.data.commitment;
+        actionResult = response.data;
+        commitment = response.data.commitment || (response.data.commitment_id ? {
+          id: response.data.commitment_id,
+          commitment_id: response.data.commitment_id,
+          reserved_from_stock: response.data.reserved_from_stock ?? 0,
+        } : existing);
         needsCostReview = response.data.needs_cost_review;
         
       } else {
@@ -146,7 +152,12 @@ export default function AddToBuildModal({ part, onClose }) {
           throw new Error(response.data.error || 'Failed to add part to project');
         }
 
-        commitment = response.data.commitment;
+        actionResult = response.data;
+        commitment = response.data.commitment || (response.data.commitment_id ? {
+          id: response.data.commitment_id,
+          commitment_id: response.data.commitment_id,
+          reserved_from_stock: response.data.reserved_from_stock ?? 0,
+        } : existing);
         needsCostReview = response.data.needs_cost_review;
       }
 
@@ -154,7 +165,7 @@ export default function AddToBuildModal({ part, onClose }) {
       // A second AUTO_RESERVE call duplicated the same canonical rebalance and could
       // add another function cold start. Report what the canonical action reserved.
       const qtyAllocated = allocateImmediately
-        ? Math.max(0, Number(responseReservedFromCommitment(commitment) ?? 0))
+        ? Math.max(0, Number(actionResult?.reserved_from_stock ?? commitment?.reserved_from_stock ?? 0))
         : 0;
       
       return { 
