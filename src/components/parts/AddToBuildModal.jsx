@@ -51,11 +51,17 @@ export default function AddToBuildModal({ part, onClose }) {
 
 
 
-  // CANONICAL: Check existing commitments only (PartProjectRequirement is deprecated)
-  const { data: existingCommitments = [] } = useQuery({
-    queryKey: ['partCommitments', 'forPart', part?.id],
-    queryFn: () => base44.entities.PartCommitment.filter({ part_id: part?.id }),
-    enabled: !!part?.id,
+  // Do not block opening this action on a part-wide commitment scan.
+  // The selected project is the only relationship needed to decide create vs update.
+  const { data: selectedProjectCommitments = [] } = useQuery({
+    queryKey: ['partCommitments', 'forPartProject', part?.id, formData.project_id],
+    queryFn: () => base44.entities.PartCommitment.filter({
+      part_id: part?.id,
+      project_id: formData.project_id,
+    }),
+    enabled: !!part?.id && !!formData.project_id,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
   });
 
   const createRequirementMutation = useMutation({
@@ -68,15 +74,11 @@ export default function AddToBuildModal({ part, onClose }) {
 
       // SINGLE COMMITMENT RULE: One PartCommitment per (part_id + project_id)
       // Find ANY existing commitment for this part+project (including archived/closed)
-      const existing = existingCommitments.find(
-        c => c.project_id === formData.project_id
-      );
+      const existing = selectedProjectCommitments[0];
 
       // DEV GUARDRAIL: Check for duplicates - should never happen
       if (import.meta.env.DEV) {
-        const duplicates = existingCommitments.filter(
-          c => c.project_id === formData.project_id
-        );
+        const duplicates = selectedProjectCommitments;
         if (duplicates.length > 1) {
           console.error('[COMMITMENT DUPLICATION DETECTED]', {
             part_id: part.id,
@@ -208,11 +210,7 @@ export default function AddToBuildModal({ part, onClose }) {
     createRequirementMutation.mutate();
   };
 
-  // Track projects that already have a commitment (for UI hint only)
-  const projectsWithPart = existingCommitments
-    .map(c => c.project_id)
-    .filter((id, idx, arr) => arr.indexOf(id) === idx);
-  
+
   // Calculate available inventory
   const availableInventory = inventoryItems.reduce((sum, item) => {
     return sum + Math.max(0, (item.quantity_on_hand || 0) - (item.quantity_reserved || 0));
@@ -247,14 +245,7 @@ export default function AddToBuildModal({ part, onClose }) {
               value={formData.project_id}
               onChange={(v) => setFormData({ ...formData, project_id: v })}
               placeholder="Select project..."
-              renderItem={(project) => (
-                <span>
-                  {project.name}
-                  {projectsWithPart.includes(project.id) && (
-                    <span className="text-gray-500 ml-1">(will update existing)</span>
-                  )}
-                </span>
-              )}
+              renderItem={(project) => <span>{project.name}</span>}
             />
           </div>
 
