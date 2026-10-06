@@ -63,14 +63,17 @@ export default function PartsExplorerLayout({ onPartClick }) {
     includeVendorGroups: false,
   });
 
-  // Inventory view for print detail
+  // Canonical catalog read model: complete Part records + derived inventory metrics.
+  // One request replaces the previous Part.list + getPartsInventoryView double load.
   const { data: partsInventoryView = [] } = useQuery({
     queryKey: ['partsInventoryView'],
     queryFn: async () => {
       const res = await base44.functions.invoke('getPartsInventoryView', {});
       return res.data?.parts || [];
     },
+    ...operationalDataConfig,
   });
+  const parts = partsInventoryView;
 
   const inventoryViewMap = useMemo(() => {
     const map = new Map();
@@ -105,13 +108,6 @@ export default function PartsExplorerLayout({ onPartClick }) {
       }));
     } catch (e) {}
   }, [selectedCategoryId, expandedCategories, showLeftPane, viewMode, showGrouping]);
-
-  // Parts - operational data with shorter cache
-  const { data: parts = [], isLoading: partsLoading } = useQuery({
-    queryKey: ['parts'],
-    queryFn: () => base44.entities.Part.list('-created_date'),
-    ...operationalDataConfig,
-  });
 
   // Build category path — derived via useMemo to avoid render loops
   const categoryPath = useMemo(() => {
