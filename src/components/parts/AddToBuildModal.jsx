@@ -39,15 +39,18 @@ export default function AddToBuildModal({ part, onClose }) {
     notes: '',
   });
   
+  // ADJUST_REQUIRED already runs the canonical rebalance for the affected part.
+  // This checkbox controls intent/UI only; do not issue a second AUTO_RESERVE round trip.
   const [allocateImmediately, setAllocateImmediately] = useState(false);
   const [flagNeedToOrder, setFlagNeedToOrder] = useState(false);
   const [requiresPrepay, setRequiresPrepay] = useState(false); // FIX C: Order before/after pay toggle
 
-  const { data: inventoryItems = [] } = useQuery({
-    queryKey: ['inventoryItems', 'forPart', part?.id],
-    queryFn: () => base44.entities.InventoryItem.filter({ part_id: part?.id }),
-    enabled: !!part?.id && allocateImmediately,
-  });
+  // PartsTracker passes the canonical inventory read-model row into this modal.
+  // Use it instead of another InventoryItem request just to display availability.
+  const availableInventory = Math.max(
+    0,
+    Number(part?.available_stock ?? part?.available ?? part?.physical_stock ?? 0)
+  );
 
 
 
@@ -147,31 +150,12 @@ export default function AddToBuildModal({ part, onClose }) {
         needsCostReview = response.data.needs_cost_review;
       }
 
-      // Handle immediate inventory allocation if requested
-      // CANONICAL: Route through executeSupplyAction for AUTO_RESERVE
-      let qtyAllocated = 0;
-      if (allocateImmediately && commitment) {
-        // Get part's physical stock for allocation calculation
-        const partData = await base44.entities.Part.filter({ id: part.id });
-        const partRecord = partData[0];
-        const physicalStock = partRecord?.physical_stock ?? 0;
-        
-        // Calculate how much can be allocated (min of stock and needed)
-        const toAllocate = Math.min(physicalStock, qtyNeeded);
-        
-        if (toAllocate > 0) {
-          const reserveResponse = await base44.functions.invoke('executeSupplyAction', {
-            action_type: 'AUTO_RESERVE',
-            commitment_ids: [commitment.id],
-            payload: { qty_to_reserve: toAllocate },
-            dry_run: false
-          });
-          
-          if (reserveResponse.data?.success) {
-            qtyAllocated = reserveResponse.data.qty_reserved || toAllocate;
-          }
-        }
-      }
+      // ADJUST_REQUIRED performs inlineRebalance() server-side before returning.
+      // A second AUTO_RESERVE call duplicated the same canonical rebalance and could
+      // add another function cold start. Report what the canonical action reserved.
+      const qtyAllocated = allocateImmediately
+        ? Math.max(0, Number(responseReservedFromCommitment(commitment) ?? 0))
+        : 0;
       
       return { 
         commitment, 
@@ -182,34 +166,9 @@ export default function AddToBuildModal({ part, onClose }) {
         wasUpdate: !!existing
       };
     },
-    onSuccess: async ({ commitment, qtyAllocated, needs_cost_review, project_id, part_id, wasUpdate }) => {
-      // Refresh the affected catalog row from the canonical server read model.
-      // Never reproduce supply math in the browser and never reload all ~300 Parts
-      // just because one commitment changed.
-      const canonicalResponse = await base44.functions.invoke('getPartsInventoryView', { part_id });
-      const canonicalPartRow = canonicalResponse.data?.parts?.[0] ?? null;
-
-      if (canonicalPartRow) {
-        queryClient.setQueryData(['partsInventoryView', part_id], canonicalPartRow);
-        queryClient.setQueryData(['partsInventoryView'], (current = []) => {
-          if (!Array.isArray(current)) return [canonicalPartRow];
-          const index = current.findIndex(row => row.part_id === part_id);
-          if (index < 0) return [canonicalPartRow, ...current];
-          const next = current.slice();
-          next[index] = canonicalPartRow;
-          return next;
-        });
-      }
-
-      // Preserve the freshly patched canonical catalog while refreshing the
-      // project/supply/commitment surfaces affected by this mutation.
-      await forceAppRefresh(queryClient, {
-        partIds: [part_id],
-        projectIds: [project_id],
-        commitmentIds: commitment ? [commitment.id] : [],
-        preservePartsCatalog: Boolean(canonicalPartRow),
-      });
-      
+    onSuccess: ({ commitment, qtyAllocated, needs_cost_review, project_id, part_id, wasUpdate }) => {
+      // The write is complete at this point. Close immediately instead of making
+      // the user wait for read-model refreshes that do not affect write success.
       let message = wasUpdate ? 'Commitment updated' : 'Part added to build';
       if (qtyAllocated > 0) {
         message += ` (${qtyAllocated} allocated from stock)`;
@@ -219,6 +178,37 @@ export default function AddToBuildModal({ part, onClose }) {
       }
       toast.success(message);
       onClose();
+
+      // Refresh affected read models after the successful UI transition.
+      // Do not await this work; a slow read model must not make a completed write
+      // appear stuck or invite a duplicate submission.
+      void (async () => {
+        try {
+          const canonicalResponse = await base44.functions.invoke('getPartsInventoryView', { part_id });
+          const canonicalPartRow = canonicalResponse.data?.parts?.[0] ?? null;
+
+          if (canonicalPartRow) {
+            queryClient.setQueryData(['partsInventoryView', part_id], canonicalPartRow);
+            queryClient.setQueryData(['partsInventoryView'], (current = []) => {
+              if (!Array.isArray(current)) return [canonicalPartRow];
+              const index = current.findIndex(row => row.part_id === part_id);
+              if (index < 0) return [canonicalPartRow, ...current];
+              const next = current.slice();
+              next[index] = canonicalPartRow;
+              return next;
+            });
+          }
+
+          await forceAppRefresh(queryClient, {
+            partIds: [part_id],
+            projectIds: [project_id],
+            commitmentIds: commitment ? [commitment.id || commitment.commitment_id].filter(Boolean) : [],
+            preservePartsCatalog: Boolean(canonicalPartRow),
+          });
+        } catch (refreshError) {
+          console.warn('[AddToBuild] Background refresh failed after successful write', refreshError);
+        }
+      })();
     },
     onError: (error) => {
       toast.error(error.message || 'Failed to add to build');
@@ -230,11 +220,6 @@ export default function AddToBuildModal({ part, onClose }) {
     createRequirementMutation.mutate();
   };
 
-
-  // Calculate available inventory
-  const availableInventory = inventoryItems.reduce((sum, item) => {
-    return sum + Math.max(0, (item.quantity_on_hand || 0) - (item.quantity_reserved || 0));
-  }, 0);
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
@@ -320,10 +305,11 @@ export default function AddToBuildModal({ part, onClose }) {
                 id="allocateImmediately"
                 checked={allocateImmediately}
                 onCheckedChange={setAllocateImmediately}
+                disabled={availableInventory <= 0}
                 className="mt-0.5"
               />
               <div className="flex-1">
-                <Label htmlFor="allocateImmediately" className="text-gray-300 cursor-pointer text-sm">
+                <Label htmlFor="allocateImmediately" className={availableInventory > 0 ? "text-gray-300 cursor-pointer text-sm" : "text-gray-500 text-sm"}>
                   Allocate from inventory immediately (if available)
                 </Label>
                 {allocateImmediately && (
