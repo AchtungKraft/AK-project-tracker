@@ -81,7 +81,16 @@ function buildMap(items, keyField = 'id') {
  *   refetchAll: Function,
  * }
  */
-export function useReferenceData() {
+export function useReferenceData(options = {}) {
+  const {
+    includeCategories = true,
+    includeVendors = true,
+    includeMakes = true,
+    includeModels = true,
+    includeYears = true,
+    includeLocations = true,
+    includeVendorGroups = true,
+  } = options;
   // Part Categories
   const categoriesQuery = useQuery({
     queryKey: ['referenceData', 'partCategories'],
@@ -90,6 +99,7 @@ export function useReferenceData() {
       return list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     },
     ...REFERENCE_QUERY_CONFIG,
+    enabled: includeCategories,
   });
 
   // Vendors
@@ -97,6 +107,7 @@ export function useReferenceData() {
     queryKey: ['referenceData', 'vendors'],
     queryFn: () => base44.entities.Vendor.list(),
     ...REFERENCE_QUERY_CONFIG,
+    enabled: includeVendors,
   });
 
   // Car Makes
@@ -104,6 +115,7 @@ export function useReferenceData() {
     queryKey: ['referenceData', 'carMakes'],
     queryFn: () => base44.entities.CarMake.list(),
     ...REFERENCE_QUERY_CONFIG,
+    enabled: includeMakes,
   });
 
   // Car Models
@@ -111,6 +123,7 @@ export function useReferenceData() {
     queryKey: ['referenceData', 'carModels'],
     queryFn: () => base44.entities.CarModel.list(),
     ...REFERENCE_QUERY_CONFIG,
+    enabled: includeModels,
   });
 
   // Car Years
@@ -118,6 +131,7 @@ export function useReferenceData() {
     queryKey: ['referenceData', 'carYears'],
     queryFn: () => base44.entities.CarYear.list(),
     ...REFERENCE_QUERY_CONFIG,
+    enabled: includeYears,
   });
 
   // Locations
@@ -125,6 +139,7 @@ export function useReferenceData() {
     queryKey: ['referenceData', 'locations'],
     queryFn: () => base44.entities.Location.list(),
     ...REFERENCE_QUERY_CONFIG,
+    enabled: includeLocations,
   });
 
   // Vendor Groups
@@ -132,6 +147,7 @@ export function useReferenceData() {
     queryKey: ['referenceData', 'vendorGroups'],
     queryFn: () => base44.entities.VendorGroup.list(),
     ...REFERENCE_QUERY_CONFIG,
+    enabled: includeVendorGroups,
   });
 
   // Determine ready state
