@@ -51,6 +51,7 @@ export default function PartVendorSourcesSection({
 
   // mode="edit" props
   partId,
+  placeholderSources,
 
   // mode="create" props
   mode = "edit", // "create" | "edit"
@@ -78,6 +79,9 @@ export default function PartVendorSourcesSection({
     gcTime: 300000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
+    // View mode can render the Part's canonical preferred/default source immediately
+    // while the authoritative multi-source rows are fetched in the background.
+    placeholderData: mode === "edit" && placeholderSources?.length ? placeholderSources : undefined,
   });
 
   useEffect(() => {
