@@ -37,16 +37,28 @@ export default function ProjectSelect({
   const { data: projects = [] } = useQuery({
     queryKey: ["projects"],
     queryFn: () => base44.entities.Project.list("-created_date", 200),
+    staleTime: 300000,
+    gcTime: 900000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   const { data: projectTypes = [] } = useQuery({
     queryKey: ["projectTypes"],
     queryFn: () => base44.entities.ProjectType.list("sort_order", 100),
+    staleTime: 300000,
+    gcTime: 900000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   const { data: statuses = [] } = useQuery({
     queryKey: ["statuses"],
     queryFn: () => base44.entities.StatusList.list(),
+    staleTime: 300000,
+    gcTime: 900000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   // O(1) lookup map
