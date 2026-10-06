@@ -56,7 +56,12 @@ export default function PartsExplorerLayout({ onPartClick }) {
     modelMap,
     yearMap,
     isError: referenceError,
-  } = useReferenceData();
+  } = useReferenceData({
+    // Catalog browsing/search does not use storage locations or vendor groups.
+    // Do not make the initial list wait on unrelated reference datasets.
+    includeLocations: false,
+    includeVendorGroups: false,
+  });
 
   // Inventory view for print detail
   const { data: partsInventoryView = [] } = useQuery({
