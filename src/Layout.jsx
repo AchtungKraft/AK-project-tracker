@@ -21,6 +21,7 @@ import {
   BookOpen,
   Image,
   LogOut,
+  MessageSquare,
 } from "lucide-react";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { useLogout } from "@/hooks/useLogout";
@@ -155,6 +156,7 @@ const getNavigationSections = () => {
       title: "Projects",
       colorKey: "projects",
       items: [
+        { title: "COMMS", url: "https://comms.achtungkraft.com/", icon: MessageSquare, external: true },
         { title: "Projects", url: createPageUrl("Dashboard"), icon: FolderKanban },
         { title: "Workload", url: createPageUrl("PriorityDashboard"), icon: Flame },
         { title: "Client Portal", url: createPageUrl("ClientPortalHub"), icon: Building2 },
