@@ -390,6 +390,20 @@ export default function Layout({ children, currentPageName }) {
     return localStorage.getItem('achtung_view_as_company') || null;
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [commsBadge, setCommsBadge] = useState(0);
+
+  useEffect(() => {
+    const onCommsBadge = (event) => {
+      if (event.origin !== 'https://comms.achtungkraft.com') return;
+      const iframe = document.querySelector('iframe[data-ak-comms-embed]');
+      if (!iframe || event.source !== iframe.contentWindow) return;
+      const payload = event.data;
+      if (payload?.type !== 'ak-comms:badge-count' || !Number.isSafeInteger(payload.total) || payload.total < 0) return;
+      setCommsBadge(payload.total);
+    };
+    window.addEventListener('message', onCommsBadge);
+    return () => window.removeEventListener('message', onCommsBadge);
+  }, []);
   const isMobile = useIsMobile();
   const { handleLogout, isLoggingOut } = useLogout();
 
@@ -708,6 +722,7 @@ export default function Layout({ children, currentPageName }) {
                       colorKey={section.colorKey}
                       items={section.items}
                       currentPath={location.pathname}
+                      commsBadge={commsBadge}
                     />
                   </div>
                 ))}
