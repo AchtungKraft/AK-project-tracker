@@ -85,7 +85,7 @@ const SECTION_COLORS = {
 };
 
 // NavSection component for grouped navigation
-const NavSection = ({ title, colorKey, items, currentPath }) => {
+const NavSection = ({ title, colorKey, items, currentPath, commsBadge = 0 }) => {
   const colors = SECTION_COLORS[colorKey] || SECTION_COLORS.admin;
   
   return (
@@ -129,6 +129,11 @@ const NavSection = ({ title, colorKey, items, currentPath }) => {
                 >
                   <Icon className={cn("w-4 h-4", isActive ? "text-white" : colors.iconMuted)} />
                   <span>{item.title}</span>
+                  {item.title === 'COMMS' && commsBadge > 0 && (
+                    <span className="ml-auto rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white" aria-label={`${commsBadge} COMMS items need attention`}>
+                      {commsBadge > 99 ? '99+' : commsBadge}
+                    </span>
+                  )}
                 </Link>
               )}
             </div>
