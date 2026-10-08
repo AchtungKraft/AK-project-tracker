@@ -398,7 +398,7 @@ export default function Layout({ children, currentPageName }) {
       const iframe = document.querySelector('iframe[data-ak-comms-embed]');
       if (!iframe || event.source !== iframe.contentWindow) return;
       const payload = event.data;
-      if (payload?.type !== 'ak-comms:badge-count' || !Number.isSafeInteger(payload.total) || payload.total < 0) return;
+      if (payload?.type !== 'ak-comms:work-count' || !Number.isSafeInteger(payload.total) || payload.total < 0) return;
       setCommsBadge(payload.total);
     };
     window.addEventListener('message', onCommsBadge);
