@@ -68,6 +68,7 @@ import PartsActionWorkbench from './pages/PartsActionWorkbench';
 import PartsLifecycleDiagnostic from './pages/PartsLifecycleDiagnostic';
 import PartsTracker from './pages/PartsTracker';
 import PortalStatsEmbed from './pages/PortalStatsEmbed';
+import CommsEmbed from './pages/CommsEmbed';
 import PriorityDashboard from './pages/PriorityDashboard';
 import ProjectDetail from './pages/ProjectDetail';
 import ProjectFinancialReport from './pages/ProjectFinancialReport';
@@ -115,6 +116,7 @@ export const PAGES = {
     "PartsLifecycleDiagnostic": PartsLifecycleDiagnostic,
     "PartsTracker": PartsTracker,
     "PortalStatsEmbed": PortalStatsEmbed,
+    "CommsEmbed": CommsEmbed,
     "PriorityDashboard": PriorityDashboard,
     "ProjectDetail": ProjectDetail,
     "ProjectFinancialReport": ProjectFinancialReport,
