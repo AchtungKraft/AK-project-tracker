@@ -404,6 +404,29 @@ export default function Layout({ children, currentPageName }) {
     window.addEventListener('message', onCommsBadge);
     return () => window.removeEventListener('message', onCommsBadge);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let lastFetch = 0;
+    const fetchCount = async () => {
+      if (Date.now() - lastFetch < 15000) return;
+      lastFetch = Date.now();
+      const res = await base44.functions.invoke('getCommsWorkCount', {}).catch(() => null);
+      const total = res?.data?.total;
+      if (!cancelled && Number.isSafeInteger(total) && total >= 0) setCommsBadge(total);
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchCount(); };
+    fetchCount();
+    const interval = setInterval(() => { if (document.visibilityState === 'visible') { lastFetch = 0; fetchCount(); } }, 120000);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, []);
   const isMobile = useIsMobile();
   const { handleLogout, isLoggingOut } = useLogout();
 
