@@ -18,6 +18,13 @@
       "type": "string",
       "description": "Client phone"
     },
+    "client_account_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Optional reference to parent ClientAccount. Null/absent = unassigned."
+    },
     "vin": {
       "type": "string",
       "description": "VIN or Chassis number"

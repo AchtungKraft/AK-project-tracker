@@ -21,6 +21,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
+import ClientAccountSelect from "@/components/clients/ClientAccountSelect";
 import { getMobileInputClass, getMobileSelectClass } from "@/components/mobile/MobileFormStyles";
 
 export default function EditProjectModal({ project, onClose }) {
@@ -51,6 +52,7 @@ export default function EditProjectModal({ project, onClose }) {
         client_name: project.client_name || "",
         client_email: project.client_email || "",
         client_phone: project.client_phone || "",
+        client_account_id: project.client_account_id || "",
         vin: project.vin || "",
         project_type_id: project.project_type_id || "",
         status_id: project.status_id || "",
@@ -143,7 +145,10 @@ export default function EditProjectModal({ project, onClose }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    updateMutation.mutate(projectData);
+    const { client_account_id, ...rest } = projectData;
+    // Only send the parent link when it changed (keeps non-admin saves untouched)
+    const linkChanged = (client_account_id || "") !== (project.client_account_id || "");
+    updateMutation.mutate(linkChanged ? { ...rest, client_account_id: client_account_id || null } : rest);
   };
 
   const handleTeamToggle = (memberId) => {
@@ -218,6 +223,12 @@ export default function EditProjectModal({ project, onClose }) {
             className={getMobileInputClass(isMobile, "bg-gray-800 border-gray-700 text-white")}
           />
         </div>
+
+        <ClientAccountSelect
+          value={projectData.client_account_id}
+          onChange={(v) => setProjectData({ ...projectData, client_account_id: v })}
+          className={getMobileSelectClass ? getMobileSelectClass(isMobile, "bg-gray-800 border-gray-700 text-white") : undefined}
+        />
 
         <div>
           <Label>Project Type</Label>

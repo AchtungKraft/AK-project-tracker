@@ -164,6 +164,7 @@ const getNavigationSections = () => {
         { title: "COMMS", url: createPageUrl("CommsEmbed"), icon: MessageSquare },
         { title: "Projects", url: createPageUrl("Dashboard"), icon: FolderKanban },
         { title: "Workload", url: createPageUrl("PriorityDashboard"), icon: Flame },
+        { title: "Clients", url: "/clients", icon: Building2 },
         { title: "Client Portal", url: createPageUrl("ClientPortalHub"), icon: Building2 },
         { title: "Portal Stats", url: createPageUrl("PortalStatsEmbed"), icon: BarChart3 },
         { title: "Build Knowledge", url: "/buildknowledge", icon: BookOpen },

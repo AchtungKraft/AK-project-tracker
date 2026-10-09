@@ -18,6 +18,8 @@ import ClientPage from './pages/ClientPage';
 import MediaLibrary from './pages/MediaLibrary';
 import ProductionBoard from './pages/ProductionBoard';
 import TechnicianQueue from './pages/TechnicianQueue';
+import Clients from './pages/Clients';
+import ClientAccountDetail from './pages/ClientAccountDetail';
 
 // VendorPOBuilder page removed — vendor PO creation is now inline in GlobalNeedToOrder
 
@@ -103,6 +105,17 @@ const AuthenticatedApp = () => {
       <Route path="/technicianqueue" element={
         <LayoutWrapper currentPageName="TechnicianQueue">
           <TechnicianQueue />
+        </LayoutWrapper>
+      } />
+
+      <Route path="/clients" element={
+        <LayoutWrapper currentPageName="Clients">
+          <Clients />
+        </LayoutWrapper>
+      } />
+      <Route path="/clientaccount" element={
+        <LayoutWrapper currentPageName="ClientAccountDetail">
+          <ClientAccountDetail />
         </LayoutWrapper>
       } />
 

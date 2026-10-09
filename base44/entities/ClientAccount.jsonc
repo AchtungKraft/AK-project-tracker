@@ -1,0 +1,73 @@
+{
+  "name": "ClientAccount",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Organization / client account name"
+    },
+    "name_normalized": {
+      "type": "string",
+      "description": "Lowercased, trimmed, whitespace-collapsed name used for duplicate prevention"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "inactive"
+      ],
+      "default": "active",
+      "description": "Account status"
+    },
+    "primary_contact_name": {
+      "type": "string",
+      "description": "Optional primary contact name"
+    },
+    "email": {
+      "type": "string",
+      "description": "Optional contact email"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Optional contact phone"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Internal notes"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "user"
+          }
+        }
+      ]
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

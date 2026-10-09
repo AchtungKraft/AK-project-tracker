@@ -13,6 +13,7 @@ import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
 import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { referenceDataConfig } from "@/components/common/queryConfig";
+import ClientAccountSelect from "@/components/clients/ClientAccountSelect";
 
 // Separator used between number prefix and description — matches dominant convention
 const NAME_SEPARATOR = " - ";
@@ -224,6 +225,8 @@ export default function CreateProjectModal({ onClose, sourceProject = null }) {
       submitData.project_type_id = "";
     }
 
+    if (!submitData.client_account_id) delete submitData.client_account_id;
+
     createMutation.mutate(submitData);
   };
 
@@ -392,6 +395,10 @@ export default function CreateProjectModal({ onClose, sourceProject = null }) {
             className="bg-gray-800 border-gray-700 text-white"
           />
         </div>
+        <ClientAccountSelect
+          value={projectData.client_account_id}
+          onChange={(v) => setProjectData({ ...projectData, client_account_id: v })}
+        />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
