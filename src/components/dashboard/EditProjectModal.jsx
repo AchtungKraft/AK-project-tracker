@@ -87,7 +87,17 @@ export default function EditProjectModal({ project, onClose }) {
   const activeMembers = teamMembers.filter(tm => tm.active);
 
   const updateMutation = useMutation({
-    mutationFn: (data) => base44.entities.Project.update(project.id, data),
+    mutationFn: async ({ fields, link }) => {
+      await base44.entities.Project.update(project.id, fields);
+      if (!link) return;
+      // Client link goes through the admin-only server check
+      const prev = project.client_account_id || null;
+      await base44.functions.invoke('setProjectClientAccounts', {
+        account_id: link.next || prev,
+        confirm_reassign: true,
+        changes: [{ project_id: project.id, assign: !!link.next, expected_current: prev }],
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       queryClient.invalidateQueries({ queryKey: ['project', project.id] });
@@ -148,7 +158,7 @@ export default function EditProjectModal({ project, onClose }) {
     const { client_account_id, ...rest } = projectData;
     // Only send the parent link when it changed (keeps non-admin saves untouched)
     const linkChanged = (client_account_id || "") !== (project.client_account_id || "");
-    updateMutation.mutate(linkChanged ? { ...rest, client_account_id: client_account_id || null } : rest);
+    updateMutation.mutate({ fields: rest, link: linkChanged ? { next: client_account_id || null } : null });
   };
 
   const handleTeamToggle = (memberId) => {
