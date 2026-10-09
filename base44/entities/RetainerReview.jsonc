@@ -1,0 +1,147 @@
+{
+  "name": "RetainerReview",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "description": "ClientFeedbackRequest (request_type=retainer_review) this revision belongs to"
+    },
+    "retainer_account_id": {
+      "type": "string"
+    },
+    "client_account_id": {
+      "type": "string"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Designated D&D project at time of authoring"
+    },
+    "revision": {
+      "type": "integer",
+      "description": "1-based revision number"
+    },
+    "is_current": {
+      "type": "boolean",
+      "default": true
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "in_client_review",
+        "approved",
+        "changes_requested",
+        "superseded"
+      ],
+      "default": "draft"
+    },
+    "title": {
+      "type": "string"
+    },
+    "scope_description": {
+      "type": "string"
+    },
+    "lines": {
+      "type": "array",
+      "description": "Labor estimate lines. hours_x100 = hours in hundredths; money in integer cents.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "labor_group_id": {
+            "type": "string"
+          },
+          "labor_group_name": {
+            "type": "string"
+          },
+          "rate_id": {
+            "type": "string"
+          },
+          "hours_x100": {
+            "type": "integer"
+          },
+          "standard_rate_cents": {
+            "type": "integer"
+          },
+          "negotiated_rate_cents": {
+            "type": "integer"
+          },
+          "est_standard_cents": {
+            "type": "integer"
+          },
+          "est_negotiated_cents": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "task_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "task_names_snapshot": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "est_hours_x100": {
+      "type": "integer"
+    },
+    "est_standard_cents": {
+      "type": "integer"
+    },
+    "est_negotiated_cents": {
+      "type": "integer"
+    },
+    "content_hash": {
+      "type": "string",
+      "description": "SHA-256 of the reviewed content; approvals must match it"
+    },
+    "sent_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "decided_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "authored_by_email": {
+      "type": "string"
+    },
+    "superseded_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "request_id",
+    "retainer_account_id",
+    "revision",
+    "status",
+    "content_hash"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "retainer_service_only"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "retainer_service_only"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "retainer_service_only"
+      }
+    }
+  }
+}

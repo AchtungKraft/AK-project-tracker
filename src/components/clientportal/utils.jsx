@@ -42,6 +42,10 @@ export const REQUEST_TYPE_UI = {
   client_scope_review: {
     label: "Scope Review",
     color: "bg-cyan-500/20 text-cyan-400 border-cyan-500/50 border"
+  },
+  retainer_review: {
+    label: "Retainer Review",
+    color: "bg-violet-500/20 text-violet-400 border-violet-500/50 border"
   }
 };
 
@@ -61,7 +65,8 @@ export const REQUEST_TYPE_BEHAVIOR = {
   update: "decision",
   budget_review: "image_review",      // Structured review - same as design_review
   deliverable_review: "image_review",  // Structured review - same as design_review
-  client_scope_review: "scope_review"  // Item-level approval workflow
+  client_scope_review: "scope_review",  // Item-level approval workflow
+  retainer_review: "retainer_review"  // Revision + content-hash checked approval
 };
 
 /**

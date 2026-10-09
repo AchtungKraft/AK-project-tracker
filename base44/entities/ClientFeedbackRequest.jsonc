@@ -25,7 +25,8 @@
         "update",
         "budget_review",
         "deliverable_review",
-        "client_scope_review"
+        "client_scope_review",
+        "retainer_review"
       ],
       "description": "Type of feedback request"
     },

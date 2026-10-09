@@ -1,0 +1,117 @@
+{
+  "name": "RetainerApprovalSnapshot",
+  "type": "object",
+  "properties": {
+    "review_id": {
+      "type": "string",
+      "description": "RetainerReview revision decided on (one snapshot per revision)"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "retainer_account_id": {
+      "type": "string"
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "decision_id": {
+      "type": "string",
+      "description": "Canonical ClientFeedbackDecision id"
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "approved",
+        "changes_requested"
+      ]
+    },
+    "note": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "integer"
+    },
+    "content_hash": {
+      "type": "string"
+    },
+    "reviewer_type": {
+      "type": "string",
+      "enum": [
+        "client_contact"
+      ]
+    },
+    "reviewer_id": {
+      "type": "string"
+    },
+    "reviewer_name": {
+      "type": "string"
+    },
+    "access_id": {
+      "type": "string",
+      "description": "ProjectClientAccess used"
+    },
+    "decided_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "title": {
+      "type": "string"
+    },
+    "scope_description": {
+      "type": "string"
+    },
+    "lines": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "task_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "est_hours_x100": {
+      "type": "integer"
+    },
+    "est_standard_cents": {
+      "type": "integer"
+    },
+    "est_negotiated_cents": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "review_id",
+    "request_id",
+    "decision",
+    "revision",
+    "content_hash",
+    "reviewer_id",
+    "decided_at"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "retainer_service_only"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "retainer_service_only"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "retainer_service_only"
+      }
+    }
+  }
+}

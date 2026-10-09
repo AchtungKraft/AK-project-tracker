@@ -35,7 +35,8 @@ const REQUEST_TYPE_UI = {
     update: { label: "Project Update", color: "#6b7280" },
     budget_review: { label: "Budget Review", color: "#e11d48" },
     deliverable_review: { label: "Deliverable Review", color: "#10b981" },
-    client_scope_review: { label: "Scope Review", color: "#06b6d4" }
+    client_scope_review: { label: "Scope Review", color: "#06b6d4" },
+    retainer_review: { label: "Retainer Review", color: "#8b5cf6" }
 };
 
 const getRequestTypeInfo = (type) => {
@@ -444,6 +445,22 @@ Deno.serve(async (req) => {
             created_date: a.created_date
         }));
 
+        // Retainer review: client-safe current revision (never drafts)
+        let retainerReview = null;
+        if (request.request_type === 'retainer_review') {
+            const rrRes = await base44.asServiceRole.entities.RetainerReview.filter({ request_id: requestId, is_current: true });
+            const rr = (Array.isArray(rrRes) ? rrRes : safeArray(rrRes?.items))[0];
+            if (rr && rr.status !== 'draft' && rr.project_id === request.project_id) {
+                retainerReview = {
+                    id: rr.id, revision: rr.revision, status: rr.status, title: rr.title, scope_description: rr.scope_description,
+                    lines: (rr.lines || []).map(l => ({ labor_group_name: l.labor_group_name, hours_x100: l.hours_x100, standard_rate_cents: l.standard_rate_cents, negotiated_rate_cents: l.negotiated_rate_cents, est_standard_cents: l.est_standard_cents, est_negotiated_cents: l.est_negotiated_cents })),
+                    task_names: rr.task_names_snapshot || [],
+                    est_hours_x100: rr.est_hours_x100, est_standard_cents: rr.est_standard_cents, est_negotiated_cents: rr.est_negotiated_cents,
+                    content_hash: rr.content_hash, decided_at: rr.decided_at || null,
+                };
+            }
+        }
+
         const typeInfo = getRequestTypeInfo(request.request_type);
 
         const executionTime = Date.now() - startTime;
@@ -574,6 +591,7 @@ Deno.serve(async (req) => {
                     };
                 });
             })(),
+            retainerReview,
             assignableUsers: assignableUsers,
             assignableContacts: projectClients.map(c => ({ id: c.id, name: c.name, type: 'client_contact' }))
         }, {

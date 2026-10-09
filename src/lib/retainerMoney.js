@@ -16,6 +16,14 @@ export function formatCents(cents) {
   return `${neg ? "-" : ""}$${dollars}.${String(abs % 100).padStart(2, "0")}`;
 }
 
+export async function retainerReviewAction(payload) {
+  try {
+    return (await base44.functions.invoke("retainerReviewAction", payload)).data;
+  } catch (e) {
+    throw new Error(e?.response?.data?.error || e.message);
+  }
+}
+
 export async function retainerAction(payload) {
   try {
     return (await base44.functions.invoke("retainerAdminAction", payload)).data;

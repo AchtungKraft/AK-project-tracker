@@ -73,6 +73,14 @@ Deno.serve(async (req) => {
             });
         }
 
+        // Retainer reviews must use publicRetainerDecision (revision + content-hash checked)
+        if (request.request_type === 'retainer_review') {
+            return Response.json({ error: 'Retainer reviews must be decided from the retainer review panel.' }, {
+                status: 400,
+                headers: { 'Access-Control-Allow-Origin': '*' }
+            });
+        }
+
         let clientContactId;
         let access = null;
 

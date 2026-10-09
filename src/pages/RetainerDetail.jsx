@@ -8,6 +8,7 @@ import RetainerSetupCard from "@/components/retainer/RetainerSetupCard";
 import RetainerSummary from "@/components/retainer/RetainerSummary";
 import RetainerRatesSection from "@/components/retainer/RetainerRatesSection";
 import RetainerLedgerSection from "@/components/retainer/RetainerLedgerSection";
+import RetainerReviewsSection from "@/components/retainer/RetainerReviewsSection";
 
 export default function RetainerDetail() {
   const clientId = new URLSearchParams(window.location.search).get("client");
@@ -43,6 +44,7 @@ export default function RetainerDetail() {
         <>
           <RetainerSummary retainer={retainer} projects={projects} />
           <RetainerRatesSection retainer={retainer} />
+          <RetainerReviewsSection retainer={retainer} />
           <RetainerLedgerSection retainer={retainer} />
         </>
       )}

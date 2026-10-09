@@ -21,6 +21,7 @@ import { getRequestStateCanonical } from "@/components/clientportal/stateHelpers
 import { isStructuredReview } from "@/components/clientportal/reviewBehavior";
 import ImageModal from "../components/ui/ImageModal";
 import ScopeReviewDisplay from "@/components/scope/ScopeReviewDisplay";
+import RetainerReviewClientPanel from "@/components/retainer/RetainerReviewClientPanel";
 
 export default function ClientFeedbackRequestDetail() {
   const navigate = useNavigate();
@@ -358,7 +359,7 @@ export default function ClientFeedbackRequestDetail() {
               )}
             </div>
 
-            {clientAccess?.access_role === 'approver' && canAct && !isStructuredReview(request.request_type) && request.request_type !== 'client_scope_review' && (
+            {clientAccess?.access_role === 'approver' && canAct && !isStructuredReview(request.request_type) && request.request_type !== 'client_scope_review' && request.request_type !== 'retainer_review' && (
               <div className="flex gap-2 mt-4">
                 <Button
                   size="sm"
@@ -405,7 +406,16 @@ export default function ClientFeedbackRequestDetail() {
           </Card>
         )}
 
-        {request.request_type === 'client_scope_review' ? (
+        {request.request_type === 'retainer_review' ? (
+          <RetainerReviewClientPanel
+            review={requestData?.retainerReview}
+            accessRole={clientAccess?.access_role}
+            token={token}
+            slug={slug}
+            requestId={requestId}
+            queryKey={['clientRequestDetail', token, slug, requestId]}
+          />
+        ) : request.request_type === 'client_scope_review' ? (
           <ScopeReviewDisplay
             requestId={requestId}
             queryKey={['clientRequestDetail', token, slug, requestId]}
