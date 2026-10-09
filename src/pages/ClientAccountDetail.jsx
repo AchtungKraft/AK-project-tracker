@@ -4,7 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Loader2, Pencil } from "lucide-react";
+import { ArrowLeft, Loader2, Pencil, FolderKanban } from "lucide-react";
+import ManageClientProjectsModal from "@/components/clients/ManageClientProjectsModal";
 import { useIsAdmin } from "@/lib/clientAccounts";
 import { buildProjectDetailUrl, SOURCES } from "@/lib/workspaceConfig";
 import ClientAccountFormModal from "@/components/clients/ClientAccountFormModal";
@@ -13,6 +14,7 @@ export default function ClientAccountDetail() {
   const id = new URLSearchParams(window.location.search).get("id");
   const isAdmin = useIsAdmin();
   const [editing, setEditing] = useState(false);
+  const [managing, setManaging] = useState(false);
 
   const { data: account, isLoading } = useQuery({
     queryKey: ["clientAccount", id],
@@ -38,7 +40,12 @@ export default function ClientAccountDetail() {
           <h1 className="text-2xl font-bold text-white">{account.name}</h1>
           <Badge variant="outline" className="mt-1 text-gray-300 capitalize">{account.status || "active"}</Badge>
         </div>
-        {isAdmin && <Button variant="outline" onClick={() => setEditing(true)}><Pencil className="w-4 h-4 mr-1" /> Edit</Button>}
+        {isAdmin && (
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setManaging(true)}><FolderKanban className="w-4 h-4 mr-1" /> Manage Projects</Button>
+            <Button variant="outline" onClick={() => setEditing(true)}><Pencil className="w-4 h-4 mr-1" /> Edit</Button>
+          </div>
+        )}
       </div>
       {(details.length > 0 || account.notes) && (
         <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-4 space-y-2 text-sm">
@@ -66,6 +73,7 @@ export default function ClientAccountDetail() {
         )}
       </div>
       {editing && <ClientAccountFormModal account={account} onClose={() => setEditing(false)} />}
+      {managing && isAdmin && <ManageClientProjectsModal account={account} onClose={() => setManaging(false)} />}
     </div>
   );
 }
