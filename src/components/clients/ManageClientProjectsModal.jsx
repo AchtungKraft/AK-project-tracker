@@ -48,9 +48,12 @@ export default function ManageClientProjectsModal({ account, onClose }) {
     if (reassigns.length && !confirming) { setConfirming(true); return; }
     setSaving(true); setError("");
     try {
-      for (const c of pending) {
-        await base44.entities.Project.update(c.project.id, { client_account_id: c.checked ? account.id : null });
-      }
+      const res = await base44.functions.invoke("setProjectClientAccounts", {
+        account_id: account.id,
+        confirm_reassign: confirming,
+        changes: pending.map((c) => ({ project_id: c.project.id, assign: c.checked, expected_current: c.project.client_account_id || null })),
+      }).catch((e) => { throw new Error(e?.response?.data?.error || e.message); });
+      if (res.data?.failed?.length) throw new Error(`Could not update: ${res.data.failed.join(", ")}. Other changes were saved.`);
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["clientAccountProjects"] }),
         qc.invalidateQueries({ queryKey: ["manageClientProjects"] }),
