@@ -1,0 +1,74 @@
+{
+  "name": "RetainerRate",
+  "type": "object",
+  "properties": {
+    "retainer_account_id": {
+      "type": "string"
+    },
+    "labor_group_id": {
+      "type": "string",
+      "description": "Reference to ScopeLaborGroup"
+    },
+    "labor_group_name_snapshot": {
+      "type": "string"
+    },
+    "standard_rate_cents_snapshot": {
+      "type": "integer",
+      "description": "ScopeLaborGroup standard hourly rate at time of setting, in cents"
+    },
+    "negotiated_rate_cents": {
+      "type": "integer",
+      "description": "Negotiated hourly rate in cents"
+    },
+    "discount_bps_snapshot": {
+      "type": "integer",
+      "description": "Discount vs standard in basis points (100 = 1%)"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "superseded_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "set_by_email": {
+      "type": "string"
+    },
+    "set_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "note": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "retainer_account_id",
+    "labor_group_id",
+    "standard_rate_cents_snapshot",
+    "negotiated_rate_cents"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "retainer_service_only"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "retainer_service_only"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "retainer_service_only"
+      }
+    }
+  }
+}

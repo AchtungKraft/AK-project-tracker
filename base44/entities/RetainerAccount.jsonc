@@ -1,0 +1,66 @@
+{
+  "name": "RetainerAccount",
+  "type": "object",
+  "properties": {
+    "client_account_id": {
+      "type": "string",
+      "description": "Exactly one ClientAccount (one retainer per client account)"
+    },
+    "designated_project_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Optional existing D&D Project. Never auto-created."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "inactive"
+      ],
+      "default": "active"
+    },
+    "currency": {
+      "type": "string",
+      "enum": [
+        "USD"
+      ],
+      "default": "USD"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "created_by_email": {
+      "type": "string"
+    },
+    "updated_by_email": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "client_account_id"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "retainer_service_only"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "retainer_service_only"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "retainer_service_only"
+      }
+    }
+  }
+}

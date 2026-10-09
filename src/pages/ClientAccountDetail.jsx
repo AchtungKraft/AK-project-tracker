@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Loader2, Pencil, FolderKanban } from "lucide-react";
+import { ArrowLeft, Loader2, Pencil, FolderKanban, Wallet } from "lucide-react";
 import ManageClientProjectsModal from "@/components/clients/ManageClientProjectsModal";
 import { useIsAdmin } from "@/lib/clientAccounts";
 import { buildProjectDetailUrl, SOURCES } from "@/lib/workspaceConfig";
@@ -42,6 +42,7 @@ export default function ClientAccountDetail() {
         </div>
         {isAdmin && (
           <div className="flex gap-2">
+            <Button variant="outline" asChild><Link to={`/retainer?client=${account.id}`}><Wallet className="w-4 h-4 mr-1" /> Retainer</Link></Button>
             <Button variant="outline" onClick={() => setManaging(true)}><FolderKanban className="w-4 h-4 mr-1" /> Manage Projects</Button>
             <Button variant="outline" onClick={() => setEditing(true)}><Pencil className="w-4 h-4 mr-1" /> Edit</Button>
           </div>

@@ -1,0 +1,80 @@
+{
+  "name": "RetainerLedgerEntry",
+  "type": "object",
+  "properties": {
+    "transaction_id": {
+      "type": "string",
+      "description": "Human-readable unique transaction ID (RTL-YYYYMMDD-XXXXXXXX)"
+    },
+    "retainer_account_id": {
+      "type": "string"
+    },
+    "client_account_id": {
+      "type": "string"
+    },
+    "entry_type": {
+      "type": "string",
+      "enum": [
+        "deposit",
+        "adjustment"
+      ],
+      "description": "Phase 2A: admin deposits and manual corrections only"
+    },
+    "amount_cents": {
+      "type": "integer",
+      "description": "Signed integer cents. Deposits > 0; adjustments non-zero."
+    },
+    "reason": {
+      "type": "string"
+    },
+    "external_reference": {
+      "type": "string",
+      "description": "Check #, payment ref, etc."
+    },
+    "actor_id": {
+      "type": "string"
+    },
+    "actor_email": {
+      "type": "string"
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "idempotency_key": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "transaction_id",
+    "retainer_account_id",
+    "entry_type",
+    "amount_cents",
+    "reason",
+    "actor_email",
+    "recorded_at",
+    "idempotency_key"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "retainer_service_only"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "retainer_service_only"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "retainer_service_only"
+      }
+    }
+  }
+}
