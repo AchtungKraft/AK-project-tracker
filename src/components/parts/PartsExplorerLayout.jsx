@@ -377,14 +377,14 @@ export default function PartsExplorerLayout({ onPartClick }) {
         )}
 
         {/* Split Pane Layout - Desktop: side-by-side, Mobile: stacked */}
-        <div className="flex-1 flex flex-col md:flex-row md:overflow-hidden">
+        <div className="md:flex-1 flex flex-col md:flex-row md:overflow-hidden">
           {/* Left Pane - Category Tree */}
           <div 
             className="
               flex
               w-full md:w-[30%] lg:w-[25%] 
               flex-col border-b md:border-b-0 md:border-r border-red-900/30 bg-black/20
-              max-h-[40vh] md:max-h-none
+              max-h-[40vh] md:max-h-none overflow-hidden
             "
           >
             <CategoryTree
@@ -402,7 +402,7 @@ export default function PartsExplorerLayout({ onPartClick }) {
           {/* Right Pane - Parts List */}
           <div className="
             flex
-            flex-1 flex-col overflow-hidden
+            md:flex-1 flex-col md:overflow-hidden min-w-0
           ">
             {/* Toolbar */}
             <div className="p-3 border-b border-red-900/20 bg-gray-900/30">
@@ -419,8 +419,8 @@ export default function PartsExplorerLayout({ onPartClick }) {
             </div>
 
             {/* Parts Display */}
-            <div className="flex-1 flex flex-col md:overflow-hidden">
-              <div className="flex-1 p-4 md:overflow-y-auto parts-tracker-scrollbar">
+            <div className="md:flex-1 flex flex-col md:overflow-hidden">
+              <div className="md:flex-1 p-4 md:overflow-y-auto parts-tracker-scrollbar">
                 {viewMode === 'cards' ? (
                   <PartsGrid
                     parts={paginatedParts}
