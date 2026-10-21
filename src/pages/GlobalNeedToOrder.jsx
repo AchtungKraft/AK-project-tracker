@@ -280,9 +280,9 @@ export default function GlobalNeedToOrder() {
               </h1>
               <p className="text-sm text-gray-400">Cross-project ordering queue</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap min-w-0 max-w-full">
               {/* Grouping Mode Selector */}
-              <div className="flex items-center bg-gray-800 rounded-lg p-0.5 border border-gray-700">
+              <div className="flex items-center bg-gray-800 rounded-lg p-0.5 border border-gray-700 max-w-full overflow-x-auto">
                 <Button
                   variant={groupingMode === 'vendor_project' ? 'default' : 'ghost'}
                   size="sm"

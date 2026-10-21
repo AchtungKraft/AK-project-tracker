@@ -92,7 +92,7 @@ export default function HierarchicalList({
                 snapshot.isDragging ? 'shadow-lg border border-red-900/50' : ''
               }`}
             >
-              <div className="flex items-center gap-3 flex-1">
+              <div className="flex items-center gap-3 flex-1 min-w-0 flex-wrap sm:flex-nowrap">
                 <div {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing">
                   <GripVertical className="w-5 h-5 text-gray-500" />
                 </div>
@@ -169,7 +169,7 @@ export default function HierarchicalList({
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                 {editing === item.id ? (
                   <>
                     <Button

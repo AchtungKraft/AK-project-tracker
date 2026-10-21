@@ -157,6 +157,20 @@ button:focus-visible {
   }
 }
 
+/* ── Mobile: iOS Safari zooms the page into any focused field under 16px,
+   which shows up as horizontal clipping while the keyboard is open. ── */
+@media (max-width: 767px) {
+  input:not([type=checkbox]):not([type=radio]):not([type=range]),
+  textarea,
+  select,
+  [contenteditable="true"],
+  .ql-editor {
+    font-size: 16px !important;
+  }
+  /* Keep media and wide rich content inside their container */
+  img, video { max-width: 100%; }
+}
+
 /* ── Global subtle dark scrollbars ── */
 * {
   scrollbar-width: thin;

@@ -112,7 +112,7 @@ export default function ProjectListView({
                               </span>
                             )}
                             {project.vin && (
-                              <span className="text-gray-600">
+                              <span className="text-gray-600 min-w-0 max-w-full break-all">
                                 VIN: {project.vin}
                               </span>
                             )}
