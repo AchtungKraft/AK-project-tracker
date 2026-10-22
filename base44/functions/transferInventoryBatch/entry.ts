@@ -27,6 +27,14 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
+    // Service-role writes must not be callable by external/company project users.
+    // The Storage workspace is an internal AK staff workflow; enforce it in backend too.
+    if (user.role !== 'admin') {
+      const memberships = await base44.asServiceRole.entities.TeamMember.filter({ user_id: user.id });
+      const isAkStaff = memberships.some(m => m.active !== false && m.is_achtung_kraft_member === true);
+      if (!isAkStaff) return Response.json({ error: 'AK staff authorization required' }, { status: 403 });
+    }
+
     const payload = await req.json();
     const {
       transfer_type,     // 'inventory_move' | 'container_move' | 'put_away' | 'project_stage' | 'return_to_stock' | 'admin_correction'
