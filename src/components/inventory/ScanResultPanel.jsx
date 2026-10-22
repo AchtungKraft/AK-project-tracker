@@ -31,6 +31,8 @@ export default function ScanResultPanel({
   inventoryItems = [],
   projects = [],
   onOpenEntity,
+  onDocumentContainer,
+  preferredAction='browse',
   onScanAgain,
   onBrowse,
 }) {
@@ -86,6 +88,8 @@ export default function ScanResultPanel({
         inventoryItems={inventoryItems}
         projects={projects}
         onOpen={() => onOpenEntity?.('CONTAINER', scanResult.entity_id)}
+        onDocument={onDocumentContainer ? () => onDocumentContainer(scanResult.entity_id) : undefined}
+        preferredAction={preferredAction}
         onScanAgain={onScanAgain}
       />
     );
@@ -177,7 +181,7 @@ function LocationScanResult({ location, locations, containers, inventoryItems, p
 // ════════════════════════════════════════════
 // CONTAINER SCAN RESULT
 // ════════════════════════════════════════════
-function ContainerScanResult({ container, locations, inventoryItems, projects, onOpen, onScanAgain }) {
+function ContainerScanResult({ container, locations, inventoryItems, projects, onOpen, onDocument, preferredAction, onScanAgain }) {
   const tc = getContainerTypeConfig(container.container_type);
   const TypeIcon = tc.icon;
   const displayColor = container.color || tc.color;
@@ -255,11 +259,14 @@ function ContainerScanResult({ container, locations, inventoryItems, projects, o
       {/* Actions */}
       <div className="px-4 py-4 border-t border-gray-800 shrink-0 space-y-2"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }}>
-        <Button onClick={onOpen} className="w-full h-12 text-base gap-2 bg-red-600 hover:bg-red-700">
-          <FolderOpen className="w-5 h-5" /> Open Container
+        {onDocument && <Button onClick={onDocument} className={`w-full h-12 text-base gap-2 ${preferredAction==='document'?'bg-amber-600 hover:bg-amber-700':'bg-indigo-700 hover:bg-indigo-800'}`}>
+          <Package className="w-5 h-5" /> Photograph / Document Contents
+        </Button>}
+        <Button onClick={onOpen} className={`w-full h-12 text-base gap-2 ${preferredAction==='document'?'bg-gray-800 hover:bg-gray-700':'bg-red-600 hover:bg-red-700'}`}>
+          <FolderOpen className="w-5 h-5" /> Open Box Details
         </Button>
-        <Button onClick={onScanAgain} variant="outline" className="w-full h-12 text-base border-gray-600 text-gray-300 gap-2">
-          <RefreshCw className="w-5 h-5" /> Scan Again
+        <Button onClick={onScanAgain} variant="outline" className="w-full h-11 text-sm border-gray-600 text-gray-300 gap-2">
+          <RefreshCw className="w-4 h-4" /> Scan Another
         </Button>
       </div>
     </div>
