@@ -9,7 +9,7 @@ function harness(file, { role='admin', storage={}, delay=0, failCustody=false }=
   const rows={TeamMember:[],StorageContainer:[],StoredProperty:[],StoredPropertyPhoto:[],StorageCustodyEvent:[],StorageLabel:[],StorageLabelBatch:[],Project:[],Location:[],Part:[],InventoryItem:[],InventoryTransfer:[],InventoryAuditLog:[],InventoryMutationLog:[], ...clone(storage)};
   const calls=[];
   let next=1;
-  const makeId=()=>next++.toString(16).padStart(24,'0');
+  const makeId=()=>(next++).toString(16).padStart(24,'0');
   const cmp=(record,query)=>Object.entries(query||{}).every(([k,v])=>v&&typeof v==='object'&&('$in' in v) ? v.$in.includes(record[k]):record[k]===v);
   const entities=new Proxy({}, {get(_target,n){return {
     async filter(q,_sort,limit){calls.push(`${String(n)}.filter`);return (rows[n]||[]).filter(r=>cmp(r,q)).slice(0,limit||500);},
