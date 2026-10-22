@@ -1,0 +1,72 @@
+{
+  "name": "StorageCustodyEvent",
+  "type": "object",
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "intake",
+        "move_container",
+        "move_property",
+        "split",
+        "merge",
+        "link_catalog",
+        "unlink_catalog",
+        "verify",
+        "activate_label",
+        "return",
+        "remove",
+        "convert_to_inventory",
+        "owner_change",
+        "correct"
+      ],
+      "description": "Physical custody event; informational and non-inventory"
+    },
+    "stored_property_id": {
+      "type": "string"
+    },
+    "container_id": {
+      "type": "string"
+    },
+    "from_container_id": {
+      "type": "string"
+    },
+    "to_container_id": {
+      "type": "string"
+    },
+    "from_location_id": {
+      "type": "string"
+    },
+    "to_location_id": {
+      "type": "string"
+    },
+    "client_account_id": {
+      "type": "string"
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "performed_by": {
+      "type": "string"
+    },
+    "performed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "action_key": {
+      "type": "string",
+      "description": "Idempotency/replay key"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "details": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "event_type",
+    "performed_by",
+    "performed_at"
+  ]
+}
