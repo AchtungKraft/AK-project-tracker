@@ -2,6 +2,7 @@ import React from "react";
 import { MapPin, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig, buildLocationPath } from "./locationTypeConfig";
+import { shopStorageName } from "./shopStorageNames";
 
 /**
  * Persistent workspace header spanning center + inspector.
@@ -13,7 +14,7 @@ export default function StorageWorkspaceHeader({ locationId, locations, selected
       return (
         <div className="flex items-center gap-2 px-4 py-1.5 bg-yellow-950/15 border-b border-yellow-900/20 shrink-0 min-h-[32px]">
           <MapPin className="w-3.5 h-3.5 text-yellow-500 shrink-0" />
-          <span className="text-xs font-semibold text-yellow-400">Unassigned Parts</span>
+          <span className="text-xs font-semibold text-yellow-400">Stock Without a Location</span>
         </div>
       );
     }
@@ -47,7 +48,7 @@ export default function StorageWorkspaceHeader({ locationId, locations, selected
                   "text-xs truncate max-w-[140px]",
                   isLast ? "font-semibold" : "font-normal"
                 )}>
-                  {node.shortCode || node.name}
+                  {shopStorageName(node.name)==='Unassigned Stock'?shopStorageName(node.name):(node.shortCode||shopStorageName(node.name))}
                 </span>
               </div>
             </React.Fragment>
