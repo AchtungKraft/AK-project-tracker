@@ -521,6 +521,17 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   // Shared modals
   const renderModals = () => (
     <>
+      {!isMobile && containerWorkspaceOpen && selectedContainer && <StorageContainerWorkspace
+        container={selectedContainer} locations={locations} inventoryItems={inventoryItems}
+        parts={parts} projects={projects} vendors={vendors}
+        onClose={() => { setContainerWorkspaceOpen(false); setSelectedContainer(null); }}
+        onMove={(c) => { setMoveContainerReturnHome(false); setMoveContainerTarget(c); }}
+        onReturnHome={(c) => { setMoveContainerReturnHome(true); setMoveContainerTarget(c); }}
+        onAddParts={(c) => setAddToContainerTarget(c)}
+        onEmptyContainer={(c) => setEmptyContainerTarget(c)}
+        onMoveFromContainer={handleStartMoveFromContainer}
+        onPartClick={onPartClick} onOpenGallery={openGallery} partActions={partActions}
+        getInventoryStats={getInventoryStats} getInventoryItemId={getInventoryItemId} />}
       {inventoryModalPart && <AddInventoryModal onClose={() => setInventoryModalPart(null)} preselectedPartId={inventoryModalPart.id} />}
       {orderModalPart && <OrderPartModal part={orderModalPart} onClose={() => setOrderModalPart(null)} />}
       {buildModalPart && <AddToBuildModal part={buildModalPart} onClose={() => setBuildModalPart(null)} />}
@@ -534,17 +545,6 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
         intent={scanIntent} onOpenLocation={handleScanOpenLocation} onOpenContainer={handleScanOpenContainer}
         onDocumentContainer={(box) => { setScannerOpen(false); handleSelectContainer(box); }}
         onClose={() => setScannerOpen(false)} />}
-      {!isMobile && containerWorkspaceOpen && selectedContainer && <StorageContainerWorkspace
-        container={selectedContainer} locations={locations} inventoryItems={inventoryItems}
-        parts={parts} projects={projects} vendors={vendors}
-        onClose={() => { setContainerWorkspaceOpen(false); setSelectedContainer(null); }}
-        onMove={(c) => { setMoveContainerReturnHome(false); setMoveContainerTarget(c); }}
-        onReturnHome={(c) => { setMoveContainerReturnHome(true); setMoveContainerTarget(c); }}
-        onAddParts={(c) => setAddToContainerTarget(c)}
-        onEmptyContainer={(c) => setEmptyContainerTarget(c)}
-        onMoveFromContainer={handleStartMoveFromContainer}
-        onPartClick={onPartClick} onOpenGallery={openGallery} partActions={partActions}
-        getInventoryStats={getInventoryStats} getInventoryItemId={getInventoryItemId} />}
       {documentBoxPickerOpen && <StorageDocumentBoxPicker
         containers={containers} locations={locations} projects={projects} isAdmin={isAdmin}
         onChooseBox={chooseBoxToDocument} onScan={scanBoxFromPicker}
