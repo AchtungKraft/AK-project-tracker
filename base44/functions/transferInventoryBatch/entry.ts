@@ -39,6 +39,7 @@ Deno.serve(async (req) => {
     const {
       transfer_type,     // 'inventory_move' | 'container_move' | 'put_away' | 'project_stage' | 'return_to_stock' | 'admin_correction'
       source_location_id,
+      source_unassigned_only, // shop shortcut: enforce source has no location and no box
       source_container_id,
       destination_location_id,
       destination_container_id,
@@ -232,6 +233,11 @@ Deno.serve(async (req) => {
       // Validate source matches
       if (source_location_id && invItem.location_id !== source_location_id) {
         errors.push({ index: i, error: 'Item not at source location', code: 'SOURCE_MISMATCH' }); continue;
+      }
+      // The shop's no-location queue must not accidentally move items that
+      // were assigned elsewhere after the technician opened the page.
+      if (source_unassigned_only === true && (invItem.location_id || invItem.container_id)) {
+        errors.push({ index: i, error: 'Item is no longer unassigned', code: 'SOURCE_MISMATCH' }); continue;
       }
       if (source_container_id && invItem.container_id !== source_container_id) {
         errors.push({ index: i, error: 'Item not in source container', code: 'CONTAINER_MISMATCH' }); continue;
