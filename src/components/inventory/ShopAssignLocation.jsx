@@ -143,7 +143,7 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
         </Button>
         <div className="min-w-0 flex-1">
           <h2 className="text-lg font-semibold truncate">Assign Stock Location</h2>
-          <p className="text-xs text-gray-400">Select parts → Choose shelf → Confirm · stock quantities stay balanced</p>
+          <p className="text-xs text-gray-400">Select parts → Choose shelf → Confirm · uses existing stock-transfer rules</p>
         </div>
         <div className="shrink-0 rounded bg-amber-950/40 text-amber-300 text-xs px-2 py-1">{step==='items'?'1 / 3':step==='destination'?'2 / 3':step==='review'?'3 / 3':'Complete'}</div>
       </div>
@@ -163,7 +163,7 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
               <span className="text-xs text-gray-400">{countBySource.none} movable lines</span>
             </button>
           </div>
-          <p className="text-xs text-gray-400">Only unreserved, loose inventory is selectable. Box contents are moved using Move Box.</p>
+          <p className="text-xs text-gray-400">Only unreserved, loose stock can move here. For client parts or take-offs that are not inventory, scan a labeled box and use Document Contents.</p>
           <div className="flex gap-2 items-center">
             <div className="relative flex-1">
               <Search className="absolute top-1/2 left-3 -translate-y-1/2 w-4 h-4 text-gray-500"/>
