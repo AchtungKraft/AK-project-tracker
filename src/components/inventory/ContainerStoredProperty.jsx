@@ -109,7 +109,7 @@ function StoredPropertyRow({item,container,parts,onChanged}){
 export default function ContainerStoredProperty({container,parts=[]}){
   const client=useQueryClient();
   const [intakeOpen,setIntakeOpen]=useState(false);
-  const {data:items=[],isLoading,error,refetch}=useQuery({
+  const {data:items=[],isLoading,error}=useQuery({
     queryKey:['storedPropertyContainer',container.id],
     queryFn:async()=>{
       const result=unwrap(await base44.functions.invoke('storageProperty',{action:'list_container',container_id:container.id}));
@@ -120,7 +120,6 @@ export default function ContainerStoredProperty({container,parts=[]}){
   });
   const refresh=()=>{
     client.invalidateQueries({queryKey:['storedPropertyContainer',container.id]});
-    refetch();
   };
   return <section className="space-y-3 mb-5 pb-4 border-b border-gray-800">
     <div className="flex items-center gap-2 justify-between">
