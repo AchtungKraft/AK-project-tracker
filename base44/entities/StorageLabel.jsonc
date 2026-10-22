@@ -1,0 +1,86 @@
+{
+  "name": "StorageLabel",
+  "type": "object",
+  "properties": {
+    "batch_id": {
+      "type": "string",
+      "description": "StorageLabelBatch identity"
+    },
+    "short_code": {
+      "type": "string",
+      "description": "Unique human-readable label code derived from batch"
+    },
+    "qr_code_value": {
+      "type": "string",
+      "description": "AK_CTR:{label.id} permanent QR value"
+    },
+    "container_type": {
+      "type": "string",
+      "enum": [
+        "box",
+        "tote",
+        "bin",
+        "tray",
+        "organizer",
+        "crate",
+        "cart",
+        "kit",
+        "other"
+      ],
+      "default": "box"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "reserved",
+        "activating",
+        "activated",
+        "voided"
+      ],
+      "default": "reserved"
+    },
+    "container_id": {
+      "type": "string",
+      "description": "StorageContainer created on activation"
+    },
+    "sequence": {
+      "type": "integer",
+      "description": "Ordered label position in batch"
+    },
+    "activated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "activated_by": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "batch_id",
+    "short_code",
+    "container_type",
+    "sequence"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}
