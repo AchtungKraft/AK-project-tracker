@@ -9,6 +9,7 @@ import { Select,SelectContent,SelectItem,SelectTrigger,SelectValue } from "@/com
 import { Camera,Images,Loader2,X,ShieldCheck,CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { uploadAndRegisterPropertyPhoto, uploadErrorDetail } from "@/lib/storagePhotoUpload";
+import { prepareStoragePhotoFile } from "@/lib/storagePhotoPrepare";
 
 const TYPES=[
   ['unidentified','Unidentified contents'],['miscellaneous','Miscellaneous group'],
@@ -82,8 +83,13 @@ export default function PropertyIntakeModal({ container, existingGroup = null, o
         if(current.saved)continue;
         setProgress(`Photograph ${i+1} of ${files.length}`);
         try{
+          let uploadFile=current.file;
+          if(!current.uri && uploadFile.size>6*1024*1024){
+            setProgress(`Optimizing photograph ${i+1} for private storage…`);
+            uploadFile=await prepareStoragePhotoFile(uploadFile);
+          }
           const uploaded=await uploadAndRegisterPropertyPhoto({
-            file:current.file,
+            file:uploadFile,
             existingUri:current.uri,
             containerId:container.id,
             propertyId:created.id,
@@ -164,7 +170,7 @@ export default function PropertyIntakeModal({ container, existingGroup = null, o
       </div>
       <div className="border-t border-gray-700 pt-3 shrink-0 space-y-2" style={{paddingBottom:'env(safe-area-inset-bottom, 0px)'}}>
         {busy&&<p className="text-xs text-gray-400 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>{progress||'Saving group…'}</p>}
-        <Button disabled={busy||(!files.length&&(!name.trim()||!!group))} onClick={save} className="w-full h-12">
+        <Button disabled={busy||(!files.length&&(!name.trim()||!!group))||(!files.some(f=>!f.saved)&&!!group)} onClick={save} className="w-full h-12">
           {busy?'Saving…':group?`Save / Retry Photos (${files.filter(f=>!f.saved).length} remaining)`:`Save Intake (${files.length} photo${files.length===1?'':'s'})`}
         </Button>
         <Button variant="outline" disabled={busy} onClick={onClose} className="w-full h-9">Close</Button>
