@@ -10,10 +10,12 @@ import PropertyIntakeModal from "./PropertyIntakeModal";
 const unwrap = r=>r?.data||r;
 
 function StoredPropertyRow({item,container,parts,onChanged}){
+  const queryClient=useQueryClient();
   const [showPhotos,setShowPhotos]=useState(false);
   const [linking,setLinking]=useState(false);
   const [search,setSearch]=useState('');
   const [linkBusy,setLinkBusy]=useState(false);
+  const [additionalPhotos,setAdditionalPhotos]=useState(false);
   const catalog=parts.find(p=>p.id===item.catalog_part_id);
   const candidates=useMemo(()=>{
     const needle=search.trim().toLowerCase();
@@ -65,6 +67,9 @@ function StoredPropertyRow({item,container,parts,onChanged}){
         {showPhotos?<ChevronDown className="w-3 h-3"/>:<ChevronRight className="w-3 h-3"/>}
         <ImageIcon className="w-3 h-3"/> {item.photo_count||0} photos
       </Button>
+      <Button size="sm" variant="ghost" onClick={()=>setAdditionalPhotos(true)} className="h-8 gap-1 text-xs text-gray-400">
+        <Camera className="w-3 h-3"/> Add Photos
+      </Button>
       <Button size="sm" variant="ghost" onClick={()=>setLinking(v=>!v)} className="h-8 gap-1 text-xs text-gray-400">
         <Link2 className="w-3 h-3"/> {catalog?'Change catalog match':'Identify as Part'}
       </Button>
@@ -85,6 +90,12 @@ function StoredPropertyRow({item,container,parts,onChanged}){
       </div>
       <p className="text-[10px] text-gray-600">Photo links expire automatically and can be refreshed by reopening this section.</p>
     </div>}
+    {additionalPhotos&&<PropertyIntakeModal container={container} existingGroup={item}
+      onClose={()=>setAdditionalPhotos(false)} onSaved={()=>{
+        onChanged?.();
+        queryClient.invalidateQueries({queryKey:['storedPropertyPhotos',item.id]});
+      }}/>
+    }
     {linking&&<div className="rounded border border-gray-800 p-2 space-y-2">
       <div className="relative">
         <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-gray-500"/>
