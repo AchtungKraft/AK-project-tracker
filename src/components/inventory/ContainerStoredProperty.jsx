@@ -3,9 +3,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Camera, ChevronDown, ChevronRight, Image as ImageIcon, Link2, Loader2, Package, Search } from "lucide-react";
+import { Camera, ChevronDown, ChevronRight, Image as ImageIcon, Link2, Loader2, Package, Pencil, Search } from "lucide-react";
 import { toast } from "sonner";
 import PropertyIntakeModal from "./PropertyIntakeModal";
+import StoredPropertyDetailsEditor from "./StoredPropertyDetailsEditor";
 
 const unwrap = r=>r?.data||r;
 
@@ -16,6 +17,7 @@ function StoredPropertyRow({item,container,parts,onChanged}){
   const [search,setSearch]=useState('');
   const [linkBusy,setLinkBusy]=useState(false);
   const [additionalPhotos,setAdditionalPhotos]=useState(false);
+  const [editingDetails,setEditingDetails]=useState(false);
   const catalog=parts.find(p=>p.id===item.catalog_part_id);
   const candidates=useMemo(()=>{
     const needle=search.trim().toLowerCase();
@@ -56,6 +58,7 @@ function StoredPropertyRow({item,container,parts,onChanged}){
           {item.condition&&item.condition!=='unknown'?` · ${item.condition}`:''}
         </div>
         {item.description&&<p className="text-xs text-gray-400 mt-1 whitespace-pre-wrap">{item.description}</p>}
+        {item.notes&&<p className="text-xs text-amber-300/80 mt-1 whitespace-pre-wrap">{item.notes}</p>}
         {catalog&&<p className="text-xs text-blue-300 mt-1">
           Catalog ID: {catalog.part_name||catalog.vendor_part_number} <span className="text-gray-500">· not inventory</span>
         </p>}
@@ -63,6 +66,9 @@ function StoredPropertyRow({item,container,parts,onChanged}){
       </div>
     </div>
     <div className="flex items-center flex-wrap gap-2">
+      <Button size="sm" variant="outline" onClick={()=>setEditingDetails(true)} className="h-8 gap-1 text-xs border-indigo-800 text-indigo-200">
+        <Pencil className="w-3 h-3"/> Edit Details
+      </Button>
       <Button size="sm" variant="outline" onClick={()=>setShowPhotos(v=>!v)} className="h-8 gap-1 text-xs border-gray-700">
         {showPhotos?<ChevronDown className="w-3 h-3"/>:<ChevronRight className="w-3 h-3"/>}
         <ImageIcon className="w-3 h-3"/> {item.photo_count||0} photos
@@ -90,6 +96,8 @@ function StoredPropertyRow({item,container,parts,onChanged}){
       </div>
       <p className="text-[10px] text-gray-600">Photo links expire automatically and can be refreshed by reopening this section.</p>
     </div>}
+    {editingDetails&&<StoredPropertyDetailsEditor container={container} property={item}
+      onClose={()=>setEditingDetails(false)} onSaved={onChanged} />}
     {additionalPhotos&&<PropertyIntakeModal container={container} existingGroup={item}
       onClose={()=>setAdditionalPhotos(false)} onSaved={()=>{
         onChanged?.();
