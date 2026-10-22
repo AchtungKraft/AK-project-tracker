@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { 
-  Search, ChevronRight, Package, LayoutGrid, List, X, ArrowLeft, ScanLine, ArrowRightLeft
+  Search, ChevronRight, Package, LayoutGrid, List, X, ArrowLeft, ScanLine, ArrowRightLeft, Printer
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig, buildLocationPathString } from "./locationTypeConfig";
@@ -31,6 +31,8 @@ import MoveContainerModal from "./MoveContainerModal";
 import AddToContainerModal from "./AddToContainerModal";
 import EmptyContainerModal from "./EmptyContainerModal";
 import ScannerModal from "./ScannerModal";
+import BatchStorageLabelsModal from "./BatchStorageLabelsModal";
+import { useIsAdmin } from "@/lib/clientAccounts";
 import InventoryMoveWorkflow from "./move/InventoryMoveWorkflow";
 import MobileMoveWorkflow from "./mobile/MobileMoveWorkflow";
 import PutAwayWorkflow from "./putaway/PutAwayWorkflow";
@@ -39,6 +41,7 @@ const STORAGE_KEY = 'achtung_inventory_locations_state';
 
 export default function InventoryLocations({ onPartClick, urlLocationId }) {
   const isMobile = useIsMobile();
+  const isAdmin = useIsAdmin();
 
   // --- Persisted state ---
   const [selectedLocationId, setSelectedLocationIdRaw] = useState(() => {
@@ -96,6 +99,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   const [needToBuyModalPart, setNeedToBuyModalPart] = useState(null);
   const [galleryState, setGalleryState] = useState({ open: false, images: [], currentIndex: 0 });
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [batchLabelsOpen, setBatchLabelsOpen] = useState(false);
   const [moveWorkflowSource, setMoveWorkflowSource] = useState(null); // { type, id, entity }
   const [mobileMoveOpen, setMobileMoveOpen] = useState(false);
   const [putAwayOpen, setPutAwayOpen] = useState(false);
@@ -498,6 +502,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
       {emptyContainerTarget && <EmptyContainerModal container={emptyContainerTarget} onClose={() => setEmptyContainerTarget(null)} locations={locations} containers={containers} inventoryItems={inventoryItems} parts={parts} />}
       <ImageGallery isOpen={galleryState.open} images={galleryState.images} currentIndex={galleryState.currentIndex} onClose={closeGallery} onNavigate={navigateGallery} />
       {scannerOpen && <ScannerModal locations={locations} containers={containers} inventoryItems={inventoryItems} projects={projects} onOpenLocation={handleScanOpenLocation} onOpenContainer={handleScanOpenContainer} onClose={() => setScannerOpen(false)} />}
+      {isAdmin && batchLabelsOpen && <BatchStorageLabelsModal onClose={() => setBatchLabelsOpen(false)} />}
       {moveWorkflowSource && (
         <InventoryMoveWorkflow
           source={moveWorkflowSource}
@@ -586,6 +591,12 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                   <ArrowRightLeft className="w-4 h-4" /> Put Away
                 </Button>
               </div>
+              {isAdmin && <div className="px-3 py-2">
+                <Button variant="outline" onClick={() => setBatchLabelsOpen(true)}
+                  className="w-full h-10 gap-2 border-gray-700 text-gray-300 text-sm">
+                  <Printer className="w-4 h-4" /> Print Batch Box Labels
+                </Button>
+              </div>}
               <StorageHome favorites={favorites} recents={recents} locations={locations} containers={containers}
                 inventoryItems={inventoryItems} locationPartCounts={locationPartCounts} showEmptyLocations={showEmptyLocations}
                 onSelectLocation={handleLocationSelect} onSelectContainer={handleSelectContainer}
@@ -650,6 +661,11 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                 <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-gray-600 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 font-mono pointer-events-none">⌘K</kbd>
               )}
             </div>
+            {/* Batch label generation requires admin; scanning and activation remain separate. */}
+            {isAdmin && <Button size="sm" variant="outline" onClick={() => setBatchLabelsOpen(true)}
+              className="h-9 gap-1.5 border-gray-700 text-gray-300 hover:border-red-700 shrink-0">
+              <Printer className="w-4 h-4" /> Labels
+            </Button>}
             {/* Scan + View toggle */}
             <Button size="sm" variant="outline" onClick={() => setScannerOpen(true)}
               className="h-9 gap-1.5 border-gray-700 text-gray-300 hover:text-red-400 hover:border-red-700 shrink-0">
