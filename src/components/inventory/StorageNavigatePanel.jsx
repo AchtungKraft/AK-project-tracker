@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Star, Clock, ChevronRight, ChevronDown, MapPin, Package, PackageOpen, ArrowRightLeft } from "lucide-react";
+import { Star, Clock, ChevronRight, ChevronDown, MapPin, Package, PackageOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig } from "./locationTypeConfig";
 import { findReceivingLocation } from "@/lib/receivingLocationResolver";
