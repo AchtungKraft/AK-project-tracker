@@ -72,10 +72,10 @@ function StoredPropertyRow({item,container,parts,onChanged,autoPreview=false}){
       <Button size="sm" variant="outline" onClick={()=>setEditingContents(true)} className="h-9 gap-1.5 text-xs border-indigo-800 text-indigo-200">
         <Pencil className="w-3.5 h-3.5"/> Edit Contents &amp; Photos
       </Button>
-      <Button size="sm" variant="outline" onClick={()=>setShowPhotos(v=>!v)} className="h-8 gap-1 text-xs border-gray-700">
+      {(item.photo_count||0)>0&&<Button size="sm" variant="outline" onClick={()=>setShowPhotos(v=>!v)} className="h-9 gap-1 text-xs border-gray-700">
         {showPhotos?<ChevronDown className="w-3 h-3"/>:<ChevronRight className="w-3 h-3"/>}
-        <ImageIcon className="w-3 h-3"/> {item.photo_count||0} photos
-      </Button>
+        <ImageIcon className="w-3 h-3"/> {item.photo_count} {item.photo_count===1?"photo":"photos"}
+      </Button>}
       <Button size="sm" variant="ghost" onClick={()=>setLinking(v=>!v)} className="h-8 gap-1 text-xs text-gray-400">
         <Link2 className="w-3 h-3"/> {catalog?'Change catalog match':'Identify as Part'}
       </Button>
@@ -142,12 +142,12 @@ export default function ContainerStoredProperty({container,parts=[],wide=false})
         <p className="text-[11px] text-gray-500">Client parts and take-offs · separate from inventory</p>
       </div>
       <Button onClick={()=>setIntakeOpen(true)} size="sm" variant="outline" className="h-9 gap-1.5 text-xs border-indigo-800 text-indigo-200">
-        <Camera className="w-4 h-4"/> Add New Group
+        <Camera className="w-4 h-4"/> Add Contents
       </Button>
     </div>
     {isLoading?<p className="text-xs text-gray-500">Loading property…</p>:
       error?<p className="text-xs text-red-400">Stored Property unavailable: {error.message}</p>:
-        !active.length?<p className="text-sm text-gray-500 rounded-lg border border-dashed border-gray-800 p-4">No stored property documented yet. Use Document Contents to photograph or list client items, take-offs, or miscellaneous parts.</p>:
+        !active.length?<p className="text-sm text-gray-500 rounded-lg border border-dashed border-gray-800 p-4">No stored property documented yet. Select Add Contents to photograph or list client items, take-offs, or miscellaneous parts.</p>:
           <div className={wide?"grid grid-cols-1 lg:grid-cols-2 gap-3 items-start":"space-y-2"}>{active.map((i,index)=>
             <StoredPropertyRow key={i.id} item={i} container={container} parts={parts} onChanged={refresh} autoPreview={wide&&index<4}/>)}</div>}
     {intakeOpen&&<PropertyIntakeModal container={container} onClose={()=>setIntakeOpen(false)} onSaved={refresh}/>}
