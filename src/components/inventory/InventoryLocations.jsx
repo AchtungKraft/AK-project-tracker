@@ -105,6 +105,8 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   const [mobileMoveOpen, setMobileMoveOpen] = useState(false);
   const [putAwayOpen, setPutAwayOpen] = useState(false);
   const [assignLocationOpen, setAssignLocationOpen] = useState(false);
+  const [assignPartId, setAssignPartId] = useState(null);
+  const openAssignLocation = (part = null) => { setAssignPartId(part?.id || null); setAssignLocationOpen(true); };
 
   // URL sync
   const setSelectedLocationId = useCallback((id) => {
@@ -480,12 +482,12 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                       {subLoc.parts.map(part => {
                         const itemForPart = inventoryItems.find(i => i.part_id === part.id && i.location_id === (subLoc.locationId || null) && (i.quantity_on_hand || 0) > 0);
                         const ctr = itemForPart?.container_id ? containers.find(c => c.id === itemForPart.container_id) : null;
-                        return <StoragePartRow key={`${part.id}-${subLoc.locationId}`} part={part} locationQty={part._locationQty} locationReserved={part._locationReserved} locationId={subLoc.locationId || (group.locationId === 'unassigned' ? 'unassigned' : null)} selectedLocationId={selectedLocationId} getInventoryStats={getInventoryStats} getInventoryItemId={getInventoryItemId} vendors={vendors} onPartClick={handlePartClick} onOpenGallery={openGallery} partActions={partActions} containerName={ctr?.name} isSelected={previewPart?.id === part.id} isFlashing={flashId === part.id} />;
+                        return <StoragePartRow key={`${part.id}-${subLoc.locationId}`} part={part} locationQty={part._locationQty} locationReserved={part._locationReserved} locationId={subLoc.locationId || (group.locationId === 'unassigned' ? 'unassigned' : null)} selectedLocationId={selectedLocationId} getInventoryStats={getInventoryStats} getInventoryItemId={getInventoryItemId} vendors={vendors} onPartClick={handlePartClick} onOpenGallery={openGallery} partActions={partActions} containerName={ctr?.name} isSelected={previewPart?.id === part.id} isFlashing={flashId === part.id} onAssignLocation={showingNeedsPlacement ? openAssignLocation : undefined} />;
                       })}
                     </div>
                   ) : (
                     <div className={cn("grid grid-cols-1 lg:grid-cols-2 gap-2", subLoc.locationName && "ml-3")}>
-                      {subLoc.parts.map(part => <StoragePartCard key={`${part.id}-${subLoc.locationId}`} part={part} locationQty={part._locationQty} locationReserved={part._locationReserved} locationId={subLoc.locationId || (group.locationId === 'unassigned' ? 'unassigned' : null)} selectedLocationId={selectedLocationId} getInventoryStats={getInventoryStats} getInventoryItemId={getInventoryItemId} vendors={vendors} onPartClick={handlePartClick} onOpenGallery={openGallery} partActions={partActions} isSelected={previewPart?.id === part.id} isFlashing={flashId === part.id} />)}
+                      {subLoc.parts.map(part => <StoragePartCard key={`${part.id}-${subLoc.locationId}`} part={part} locationQty={part._locationQty} locationReserved={part._locationReserved} locationId={subLoc.locationId || (group.locationId === 'unassigned' ? 'unassigned' : null)} selectedLocationId={selectedLocationId} getInventoryStats={getInventoryStats} getInventoryItemId={getInventoryItemId} vendors={vendors} onPartClick={handlePartClick} onOpenGallery={openGallery} partActions={partActions} isSelected={previewPart?.id === part.id} isFlashing={flashId === part.id} onAssignLocation={showingNeedsPlacement ? openAssignLocation : undefined} />)}
                     </div>
                   )}
                 </div>
@@ -513,7 +515,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
       {isAdmin && batchLabelsOpen && <BatchStorageLabelsModal onClose={() => setBatchLabelsOpen(false)} />}
       {assignLocationOpen && <ShopAssignLocation
         locations={locations} inventoryItems={inventoryItems} parts={parts} containers={containers}
-        initialSourceId={selectedLocationId} onClose={() => setAssignLocationOpen(false)}
+        initialPartId={assignPartId} initialSourceId={selectedLocationId} onClose={() => setAssignLocationOpen(false)}
         onNavigate={(id) => { handleLocationSelect(id); setAssignLocationOpen(false); }}/>}
       {moveWorkflowSource && (
         <InventoryMoveWorkflow
@@ -594,7 +596,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
             <>
               {/* Shop-first: placement and scan are the everyday actions. */}
               <div className="px-3 pt-3 pb-1 grid grid-cols-2 gap-2">
-                <Button onClick={() => setAssignLocationOpen(true)} className="h-12 gap-1 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-sm min-w-0">
+                <Button onClick={() => openAssignLocation()} className="h-12 gap-1 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-sm min-w-0">
                   <MapPin className="w-4 h-4 shrink-0" /> Assign Location {needsPlacementCount>0&&`(${needsPlacementCount})`}
                 </Button>
                 <Button onClick={() => setMobileMoveOpen(true)}
@@ -652,7 +654,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
               {showingNeedsPlacement && <div className="px-3 py-2 bg-amber-950/20 border-b border-amber-800/30 flex gap-2 items-center">
                 <div className="flex-1 min-w-0"><div className="text-sm text-amber-200 font-semibold">Needs a shelf?</div>
                 <p className="text-xs text-gray-400">Move loose stock to its actual location.</p></div>
-                <Button onClick={() => setAssignLocationOpen(true)} className="shrink-0 h-10 bg-amber-600 hover:bg-amber-700">Assign Location</Button>
+                <Button onClick={() => openAssignLocation()} className="shrink-0 h-10 bg-amber-600 hover:bg-amber-700">Assign Location</Button>
               </div>}
               {renderLocationContent()}
             </div>
@@ -682,7 +684,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                 <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-gray-600 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 font-mono pointer-events-none">⌘K</kbd>
               )}
             </div>
-            <Button size="sm" onClick={() => setAssignLocationOpen(true)}
+            <Button size="sm" onClick={() => openAssignLocation()}
               className="h-9 gap-1.5 bg-amber-600 hover:bg-amber-700 text-white shrink-0" title="Move unassigned loose stock to a physical shelf">
               <MapPin className="w-4 h-4"/> Assign Location {needsPlacementCount>0&&`(${needsPlacementCount})`}
             </Button>
@@ -726,7 +728,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
               onToggleFavorite={toggleFavorite} isFavorite={isFavorite}
               onToggleEmpty={handleToggleEmpty}
               inventoryItems={inventoryItems}
-              onOpenAssignLocation={() => setAssignLocationOpen(true)}
+              onOpenAssignLocation={() => openAssignLocation()}
               onOpenPutAway={() => setPutAwayOpen(true)}
             />
           </div>
@@ -753,7 +755,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                       <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0"/>
                       <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-amber-200">These parts need a physical shelf.</p>
                         <p className="text-xs text-gray-400">Choose parts, choose the shelf, then confirm.</p></div>
-                      <Button onClick={() => setAssignLocationOpen(true)} className="bg-amber-600 hover:bg-amber-700 h-9">Assign Location</Button>
+                      <Button onClick={() => openAssignLocation()} className="bg-amber-600 hover:bg-amber-700 h-9">Assign Location</Button>
                     </div>}
                     <div className="border-b border-red-900/20 bg-gray-900/20 overflow-y-auto shrink-0" style={{ maxHeight: '40%' }}>
                       <LocationDetailPanel locationId={selectedLocationId} locations={locations} inventoryItems={inventoryItems}
@@ -776,7 +778,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                     <div className="flex items-center gap-3 p-3 border-b border-amber-800/30 bg-amber-950/20">
                       <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0"/>
                       <div className="flex-1"><p className="text-sm font-semibold text-amber-200">Stock without a location</p><p className="text-xs text-gray-400">Move it to a labeled shelf or rack.</p></div>
-                      <Button onClick={() => setAssignLocationOpen(true)} className="bg-amber-600 hover:bg-amber-700 h-9">Assign Location</Button>
+                      <Button onClick={() => openAssignLocation()} className="bg-amber-600 hover:bg-amber-700 h-9">Assign Location</Button>
                     </div>
                     {renderLocationContent()}
                   </>
@@ -785,7 +787,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                     <Package className="w-12 h-12 text-gray-700 mb-3" />
                     <h3 className="text-base font-semibold text-gray-300">Where is it in the shop?</h3>
                     <p className="text-sm text-gray-500 mt-2 max-w-sm">Choose a shelf on the left, search for an item, or put stock in its proper location.</p>
-                    <Button onClick={() => setAssignLocationOpen(true)} className="mt-5 gap-2 bg-amber-600 hover:bg-amber-700"><MapPin className="w-4 h-4"/> Assign Location</Button>
+                    <Button onClick={() => openAssignLocation()} className="mt-5 gap-2 bg-amber-600 hover:bg-amber-700"><MapPin className="w-4 h-4"/> Assign Location</Button>
                   </div>
                 )}
               </div>
