@@ -22,12 +22,20 @@ export function responseData(response) {
   return data;
 }
 
-/** Private object identities, never public links or temporary signed URLs. */
+/**
+ * Only a candidate URI validator: the secured backend MUST validate it with
+ * CreateFileSignedUrl before persistence. Base44 can return opaque relative file
+ * references, not only private/ and gs:// strings.
+ *
+ * Never accept network URL formats, JavaScript URLs, fragments, queries,
+ * backslashes, traversal, or control characters as file identifiers.
+ */
 export function isPrivateStorageUri(value) {
-  if(typeof value!=='string'||value.length<9||value.length>1200
-    ||/[?#\\\u0000-\u001f]/.test(value)||value.includes('..'))return false;
-  return /^private\/[^/]+(?:\/.+)?$/.test(value)
-    || /^gs:\/\/[a-zA-Z0-9][a-zA-Z0-9._-]{1,220}\/[^/].+/.test(value);
+  if(typeof value!=='string'||value.length<3||value.length>2048
+    ||/[?#\\\u0000-\u001f]/.test(value)||value.includes('..')||value.startsWith('//'))return false;
+  if(/^gs:\/\/[a-zA-Z0-9][a-zA-Z0-9._-]{1,220}\/[^/].+/.test(value))return true;
+  if(/^[a-z][a-z\d+.-]*:/i.test(value))return false;
+  return /^\/?[a-zA-Z0-9][a-zA-Z0-9_./% +@=-]*$/.test(value);
 }
 
 function describeUploadResponse(raw) {
