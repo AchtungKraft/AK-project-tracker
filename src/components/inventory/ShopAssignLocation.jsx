@@ -133,7 +133,7 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
     }finally{setBusy(false);}
   };
   const close=()=>{if(!busy)onClose?.();};
-  const sourceLabel=source==='legacy'?'Unassigned stock (legacy)':'Stock with no location';
+  const sourceLabel=source==='legacy'?'Unassigned Stock':'No Location Set';
 
   return <div className="fixed inset-0 z-[85] bg-[#0d1421] text-white flex flex-col" role="dialog" aria-modal="true" aria-label="Assign stock to a location">
     <div className="shrink-0 border-b border-gray-700 bg-gray-900/95 px-3 sm:px-6 py-3">
@@ -154,12 +154,12 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
           <div className="grid grid-cols-2 gap-2">
             <button onClick={()=>chooseSource('legacy')} disabled={!legacy||busy}
               className={`rounded-lg p-3 border text-left ${source==='legacy'?'border-amber-500 bg-amber-950/20':'border-gray-700 bg-gray-900/50'}`}>
-              <span className="text-sm font-medium block">Unassigned stock</span>
+              <span className="text-sm font-medium block">Unassigned Stock</span>
               <span className="text-xs text-gray-400">{countBySource.legacy} movable lines</span>
             </button>
             <button onClick={()=>chooseSource('none')} disabled={busy}
               className={`rounded-lg p-3 border text-left ${source==='none'?'border-amber-500 bg-amber-950/20':'border-gray-700 bg-gray-900/50'}`}>
-              <span className="text-sm font-medium block">No location set</span>
+              <span className="text-sm font-medium block">No Location Set</span>
               <span className="text-xs text-gray-400">{countBySource.none} movable lines</span>
             </button>
           </div>
@@ -169,6 +169,7 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
               <Search className="absolute top-1/2 left-3 -translate-y-1/2 w-4 h-4 text-gray-500"/>
               <Input value={itemSearch} onChange={e=>setItemSearch(e.target.value)} placeholder="Find a part or number…" className="pl-9 h-11 bg-gray-900 border-gray-700"/>
             </div>
+            {selected.size>0&&<Button size="sm" variant="ghost" className="h-11 shrink-0 text-gray-400" onClick={()=>setSelected(new Map())}>Clear</Button>}
             <Button size="sm" variant="outline" className="h-11 shrink-0" onClick={()=>{
               const next=new Map(selected);
               for(const {i} of filteredItems){next.set(i.id,(i.quantity_on_hand||0)-(i.quantity_reserved||0));}
