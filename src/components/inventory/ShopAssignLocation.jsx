@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, CheckCircle2, CircleAlert, MapPin, Package, Search, ScanLine, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, CircleAlert, MapPin, Package, Search, ScanLine, Star, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import QRScanner from "./QRScanner";
 import { resolveStorageScan } from "@/lib/resolveStorageScan";
 import { buildLocationPathString } from "./locationTypeConfig";
+import useLocationFavorites from "./useLocationFavorites";
 
 /**
  * Shop shortcut for loose inventory that has no real physical shelf.
@@ -16,6 +17,7 @@ import { buildLocationPathString } from "./locationTypeConfig";
  */
 export default function ShopAssignLocation({ locations=[], inventoryItems=[], parts=[], containers=[], initialPartId=null, initialSourceId=null, onClose, onNavigate }) {
   const qc=useQueryClient();
+  const {favorites,recents,addRecent}=useLocationFavorites();
   const legacy=useMemo(()=>locations.find(l=>l.location_area==='UNASSIGNED_SYSTEM'&&l.active!==false),[locations]);
   const [source,setSource]=useState(initialSourceId === 'unassigned' ? 'none' :
     initialSourceId && legacy?.id===initialSourceId ? 'legacy' : (legacy ? 'legacy' : 'none'));
@@ -23,6 +25,8 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
   const preselectedRef=useRef(false);
   const [itemSearch,setItemSearch]=useState('');
   const [destinationSearch,setDestinationSearch]=useState('');
+  const [selectedAreaId,setSelectedAreaId]=useState(null);
+  const [showAllDestinations,setShowAllDestinations]=useState(false);
   const [destination,setDestination]=useState(null);
   const [selected,setSelected]=useState(new Map());
   const [scanOpen,setScanOpen]=useState(false);
@@ -63,11 +67,31 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
   const totalQty=lineRows.reduce((sum,x)=>sum+x.qty,0);
   const availableLocs=useMemo(()=>locations.filter(l=>l.active!==false && l.id!==legacy?.id && l.location_area!=='UNASSIGNED_SYSTEM' &&
     l.location_type!=='receiving'),[locations,legacy]);
+  const locationById=useMemo(()=>new Map(locations.map(l=>[l.id,l])),[locations]);
+  const getRoot=(id)=>{
+    let cursor=id;const visited=new Set();
+    while(cursor && !visited.has(cursor)){
+      visited.add(cursor);
+      const loc=locationById.get(cursor);
+      if(!loc?.parent_id || !locationById.has(loc.parent_id))return cursor;
+      cursor=loc.parent_id;
+    }
+    return cursor;
+  };
+  const areaOptions=useMemo(()=>availableLocs.filter(l=>getRoot(l.id)===l.id)
+    .sort((a,b)=>a.location_area.localeCompare(b.location_area)),[availableLocs,locationById]);
+  const quickDestinations=useMemo(()=>{
+    const byId=new Map(availableLocs.map(l=>[l.id,l]));
+    return [...new Set([...favorites,...recents])].map(id=>byId.get(id)).filter(Boolean).slice(0,8);
+  },[availableLocs,favorites,recents]);
   const destinations=useMemo(()=>{
     const q=destinationSearch.trim().toLowerCase();
-    const ls=q?availableLocs.filter(l=>[l.location_area,l.short_code,buildLocationPathString(l.id,locations)].some(s=>String(s||'').toLowerCase().includes(q))):availableLocs;
-    return ls.slice(0,60);
-  },[destinationSearch,availableLocs,locations]);
+    if(q)return availableLocs.filter(l=>[l.location_area,l.short_code,buildLocationPathString(l.id,locations)].some(s=>String(s||'').toLowerCase().includes(q)))
+      .sort((a,b)=>buildLocationPathString(a.id,locations).localeCompare(buildLocationPathString(b.id,locations))).slice(0,80);
+    if(selectedAreaId)return availableLocs.filter(l=>getRoot(l.id)===selectedAreaId)
+      .sort((a,b)=>buildLocationPathString(a.id,locations).localeCompare(buildLocationPathString(b.id,locations))).slice(0,80);
+    return showAllDestinations?availableLocs.slice().sort((a,b)=>buildLocationPathString(a.id,locations).localeCompare(buildLocationPathString(b.id,locations))).slice(0,80):[];
+  },[destinationSearch,availableLocs,locations,locationById,selectedAreaId,showAllDestinations]);
 
   const toggle=(i)=>{
     if(step!=='items')return;
