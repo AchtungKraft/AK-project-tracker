@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const ALPHA = 'a'.repeat(24), BETA='b'.repeat(24), GAMMA='c'.repeat(24), DELTA='d'.repeat(24), EPS='e'.repeat(24);
 const clone = a => structuredClone(a);
-function harness(file, { role='admin', storage={}, delay=0, failCustody=false }={}) {
+function harness(file, { role='admin', storage={}, delay=0, failCustody=false, failSigning=false }={}) {
   const rows={TeamMember:[],StorageContainer:[],StoredProperty:[],StoredPropertyPhoto:[],StorageCustodyEvent:[],StorageLabel:[],StorageLabelBatch:[],Project:[],Location:[],Part:[],InventoryItem:[],InventoryTransfer:[],InventoryAuditLog:[],InventoryMutationLog:[], ...clone(storage)};
   const calls=[];
   let next=1;
@@ -18,7 +18,11 @@ function harness(file, { role='admin', storage={}, delay=0, failCustody=false }=
       if(delay)await new Promise(r=>setTimeout(r,delay));let v={id:makeId(),...p};(rows[n]||=[]).push(v);return v;},
     async update(id,p){calls.push(`${String(n)}.update`);let v=(rows[n]||[]).find(r=>r.id===id);if(!v)throw Error(`Missing ${String(n)} ${id}`);Object.assign(v,p);return clone(v);}
   }}});
-  const service={entities, integrations:{Core:{CreateFileSignedUrl:async({file_uri})=>({signed_url:'https://signed.test/'+encodeURIComponent(file_uri)})}}};
+  const service={entities, integrations:{Core:{CreateFileSignedUrl:async({file_uri})=>{
+    calls.push('CreateFileSignedUrl');
+    if(failSigning)throw Error('private signer denied URI');
+    return {signed_url:'https://signed.test/'+encodeURIComponent(file_uri)};
+  }}}};
   const source=fs.readFileSync(file,'utf8').replace(/^import[^\n]+\n/,'');
   let fn;
   vm.runInNewContext(source,{
@@ -50,13 +54,25 @@ async function storedPropertyTests(){
   const cloudAgain=await h.invoke({action:'add_photo',container_id:ALPHA,property_id:pid,file_uri:gsUri});
   assert.equal(cloudAgain.data.idempotent_hit,true);
   assert.equal(h.rows.StoredPropertyPhoto.length,2);
+  const relativeUri='files/storage-private/ak/client%20part-seat.jpg';
+  const rel=await h.invoke({action:'add_photo',container_id:ALPHA,property_id:pid,file_uri:relativeUri});
+  assert.equal(rel.data.success,true);
+  assert.equal(h.rows.StoredPropertyPhoto.length,3);
+  const denied=harness('base44/functions/storageProperty/entry.ts',{failSigning:true,storage:{
+    StorageContainer:[{id:ALPHA,active:true,status:'active'}],
+    StoredProperty:[{id:pid,container_id:ALPHA,status:'in_storage'}],
+  }});
+  const reject=await denied.invoke({action:'add_photo',container_id:ALPHA,property_id:pid,file_uri:'files/private/unknown.jpg'});
+  assert.equal(reject.status,422);
+  assert.equal(reject.data.code,'PRIVATE_URI_NOT_VERIFIED');
+  assert.equal(denied.rows.StoredPropertyPhoto.length,0);
   for(const unsafe of ['https://example.com/photo.jpg','ftp://someone/file.jpg','other-app/file.jpg','private/../secret.jpg']){
     assert.equal((await h.invoke({action:'add_photo',container_id:ALPHA,property_id:pid,file_uri:unsafe})).status,400);
   }
-  const list=await h.invoke({action:'list_container',container_id:ALPHA});assert.equal(list.data.items[0].photo_count,2);
+  const list=await h.invoke({action:'list_container',container_id:ALPHA});assert.equal(list.data.items[0].photo_count,3);
   assert.ok(!JSON.stringify(list.data).includes('private/client/photos'));
   const photos=await h.invoke({action:'get_photos',property_id:pid});assert.ok(photos.data.photos[0].signed_url);
-  assert.equal(photos.data.photos.length,2);
+  assert.equal(photos.data.photos.length,3);
   assert.ok(photos.data.photos.every(p=>p.signed_url));
   assert.ok(!JSON.stringify(photos.data).includes('file_uri'));
   const details=await h.invoke({action:'update_group',container_id:ALPHA,property_id:pid,
