@@ -263,7 +263,7 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
           {scanError&&<p className="text-amber-300 text-sm">{scanError}</p>}
           <p className="text-xs text-gray-500">Find the physical destination. Receiving and Unassigned are not available for this action.</p>
           {!destinationSearch.trim() && <>
-            {quickDestinations.length>0 && <section className="space-y-2">
+            {!selectedAreaId && quickDestinations.length>0 && <section className="space-y-2">
               <div className="flex items-center gap-2 text-sm font-semibold text-gray-200"><Star className="w-4 h-4 text-amber-400"/> Saved and recent locations</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {quickDestinations.map(loc=><button type="button" key={loc.id} onClick={()=>chooseDestination(loc)}
@@ -278,18 +278,38 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
             <section className="space-y-2">
               <div className="flex items-center justify-between gap-3">
                 <h3 className="text-sm font-semibold text-gray-200">Browse by shop area</h3>
-                {selectedAreaId && <button type="button" className="text-xs text-amber-300 hover:underline" onClick={()=>setSelectedAreaId(null)}>All areas</button>}
+                {selectedAreaId && <button type="button" className="text-xs text-amber-300 hover:underline" onClick={()=>navigateArea(null)}>All areas</button>}
               </div>
               {!selectedAreaId && <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {areaOptions.map(area=><button key={area.id} type="button" onClick={()=>{setSelectedAreaId(area.id);setShowAllDestinations(false)}}
+                {areaOptions.map(area=><button key={area.id} type="button" onClick={()=>navigateArea(area.id)}
                   className="text-left min-w-0 p-3 h-14 flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-900/60 hover:border-amber-600">
                   <MapPin className="w-4 h-4 text-amber-400 shrink-0"/>
                   <span className="text-sm font-medium truncate">{area.location_area}</span>
                   <ArrowRight className="ml-auto w-3.5 h-3.5 text-gray-500 shrink-0"/>
                 </button>)}
               </div>}
-              {selectedAreaId && <div className="text-xs text-amber-200 border border-amber-900/40 rounded-md px-3 py-2">
-                {locationById.get(selectedAreaId)?.location_area} · Choose the actual shelf or area below.
+              {selectedAreaId && <div className="rounded-lg border border-amber-900/40 bg-amber-950/10 p-3 space-y-3">
+                <nav aria-label="Storage location hierarchy" className="flex items-center flex-wrap gap-1 text-xs">
+                  <button type="button" onClick={()=>navigateArea(null)} className="text-amber-300 hover:underline">All areas</button>
+                  {areaPath.map(node=><span key={node.id} className="inline-flex items-center gap-1 min-w-0">
+                    <ChevronRight className="w-3.5 h-3.5 text-gray-500"/>
+                    <button type="button" onClick={()=>navigateArea(node.id)}
+                      aria-current={node.id===selectedAreaId?'location':undefined}
+                      className={node.id===selectedAreaId?'text-white font-semibold':'text-amber-300 hover:underline'}>
+                      {node.name}
+                    </button>
+                  </span>)}
+                </nav>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-white">{selectedArea?.location_area}</p>
+                    <p className="text-xs text-gray-400">{childCounts.get(selectedAreaId)||0} sublocations · Choose a specific spot below.</p>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" className="h-9 shrink-0 text-xs border-gray-700 text-gray-300"
+                    onClick={()=>chooseDestination(selectedArea)}>
+                    Store directly here
+                  </Button>
+                </div>
               </div>}
             </section>
             {!selectedAreaId && <button type="button" onClick={()=>setShowAllDestinations(v=>!v)}
@@ -300,17 +320,34 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
           </>}
           {(destinationSearch.trim() || selectedAreaId || showAllDestinations) && <div className="space-y-1">
             <div className="text-xs text-gray-400 font-medium pb-1">
-              {destinationSearch.trim()?'Matching locations':selectedAreaId?'Locations in selected area':'All locations'} · {destinations.length}{destinations.length===80?' shown (search to narrow)':''}
+              {destinationSearch.trim()?'Search results':selectedAreaId?'Choose a storage spot':'All locations'} · {destinations.length}{destinations.length===80?' shown (search to narrow)':''}
             </div>
-            {destinations.map(loc=><button key={loc.id} onClick={()=>chooseDestination(loc)}
-              className="w-full rounded-lg bg-gray-900/45 border border-gray-800 hover:border-amber-600 px-3 py-3 text-left flex items-center gap-3">
-              <MapPin className="w-5 h-5 shrink-0 text-amber-400"/>
-              <div className="min-w-0 flex-1"><div className="text-sm font-medium truncate">{loc.location_area}</div>
-                <div className="text-xs text-gray-500 truncate">{buildLocationPathString(loc.id,locations)}</div>
-                {loc.project_id&&<span className="text-[10px] text-indigo-300">Project-specific storage</span>}</div>
-              <ArrowRight className="w-4 h-4 shrink-0 text-gray-400"/>
-            </button>)}
-            {destinations.length===0&&<p className="text-sm text-gray-500 py-8 text-center">No matching physical locations. Try searching by shelf, trailer, or project name.</p>}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {destinations.map(loc=>{
+                const children=childCounts.get(loc.id)||0;
+                const browse=!!selectedAreaId&&!destinationSearch.trim()&&children>0;
+                return <div key={loc.id} className="rounded-lg border border-gray-800 bg-gray-900/45 hover:border-amber-700 min-w-0 overflow-hidden">
+                  <button type="button" onClick={()=>browse?navigateArea(loc.id):chooseDestination(loc)}
+                    className="w-full min-h-[78px] p-3 text-left flex items-start gap-2 focus-visible:outline-2 focus-visible:outline-amber-500">
+                    <MapPin className="w-4 h-4 shrink-0 mt-0.5 text-amber-400"/>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold leading-snug break-words">{loc.location_area}</span>
+                      {!selectedAreaId||destinationSearch.trim()?
+                        <span className="block text-[11px] text-gray-500 leading-snug mt-1 break-words">{buildLocationPathString(loc.id,locations)}</span>:
+                        <span className="block text-[11px] text-gray-500 mt-1">{children>0?children+' more locations · Browse':'Select this location'}</span>}
+                      {loc.project_id&&<span className="block text-[10px] text-indigo-300 mt-1">Project storage</span>}
+                    </span>
+                    {browse?<ChevronRight className="w-4 h-4 shrink-0 mt-1 text-amber-400"/>:
+                      <ArrowRight className="w-4 h-4 shrink-0 mt-1 text-gray-400"/>}
+                  </button>
+                  {browse&&<button type="button" onClick={()=>chooseDestination(loc)}
+                    className="block w-full border-t border-gray-800 py-2 px-3 text-left text-xs text-gray-400 hover:text-white hover:bg-gray-800/50">
+                    Store directly in {loc.location_area}
+                  </button>}
+                </div>;
+              })}
+            </div>
+            {destinations.length===0&&<p className="text-sm text-gray-500 py-8 text-center">No sublocations here. Use “Store directly here” above, or go back and choose another area.</p>}
           </div>}
         </>}
         {step==='review'&&<>
