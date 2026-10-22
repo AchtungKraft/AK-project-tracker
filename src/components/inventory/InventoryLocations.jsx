@@ -31,7 +31,6 @@ import MoveContainerModal from "./MoveContainerModal";
 import AddToContainerModal from "./AddToContainerModal";
 import EmptyContainerModal from "./EmptyContainerModal";
 import ScannerModal from "./ScannerModal";
-import PropertyIntakeModal from "./PropertyIntakeModal";
 import StorageDocumentBoxPicker from "./StorageDocumentBoxPicker";
 import BatchStorageLabelsModal from "./BatchStorageLabelsModal";
 import { useIsAdmin } from "@/lib/clientAccounts";
@@ -104,7 +103,6 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   const [galleryState, setGalleryState] = useState({ open: false, images: [], currentIndex: 0 });
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scanIntent, setScanIntent] = useState('browse');
-  const [documentContainer, setDocumentContainer] = useState(null);
   const [documentBoxPickerOpen, setDocumentBoxPickerOpen] = useState(false);
   const openDocumentBoxPicker = () => setDocumentBoxPickerOpen(true);
   const chooseBoxToDocument = (box) => {
@@ -551,8 +549,6 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
         containers={containers} locations={locations} projects={projects} isAdmin={isAdmin}
         onChooseBox={chooseBoxToDocument} onScan={scanBoxFromPicker}
         onPrintLabels={labelsFromPicker} onClose={() => setDocumentBoxPickerOpen(false)} />}
-      {documentContainer && <PropertyIntakeModal container={documentContainer}
-        onClose={() => setDocumentContainer(null)} />}
       {isAdmin && batchLabelsOpen && <BatchStorageLabelsModal onClose={() => setBatchLabelsOpen(false)} />}
       {assignLocationOpen && <ShopAssignLocation
         locations={locations} inventoryItems={inventoryItems} parts={parts} containers={containers}
