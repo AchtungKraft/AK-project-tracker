@@ -330,7 +330,7 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
               {submittedLines.map(({id,name,qty})=><div key={id} className="flex justify-between gap-2 border-t border-gray-800/60 pt-2 text-sm">
                 <span>{name}</span><strong className="shrink-0">{qty} {qty===1?'unit':'units'}</strong>
               </div>)}
-            </div>
+            </div>}
             {result?.error&&<p className="text-sm text-amber-200">{result.error}</p>}
             {result?.errors?.length>0&&<div className="text-xs text-gray-400 space-y-1">{result.errors.map((e,index)=><p key={index}>Line {e.index+1}: {e.error}</p>)}</div>}
             {!result?.success&&<p className="text-xs text-amber-200">Do not repeat this transfer until you verify the actual stock state. The backend can partially execute a batch.</p>}
