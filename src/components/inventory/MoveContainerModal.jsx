@@ -73,8 +73,9 @@ export default function MoveContainerModal({ container, onClose, locations = [],
       if (response.data?.error) throw new Error(response.data.error);
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['storageContainers'] });
+      queryClient.invalidateQueries({ queryKey: ['storedPropertyContainer', container.id] });
       queryClient.invalidateQueries({ predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'inventoryItems' });
       queryClient.invalidateQueries({ queryKey: ['locations'] });
       queryClient.invalidateQueries({ queryKey: ['inventoryTransfers'] });
@@ -85,6 +86,9 @@ export default function MoveContainerModal({ container, onClose, locations = [],
           ? `Returned "${container.name}" home to ${destLoc?.location_area || 'home'} (${containedItems.length} items)`
           : `Moved "${container.name}" to ${destLoc?.location_area || 'new location'} (${containedItems.length} items)`
       );
+      if (result?.custody_recorded === false) {
+        toast.warning('Box moved, but the stored-property custody log needs administrator review.');
+      }
       onClose();
     },
     onError: (e) => toast.error('Move failed: ' + e.message),
