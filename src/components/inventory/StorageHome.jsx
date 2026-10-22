@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from "react";
-import { Star, Clock, ChevronRight, ChevronDown, MapPin, Package } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Star, Clock, ChevronRight, ChevronDown, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig } from "./locationTypeConfig";
 import { getContainerTypeConfig } from "./containerTypeConfig";
