@@ -78,7 +78,7 @@ test('large photos are downscaled when browser encoding is available', async()=>
   globalThis.File=class {constructor(blobs,name,options){this.name=name;this.type=options.type;this.size=blobs[0].size;}};
   globalThis.document={createElement:()=>({width:0,height:0,
     getContext:()=>({drawImage:(...args)=>draw.push(args)}),
-    toBlob:(done)=>done(new Blob(['small JPEG'],'image/jpeg'))})};
+    toBlob:(done)=>done(new Blob(['small JPEG'],{type:'image/jpeg'}))})};
   globalThis.createImageBitmap=async()=>({width:4000,height:3000,close(){}});
   try{
     const original={name:'seats.png',type:'image/png',size:9*1024*1024,lastModified:1};
