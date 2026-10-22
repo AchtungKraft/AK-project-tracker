@@ -13,13 +13,24 @@ export default function StorageNavigatePanel({
   favorites, recents, locations, locationPartCounts, showEmptyLocations,
   selectedLocationId, expandedLocations,
   onSelectLocation, onToggleExpand, onToggleFavorite, isFavorite, onToggleEmpty,
-  inventoryItems, onOpenPutAway, onOpenAssignLocation,
+  inventoryItems, containers = [], onOpenPutAway, onOpenAssignLocation,
 }) {
   const resolveLocation = (id) => locations.find(l => l.id === id);
   const favLocs = favorites.map(resolveLocation).filter(Boolean);
   const recentLocs = recents.filter(id => !favorites.includes(id)).map(resolveLocation).filter(Boolean).slice(0, 6);
   const rootLocations = locations.filter(l => !l.parent_id && l.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   const unassignedCount = locationPartCounts['unassigned'] || 0;
+  const containerCounts = useMemo(()=>{
+    const results=new Map();const byId=new Map(locations.map(l=>[l.id,l]));
+    for(const c of containers){
+      if(c.active===false || c.status==='archived')continue;
+      let id=c.location_id;const visited=new Set();
+      while(id&&!visited.has(id)){
+        visited.add(id);results.set(id,(results.get(id)||0)+1);id=byId.get(id)?.parent_id;
+      }
+    }
+    return results;
+  },[containers,locations]);
   const systemLoc = locations.find(l=>l.location_area==='UNASSIGNED_SYSTEM'&&l.active!==false);
   const needsPlacement = inventoryItems.filter(i=>!i.container_id && (i.quantity_on_hand||0)>(i.quantity_reserved||0) && (!i.location_id || i.location_id===systemLoc?.id)).length;
 
@@ -29,7 +40,7 @@ export default function StorageNavigatePanel({
     const isExpanded = expandedLocations[location.id];
     const isSelected = selectedLocationId === location.id;
     const partCount = locationPartCounts[location.id] || 0;
-    if (partCount === 0 && !showEmptyLocations) return null;
+    if (partCount === 0 && !containerCounts.has(location.id) && !showEmptyLocations) return null;
 
     return (
       <div key={location.id}>
@@ -37,7 +48,7 @@ export default function StorageNavigatePanel({
           className={cn(
             "flex items-center gap-1.5 px-2 py-1.5 cursor-pointer transition-colors group text-sm",
             isSelected ? "bg-red-950/40 text-red-400" : "hover:bg-gray-800/50 text-gray-300",
-            partCount === 0 && "opacity-50"
+            partCount === 0 && !containerCounts.has(location.id) && "opacity-50"
           )}
           style={{ paddingLeft: `${(level * 14) + 8}px` }}
           onClick={() => onSelectLocation(location.id)}
@@ -54,8 +65,9 @@ export default function StorageNavigatePanel({
             <Star className={cn("w-3 h-3", isFavorite(location.id) && "fill-yellow-500")} />
           </button>
           {partCount > 0 && <span className={cn("shrink-0 text-[10px] px-1.5 py-0 rounded-full min-w-[20px] text-center", isSelected ? "bg-red-600 text-white" : "bg-gray-800 text-gray-500")}>{partCount}</span>}
+          {(containerCounts.get(location.id)||0)>0&&<span className="text-[10px] text-indigo-400 shrink-0">{containerCounts.get(location.id)} bx</span>}
         </div>
-        {hasChildren && isExpanded && children.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)).filter(c => showEmptyLocations || (locationPartCounts[c.id] || 0) > 0).map(c => renderNode(c, level + 1))}
+        {hasChildren && isExpanded && children.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)).filter(c => showEmptyLocations || (locationPartCounts[c.id] || 0) > 0 || containerCounts.has(c.id)).map(c => renderNode(c, level + 1))}
       </div>
     );
   };
