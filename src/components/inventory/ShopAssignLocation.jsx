@@ -33,6 +33,7 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
   const [scanError,setScanError]=useState('');
   const [busy,setBusy]=useState(false);
   const [result,setResult]=useState(null);
+  const [submittedLines,setSubmittedLines]=useState([]); // immutable receipt, survives post-move inventory refetch
   const batchKey=useRef(null);
 
   const partsById=useMemo(()=>new Map(parts.map(p=>[p.id,p])),[parts]);
@@ -110,7 +111,7 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
   };
   const chooseSource=(next)=>{
     if(busy||next===source)return;
-    setSource(next);setSelected(new Map());setDestination(null);setResult(null);batchKey.current=null;setStep('items');
+    setSource(next);setSelected(new Map());setDestination(null);setResult(null);setSubmittedLines([]);batchKey.current=null;setStep('items');
   };
   const chooseDestination=(loc)=>{
     if(!loc||loc.active===false||loc.id===legacy?.id||loc.location_type==='receiving'){
@@ -128,6 +129,10 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
   const submit=async()=>{
     if(busy||!destination||lineRows.length===0)return;
     if(!batchKey.current)batchKey.current='shop_assign_'+crypto.randomUUID().replace(/-/g,'');
+    // Keep a receipt snapshot: the live unassigned items disappear from source
+    // immediately after a successful move and query-cache refresh.
+    const receiptLines=lineRows.map(({i,part,qty})=>({id:i.id,name:part?.part_name||i.part_id,qty}));
+    setSubmittedLines(receiptLines);
     setBusy(true);
     try{
       const payload={
@@ -322,8 +327,8 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
                 <div><p className="font-semibold">{destination?.location_area}</p>
                   <p className="text-xs text-gray-400">{buildLocationPathString(destination?.id,locations)}</p></div>
               </div>
-              {lineRows.map(({i,part,qty})=><div key={i.id} className="flex justify-between gap-2 border-t border-gray-800/60 pt-2 text-sm">
-                <span>{part?.part_name||i.part_id}</span><strong className="shrink-0">{qty} {qty===1?'unit':'units'}</strong>
+              {submittedLines.map(({id,name,qty})=><div key={id} className="flex justify-between gap-2 border-t border-gray-800/60 pt-2 text-sm">
+                <span>{name}</span><strong className="shrink-0">{qty} {qty===1?'unit':'units'}</strong>
               </div>)}
             </div>
             {result?.error&&<p className="text-sm text-amber-200">{result.error}</p>}
