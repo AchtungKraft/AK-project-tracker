@@ -7,13 +7,41 @@
  * functions may return an axios response with .data. Handle both.
  * Never silently fall back to public UploadFile for client-owned photos.
  */
+/**
+ * Base44 Core integration endpoint responses can be direct or wrapped by SDK,
+ * including {success:true,data:{file_uri:"gs://..."}}. Seek the actual
+ * payload even when an outer wrapper already has a success flag.
+ */
 export function responseData(response) {
   let data=response;
-  for(let i=0;i<3&&data&&typeof data==='object'&&'data' in data;i++) {
-    if(data.file_uri||data.success!==undefined||data.error!==undefined)break;
+  for(let i=0;i<5&&data&&typeof data==='object';i++) {
+    if(typeof data.file_uri==='string' || (data.error && !data.data)) break;
+    if(!('data' in data) || data.data==null)break;
     data=data.data;
   }
   return data;
+}
+
+/** Private object identities, never public links or temporary signed URLs. */
+export function isPrivateStorageUri(value) {
+  if(typeof value!=='string'||value.length<9||value.length>1200
+    ||/[?#\\\u0000-\u001f]/.test(value)||value.includes('..'))return false;
+  return /^private\/[^/]+\/.+/.test(value)
+    || /^gs:\/\/[a-zA-Z0-9][a-zA-Z0-9._-]{1,220}\/[^/].+/.test(value);
+}
+
+function describeUploadResponse(raw) {
+  const obj=raw && typeof raw==='object'?raw:{};
+  const data=responseData(raw);
+  const keys=Object.keys(obj).slice(0,10).filter(k=>/^[a-zA-Z0-9_]+$/.test(k)).join(',')||'none';
+  const innerKeys=data && typeof data==='object'
+    ?Object.keys(data).slice(0,10).filter(k=>/^[a-zA-Z0-9_]+$/.test(k)).join(',')
+    :'none';
+  const u=data?.file_uri;
+  const uriFormat=typeof u==='string'
+    ?(/^[a-zA-Z][a-zA-Z0-9+.-]*:/.exec(u)?.[0].slice(0,-1)||'relative')
+    :'missing';
+  return `Private storage response incompatible (fields: ${keys}; payload: ${innerKeys}; URI format: ${uriFormat})`;
 }
 
 const safeText=s=>String(s||'').replace(/https?:\/\/\S+/gi,'[URL omitted]').replace(/private\/\S+/gi,'[private path omitted]').slice(0,240);
@@ -57,8 +85,9 @@ export async function uploadAndRegisterPropertyPhoto({
       const raw=await uploadPrivate({file});
       const data=responseData(raw);
       uri=data?.file_uri;
-      if(typeof uri!=='string'||!uri.startsWith('private/')){
-        const err=new Error('Private upload returned no usable private file URI');
+      if(!isPrivateStorageUri(uri)){
+        // Do not treat an unexpected public URL as a private-storage success.
+        const err=new Error(describeUploadResponse(raw));
         err.code='INVALID_UPLOAD_RESPONSE';
         throw err;
       }
