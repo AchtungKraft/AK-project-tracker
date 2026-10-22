@@ -1,0 +1,107 @@
+{
+  "name": "StoredProperty",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Plain-language name or Unidentified contents; no Part catalog record required"
+    },
+    "property_type": {
+      "type": "string",
+      "enum": [
+        "unidentified",
+        "miscellaneous",
+        "take_off",
+        "client_supplied",
+        "spare",
+        "other"
+      ],
+      "default": "unidentified"
+    },
+    "ownership_type": {
+      "type": "string",
+      "enum": [
+        "client",
+        "ak",
+        "third_party",
+        "unknown"
+      ],
+      "default": "unknown"
+    },
+    "client_account_id": {
+      "type": "string",
+      "description": "Legal property owner when a client account"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Associated build or project; separate from physical location"
+    },
+    "container_id": {
+      "type": "string",
+      "description": "Optional physical container; effective location from container"
+    },
+    "location_id": {
+      "type": "string",
+      "description": "Direct location only when not contained"
+    },
+    "catalog_part_id": {
+      "type": "string",
+      "description": "Optional identification link to Part; NOT inventory"
+    },
+    "quantity": {
+      "type": "number",
+      "description": "Physical count when established; null/absent means unknown"
+    },
+    "quantity_known": {
+      "type": "boolean",
+      "default": false
+    },
+    "condition": {
+      "type": "string",
+      "enum": [
+        "unknown",
+        "new",
+        "used",
+        "damaged",
+        "mixed"
+      ],
+      "default": "unknown"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "in_storage",
+        "returned",
+        "removed",
+        "installed",
+        "disposed",
+        "converted_to_inventory"
+      ],
+      "default": "in_storage"
+    },
+    "description": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "created_by": {
+      "type": "string"
+    },
+    "last_updated_by": {
+      "type": "string"
+    },
+    "converted_inventory_item_id": {
+      "type": "string"
+    },
+    "converted_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "name",
+    "ownership_type",
+    "status"
+  ]
+}
