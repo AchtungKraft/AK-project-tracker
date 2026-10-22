@@ -7,8 +7,8 @@ import { buildLocationPathString } from "./locationTypeConfig";
 
 /**
  * Non-camera, shop-first entry into physical property intake.
- * This is intentionally a chooser: selecting a box opens PropertyIntakeModal,
- * not AddInventoryModal, receiving, or any stock transfer.
+ * Selecting a box opens its existing contents and actions, never an automatic Add modal.
+ * It cannot directly create stock, receiving, or inventory movements.
  */
 export default function StorageDocumentBoxPicker({
   containers = [], locations = [], projects = [], isAdmin = false,
@@ -33,11 +33,11 @@ export default function StorageDocumentBoxPicker({
     <DialogContent className="w-[calc(100vw-16px)] max-w-2xl max-h-[90dvh] overflow-hidden p-4 sm:p-6 flex flex-col bg-gray-900 border-gray-700 text-white">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
-          <Camera className="w-5 h-5 text-indigo-300"/> Document Box Contents
+          <Package className="w-5 h-5 text-indigo-300"/> Open / Document Box
         </DialogTitle>
       </DialogHeader>
       <p className="text-xs text-gray-400">
-        Photograph client parts, take-offs, and miscellaneous contents without adding them to stock inventory.
+        Select a box to view its current property groups and photos. You can add new contents from inside that box.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 shrink-0">
         <Button onClick={onScan} className="h-11 bg-indigo-700 hover:bg-indigo-800 gap-2">
@@ -57,7 +57,7 @@ export default function StorageDocumentBoxPicker({
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-2">
         <p className="text-xs text-gray-400 font-medium">
-          Choose an existing box ({filtered.length}{activeBoxes.length > 150 && !search ? " shown" : ""})
+          Open an existing box ({filtered.length}{activeBoxes.length > 150 && !search ? " shown" : ""})
         </p>
         {filtered.map(box => {
           const loc = locationById.get(box.location_id);
@@ -73,7 +73,7 @@ export default function StorageDocumentBoxPicker({
                 <span className="truncate">{loc ? buildLocationPathString(loc.id, locations) : "Location not assigned"}</span>
               </span>
             </span>
-            <Camera className="w-4 h-4 text-indigo-300 shrink-0"/>
+            <span className="text-xs font-medium text-indigo-200 shrink-0">Open</span>
           </button>;
         })}
         {activeBoxes.length === 0 && <div className="border border-dashed border-indigo-900 rounded-lg p-4 space-y-2 text-sm text-gray-300">
