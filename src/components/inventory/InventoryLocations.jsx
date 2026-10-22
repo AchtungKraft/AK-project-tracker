@@ -726,7 +726,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
               onToggleExpand={(id) => setExpandedLocations(prev => ({ ...prev, [id]: !prev[id] }))}
               onToggleFavorite={toggleFavorite} isFavorite={isFavorite}
               onToggleEmpty={handleToggleEmpty}
-              inventoryItems={inventoryItems}
+              inventoryItems={inventoryItems} containers={containers}
               onOpenAssignLocation={() => openAssignLocation()}
               onOpenPutAway={() => setPutAwayOpen(true)}
             />
