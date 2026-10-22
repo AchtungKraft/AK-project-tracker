@@ -2,6 +2,10 @@
   "name": "StoredProperty",
   "type": "object",
   "properties": {
+    "intake_key": {
+      "type": "string",
+      "description": "Unique client-generated idempotency key for an intake session"
+    },
     "name": {
       "type": "string",
       "description": "Plain-language name or Unidentified contents; no Part catalog record required"
