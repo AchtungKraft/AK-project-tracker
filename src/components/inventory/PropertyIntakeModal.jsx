@@ -166,7 +166,7 @@ export default function PropertyIntakeModal({ container, existingGroup = null, o
           </p>)}
           <p className="text-xs text-gray-400">Retry below. Already-uploaded files are reused when registration fails, so new copies are not created unnecessarily.</p>
         </div>}
-        {group&&<p className="text-xs text-gray-400">{existingGroup ? 'Adding to existing group.' : 'Group saved.'} {doneCount} photos uploaded in this session. Failed photos can be retried. Closing does not remove saved property.</p>
+        {group&&<p className="text-xs text-gray-400">{existingGroup ? 'Adding to existing group.' : 'Group saved.'} {doneCount} photos uploaded in this session. Failed photos can be retried. Closing does not remove saved property.</p>}
       </div>
       <div className="border-t border-gray-700 pt-3 shrink-0 space-y-2" style={{paddingBottom:'env(safe-area-inset-bottom, 0px)'}}>
         {busy&&<p className="text-xs text-gray-400 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>{progress||'Saving group…'}</p>}
