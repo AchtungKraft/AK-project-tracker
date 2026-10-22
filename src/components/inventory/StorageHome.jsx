@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { getLocationTypeConfig } from "./locationTypeConfig";
 import { getContainerTypeConfig } from "./containerTypeConfig";
 import PutAwayIndicator from "./putaway/PutAwayIndicator";
+import { shopStorageName } from "./shopStorageNames";
 
 /**
  * StorageHome — the "where do I go?" screen.
@@ -91,7 +92,7 @@ export default function StorageHome({
             </button>
           ) : <div className="w-4" />}
           {(() => { const tc = getLocationTypeConfig(location.location_type); const TIcon = tc.icon; return <TIcon className="w-4 h-4 shrink-0" style={{ color: location.color || tc.color }} />; })()}
-          <span className="flex-1 text-sm font-medium truncate">{location.location_area}</span>
+          <span className="flex-1 text-sm font-medium truncate">{shopStorageName(location.location_area)}</span>
           <button onClick={(e) => { e.stopPropagation(); onToggleFavorite(location.id); }} className={cn("shrink-0 p-0.5 transition-colors", isFavorite(location.id) ? "text-yellow-500" : "text-gray-700 hover:text-yellow-600 md:opacity-0 md:group-hover:opacity-100")}>
             <Star className={cn("w-3 h-3", isFavorite(location.id) && "fill-yellow-500")} />
           </button>
@@ -141,7 +142,7 @@ export default function StorageHome({
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm text-white font-medium truncate">{loc.location_area}</div>
+                    <div className="text-sm text-white font-medium truncate">{shopStorageName(loc.location_area)}</div>
                     <div className="text-[10px] text-gray-500">{count} parts</div>
                   </div>
                 </button>
@@ -166,7 +167,7 @@ export default function StorageHome({
                 <button key={loc.id} onClick={() => onSelectLocation(loc.id)}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-800/50 text-left transition-colors">
                   <TIcon className="w-4 h-4 shrink-0" style={{ color: loc.color || tc.color }} />
-                  <span className="flex-1 text-sm text-gray-300 truncate">{loc.location_area}</span>
+                  <span className="flex-1 text-sm text-gray-300 truncate">{shopStorageName(loc.location_area)}</span>
                   <span className="text-xs text-gray-500">{count}</span>
                   <ChevronRight className="w-4 h-4 text-gray-600" />
                 </button>
@@ -222,7 +223,7 @@ export default function StorageHome({
           {(showEmptyLocations || unassignedCount > 0) && (
             <div className={cn("flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-800/50 text-gray-300 ml-4", unassignedCount === 0 && "opacity-50")} onClick={() => onSelectLocation('unassigned')}>
               <MapPin className="w-4 h-4 text-yellow-500" />
-              <span className="flex-1 text-sm font-medium">Unassigned</span>
+              <span className="flex-1 text-sm font-medium">No Location Set</span>
               {unassignedCount > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-900/50 text-yellow-300">{unassignedCount}</span>}
             </div>
           )}
