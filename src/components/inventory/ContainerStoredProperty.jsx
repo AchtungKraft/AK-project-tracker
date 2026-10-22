@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Camera, ChevronDown, ChevronRight, Image as ImageIcon, Link2, Loader2, Package, Pencil, Search } from "lucide-react";
 import { toast } from "sonner";
 import PropertyIntakeModal from "./PropertyIntakeModal";
-import StoredPropertyDetailsEditor from "./StoredPropertyDetailsEditor";
 
 const unwrap = r=>r?.data||r;
 export async function fetchStoredPropertyForContainer(containerId) {
@@ -21,8 +20,7 @@ function StoredPropertyRow({item,container,parts,onChanged,autoPreview=false}){
   const [linking,setLinking]=useState(false);
   const [search,setSearch]=useState('');
   const [linkBusy,setLinkBusy]=useState(false);
-  const [additionalPhotos,setAdditionalPhotos]=useState(false);
-  const [editingDetails,setEditingDetails]=useState(false);
+  const [editingContents,setEditingContents]=useState(false);
   const catalog=parts.find(p=>p.id===item.catalog_part_id);
   const candidates=useMemo(()=>{
     const needle=search.trim().toLowerCase();
@@ -71,15 +69,12 @@ function StoredPropertyRow({item,container,parts,onChanged,autoPreview=false}){
       </div>
     </div>
     <div className="flex items-center flex-wrap gap-2">
-      <Button size="sm" variant="outline" onClick={()=>setEditingDetails(true)} className="h-8 gap-1 text-xs border-indigo-800 text-indigo-200">
-        <Pencil className="w-3 h-3"/> Edit Details
+      <Button size="sm" variant="outline" onClick={()=>setEditingContents(true)} className="h-9 gap-1.5 text-xs border-indigo-800 text-indigo-200">
+        <Pencil className="w-3.5 h-3.5"/> Edit Contents &amp; Photos
       </Button>
       <Button size="sm" variant="outline" onClick={()=>setShowPhotos(v=>!v)} className="h-8 gap-1 text-xs border-gray-700">
         {showPhotos?<ChevronDown className="w-3 h-3"/>:<ChevronRight className="w-3 h-3"/>}
         <ImageIcon className="w-3 h-3"/> {item.photo_count||0} photos
-      </Button>
-      <Button size="sm" variant="ghost" onClick={()=>setAdditionalPhotos(true)} className="h-8 gap-1 text-xs text-gray-400">
-        <Camera className="w-3 h-3"/> Add Photos
       </Button>
       <Button size="sm" variant="ghost" onClick={()=>setLinking(v=>!v)} className="h-8 gap-1 text-xs text-gray-400">
         <Link2 className="w-3 h-3"/> {catalog?'Change catalog match':'Identify as Part'}
@@ -101,10 +96,8 @@ function StoredPropertyRow({item,container,parts,onChanged,autoPreview=false}){
       </div>
       <p className="text-[10px] text-gray-600">Photo links expire automatically and can be refreshed by reopening this section.</p>
     </div>}
-    {editingDetails&&<StoredPropertyDetailsEditor container={container} property={item}
-      onClose={()=>setEditingDetails(false)} onSaved={onChanged} />}
-    {additionalPhotos&&<PropertyIntakeModal container={container} existingGroup={item}
-      onClose={()=>setAdditionalPhotos(false)} onSaved={()=>{
+    {editingContents&&<PropertyIntakeModal container={container} existingGroup={item}
+      onClose={()=>setEditingContents(false)} onSaved={()=>{
         onChanged?.();
         queryClient.invalidateQueries({queryKey:['storedPropertyPhotos',item.id]});
       }}/>
@@ -149,7 +142,7 @@ export default function ContainerStoredProperty({container,parts=[],wide=false})
         <p className="text-[11px] text-gray-500">Client parts and take-offs · separate from inventory</p>
       </div>
       <Button onClick={()=>setIntakeOpen(true)} size="sm" variant="outline" className="h-9 gap-1.5 text-xs border-indigo-800 text-indigo-200">
-        <Camera className="w-4 h-4"/> Document Contents
+        <Camera className="w-4 h-4"/> Add New Group
       </Button>
     </div>
     {isLoading?<p className="text-xs text-gray-500">Loading property…</p>:
