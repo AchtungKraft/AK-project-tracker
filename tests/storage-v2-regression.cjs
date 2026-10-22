@@ -51,12 +51,23 @@ async function storedPropertyTests(){
   assert.ok(!JSON.stringify(list.data).includes('private/client/photos'));
   const photos=await h.invoke({action:'get_photos',property_id:pid});assert.ok(photos.data.photos[0].signed_url);
   assert.ok(!JSON.stringify(photos.data).includes('file_uri'));
+  const details=await h.invoke({action:'update_group',container_id:ALPHA,property_id:pid,
+    name:'Identified trim and clips',property_type:'miscellaneous',condition:'used',
+    description:'Dashboard clips and fasteners',notes:'Client box only',
+    quantity_known:true,quantity:12});
+  assert.equal(details.data.success,true);assert.equal(details.data.item.name,'Identified trim and clips');
+  assert.equal(details.data.item.quantity,12);assert.equal(details.data.item.quantity_known,true);
+  assert.equal(details.data.item.condition,'used');
+  const invalidQty=await h.invoke({action:'update_group',container_id:ALPHA,property_id:pid,quantity_known:true,quantity:0});
+  assert.equal(invalidQty.status,400);
+  const uncounted=await h.invoke({action:'update_group',container_id:ALPHA,property_id:pid,quantity_known:false});
+  assert.equal(uncounted.data.item.quantity_known,false);assert.equal(uncounted.data.item.quantity,null);
   const link=await h.invoke({action:'update_group',container_id:ALPHA,property_id:pid,catalog_part_id:EPS});assert.equal(link.data.success,true);
   const lookup=await h.invoke({action:'find_by_part',part_id:EPS});assert.equal(lookup.data.items[0].location_id,BETA);
   assert.ok(!h.calls.some(x=>/^(InventoryItem|PartCommitment|Part|Order|InventoryMutationLog)\.(create|update)$/.test(x)));
   const external=harness('base44/functions/storageProperty/entry.ts',{role:'user'});
   assert.equal((await external.invoke({action:'get_photos',property_id:pid})).status,403);
-  console.log('PASS property: idempotent group/photo, private photos, client ownership, catalog-only link, staff access, no inventory writes');
+  console.log('PASS property: idempotent intake/photo, private photos, later identification and quantity edit, catalog-only link, staff access, no inventory writes');
 }
 async function labelTests(){
   const h=harness('base44/functions/storageLabels/entry.ts',{storage:{
