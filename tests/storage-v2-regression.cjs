@@ -66,7 +66,7 @@ async function storedPropertyTests(){
   assert.equal(reject.status,422);
   assert.equal(reject.data.code,'PRIVATE_URI_NOT_VERIFIED');
   assert.equal(denied.rows.StoredPropertyPhoto.length,0);
-  for(const unsafe of ['https://example.com/photo.jpg','ftp://someone/file.jpg','other-app/file.jpg','private/../secret.jpg']){
+  for(const unsafe of ['https://example.com/photo.jpg','ftp://someone/file.jpg','javascript:alert(1)','private/../secret.jpg']){
     assert.equal((await h.invoke({action:'add_photo',container_id:ALPHA,property_id:pid,file_uri:unsafe})).status,400);
   }
   const list=await h.invoke({action:'list_container',container_id:ALPHA});assert.equal(list.data.items[0].photo_count,3);
