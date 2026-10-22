@@ -110,9 +110,12 @@ Deno.serve(async(req)=>{
           }});
         }
         if(label.status==='voided') return reply({error:'Label has been voided'},409);
-        const [container]=label.container_id
-          ?await db.entities.StorageContainer.filter({id:label.container_id})
-          :await db.entities.StorageContainer.filter({qr_code_value:qr});
+        // Read by physical QR (not merely the stored pointer): two racing activations
+        // must be flagged instead of silently hiding duplicate physical boxes.
+        const matches=await db.entities.StorageContainer.filter({qr_code_value:qr});
+        if(matches.length>1) return reply({error:'Duplicate box identity detected. Stop using this label and request admin reconciliation.'},409);
+        const container=matches[0];
+        if(label.container_id&&container&&label.container_id!==container.id) return reply({error:'Label/container identity mismatch. Admin review required.'},409);
         if(!container||container.active===false||container.status==='archived') return reply({error:'Activated container unavailable'},409);
         return reply({success:true,reserved:false,container:{
           id:container.id,name:container.name,short_code:container.short_code,
@@ -168,8 +171,19 @@ Deno.serve(async(req)=>{
         });
       }
 
+      // Base44 does not expose an atomic compare-and-swap constraint on this entity.
+      // Detect a concurrent double-activation and fail closed rather than declaring
+      // success with two matching QR containers. This is detection, not a DB lock.
+      const postCreate=await db.entities.StorageContainer.filter({qr_code_value:qr});
+      if(postCreate.length!==1||postCreate[0].id!==container.id){
+        return reply({error:'Duplicate or conflicting box activation detected. Admin reconciliation required.',code:'DUPLICATE_BOX_IDENTITY'},409);
+      }
       const now=new Date().toISOString();
       await db.entities.StorageLabel.update(label.id,{status:'activated',container_id:container.id,activated_at:now,activated_by:user.id});
+      const [verifiedLabel]=await db.entities.StorageLabel.filter({id:label.id});
+      if(verifiedLabel?.container_id!==container.id){
+        return reply({error:'Concurrent label activation conflict. Admin review required.',code:'ACTIVATION_CONFLICT'},409);
+      }
       let auditRecorded=true;
       try{
         const existingEvents=await db.entities.StorageCustodyEvent.filter({action_key:`activate_label_${label.id}`});
