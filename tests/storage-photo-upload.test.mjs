@@ -36,6 +36,19 @@ test('Core response may be nested; still read private URI',async()=>{
  assert.equal(result.uri,'private/file.jpeg');
 });
 
+test('Base44 opaque relative file_uri proceeds unchanged to secured registration',async()=>{
+  const uri='files/user-photo-storage/clients/interior%20part-001.jpg';
+  assert.equal(isPrivateStorageUri(uri),true);
+  assert.equal(isPrivateStorageUri('/private/uploads/example.jpeg'),true);
+  let registered=null;
+  const result=await uploadAndRegisterPropertyPhoto({...input,
+    uploadPrivate:async()=>({file_uri:uri}),
+    invokeProperty:async p=>{registered=p;return {data:{success:true,photo:{id:'photo-relative'}}};},
+  });
+  assert.equal(result.uri,uri);assert.equal(registered.file_uri,uri);
+  assert.equal(result.photo.id,'photo-relative');
+});
+
 test('gs:// private Cloud Storage URI passes through successful registration',async()=>{
   const uri='gs://base44-private-photo-storage/path%20with%20space/seats.jpg';
   assert.equal(isPrivateStorageUri(uri),true);
@@ -56,6 +69,9 @@ test('public and malformed URI responses are rejected without exposing full path
     's3://bucket/seats.jpg',
     'gs://bucket-only',
     'javascript:alert(1)',
+    '//example.com/download.jpg',
+    '../secret-image.jpg',
+    'files/private/../secret-image.jpg',
   ])assert.equal(isPrivateStorageUri(bad),false,bad);
   await assert.rejects(()=>uploadAndRegisterPropertyPhoto({...input,
     uploadPrivate:async()=>({success:true,data:{file_uri:'https://public.example.com/seats.jpg'}}),
