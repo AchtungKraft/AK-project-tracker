@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, CircleAlert, MapPin, Package, Search, ScanLine, Star, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, ChevronRight, CircleAlert, MapPin, Package, Search, ScanLine, Star, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import QRScanner from "./QRScanner";
 import { resolveStorageScan } from "@/lib/resolveStorageScan";
-import { buildLocationPathString } from "./locationTypeConfig";
+import { buildLocationPath, buildLocationPathString } from "./locationTypeConfig";
 import useLocationFavorites from "./useLocationFavorites";
 
 /**
@@ -35,6 +35,12 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
   const [result,setResult]=useState(null);
   const [submittedLines,setSubmittedLines]=useState([]); // immutable receipt, survives post-move inventory refetch
   const batchKey=useRef(null);
+  const scrollRef=useRef(null);
+  useEffect(()=>{ if(scrollRef.current)scrollRef.current.scrollTop=0; },[step]);
+  const navigateArea=(id)=>{
+    setSelectedAreaId(id);setShowAllDestinations(false);
+    if(scrollRef.current)scrollRef.current.scrollTop=0;
+  };
 
   const partsById=useMemo(()=>new Map(parts.map(p=>[p.id,p])),[parts]);
   const countBySource=useMemo(()=>{
@@ -81,6 +87,15 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
   };
   const areaOptions=useMemo(()=>availableLocs.filter(l=>getRoot(l.id)===l.id)
     .sort((a,b)=>a.location_area.localeCompare(b.location_area)),[availableLocs,locationById]);
+  const childCounts=useMemo(()=>{
+    const counts=new Map();
+    for(const loc of availableLocs){
+      if(loc.parent_id && locationById.has(loc.parent_id))counts.set(loc.parent_id,(counts.get(loc.parent_id)||0)+1);
+    }
+    return counts;
+  },[availableLocs,locationById]);
+  const selectedArea=selectedAreaId?locationById.get(selectedAreaId):null;
+  const areaPath=useMemo(()=>selectedAreaId?buildLocationPath(selectedAreaId,locations):[],[selectedAreaId,locations]);
   const quickDestinations=useMemo(()=>{
     const byId=new Map(availableLocs.map(l=>[l.id,l]));
     return [...new Set([...favorites,...recents])].map(id=>byId.get(id)).filter(Boolean).slice(0,8);
@@ -89,8 +104,10 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
     const q=destinationSearch.trim().toLowerCase();
     if(q)return availableLocs.filter(l=>[l.location_area,l.short_code,buildLocationPathString(l.id,locations)].some(s=>String(s||'').toLowerCase().includes(q)))
       .sort((a,b)=>buildLocationPathString(a.id,locations).localeCompare(buildLocationPathString(b.id,locations))).slice(0,80);
-    if(selectedAreaId)return availableLocs.filter(l=>getRoot(l.id)===selectedAreaId)
-      .sort((a,b)=>buildLocationPathString(a.id,locations).localeCompare(buildLocationPathString(b.id,locations))).slice(0,80);
+    // Browse one hierarchy level at a time rather than flattening every descendant.
+    // The parent remains available via the separate "Store directly here" action.
+    if(selectedAreaId)return availableLocs.filter(l=>l.parent_id===selectedAreaId)
+      .sort((a,b)=>a.location_area.localeCompare(b.location_area));
     return showAllDestinations?availableLocs.slice().sort((a,b)=>buildLocationPathString(a.id,locations).localeCompare(buildLocationPathString(b.id,locations))).slice(0,80):[];
   },[destinationSearch,availableLocs,locations,locationById,selectedAreaId,showAllDestinations]);
 
@@ -180,7 +197,7 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
         <div className="shrink-0 rounded bg-amber-950/40 text-amber-300 text-xs px-2 py-1">{step==='items'?'1 / 3':step==='destination'?'2 / 3':step==='review'?'3 / 3':'Complete'}</div>
       </div>
     </div>
-    <div className="flex-1 min-h-0 overflow-y-auto">
+    <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
       <div className="max-w-4xl mx-auto px-3 sm:px-6 py-4 space-y-4">
         {step==='items'&&<>
           <div className="grid grid-cols-2 gap-2">
