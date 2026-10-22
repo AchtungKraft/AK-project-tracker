@@ -1,6 +1,6 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
-import { Package } from "lucide-react";
+import { Package, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import InventoryLocationEditor from "./InventoryLocationEditor";
 import PartActionsDropdown from "../parts/PartActionsDropdown";
@@ -9,7 +9,7 @@ export default function StoragePartRow({
   part, locationQty, locationReserved, locationId,
   selectedLocationId, getInventoryStats, getInventoryItemId,
   vendors, onPartClick, onOpenGallery, partActions, containerName,
-  isSelected = false, isFlashing = false,
+  isSelected = false, isFlashing = false, onAssignLocation,
 }) {
   const images = part.photos || [];
   const featuredPhoto = part.featured_photo || images[0];
@@ -73,7 +73,10 @@ export default function StoragePartRow({
           <div className={cn("font-semibold", stats.available > 0 ? "text-green-400" : stats.onHand > 0 ? "text-orange-400" : "text-red-400")}>{stats.available}</div>
         </div>
       </div>
-      {inventoryItemId && (
+      {onAssignLocation && stats.available>0 ? <button type="button" onClick={e=>{e.stopPropagation();onAssignLocation(part);}}
+        className="shrink-0 h-9 px-3 inline-flex items-center gap-1.5 rounded-md bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700">
+        <MapPin className="w-3.5 h-3.5"/> Assign Shelf
+      </button> : inventoryItemId && (
         <div><InventoryLocationEditor inventoryItemId={inventoryItemId} currentLocationId={locationId === 'unassigned' ? null : locationId} compact /></div>
       )}
       <div className="ml-2">
