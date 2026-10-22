@@ -9,10 +9,15 @@ import PropertyIntakeModal from "./PropertyIntakeModal";
 import StoredPropertyDetailsEditor from "./StoredPropertyDetailsEditor";
 
 const unwrap = r=>r?.data||r;
+export async function fetchStoredPropertyForContainer(containerId) {
+  const result=unwrap(await base44.functions.invoke('storageProperty',{action:'list_container',container_id:containerId}));
+  if(result.error||!result.success)throw new Error(result.error||'Unable to load property');
+  return result.items||[];
+}
 
-function StoredPropertyRow({item,container,parts,onChanged}){
+function StoredPropertyRow({item,container,parts,onChanged,autoPreview=false}){
   const queryClient=useQueryClient();
-  const [showPhotos,setShowPhotos]=useState(false);
+  const [showPhotos,setShowPhotos]=useState(autoPreview && item.photo_count>0);
   const [linking,setLinking]=useState(false);
   const [search,setSearch]=useState('');
   const [linkBusy,setLinkBusy]=useState(false);
@@ -125,25 +130,22 @@ function StoredPropertyRow({item,container,parts,onChanged}){
 }
 
 /** Lazy load solely one selected box; inventory queries and counts remain untouched. */
-export default function ContainerStoredProperty({container,parts=[]}){
+export default function ContainerStoredProperty({container,parts=[],wide=false}){
   const client=useQueryClient();
   const [intakeOpen,setIntakeOpen]=useState(false);
   const {data:items=[],isLoading,error}=useQuery({
     queryKey:['storedPropertyContainer',container.id],
-    queryFn:async()=>{
-      const result=unwrap(await base44.functions.invoke('storageProperty',{action:'list_container',container_id:container.id}));
-      if(result.error||!result.success)throw new Error(result.error||'Unable to load property');
-      return result.items||[];
-    },
+    queryFn:()=>fetchStoredPropertyForContainer(container.id),
     staleTime:20_000,refetchOnWindowFocus:false,retry:1,
   });
   const refresh=()=>{
     client.invalidateQueries({queryKey:['storedPropertyContainer',container.id]});
   };
+  const active=items.filter(i=>i.status==='in_storage');
   return <section className="space-y-3 mb-5 pb-4 border-b border-gray-800">
     <div className="flex items-center gap-2 justify-between">
       <div>
-        <h3 className="text-sm font-semibold text-indigo-200">Stored Property</h3>
+        <h3 className="text-base font-semibold text-indigo-200">Stored Property {(!isLoading&&!error)&&<span className="text-sm font-normal text-gray-400">({active.length} {active.length===1?'group':'groups'})</span>}</h3>
         <p className="text-[11px] text-gray-500">Client parts and take-offs · separate from inventory</p>
       </div>
       <Button onClick={()=>setIntakeOpen(true)} size="sm" variant="outline" className="h-9 gap-1.5 text-xs border-indigo-800 text-indigo-200">
@@ -153,8 +155,8 @@ export default function ContainerStoredProperty({container,parts=[]}){
     {isLoading?<p className="text-xs text-gray-500">Loading property…</p>:
       error?<p className="text-xs text-red-400">Stored Property unavailable: {error.message}</p>:
         !items.length?<p className="text-xs text-gray-500">No photographed or uncatalogued items recorded in this box.</p>:
-          <div className="space-y-2">{items.filter(i=>i.status==='in_storage').map(i=>
-            <StoredPropertyRow key={i.id} item={i} container={container} parts={parts} onChanged={refresh}/>)}</div>}
+          <div className={wide?"grid grid-cols-1 lg:grid-cols-2 gap-3 items-start":"space-y-2"}>{active.map((i,index)=>
+            <StoredPropertyRow key={i.id} item={i} container={container} parts={parts} onChanged={refresh} autoPreview={wide&&index<4}/>)}</div>}
     {intakeOpen&&<PropertyIntakeModal container={container} onClose={()=>setIntakeOpen(false)} onSaved={refresh}/>}
   </section>;
 }
