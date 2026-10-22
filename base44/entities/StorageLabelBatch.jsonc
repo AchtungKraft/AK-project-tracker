@@ -1,0 +1,74 @@
+{
+  "name": "StorageLabelBatch",
+  "type": "object",
+  "properties": {
+    "request_key": {
+      "type": "string",
+      "description": "Client generated idempotency request key; one intended label generation"
+    },
+    "batch_code": {
+      "type": "string",
+      "description": "Permanent human-readable batch code"
+    },
+    "container_type": {
+      "type": "string",
+      "enum": [
+        "box",
+        "tote",
+        "bin",
+        "tray",
+        "organizer",
+        "crate",
+        "cart",
+        "kit",
+        "other"
+      ],
+      "default": "box"
+    },
+    "requested_count": {
+      "type": "integer",
+      "description": "Total number of labels requested"
+    },
+    "container_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Reserved container identities, in print order"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "generating",
+        "ready",
+        "partial",
+        "error",
+        "voided"
+      ],
+      "default": "generating"
+    },
+    "generated_by": {
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_printed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "print_count": {
+      "type": "integer",
+      "default": 0
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "request_key",
+    "container_type",
+    "requested_count"
+  ]
+}
