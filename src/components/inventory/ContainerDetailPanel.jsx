@@ -8,19 +8,19 @@ import {
   ChevronRight, ChevronDown, CheckCircle2, StickyNote, Pencil, X, Check
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/use-toast";
 import { getContainerTypeConfig } from "./containerTypeConfig";
 import { printContainerQRLabel } from "./containerQRLabel";
 import LocationBreadcrumb from "./LocationBreadcrumb";
 import StoragePartRow from "./StoragePartRow";
-import ContainerStoredProperty from "./ContainerStoredProperty";
+import ContainerStoredProperty, { fetchStoredPropertyForContainer } from "./ContainerStoredProperty";
 
 export default function ContainerDetailPanel({
   container, locations, inventoryItems, parts, projects, vendors,
   onClose, onMove, onReturnHome, onAddParts, onEmptyContainer, onMoveFromContainer,
   onPartClick, onOpenGallery, partActions,
-  getInventoryStats, getInventoryItemId,
+  getInventoryStats, getInventoryItemId, workspaceMode = false,
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -41,6 +41,15 @@ export default function ContainerDetailPanel({
   const containedPartIds = new Set(containedItems.map(i => i.part_id));
   const containedParts = parts.filter(p => containedPartIds.has(p.id));
   const totalUnits = containedItems.reduce((s, i) => s + (i.quantity_on_hand || 0), 0);
+  // Box-only property query shares a cache with ContainerStoredProperty.
+  // Property counts never mutate or inflate Parts Tracker inventory.
+  const { data: storedGroups = [], isLoading: propertyLoading, isError: propertyError } = useQuery({
+    queryKey: ['storedPropertyContainer', container.id],
+    queryFn: () => fetchStoredPropertyForContainer(container.id),
+    staleTime: 20_000, refetchOnWindowFocus: false, retry: 1,
+  });
+  const activeGroups = storedGroups.filter(g => g.status === 'in_storage');
+  const photoCount = activeGroups.reduce((sum, g) => sum + (g.photo_count || 0), 0);
 
   const handleVerify = async () => {
     setVerifying(true);
@@ -71,7 +80,7 @@ export default function ContainerDetailPanel({
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       {/* Header — what is this + where is it */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-red-900/20 bg-gray-900/40 shrink-0">
         {onClose && (
@@ -87,11 +96,13 @@ export default function ContainerDetailPanel({
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <h3 className="text-lg font-bold text-white truncate">{container.name}</h3>
-          <div className="flex items-center gap-2 text-xs">
-            {container.short_code && <span className="font-mono font-bold text-gray-300">{container.short_code}</span>}
-            <span className="text-gray-500">·</span>
-            <span className="text-gray-400">{containedParts.length} parts · {totalUnits} units</span>
+          <h3 className="text-lg font-bold text-white break-words pr-7">{container.name}</h3>
+          {container.short_code && <div className="font-mono font-semibold text-xs text-gray-300 mt-1 break-all">{container.short_code}</div>}
+          <div className="flex items-center gap-2 flex-wrap mt-2 text-xs">
+            {propertyLoading ? <span className="text-gray-400">Loading saved contents…</span> :
+              propertyError ? <span className="text-amber-400">Stored property unavailable</span> :
+              <span className="rounded bg-indigo-950/50 border border-indigo-800/50 px-2 py-1 text-indigo-200">{activeGroups.length} stored {activeGroups.length === 1 ? 'group' : 'groups'} · {photoCount} photos</span>}
+            <span className="rounded bg-gray-800/60 px-2 py-1 text-gray-400">{containedParts.length} stocked {containedParts.length === 1 ? 'part' : 'parts'} · {totalUnits} units</span>
           </div>
           {/* Project badge — visible in header */}
           {project && (
@@ -113,9 +124,9 @@ export default function ContainerDetailPanel({
       </div>
 
       {/* Primary actions — the technician's toolbar */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-red-900/20 bg-gray-900/10 shrink-0">
+      <div className="flex items-center flex-wrap gap-2 px-3 sm:px-4 py-3 border-b border-red-900/20 bg-gray-900/10 shrink-0">
         <Button size="sm" variant="outline" onClick={() => onMove(container)} className="gap-1.5 h-9 text-sm border-gray-700 text-gray-300">
-          <ArrowRightLeft className="w-4 h-4" /> Move Ctr
+          <ArrowRightLeft className="w-4 h-4" /> Move Box
         </Button>
         {onMoveFromContainer && containedParts.length > 0 && (
           <Button size="sm" variant="outline" onClick={() => onMoveFromContainer(container)} className="gap-1.5 h-9 text-sm border-gray-700 text-gray-300">
@@ -164,21 +175,16 @@ export default function ContainerDetailPanel({
       )}
 
       {/* Physical property is independent of inventory, reservations, and stock totals. */}
-      <div className="flex-1 overflow-y-auto p-4">
-        <ContainerStoredProperty key={container.id} container={container} parts={parts} />
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 sm:p-5">
+        <ContainerStoredProperty key={container.id} container={container} parts={parts} wide={workspaceMode} />
         {containedParts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center py-8">
-            <Package className="w-14 h-14 text-gray-700 mb-3" />
-            <p className="text-base text-gray-400 font-medium">No Stock Inventory</p>
-            <p className="text-sm text-gray-600 mt-1">This box may contain uncatalogued Stored Property above.</p>
-            {onAddParts && (
-              <Button size="sm" variant="outline" className="mt-4 gap-1.5" onClick={() => onAddParts(container)}>
-                <Plus className="w-4 h-4" /> Add Parts
-              </Button>
-            )}
+          <div className="rounded-lg border border-dashed border-gray-800 bg-gray-900/20 p-3 sm:p-4">
+            <p className="text-sm text-gray-400 font-medium">No Parts Tracker stock in this box</p>
+            <p className="text-xs text-gray-500 mt-1">Stored client property shown above is not counted as inventory.</p>
           </div>
         ) : (
           <div className="space-y-2">
+            <h3 className="text-sm text-gray-300 font-semibold mb-2">Parts Tracker Stock ({containedParts.length})</h3>
             {containedParts.map(part => {
               const item = containedItems.find(i => i.part_id === part.id);
               return (
@@ -208,8 +214,8 @@ export default function ContainerDetailPanel({
                 <Badge variant="outline" className="text-[10px] py-0" style={{ borderColor: displayColor + '60', color: displayColor }}>
                   {tc.label}
                 </Badge>
-                {container.status === 'empty' && (
-                  <Badge variant="outline" className="text-[10px] py-0 border-gray-600 text-gray-400">Empty</Badge>
+                {container.status === 'empty' && containedParts.length === 0 && activeGroups.length === 0 && !propertyLoading && !propertyError && (
+                  <Badge variant="outline" className="text-[10px] py-0 border-gray-600 text-gray-400">No contents recorded</Badge>
                 )}
                 {project && (
                   <span className="text-blue-400">
