@@ -1,0 +1,48 @@
+{
+  "name": "StoredPropertyPhoto",
+  "type": "object",
+  "properties": {
+    "stored_property_id": {
+      "type": "string",
+      "description": "Physical property or group being photographed"
+    },
+    "photo_url": {
+      "type": "string",
+      "description": "Uploaded source URL; access controls required"
+    },
+    "media_asset_id": {
+      "type": "string",
+      "description": "Optional managed media asset"
+    },
+    "capture_batch_id": {
+      "type": "string",
+      "description": "Same photo intake session"
+    },
+    "container_id": {
+      "type": "string",
+      "description": "Container at capture time for provenance"
+    },
+    "sort_order": {
+      "type": "integer",
+      "default": 0
+    },
+    "caption": {
+      "type": "string"
+    },
+    "captured_by": {
+      "type": "string"
+    },
+    "captured_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "archived": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "stored_property_id",
+    "photo_url"
+  ]
+}
