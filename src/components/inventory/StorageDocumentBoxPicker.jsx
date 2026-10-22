@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Camera, MapPin, Package, Printer, ScanLine, Search, X } from "lucide-react";
+import { MapPin, Package, Printer, ScanLine, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
