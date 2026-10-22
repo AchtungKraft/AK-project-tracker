@@ -143,8 +143,41 @@ Deno.serve(async (req) => {
         payload_snapshot: JSON.stringify({ transfer_type: 'container_move', container_id, destination_location_id }),
       });
 
+      // StoredProperty is physical custody, not inventory. It follows the container's
+      // effective location without creating any Part or InventoryItem mutation.
+      // This separate event is best-effort so it can never turn a successful
+      // canonical inventory move into a false-failure response on mobile.
+      let propertyCustodyRecorded = true;
+      let storedPropertyCount = 0;
+      try {
+        const propertyRecords = await base44.asServiceRole.entities.StoredProperty.filter({ container_id, status: 'in_storage' });
+        storedPropertyCount = propertyRecords.length;
+        if (storedPropertyCount > 0) {
+          const actionKey = `property_container_move_${transfer.id}`;
+          const events = await base44.asServiceRole.entities.StorageCustodyEvent.filter({ action_key: actionKey });
+          if (!events.length) {
+            await base44.asServiceRole.entities.StorageCustodyEvent.create({
+              event_type: 'move_container', container_id,
+              from_location_id: fromLocationId || null,
+              to_location_id: destination_location_id,
+              client_account_id: container.client_account_id || null,
+              project_id: container.project_id || null,
+              performed_by: user.id, performed_at: now,
+              action_key: actionKey,
+              details: { transfer_id: transfer.id, stored_property_count: storedPropertyCount },
+              notes: 'Stored property inherits the container location; no inventory mutation',
+            });
+          }
+        }
+      } catch (custodyError) {
+        propertyCustodyRecorded = false;
+        console.warn('[container_move] Property custody event incomplete:', custodyError?.message || custodyError);
+      }
+
       return Response.json({
         success: true,
+        custody_recorded: propertyCustodyRecorded,
+        stored_property_count: storedPropertyCount,
         transfer_type: 'container_move',
         batch_id: effectiveBatchId,
         container_id,
