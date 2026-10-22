@@ -2,6 +2,7 @@ import React from "react";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buildLocationPath, getLocationTypeConfig } from "./locationTypeConfig";
+import { shopStorageName } from "./shopStorageNames";
 
 /**
  * Reusable location breadcrumb component.
@@ -19,7 +20,7 @@ export default function LocationBreadcrumb({ locationId, locations, onNavigate, 
   if (path.length === 0) return null;
 
   if (plainText) {
-    return <span className="text-gray-400 text-xs">{path.map(p => p.name).join(' > ')}</span>;
+    return <span className="text-gray-400 text-xs">{path.map(p => shopStorageName(p.name)).join(' > ')}</span>;
   }
 
   return (
@@ -42,7 +43,7 @@ export default function LocationBreadcrumb({ locationId, locations, onNavigate, 
               disabled={!onNavigate}
             >
               <Icon className={cn("shrink-0", compact ? "w-3 h-3" : "w-3.5 h-3.5")} style={{ color: segment.color }} />
-              <span className="truncate max-w-[120px]">{segment.shortCode || segment.name}</span>
+              <span className="truncate max-w-[120px]">{shopStorageName(segment.name)==='Unassigned Stock'?shopStorageName(segment.name):(segment.shortCode||shopStorageName(segment.name))}</span>
             </button>
           </React.Fragment>
         );
