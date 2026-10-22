@@ -30,6 +30,7 @@ import MoveContainerModal from "./MoveContainerModal";
 import AddToContainerModal from "./AddToContainerModal";
 import EmptyContainerModal from "./EmptyContainerModal";
 import ScannerModal from "./ScannerModal";
+import PropertyIntakeModal from "./PropertyIntakeModal";
 import BatchStorageLabelsModal from "./BatchStorageLabelsModal";
 import { useIsAdmin } from "@/lib/clientAccounts";
 import InventoryMoveWorkflow from "./move/InventoryMoveWorkflow";
@@ -99,6 +100,9 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   const [needToBuyModalPart, setNeedToBuyModalPart] = useState(null);
   const [galleryState, setGalleryState] = useState({ open: false, images: [], currentIndex: 0 });
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanIntent, setScanIntent] = useState('browse');
+  const [documentContainer, setDocumentContainer] = useState(null);
+  const startBoxScan = () => { setScanIntent('document'); setScannerOpen(true); };
   const [batchLabelsOpen, setBatchLabelsOpen] = useState(false);
   const [moveWorkflowSource, setMoveWorkflowSource] = useState(null); // { type, id, entity }
   const [mobileMoveOpen, setMobileMoveOpen] = useState(false);
@@ -510,7 +514,12 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
       {addToContainerTarget && <AddToContainerModal container={addToContainerTarget} onClose={() => setAddToContainerTarget(null)} inventoryItems={inventoryItems} parts={parts} />}
       {emptyContainerTarget && <EmptyContainerModal container={emptyContainerTarget} onClose={() => setEmptyContainerTarget(null)} locations={locations} containers={containers} inventoryItems={inventoryItems} parts={parts} />}
       <ImageGallery isOpen={galleryState.open} images={galleryState.images} currentIndex={galleryState.currentIndex} onClose={closeGallery} onNavigate={navigateGallery} />
-      {scannerOpen && <ScannerModal locations={locations} containers={containers} inventoryItems={inventoryItems} projects={projects} onOpenLocation={handleScanOpenLocation} onOpenContainer={handleScanOpenContainer} onClose={() => setScannerOpen(false)} />}
+      {scannerOpen && <ScannerModal locations={locations} containers={containers} inventoryItems={inventoryItems} projects={projects}
+        intent={scanIntent} onOpenLocation={handleScanOpenLocation} onOpenContainer={handleScanOpenContainer}
+        onDocumentContainer={(box) => { setDocumentContainer(box); setScannerOpen(false); }}
+        onClose={() => setScannerOpen(false)} />}
+      {documentContainer && <PropertyIntakeModal container={documentContainer}
+        onClose={() => setDocumentContainer(null)} />}
       {isAdmin && batchLabelsOpen && <BatchStorageLabelsModal onClose={() => setBatchLabelsOpen(false)} />}
       {assignLocationOpen && <ShopAssignLocation
         locations={locations} inventoryItems={inventoryItems} parts={parts} containers={containers}
@@ -576,7 +585,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                   className={cn("pl-11 pr-10 bg-gray-900/50 border-gray-700 text-white", mobileIsHome ? "h-12 text-base" : "h-10 text-sm")} />
                 {searchTerm && <button onClick={clearSearch} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"><X className="w-4 h-4" /></button>}
               </div>
-              <Button size="icon" variant="ghost" onClick={() => setScannerOpen(true)}
+              <Button size="icon" variant="ghost" onClick={() => { setScanIntent("browse"); setScannerOpen(true); }}
                 className="h-10 w-10 text-gray-400 hover:text-red-400 shrink-0" title="Scan QR">
                 <ScanLine className="w-5 h-5" />
               </Button>
@@ -603,8 +612,11 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                   <ScanLine className="w-5 h-5" /> Scan to Move
                 </Button>
               </div>
-              <div className="px-3 py-1">
-                <Button onClick={() => setPutAwayOpen(true)} variant="outline" className="w-full h-10 gap-2 border-gray-700 text-gray-300 text-sm">
+              <div className="px-3 py-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Button onClick={startBoxScan} className="w-full h-11 gap-2 bg-indigo-700 hover:bg-indigo-800 text-white text-sm font-semibold">
+                  <ScanLine className="w-4 h-4"/> Scan Box / Photograph Contents
+                </Button>
+                <Button onClick={() => setPutAwayOpen(true)} variant="outline" className="w-full h-11 gap-2 border-gray-700 text-gray-300 text-sm">
                   <Package className="w-4 h-4"/> Put Away Received Parts
                 </Button>
               </div>
@@ -693,7 +705,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
               <Printer className="w-4 h-4" /> Labels
             </Button>}
             {/* Scan + View toggle */}
-            <Button size="sm" variant="outline" onClick={() => setScannerOpen(true)}
+            <Button size="sm" variant="outline" onClick={() => {setScanIntent("browse");setScannerOpen(true)}}
               className="h-9 gap-1.5 border-gray-700 text-gray-300 hover:text-red-400 hover:border-red-700 shrink-0">
               <ScanLine className="w-4 h-4" /> Scan
             </Button>
