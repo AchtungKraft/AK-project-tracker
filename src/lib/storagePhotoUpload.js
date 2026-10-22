@@ -26,7 +26,7 @@ export function responseData(response) {
 export function isPrivateStorageUri(value) {
   if(typeof value!=='string'||value.length<9||value.length>1200
     ||/[?#\\\u0000-\u001f]/.test(value)||value.includes('..'))return false;
-  return /^private\/[^/]+\/.+/.test(value)
+  return /^private\/[^/]+(?:\/.+)?$/.test(value)
     || /^gs:\/\/[a-zA-Z0-9][a-zA-Z0-9._-]{1,220}\/[^/].+/.test(value);
 }
 
