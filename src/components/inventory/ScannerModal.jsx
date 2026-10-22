@@ -24,6 +24,8 @@ export default function ScannerModal({
   projects = [],
   onOpenLocation,
   onOpenContainer,
+  onDocumentContainer,
+  intent = 'browse',
   onClose,
 }) {
   const queryClient = useQueryClient();
@@ -73,6 +75,16 @@ export default function ScannerModal({
     onClose();
   }, [containers, scanResult, onOpenLocation, onOpenContainer, onClose]);
 
+  // Dedicated documented-property path; never routes to InventoryItem receiving
+  // or modifies the box, Parts catalogue, quantities, or commitments.
+  const handleDocumentContainer = useCallback((entityId) => {
+    const container = containers.find(c => c.id === entityId) ||
+      (scanResult?.entity_id === entityId ? scanResult.entity : null);
+    if (!container?.id) return;
+    onDocumentContainer?.(container);
+    onClose();
+  }, [containers, scanResult, onDocumentContainer, onClose]);
+
   return (
     <div className="fixed inset-0 z-[80] bg-black flex flex-col">
       {mode === 'scanning' && (
@@ -93,7 +105,8 @@ export default function ScannerModal({
           onCancel={handleScanAgain}
           onActivated={(container) => {
             queryClient.invalidateQueries({queryKey:['storageContainers']});
-            onOpenContainer?.(container);
+            if (intent === 'document' && onDocumentContainer) onDocumentContainer(container);
+            else onOpenContainer?.(container);
             onClose();
           }}
         />
@@ -106,6 +119,8 @@ export default function ScannerModal({
           inventoryItems={inventoryItems}
           projects={projects}
           onOpenEntity={handleOpenEntity}
+          onDocumentContainer={onDocumentContainer ? handleDocumentContainer : undefined}
+          preferredAction={intent}
           onScanAgain={handleScanAgain}
           onBrowse={onClose}
         />
