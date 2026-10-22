@@ -72,10 +72,10 @@ export default function StoragePartRow({
           <div className={cn("font-semibold", stats.available > 0 ? "text-green-400" : stats.onHand > 0 ? "text-orange-400" : "text-red-400")}>{stats.available}</div>
         </div>
       </div>
-      {onAssignLocation && stats.available>0 ? <button type="button" onClick={e=>{e.stopPropagation();onAssignLocation(part);}}
+      {onAssignLocation ? (stats.available>0 ? <button type="button" onClick={e=>{e.stopPropagation();onAssignLocation(part);}}
         className="shrink-0 h-9 px-3 inline-flex items-center gap-1.5 rounded-md bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700">
         <MapPin className="w-3.5 h-3.5"/> Assign Shelf
-      </button> : inventoryItemId && (
+      </button> : <span className="text-xs text-amber-400">Fully reserved</span>) : inventoryItemId && (
         <div><InventoryLocationEditor inventoryItemId={inventoryItemId} currentLocationId={locationId === 'unassigned' ? null : locationId} compact /></div>
       )}
       <div className="ml-2">
