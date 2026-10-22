@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select,SelectContent,SelectItem,SelectTrigger,SelectValue } from "@/components/ui/select";
 import { Camera,Images,Loader2,X,ShieldCheck,CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import { uploadAndRegisterPropertyPhoto, uploadErrorDetail } from "@/lib/storagePhotoUpload";
 
 const TYPES=[
   ['unidentified','Unidentified contents'],['miscellaneous','Miscellaneous group'],
@@ -43,12 +44,12 @@ export default function PropertyIntakeModal({ container, existingGroup = null, o
       const slots=Math.max(0,25-old.length);
       if(accepted.length>slots)toast.error('Limit 25 images per intake session');
       return [...old,...accepted.slice(0,slots).map(f=>({
-        file:f,preview:URL.createObjectURL(f),uri:null,saved:false,error:null,
+        file:f,preview:URL.createObjectURL(f),uri:null,saved:false,error:null,stage:'ready',
       }))];
     });
   },[]);
   const remove=(idx)=>{
-    if(busy||group)return;
+    if(busy)return;
     setFiles(old=>{
       const copy=[...old];
       URL.revokeObjectURL(copy[idx].preview);
@@ -81,23 +82,23 @@ export default function PropertyIntakeModal({ container, existingGroup = null, o
         if(current.saved)continue;
         setProgress(`Photograph ${i+1} of ${files.length}`);
         try{
-          let uri=current.uri;
-          if(!uri){
-            const uploaded=unwrap(await base44.integrations.Core.UploadPrivateFile({file:current.file}));
-            if(!uploaded.file_uri)throw new Error('Private upload returned no file URI');
-            uri=uploaded.file_uri;
-            setFiles(prev=>prev.map((f,n)=>n===i?{...f,uri,error:null}:f));
-          }
-          const response=unwrap(await base44.functions.invoke('storageProperty',{
-            action:'add_photo',container_id:container.id,property_id:created.id,
-            file_uri:uri,capture_batch_id:intakeKey.current,
-          }));
-          if(response.error||!response.success)throw new Error(response.error||'Failed to register photo');
+          const uploaded=await uploadAndRegisterPropertyPhoto({
+            file:current.file,
+            existingUri:current.uri,
+            containerId:container.id,
+            propertyId:created.id,
+            captureBatchId:intakeKey.current,
+            uploadPrivate:(payload)=>base44.integrations.Core.UploadPrivateFile(payload),
+            invokeProperty:(payload)=>base44.functions.invoke('storageProperty',payload),
+            onUploaded:(uri)=>setFiles(prev=>prev.map((f,n)=>n===i?{...f,uri,error:null,stage:'register'}:f)),
+            onStage:(stage)=>setFiles(prev=>prev.map((f,n)=>n===i?{...f,stage,error:null}:f)),
+          });
           successful++;
-          setFiles(prev=>prev.map((f,n)=>n===i?{...f,uri,saved:true,error:null}:f));
+          setFiles(prev=>prev.map((f,n)=>n===i?{...f,uri:uploaded.uri,saved:true,error:null,stage:'done'}:f));
         }catch(err){
           failed++;
-          setFiles(prev=>prev.map((f,n)=>n===i?{...f,error:err.message||'Upload failed'}:f));
+          const info=uploadErrorDetail(err,err.stage||'upload');
+          setFiles(prev=>prev.map((f,n)=>n===i?{...f,error:info,stage:'failed'}:f));
         }
       }
       setDoneCount(successful);
@@ -106,7 +107,7 @@ export default function PropertyIntakeModal({ container, existingGroup = null, o
         toast.success(`Saved ${successful} photo${successful===1?'':'s'} in ${container.short_code||container.name}`);
         onClose();
       }else{
-        toast.error(`${failed} photos failed. The property group and other photos are saved. Retry to finish.`);
+        toast.error(`${failed} photo${failed===1?'':'s'} failed. The property group is safe. Check the error below and retry.`,{duration:9000});
       }
     }catch(error){toast.error(error.message||'Could not save intake group');}
     finally{setBusy(false);setProgress('');}
@@ -145,13 +146,21 @@ export default function PropertyIntakeModal({ container, existingGroup = null, o
           {files.map((f,i)=><div key={f.preview} className="relative aspect-square rounded border border-gray-700 overflow-hidden">
             <img src={f.preview} className="w-full h-full object-cover" alt={`Capture ${i+1}`}/>
             {f.saved&&<CheckCircle2 className="absolute bottom-1 right-1 w-5 h-5 text-green-400 drop-shadow"/>}
-            {f.error&&<div className="absolute inset-x-0 bottom-0 bg-red-900/90 text-[9px] p-1">Retry</div>}
-            {!f.saved&&!busy&&!group&&<button type="button" onClick={()=>remove(i)}
+            {f.error&&<div className="absolute inset-x-0 bottom-0 bg-red-900/90 text-[9px] p-1">{f.error.stage==='register'?'Save failed':'Upload failed'}</div>}
+            {busy&&!f.saved&&f.stage!=='failed'&&<div className="absolute inset-x-0 top-0 bg-black/70 text-[9px] p-1">{f.stage==='register'?'Registering…':'Uploading…'}</div>}
+            {!f.saved&&!busy&&<button type="button" onClick={()=>remove(i)}
               className="absolute top-1 right-1 rounded-full bg-black/70 p-1" aria-label="Remove photo">
               <X className="w-4 h-4"/></button>}
           </div>)}
         </div>}
-        {group&&<p className="text-xs text-gray-400">{existingGroup ? 'Adding to existing group.' : 'Group saved.'} {doneCount} photos uploaded in this session. Failed photos can be retried.</p>}
+        {files.some(f=>f.error)&&<div role="alert" className="rounded-md border border-red-800/70 bg-red-950/25 p-3 space-y-2">
+          <p className="text-xs text-red-200 font-semibold">Photo save failed — existing property group is preserved.</p>
+          {files.map((f,i)=>f.error&&<p key={f.preview} className="text-xs text-red-200 break-words">
+            Photo {i+1} · {f.error.stage==='register'?'Registration':'Private upload'}{f.error.status?' (HTTP '+f.error.status+')':''}: {f.error.message}
+          </p>)}
+          <p className="text-xs text-gray-400">Retry below. Already-uploaded files are reused when registration fails, so new copies are not created unnecessarily.</p>
+        </div>}
+        {group&&<p className="text-xs text-gray-400">{existingGroup ? 'Adding to existing group.' : 'Group saved.'} {doneCount} photos uploaded in this session. Failed photos can be retried. Closing does not remove saved property.</p>
       </div>
       <div className="border-t border-gray-700 pt-3 shrink-0 space-y-2" style={{paddingBottom:'env(safe-area-inset-bottom, 0px)'}}>
         {busy&&<p className="text-xs text-gray-400 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>{progress||'Saving group…'}</p>}
