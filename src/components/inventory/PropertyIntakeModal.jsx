@@ -16,15 +16,15 @@ const TYPES=[
 ];
 const unwrap=(r)=>r?.data||r;
 
-export default function PropertyIntakeModal({ container, onClose, onSaved }) {
-  const [name,setName]=useState('');
-  const [type,setType]=useState('unidentified');
-  const [notes,setNotes]=useState('');
-  const [quantity,setQuantity]=useState('');
+export default function PropertyIntakeModal({ container, existingGroup = null, onClose, onSaved }) {
+  const [name,setName]=useState(existingGroup?.name || '');
+  const [type,setType]=useState(existingGroup?.property_type || 'unidentified');
+  const [notes,setNotes]=useState(existingGroup?.description || '');
+  const [quantity,setQuantity]=useState(existingGroup?.quantity_known ? String(existingGroup.quantity) : '');
   const [files,setFiles]=useState([]);
   const [busy,setBusy]=useState(false);
   const [progress,setProgress]=useState('');
-  const [group,setGroup]=useState(null);
+  const [group,setGroup]=useState(existingGroup);
   const [doneCount,setDoneCount]=useState(0);
   const intakeKey=useRef(crypto.randomUUID().replace(/-/g,''));
   const cameraRef=useRef(null);
@@ -57,15 +57,20 @@ export default function PropertyIntakeModal({ container, onClose, onSaved }) {
     });
   };
   const save=async ()=>{
-    if(busy||(!files.length&&!name.trim()))return;
+    if(busy||(!files.length&&(!name.trim()||!!group)))return;
     setBusy(true);
     try{
-      const created=group||unwrap(await base44.functions.invoke('storageProperty',{
-        action:'create_group',container_id:container.id,intake_key:intakeKey.current,
-        name:name.trim()||'Unidentified contents',property_type:type,
-        description:notes.trim(),quantity_known:quantity.trim()!=='',
-        quantity:quantity.trim()===''?null:Number(quantity),
-      })).item;
+      let created=group;
+      if(!created){
+        const result=unwrap(await base44.functions.invoke('storageProperty',{
+          action:'create_group',container_id:container.id,intake_key:intakeKey.current,
+          name:name.trim()||'Unidentified contents',property_type:type,
+          description:notes.trim(),quantity_known:quantity.trim()!=='',
+          quantity:quantity.trim()===''?null:Number(quantity),
+        }));
+        if(result.error||!result.success)throw new Error(result.error||'Property intake failed');
+        created=result.item;
+      }
       if(!created?.id)throw new Error('Property group could not be created');
       setGroup(created);
       let successful=files.filter(f=>f.saved).length;
@@ -109,7 +114,7 @@ export default function PropertyIntakeModal({ container, onClose, onSaved }) {
 
   return <Dialog open onOpenChange={open=>{if(!open&&!busy)onClose()}}>
     <DialogContent className="bg-gray-900 text-white border-gray-700 w-[calc(100vw-16px)] max-w-xl max-h-[90dvh] flex flex-col overflow-hidden p-4 sm:p-6">
-      <DialogHeader><DialogTitle>Document Box: {container.short_code||container.name}</DialogTitle></DialogHeader>
+      <DialogHeader><DialogTitle>{existingGroup ? 'Add Photos to Property' : 'Document Box'}: {container.short_code||container.name}</DialogTitle></DialogHeader>
       <div className="min-h-0 overflow-y-auto space-y-3 pr-1">
         <p className="text-xs text-gray-400 flex items-start gap-2">
           <ShieldCheck className="w-4 h-4 shrink-0 text-green-400"/>Private photos and stored property only. This does not alter Parts Tracker stock, purchases or reservations.
@@ -146,12 +151,12 @@ export default function PropertyIntakeModal({ container, onClose, onSaved }) {
               <X className="w-4 h-4"/></button>}
           </div>)}
         </div>}
-        {group&&<p className="text-xs text-gray-400">Group saved. {doneCount} photos uploaded. Failed photos can be retried; details cannot be changed in this upload session.</p>}
+        {group&&<p className="text-xs text-gray-400">{existingGroup ? 'Adding to existing group.' : 'Group saved.'} {doneCount} photos uploaded in this session. Failed photos can be retried.</p>}
       </div>
       <div className="border-t border-gray-700 pt-3 shrink-0 space-y-2" style={{paddingBottom:'env(safe-area-inset-bottom, 0px)'}}>
         {busy&&<p className="text-xs text-gray-400 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>{progress||'Saving group…'}</p>}
-        <Button disabled={busy||(!files.length&&!name.trim())} onClick={save} className="w-full h-12">
-          {busy?'Saving…':group?'Retry Unfinished Photos':`Save Intake (${files.length} photo${files.length===1?'':'s'})`}
+        <Button disabled={busy||(!files.length&&(!name.trim()||!!group))} onClick={save} className="w-full h-12">
+          {busy?'Saving…':group?`Save / Retry Photos (${files.filter(f=>!f.saved).length} remaining)`:`Save Intake (${files.length} photo${files.length===1?'':'s'})`}
         </Button>
         <Button variant="outline" disabled={busy} onClick={onClose} className="w-full h-9">Close</Button>
       </div>
