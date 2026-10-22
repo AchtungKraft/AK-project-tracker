@@ -5,6 +5,7 @@ import { MapPin, Package, ChevronRight, ChevronDown, Printer, Star, Plus, ArrowR
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig } from "./locationTypeConfig";
 import LocationBreadcrumb from "./LocationBreadcrumb";
+import { shopStorageName } from "./shopStorageNames";
 import ImageGallery from "../parts/ImageGallery";
 import LocationActivitySummary from "./LocationActivitySummary";
 import ContainerCard from "./ContainerCard";
@@ -92,7 +93,7 @@ export default function LocationDetailPanel({
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <h3 className="text-base font-bold text-white truncate">{location.location_area}</h3>
+          <h3 className="text-base font-bold text-white truncate">{shopStorageName(location.location_area)}</h3>
           <LocationBreadcrumb locationId={locationId} locations={locations} onNavigate={onNavigateLocation} compact />
         </div>
         {/* Primary actions — always visible */}
