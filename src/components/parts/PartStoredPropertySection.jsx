@@ -6,7 +6,7 @@ import { ChevronDown,ChevronRight,MapPin,Package,LockKeyhole } from "lucide-reac
 const unwrap=r=>r?.data||r;
 
 /** Read-only identification cross-reference, intentionally excluded from all stock math. */
-export default function PartStoredPropertySection({partId,isOpen}){
+export default function PartStoredPropertySection({partId,isOpen,locations=[]}){
   const [expanded,setExpanded]=useState(false);
   const {data=[],isLoading,error}=useQuery({
     queryKey:['storedPropertyByPart',partId],
@@ -33,11 +33,11 @@ export default function PartStoredPropertySection({partId,isOpen}){
       {data.map(item=><div key={item.id} className="p-2 border border-indigo-900/30 rounded text-xs space-y-1">
         <div className="font-semibold text-gray-200">{item.name}</div>
         <div className="text-gray-400">
-          {item.quantity_known?`Qty ${item.quantity}`:'Quantity unknown'} · {item.property_type?.replace(/_/g,' ')} · {item.ownership_type}
+          {item.quantity_known?`Qty ${item.quantity}`:'Quantity unknown'} · {item.property_type?.replace(/_/g,' ')} · {item.client_name||item.project_name||item.ownership_type}
         </div>
         <div className="flex gap-1 items-start text-gray-400">
           <MapPin className="w-3 h-3 shrink-0 mt-0.5"/>
-          <span>Box {item.container_code||item.container_name||'Unboxed'} · Location ID: {item.location_id||'Unassigned'}</span>
+          <span>{item.container_code||item.container_name||'Unboxed'} · {locations.find(l=>l.id===item.location_id)?.location_area||'Location not assigned'} {item.project_name?` · ${item.project_name}`:''}</span>
         </div>
       </div>)}
       {data.length>=100&&<p className="text-xs text-yellow-300">Showing first 100 records.</p>}
