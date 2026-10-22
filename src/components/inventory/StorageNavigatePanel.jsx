@@ -1,8 +1,9 @@
 import React, { useMemo } from "react";
-import { Star, Clock, ChevronRight, ChevronDown, MapPin, Package, PackageOpen } from "lucide-react";
+import { Star, Clock, ChevronRight, ChevronDown, MapPin, Package, PackageOpen, ArrowRightLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig } from "./locationTypeConfig";
 import { findReceivingLocation } from "@/lib/receivingLocationResolver";
+import { shopStorageName } from "./shopStorageNames";
 
 /**
  * Desktop left panel — Navigate.
@@ -12,13 +13,15 @@ export default function StorageNavigatePanel({
   favorites, recents, locations, locationPartCounts, showEmptyLocations,
   selectedLocationId, expandedLocations,
   onSelectLocation, onToggleExpand, onToggleFavorite, isFavorite, onToggleEmpty,
-  inventoryItems, onOpenPutAway,
+  inventoryItems, onOpenPutAway, onOpenAssignLocation,
 }) {
   const resolveLocation = (id) => locations.find(l => l.id === id);
   const favLocs = favorites.map(resolveLocation).filter(Boolean);
   const recentLocs = recents.filter(id => !favorites.includes(id)).map(resolveLocation).filter(Boolean).slice(0, 6);
   const rootLocations = locations.filter(l => !l.parent_id && l.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   const unassignedCount = locationPartCounts['unassigned'] || 0;
+  const systemLoc = locations.find(l=>l.location_area==='UNASSIGNED_SYSTEM'&&l.active!==false);
+  const needsPlacement = inventoryItems.filter(i=>!i.container_id && (i.quantity_on_hand||0)>(i.quantity_reserved||0) && (!i.location_id || i.location_id===systemLoc?.id)).length;
 
   const renderNode = (location, level = 0) => {
     const children = locations.filter(l => l.parent_id === location.id && l.active);
@@ -45,7 +48,7 @@ export default function StorageNavigatePanel({
             </button>
           ) : <div className="w-3.5" />}
           {(() => { const tc = getLocationTypeConfig(location.location_type); const TI = tc.icon; return <TI className="w-3.5 h-3.5 shrink-0" style={{ color: location.color || tc.color }} />; })()}
-          <span className={cn("flex-1 truncate", isSelected && "font-semibold")}>{location.location_area}</span>
+          <span className={cn("flex-1 truncate", isSelected && "font-semibold")}>{shopStorageName(location.location_area)}</span>
           <button onClick={(e) => { e.stopPropagation(); onToggleFavorite(location.id); }}
             className={cn("shrink-0 p-0.5", isFavorite(location.id) ? "text-yellow-500" : "text-gray-700 opacity-0 group-hover:opacity-100 hover:text-yellow-500")}>
             <Star className={cn("w-3 h-3", isFavorite(location.id) && "fill-yellow-500")} />
@@ -66,6 +69,14 @@ export default function StorageNavigatePanel({
 
   return (
     <div className="flex flex-col h-full overflow-hidden text-[13px]">
+      {/* Primary shop action: position loose unassigned stock before inventory browsing. */}
+      {onOpenAssignLocation && <div className="px-2 pt-2">
+        <button onClick={onOpenAssignLocation} className="w-full flex items-center gap-2 px-2 py-2.5 rounded-lg bg-amber-950/30 border border-amber-700/50 hover:bg-amber-950/60 text-left">
+          <MapPin className="w-4 h-4 text-amber-400 shrink-0" />
+          <span className="flex-1 text-sm font-semibold text-amber-200">Assign Location</span>
+          {needsPlacement>0 && <span className="text-xs px-2 rounded-full bg-amber-500/20 text-amber-200">{needsPlacement}</span>}
+        </button>
+      </div>}
       {/* Put Away shortcut */}
       {putAwayCount > 0 && onOpenPutAway && (
         <div className="px-2 pt-2 pb-1">
@@ -94,7 +105,7 @@ export default function StorageNavigatePanel({
                   className={cn("w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors text-left",
                     isSelected ? "bg-red-950/40 text-red-400" : "hover:bg-gray-800/50 text-gray-300")}>
                   <TI className="w-3.5 h-3.5 shrink-0" style={{ color: loc.color || tc.color }} />
-                  <span className="flex-1 truncate">{loc.short_code || loc.location_area}</span>
+                  <span className="flex-1 truncate">{loc.location_area==='UNASSIGNED_SYSTEM'?shopStorageName(loc.location_area):(loc.short_code||loc.location_area)}</span>
                   <span className="text-[10px] text-gray-500">{locationPartCounts[loc.id] || 0}</span>
                 </button>
               );
@@ -119,7 +130,7 @@ export default function StorageNavigatePanel({
                   className={cn("w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors text-left",
                     isSelected ? "bg-red-950/40 text-red-400" : "hover:bg-gray-800/50 text-gray-300")}>
                   <TI className="w-3.5 h-3.5 shrink-0" style={{ color: loc.color || tc.color }} />
-                  <span className="flex-1 truncate">{loc.location_area}</span>
+                  <span className="flex-1 truncate">{shopStorageName(loc.location_area)}</span>
                   <span className="text-[10px] text-gray-500">{locationPartCounts[loc.id] || 0}</span>
                 </button>
               );
@@ -140,7 +151,7 @@ export default function StorageNavigatePanel({
             onClick={() => onSelectLocation('unassigned')}>
             <div className="w-3.5" />
             <MapPin className="w-3.5 h-3.5 text-yellow-500" />
-            <span className="flex-1">Unassigned</span>
+            <span className="flex-1">No Location Set</span>
             {unassignedCount > 0 && <span className="text-[10px] px-1.5 rounded-full bg-yellow-900/50 text-yellow-300">{unassignedCount}</span>}
           </div>
         )}
