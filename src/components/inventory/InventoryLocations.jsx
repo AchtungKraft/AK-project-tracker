@@ -25,6 +25,7 @@ import useLocationFavorites from "./useLocationFavorites";
 import StoragePartRow from "./StoragePartRow";
 import StoragePartCard from "./StoragePartCard";
 import ContainerDetailPanel from "./ContainerDetailPanel";
+import StorageContainerWorkspace from "./StorageContainerWorkspace";
 import CreateContainerModal from "./CreateContainerModal";
 import MoveContainerModal from "./MoveContainerModal";
 import AddToContainerModal from "./AddToContainerModal";
@@ -71,6 +72,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
 
   // Selection state
   const [selectedContainer, setSelectedContainer] = useState(null);
+  const [containerWorkspaceOpen, setContainerWorkspaceOpen] = useState(false);
   const [previewPart, setPreviewPart] = useState(null); // desktop right-panel part preview
 
   // Keyboard: Escape clears search, Cmd+K focuses search
@@ -107,7 +109,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   const openDocumentBoxPicker = () => setDocumentBoxPickerOpen(true);
   const chooseBoxToDocument = (box) => {
     setDocumentBoxPickerOpen(false);
-    setDocumentContainer(box);
+    handleSelectContainer(box);
   };
   const scanBoxFromPicker = () => {
     setDocumentBoxPickerOpen(false);
@@ -264,6 +266,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   const handleSelectContainer = (c) => {
     setSelectedContainer(c);
     setPreviewPart(null);
+    if (!isMobile) setContainerWorkspaceOpen(true);
     // On desktop, also navigate center to container's location
     if (!isMobile && c.location_id && c.location_id !== selectedLocationId) {
       setSelectedLocationId(c.location_id);
@@ -312,7 +315,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
       setExpandedLocations(newExp);
     }
     if (isMobile) { setSelectedContainer(c); }
-    else { setSelectedContainer(c); setPreviewPart(null); triggerFlash(c.id); }
+    else { setSelectedContainer(c); setPreviewPart(null); setContainerWorkspaceOpen(true); triggerFlash(c.id); }
     setSearchTerm('');
   };
 
@@ -531,8 +534,19 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
       <ImageGallery isOpen={galleryState.open} images={galleryState.images} currentIndex={galleryState.currentIndex} onClose={closeGallery} onNavigate={navigateGallery} />
       {scannerOpen && <ScannerModal locations={locations} containers={containers} inventoryItems={inventoryItems} projects={projects}
         intent={scanIntent} onOpenLocation={handleScanOpenLocation} onOpenContainer={handleScanOpenContainer}
-        onDocumentContainer={(box) => { setDocumentContainer(box); setScannerOpen(false); }}
+        onDocumentContainer={(box) => { setScannerOpen(false); handleSelectContainer(box); }}
         onClose={() => setScannerOpen(false)} />}
+      {!isMobile && containerWorkspaceOpen && selectedContainer && <StorageContainerWorkspace
+        container={selectedContainer} locations={locations} inventoryItems={inventoryItems}
+        parts={parts} projects={projects} vendors={vendors}
+        onClose={() => { setContainerWorkspaceOpen(false); setSelectedContainer(null); }}
+        onMove={(c) => { setMoveContainerReturnHome(false); setMoveContainerTarget(c); }}
+        onReturnHome={(c) => { setMoveContainerReturnHome(true); setMoveContainerTarget(c); }}
+        onAddParts={(c) => setAddToContainerTarget(c)}
+        onEmptyContainer={(c) => setEmptyContainerTarget(c)}
+        onMoveFromContainer={handleStartMoveFromContainer}
+        onPartClick={onPartClick} onOpenGallery={openGallery} partActions={partActions}
+        getInventoryStats={getInventoryStats} getInventoryItemId={getInventoryItemId} />}
       {documentBoxPickerOpen && <StorageDocumentBoxPicker
         containers={containers} locations={locations} projects={projects} isAdmin={isAdmin}
         onChooseBox={chooseBoxToDocument} onScan={scanBoxFromPicker}
@@ -832,7 +846,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
               </div>
 
               {/* RIGHT — Inspector */}
-              {(selectedContainer || previewPart) && <div className="w-[260px] xl:w-[300px] shrink-0 bg-black/20 border-l border-gray-800">
+              {previewPart && <div className="w-[260px] xl:w-[300px] shrink-0 bg-black/20 border-l border-gray-800">
                 <StorageObjectPreview
                   selectedPart={previewPart}
                   selectedContainer={selectedContainer}
