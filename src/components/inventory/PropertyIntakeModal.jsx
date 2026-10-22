@@ -63,17 +63,20 @@ export default function PropertyIntakeModal({container,existingGroup=null,onClos
   const quantityKnown=quantity.trim()!=='';
   const numericQuantity=Number(quantity);
   const quantityValid=!quantityKnown||(Number.isFinite(numericQuantity)&&numericQuantity>0&&numericQuantity<=99999);
-  const valuesChanged=editing&&(
-    name.trim()!==(existingGroup.name||'')||
-    type!==(existingGroup.property_type||'unidentified')||
-    condition!==(existingGroup.condition||'unknown')||
-    description.trim()!==(existingGroup.description||'')||
-    notes.trim()!==(existingGroup.notes||'')||
-    quantityKnown!==Boolean(existingGroup.quantity_known)||
-    (quantityKnown&&numericQuantity!==Number(existingGroup.quantity))
+  // Track the last successful write, not the original prop, so a photo retry
+  // never repeatedly updates details or creates a second group.
+  const baseline=group||existingGroup;
+  const valuesChanged=Boolean(baseline?.id)&&(
+    name.trim()!==(baseline.name||'')||
+    type!==(baseline.property_type||'unidentified')||
+    condition!==(baseline.condition||'unknown')||
+    description.trim()!==(baseline.description||'')||
+    notes.trim()!==(baseline.notes||'')||
+    quantityKnown!==Boolean(baseline.quantity_known)||
+    (quantityKnown&&numericQuantity!==Number(baseline.quantity))
   );
   const pendingCount=files.filter(f=>!f.saved).length;
-  const canSave=editing?(valuesChanged||pendingCount>0):Boolean(group||name.trim()||pendingCount>0);
+  const canSave=group?(valuesChanged||pendingCount>0):Boolean(name.trim()||pendingCount>0);
 
   const addFiles=useCallback(incoming=>{
     const candidates=Array.from(incoming||[]);
@@ -101,7 +104,7 @@ export default function PropertyIntakeModal({container,existingGroup=null,onClos
 
   const save=async()=>{
     if(busy||!canSave||!quantityValid)return;
-    if(editing&&!name.trim()){toast.error('Give the stored item a name');return;}
+    if(group&&!name.trim()){toast.error('Give the stored item a name');return;}
     setBusy(true);
     try{
       let savedGroup=group;
@@ -117,8 +120,9 @@ export default function PropertyIntakeModal({container,existingGroup=null,onClos
         savedGroup=response.item;
         if(!savedGroup?.id)throw new Error('Property group could not be created');
         setGroup(savedGroup);
+        if(!name.trim())setName(savedGroup.name||'Unidentified contents');
         onSaved?.();
-      }else if(editing&&valuesChanged){
+      }else if(valuesChanged){
         setProgress('Updating stored-property details…');
         const response=unwrap(await base44.functions.invoke('storageProperty',{
           action:'update_group',container_id:container.id,property_id:savedGroup.id,
