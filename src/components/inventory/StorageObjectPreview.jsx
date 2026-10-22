@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { getContainerTypeConfig } from "./containerTypeConfig";
 import { printContainerQRLabel } from "./containerQRLabel";
 import LocationBreadcrumb from "./LocationBreadcrumb";
+import ContainerStoredProperty from "./ContainerStoredProperty";
 
 /**
  * Desktop right panel — Inspector.
@@ -126,10 +127,11 @@ function ContainerInspector({ container, locations, inventoryItems, parts, proje
         )}
       </div>
 
-      {/* Contents */}
+      {/* Physical client property is independent from catalog inventory. */}
       <div className="flex-1 overflow-y-auto">
+        <div className="p-2"><ContainerStoredProperty key={container.id} container={container} parts={parts}/></div>
         {containedParts.length === 0 ? (
-          <div className="text-center py-8 text-xs text-gray-600">Empty container</div>
+          <div className="text-center py-5 text-xs text-gray-600">No stocked inventory in container</div>
         ) : (
           <div className="p-2 space-y-0.5">
             <div className="text-[9px] text-gray-500 uppercase tracking-widest font-semibold px-2 py-1">Contents</div>
