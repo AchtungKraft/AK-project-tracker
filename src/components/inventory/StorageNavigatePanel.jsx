@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Star, Clock, ChevronRight, ChevronDown, MapPin, PackageOpen } from "lucide-react";
+import { Star, Clock, ChevronRight, ChevronDown, MapPin, PackageOpen, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig } from "./locationTypeConfig";
 import { findReceivingLocation } from "@/lib/receivingLocationResolver";
@@ -13,7 +13,7 @@ export default function StorageNavigatePanel({
   favorites, recents, locations, locationPartCounts, showEmptyLocations,
   selectedLocationId, expandedLocations,
   onSelectLocation, onToggleExpand, onToggleFavorite, isFavorite, onToggleEmpty,
-  inventoryItems, containers = [], onOpenPutAway, onOpenAssignLocation,
+  inventoryItems, containers = [], onOpenPutAway, onOpenAssignLocation, onOpenDocumentBox,
 }) {
   const resolveLocation = (id) => locations.find(l => l.id === id);
   const favLocs = favorites.map(resolveLocation).filter(Boolean);
@@ -87,6 +87,13 @@ export default function StorageNavigatePanel({
           <MapPin className="w-4 h-4 text-amber-400 shrink-0" />
           <span className="flex-1 text-sm font-semibold text-amber-200">Assign Location</span>
           {needsPlacement>0 && <span className="text-xs px-2 rounded-full bg-amber-500/20 text-amber-200">{needsPlacement}</span>}
+        </button>
+      </div>}
+      {/* Client property is not Parts Tracker stock; give it its own action. */}
+      {onOpenDocumentBox && <div className="px-2 pt-2">
+        <button onClick={onOpenDocumentBox} className="w-full flex items-center gap-2 px-2 py-2.5 rounded-lg border border-indigo-800/70 bg-indigo-950/20 hover:bg-indigo-950/40 text-left">
+          <Camera className="w-4 h-4 text-indigo-300 shrink-0"/>
+          <span className="flex-1 text-sm font-semibold text-indigo-200">Document Box</span>
         </button>
       </div>}
       {/* Put Away shortcut */}
