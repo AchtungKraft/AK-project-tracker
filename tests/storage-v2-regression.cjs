@@ -106,4 +106,28 @@ async function moveTests(){
   assert.equal(withError.data.success,true);assert.equal(withError.data.custody_recorded,false);
   console.log('PASS move: inherited location, separate custody event, replay, failure does not flip moved box to false failure');
 }
-(async()=>{await storedPropertyTests();await labelTests();await moveTests()})().catch(err=>{console.error(err);process.exitCode=1});
+async function shopAssignmentTests(){
+  const LEGACY='9'.repeat(24), SHELF='8'.repeat(24);
+  const unassignedItem={id:ALPHA,part_id:EPS,quantity_on_hand:4,quantity_reserved:1,location_id:null,container_id:null};
+  const legacyItem={id:BETA,part_id:EPS,quantity_on_hand:5,quantity_reserved:1,location_id:LEGACY,container_id:null};
+  const h=harness('base44/functions/transferInventoryBatch/entry.ts',{storage:{
+    InventoryItem:[unassignedItem,legacyItem], Location:[{id:LEGACY,location_area:'UNASSIGNED_SYSTEM'},{id:SHELF,location_area:'Shop Rack A'}],
+  }});
+  const bad=await h.invoke({transfer_type:'inventory_move',source_unassigned_only:true,destination_location_id:SHELF,
+    batch_id:'quick_assignment_bad',lines:[{inventory_item_id:BETA,part_id:EPS,qty:1}]});
+  assert.equal(bad.data.executed,0);assert.equal(bad.data.errors[0].code,'SOURCE_MISMATCH');
+  assert.equal(h.rows.InventoryItem.find(i=>i.id===BETA).quantity_on_hand,5);
+  const noLocation=await h.invoke({transfer_type:'inventory_move',source_unassigned_only:true,destination_location_id:SHELF,
+    batch_id:'quick_assignment_from_none',lines:[{inventory_item_id:ALPHA,part_id:EPS,qty:3}]});
+  assert.equal(noLocation.data.success,true);assert.equal(noLocation.data.executed,1);
+  assert.equal(h.rows.InventoryItem.find(i=>i.id===ALPHA).quantity_on_hand,1);
+  assert.equal(h.rows.InventoryItem.find(i=>i.id===ALPHA).quantity_reserved,1);
+  assert.equal(h.rows.InventoryItem.find(i=>i.location_id===SHELF).quantity_on_hand,3);
+  const legacyMove=await h.invoke({transfer_type:'inventory_move',source_location_id:LEGACY,destination_location_id:SHELF,
+    batch_id:'quick_assignment_legacy',lines:[{inventory_item_id:BETA,part_id:EPS,qty:4}]});
+  assert.equal(legacyMove.data.success,true);assert.equal(h.rows.InventoryItem.find(i=>i.id===BETA).quantity_on_hand,1);
+  const total=h.rows.InventoryItem.reduce((acc,i)=>acc+(i.quantity_on_hand||0),0);
+  assert.equal(total,9);assert.equal(h.rows.InventoryItem.find(i=>i.location_id===SHELF).quantity_on_hand,7);
+  console.log('PASS shop assignment: no-location source guard, legacy location, partial available quantity, reserved units, stock conservation');
+}
+(async()=>{await storedPropertyTests();await labelTests();await moveTests();await shopAssignmentTests()})().catch(err=>{console.error(err);process.exitCode=1});
