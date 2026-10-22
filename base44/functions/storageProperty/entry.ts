@@ -12,7 +12,7 @@ const safeText=(s,n)=>typeof s==='string' ? s.trim().slice(0,n) : '';
 const idOk=(s)=>typeof s==='string'&&/^[a-zA-Z0-9_-]{12,120}$/.test(s);
 // The Base44 private-upload integration returns a URI such as private/user123/photo.jpg.
 // Reject public URLs and arbitrary protocols even when sent by an authenticated client.
-const photoUri=(s)=>typeof s==='string'&&s.length<1100&&/^private\/[A-Za-z0-9_./-]+$/.test(s)&&!s.includes('..');
+const photoUri=(s)=>typeof s==='string'&&s.length<1100&&s.length>8&&/^private\/[^?#\\\u0000-\u001f]+$/.test(s)&&!s.includes('..');
 const trimPhoto=(p)=>({id:p.id,stored_property_id:p.stored_property_id,sort_order:p.sort_order,caption:p.caption,captured_at:p.captured_at});
 
 Deno.serve(async (req)=>{
