@@ -77,7 +77,9 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   // Keyboard: Escape clears search, Cmd+K focuses search
   useEffect(() => {
     const handleKey = (e) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && !containerWorkspaceOpen) {
+        // The wide box workspace and its nested photo/edit dialogs own Escape.
+        // Do not close the entire box while a technician dismisses Add Photos.
         if (searchTerm) setSearchTerm('');
         else if (previewPart || selectedContainer) { setPreviewPart(null); setSelectedContainer(null); }
       }
@@ -88,7 +90,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [searchTerm, previewPart, selectedContainer]);
+  }, [searchTerm, previewPart, selectedContainer, containerWorkspaceOpen]);
 
   // Modals
   const [createContainerForLocation, setCreateContainerForLocation] = useState(null);
@@ -522,7 +524,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   const renderModals = () => (
     <>
       {!isMobile && containerWorkspaceOpen && selectedContainer && <StorageContainerWorkspace
-        container={selectedContainer} locations={locations} inventoryItems={inventoryItems}
+        container={containers.find(c=>c.id===selectedContainer.id)||selectedContainer} locations={locations} inventoryItems={inventoryItems}
         parts={parts} projects={projects} vendors={vendors}
         onClose={() => { setContainerWorkspaceOpen(false); setSelectedContainer(null); }}
         onMove={(c) => { setMoveContainerReturnHome(false); setMoveContainerTarget(c); }}
