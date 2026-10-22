@@ -916,7 +916,7 @@ export default function PartModal({ part, partId, onClose }) {
       </div>
 
       {/* Informational-only: matching client-held property never changes inventory totals. */}
-      <PartStoredPropertySection partId={activePart.id} isOpen={isOpen} />
+      <PartStoredPropertySection partId={activePart.id} isOpen={isOpen} locations={locations} />
 
       {/* Vendor Sources Section (View Mode) */}
       <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 space-y-2">
