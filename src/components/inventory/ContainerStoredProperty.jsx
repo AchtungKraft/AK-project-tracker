@@ -154,7 +154,7 @@ export default function ContainerStoredProperty({container,parts=[],wide=false})
     </div>
     {isLoading?<p className="text-xs text-gray-500">Loading property…</p>:
       error?<p className="text-xs text-red-400">Stored Property unavailable: {error.message}</p>:
-        !items.length?<p className="text-xs text-gray-500">No photographed or uncatalogued items recorded in this box.</p>:
+        !active.length?<p className="text-sm text-gray-500 rounded-lg border border-dashed border-gray-800 p-4">No stored property documented yet. Use Document Contents to photograph or list client items, take-offs, or miscellaneous parts.</p>:
           <div className={wide?"grid grid-cols-1 lg:grid-cols-2 gap-3 items-start":"space-y-2"}>{active.map((i,index)=>
             <StoredPropertyRow key={i.id} item={i} container={container} parts={parts} onChanged={refresh} autoPreview={wide&&index<4}/>)}</div>}
     {intakeOpen&&<PropertyIntakeModal container={container} onClose={()=>setIntakeOpen(false)} onSaved={refresh}/>}
