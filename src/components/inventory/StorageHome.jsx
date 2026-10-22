@@ -48,7 +48,7 @@ export default function StorageHome({
   // A shelf holding only client property boxes is occupied physical storage,
   // even when it has zero canonical Part / InventoryItem stock lines.
   const locationsWithContainers = useMemo(() => {
-    const occupied = new Set();
+    const occupied = new Map();
     const byId = new Map(locations.map(l => [l.id, l]));
     for (const c of containers) {
       if (c.active === false || c.status === 'archived') continue;
@@ -56,7 +56,7 @@ export default function StorageHome({
       const visited = new Set();
       while (id && !visited.has(id)) {
         visited.add(id);
-        occupied.add(id);
+        occupied.set(id, (occupied.get(id) || 0) + 1);
         id = byId.get(id)?.parent_id;
       }
     }
@@ -97,6 +97,7 @@ export default function StorageHome({
           </button>
           {partCount > 0 && <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400">{partCount}</span>}
         </div>
+        {(locationsWithContainers.get(location.id) || 0) > 0 && <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-indigo-950/40 text-indigo-300">{locationsWithContainers.get(location.id)} boxes</span>}
         {hasChildren && isExpanded && (
           <div>
             {children.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)).filter(c => showEmptyLocations || (locationPartCounts[c.id] || 0) > 0 || locationsWithContainers.has(c.id)).map(c => renderLocationNode(c, level + 1))}
