@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import QRScanner from "./QRScanner";
 import ScanResultPanel from "./ScanResultPanel";
 import ReservedStorageLabelActivation from "./ReservedStorageLabelActivation";
