@@ -34,6 +34,7 @@ export default function LocationDetailPanel({
   const [showMore, setShowMore] = useState(false);
 
   const location = locations.find(l => l.id === locationId);
+  const isLegacyUnassigned = location?.location_area === 'UNASSIGNED_SYSTEM';
 
   const directItems = useMemo(() =>
     location ? inventoryItems.filter(i => i.location_id === locationId && (i.quantity_on_hand || 0) > 0) : [],
@@ -104,17 +105,17 @@ export default function LocationDetailPanel({
               <Star className={cn("w-4 h-4", isFavorite && "fill-yellow-500")} />
             </Button>
           )}
-          {onPrintQR && (
+          {onPrintQR && !isLegacyUnassigned && (
             <Button size="icon" variant="ghost" onClick={() => onPrintQR(location)} className="h-8 w-8 text-gray-400" title="Print Label">
               <Printer className="w-4 h-4" />
             </Button>
           )}
-          {onMoveFromLocation && directItems.length > 0 && (
+          {onMoveFromLocation && !isLegacyUnassigned && directItems.length > 0 && (
             <Button size="sm" variant="ghost" onClick={() => onMoveFromLocation(locationId)} className="h-8 px-2 text-xs text-gray-400 hover:text-white gap-1" title="Move loose inventory">
               <ArrowRightLeft className="w-3.5 h-3.5" /> Move
             </Button>
           )}
-          {onCreateContainer && (
+          {onCreateContainer && !isLegacyUnassigned && (
             <Button size="sm" variant="ghost" onClick={() => onCreateContainer(locationId)} className="h-8 px-2 text-xs text-gray-400 hover:text-white gap-1">
               <Plus className="w-3.5 h-3.5" /> Container
             </Button>
