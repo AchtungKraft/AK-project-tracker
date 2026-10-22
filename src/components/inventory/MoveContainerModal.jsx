@@ -1,11 +1,10 @@
-import React, { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Loader2, ArrowRight, Home, Star, Clock, Search, MapPin } from "lucide-react";
+import { Loader2, ArrowRight, Home, Star, Search } from "lucide-react";
 import { toast } from "sonner";
 import { getContainerTypeConfig } from "./containerTypeConfig";
 import { cn } from "@/lib/utils";
