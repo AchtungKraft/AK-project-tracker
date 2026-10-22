@@ -60,7 +60,7 @@ async function storedPropertyTests(){
 }
 async function labelTests(){
   const h=harness('base44/functions/storageLabels/entry.ts',{storage:{
-    Project:[{id:DELTA,name:'Build',client_account_id:GAMMA}],Location:[{id:BETA,location_area:'Rack'}],
+    Project:[{id:DELTA,name:'Build',client_account_id:GAMMA}],Location:[{id:BETA,location_area:'Rack'}],ClientAccount:[{id:GAMMA,name:'Client Alpha',status:'active'}],
   }});
   const key='batch_'+ 'z'.repeat(20);
   const first=await h.invoke({action:'generate',request_key:key,count:2,container_type:'box'});
@@ -75,10 +75,14 @@ async function labelTests(){
   assert.equal(h.rows.StorageContainer[0].client_account_id,GAMMA);
   assert.equal((await h.invoke({action:'activate',label_id:label.id,project_id:DELTA,location_id:BETA})).status,409);
   const after=await h.invoke({action:'lookup',qr_value:label.qr_code_value});assert.equal(after.data.reserved,false);
+  const clientOnly=await h.invoke({action:'activate',label_id:first.data.labels[1].id,client_account_id:GAMMA,location_id:BETA});
+  assert.equal(clientOnly.data.success,true);assert.equal(clientOnly.data.container.project_id,undefined);
+  assert.equal(clientOnly.data.container.client_account_id,GAMMA);
+  const names=await h.invoke({action:'list_clients'});assert.deepEqual(names.data.clients.map(c=>c.name),['Client Alpha']);
   h.rows.StorageContainer.push({id:EPS,active:true,qr_code_value:label.qr_code_value,status:'active'});
   assert.equal((await h.invoke({action:'lookup',qr_value:label.qr_code_value})).status,409);
   assert.ok(!h.calls.some(x=>/^(InventoryItem|Part|Order|PartCommitment)\.(create|update)$/.test(x)));
-  console.log('PASS labels: reserved before box, replay safe, activation, QR compatibility, duplicate detection');
+  console.log('PASS labels: reserved before box, replay safe, project/client-only activation, QR compatibility, duplicate detection');
 }
 async function moveTests(){
   const h=harness('base44/functions/transferInventoryBatch/entry.ts',{storage:{
