@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import {uploadAndRegisterPropertyPhoto,responseData,uploadErrorDetail} from '../src/lib/storagePhotoUpload.js';
+import {uploadAndRegisterPropertyPhoto,responseData,uploadErrorDetail,isPrivateStorageUri} from '../src/lib/storagePhotoUpload.js';
 
 const input={file:{name:'seat.jpg'},containerId:'container123',propertyId:'property123',captureBatchId:'intake123'};
 
@@ -36,6 +36,39 @@ test('Core response may be nested; still read private URI',async()=>{
  assert.equal(result.uri,'private/file.jpeg');
 });
 
+test('gs:// private Cloud Storage URI passes through successful registration',async()=>{
+  const uri='gs://base44-private-photo-storage/path%20with%20space/seats.jpg';
+  assert.equal(isPrivateStorageUri(uri),true);
+  assert.equal(isPrivateStorageUri('private/user123/seats.jpg'),true);
+  let registered=null;
+  const result=await uploadAndRegisterPropertyPhoto({...input,
+    uploadPrivate:async()=>({success:true,data:{file_uri:uri}}),
+    invokeProperty:async p=>{registered=p;return {data:{success:true,photo:{id:'photo234'}}};},
+  });
+  assert.equal(result.uri,uri);assert.equal(registered.file_uri,uri);
+  assert.equal(result.photo.id,'photo234');
+});
+
+test('public and malformed URI responses are rejected without exposing full paths',async()=>{
+  for(const bad of [
+    'https://storage.googleapis.com/public-bucket/seats.jpg',
+    'gs://bucket/../../other.jpg',
+    's3://bucket/seats.jpg',
+    'gs://bucket-only',
+    'javascript:alert(1)',
+  ])assert.equal(isPrivateStorageUri(bad),false,bad);
+  await assert.rejects(()=>uploadAndRegisterPropertyPhoto({...input,
+    uploadPrivate:async()=>({success:true,data:{file_uri:'https://public.example.com/seats.jpg'}}),
+    invokeProperty:async()=>{throw Error('Cannot register public URL')},
+  }),err=>{
+    assert.equal(err.stage,'upload');
+    assert.equal(err.code,'INVALID_UPLOAD_RESPONSE');
+    assert.match(err.message,/URI format: https/);
+    assert.equal(err.message.includes('public.example.com'),false);
+    return true;
+  });
+});
+
 test('upload failure identifies correct stage and status without calling registration',async()=>{
  let attempts=0;
  await assert.rejects(()=>uploadAndRegisterPropertyPhoto({...input,
@@ -63,6 +96,7 @@ test('backend registration failure preserves upload URI for retry',async()=>{
 test('errors redact private file paths and public URLs',()=>{
  const info=uploadErrorDetail({message:'failed private/user123/secret-file.jpg at https://example.org?token=x'},'register');
  assert.ok(!info.message.includes('secret-file'));assert.ok(!info.message.includes('token=x'));
+ assert.equal(uploadErrorDetail({message:'Failed to sign gs://secret-bucket/private/seats.jpg'},'register').message.includes('secret-bucket'),false);
 });
 
 import {prepareStoragePhotoFile} from '../src/lib/storagePhotoPrepare.js';
