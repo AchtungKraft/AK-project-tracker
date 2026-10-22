@@ -87,6 +87,15 @@ Deno.serve(async(req)=>{
       }))});
     }
 
+    if(action==='list_clients'){
+      // Used only by internal AK staff during label activation; do not expose
+      // client contacts, emails or client-portal data through this endpoint.
+      const accounts=await db.entities.ClientAccount.list('name',500);
+      return reply({success:true,clients:accounts
+        .filter(c=>c.status!=='inactive')
+        .map(c=>({id:c.id,name:c.name}))});
+    }
+
     if(action==='get_batch'){
       if(!isAdmin) return reply({error:'Admin permission required'},403);
       if(typeof input.batch_id!=='string') return reply({error:'batch_id required'},400);
@@ -137,15 +146,23 @@ Deno.serve(async(req)=>{
     }
 
     if(action==='activate'){
-      const {label_id,project_id,location_id}=input;
-      if(![label_id,project_id,location_id].every(x=>typeof x==='string'&&x.length>0)) return reply({error:'Label, project and location are required'},400);
+      const {label_id,project_id,client_account_id,location_id}=input;
+      if(typeof label_id!=='string'||typeof location_id!=='string'||!(project_id||client_account_id)){
+        return reply({error:'Label, physical location, and project or Client Account are required'},400);
+      }
       const [label]=await db.entities.StorageLabel.filter({id:label_id});
       if(!label||label.status==='voided') return reply({error:'Reserved label not found'},404);
-      const [project]=await db.entities.Project.filter({id:project_id});
+      const [project]=project_id?await db.entities.Project.filter({id:project_id}):[null];
       const [location]=await db.entities.Location.filter({id:location_id});
-      if(!project) return reply({error:'Project not found'},404);
+      if(project_id&&!project) return reply({error:'Project not found'},404);
       if(!location||location.active===false) return reply({error:'Location not active'},400);
-      if(location.project_id&&location.project_id!==project.id) return reply({error:'Location belongs to another project'},409);
+      if(location.project_id&&location.project_id!==project?.id) return reply({error:'Location belongs to a different project'},409);
+      const ownerId=project?.client_account_id||client_account_id||null;
+      if(project&&client_account_id&&project.client_account_id&&client_account_id!==project.client_account_id){
+        return reply({error:'Client Account does not match the project owner'},409);
+      }
+      const [client]=ownerId?await db.entities.ClientAccount.filter({id:ownerId}):[null];
+      if(ownerId&&(!client||client.status==='inactive')) return reply({error:'Client Account not active or unavailable'},400);
       const name=typeof input.name==='string'?input.name.trim().slice(0,100):'';
       if(label.status==='activated') return reply({error:'Label already activated. Scan to open its existing box.'},409);
       if(!['reserved','activating'].includes(label.status)) return reply({error:'Label is not reservable'},409);
@@ -157,7 +174,8 @@ Deno.serve(async(req)=>{
       if(existing.length>1) return reply({error:'Duplicate container QR detected. Admin reconciliation required.'},409);
       let container=existing[0];
       if(container){
-        if(container.project_id!==project.id||container.location_id!==location.id) {
+        if((container.project_id||null)!==(project?.id||null)||
+           (container.client_account_id||null)!==(client?.id||null)||container.location_id!==location.id) {
           return reply({error:'An earlier activation already assigned this label differently. Admin review required.'},409);
         }
       }else{
@@ -165,7 +183,8 @@ Deno.serve(async(req)=>{
           name:name||label.short_code,short_code:label.short_code,
           qr_code_value:qr,container_type:label.container_type,
           label_batch_id:label.batch_id,label_state:'activated',
-          project_id:project.id,client_account_id:project.client_account_id||null,
+          ...(project?{project_id:project.id}:{}),
+          ...(client?{client_account_id:client.id}:{}),
           location_id:location.id,status:'active',active:true,
           label_activated_by:user.id,label_activated_at:new Date().toISOString(),
         });
@@ -189,7 +208,8 @@ Deno.serve(async(req)=>{
         const existingEvents=await db.entities.StorageCustodyEvent.filter({action_key:`activate_label_${label.id}`});
         if(!existingEvents.length) await db.entities.StorageCustodyEvent.create({
           event_type:'activate_label',container_id:container.id,
-          client_account_id:project.client_account_id||null,project_id:project.id,
+          ...(client?{client_account_id:client.id}:{}),
+          ...(project?{project_id:project.id}:{}),
           to_location_id:location.id,performed_by:user.id,performed_at:now,
           action_key:`activate_label_${label.id}`,notes:'Activated preprinted box label',
         });
