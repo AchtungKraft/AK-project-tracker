@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, CheckCircle2, CircleAlert, MapPin, Package, Search, ScanLine, X } from "lucide-react";
@@ -20,6 +20,7 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
   const [source,setSource]=useState(initialSourceId === 'unassigned' ? 'none' :
     initialSourceId && legacy?.id===initialSourceId ? 'legacy' : (legacy ? 'legacy' : 'none'));
   const [step,setStep]=useState('items');
+  const preselectedRef=useRef(false);
   const [itemSearch,setItemSearch]=useState('');
   const [destinationSearch,setDestinationSearch]=useState('');
   const [destination,setDestination]=useState(null);
@@ -45,6 +46,13 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
       (source==='none'?!i.location_id:i.location_id===legacy?.id))
     .map(i=>({i,part:partsById.get(i.part_id)}))
     .sort((a,b)=>(a.part?.part_name||'').localeCompare(b.part?.part_name||'')),[inventoryItems,source,legacy,partsById]);
+  useEffect(()=>{
+    if(!initialPartId || preselectedRef.current || itemRows.length===0)return;
+    const matching=itemRows.filter(({i})=>i.part_id===initialPartId);
+    if(!matching.length)return;
+    preselectedRef.current=true;
+    setSelected(new Map(matching.map(({i})=>[i.id,(i.quantity_on_hand||0)-(i.quantity_reserved||0)])));
+  },[initialPartId,itemRows]);
   const filteredItems=useMemo(()=>{
     const q=itemSearch.trim().toLowerCase();
     return itemRows.filter(({i,part})=>!q||[part?.part_name,part?.vendor_part_number,i.part_id].some(s=>String(s||'').toLowerCase().includes(q)));
