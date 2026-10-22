@@ -147,7 +147,10 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
         qc.invalidateQueries({queryKey:['inventoryItems']});
         qc.invalidateQueries({queryKey:['inventoryTransfers']});
       }
-      if(res.success)toast.success('Stock assigned to '+(destination.location_area||'destination'));
+      if(res.success){
+        addRecent(destination.id);
+        toast.success('Stock assigned to '+(destination.location_area||'destination'));
+      }
       else toast.error('Location assignment incomplete. Review the result before retrying.');
     }catch(err){
       // Network ambiguity: never silently retry with a different batch key.
@@ -229,24 +232,64 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
           </div>
         </>}
         {step==='destination'&&<>
-          <p className="text-sm text-gray-300"><strong>{lineRows.length} stock lines</strong> · {totalQty} units from {sourceLabel}</p>
+          <p className="text-sm text-gray-300"><strong>{lineRows.length} stock {lineRows.length===1?'line':'lines'}</strong> · {totalQty} {totalQty===1?'unit':'units'} from {sourceLabel}</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <Button className="h-12 gap-2" onClick={()=>{setScanError('');setScanOpen(true)}}><ScanLine className="w-5 h-5"/>Scan destination QR</Button>
             <div className="relative"><Search className="absolute top-1/2 left-3 -translate-y-1/2 w-4 h-4 text-gray-500"/>
-              <Input value={destinationSearch} onChange={e=>setDestinationSearch(e.target.value)} placeholder="Search racks or shelves…" className="pl-9 h-12 bg-gray-900 border-gray-700"/></div>
+              <Input value={destinationSearch} onChange={e=>setDestinationSearch(e.target.value)} placeholder="Search every shelf, area or project…" className="pl-9 h-12 bg-gray-900 border-gray-700"/></div>
           </div>
           {scanError&&<p className="text-amber-300 text-sm">{scanError}</p>}
-          <p className="text-xs text-gray-500">Select the physical destination. Receiving and Unassigned are not destinations for this action.</p>
-          <div className="space-y-1">
+          <p className="text-xs text-gray-500">Find the physical destination. Receiving and Unassigned are not available for this action.</p>
+          {!destinationSearch.trim() && <>
+            {quickDestinations.length>0 && <section className="space-y-2">
+              <div className="flex items-center gap-2 text-sm font-semibold text-gray-200"><Star className="w-4 h-4 text-amber-400"/> Saved and recent locations</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {quickDestinations.map(loc=><button type="button" key={loc.id} onClick={()=>chooseDestination(loc)}
+                  className="flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-900/50 hover:border-amber-600 p-3 text-left min-w-0">
+                  <MapPin className="w-4 h-4 text-amber-400 shrink-0"/>
+                  <span className="min-w-0 flex-1"><span className="block text-sm font-medium truncate">{loc.location_area}</span>
+                    <span className="block text-[11px] text-gray-500 truncate">{buildLocationPathString(loc.id,locations)}</span></span>
+                  <ArrowRight className="w-4 h-4 shrink-0 text-gray-500"/>
+                </button>)}
+              </div>
+            </section>}
+            <section className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-gray-200">Browse by shop area</h3>
+                {selectedAreaId && <button type="button" className="text-xs text-amber-300 hover:underline" onClick={()=>setSelectedAreaId(null)}>All areas</button>}
+              </div>
+              {!selectedAreaId && <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {areaOptions.map(area=><button key={area.id} type="button" onClick={()=>{setSelectedAreaId(area.id);setShowAllDestinations(false)}}
+                  className="text-left min-w-0 p-3 h-14 flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-900/60 hover:border-amber-600">
+                  <MapPin className="w-4 h-4 text-amber-400 shrink-0"/>
+                  <span className="text-sm font-medium truncate">{area.location_area}</span>
+                  <ArrowRight className="ml-auto w-3.5 h-3.5 text-gray-500 shrink-0"/>
+                </button>)}
+              </div>}
+              {selectedAreaId && <div className="text-xs text-amber-200 border border-amber-900/40 rounded-md px-3 py-2">
+                {locationById.get(selectedAreaId)?.location_area} · Choose the actual shelf or area below.
+              </div>}
+            </section>
+            {!selectedAreaId && <button type="button" onClick={()=>setShowAllDestinations(v=>!v)}
+              className="text-sm text-gray-300 flex items-center gap-2 hover:text-white py-2">
+              <ChevronDown className={`w-4 h-4 transition-transform ${showAllDestinations?'rotate-180':''}`}/>
+              {showAllDestinations?'Hide full location list':'View all locations'}
+            </button>}
+          </>}
+          {(destinationSearch.trim() || selectedAreaId || showAllDestinations) && <div className="space-y-1">
+            <div className="text-xs text-gray-400 font-medium pb-1">
+              {destinationSearch.trim()?'Matching locations':selectedAreaId?'Locations in selected area':'All locations'} · {destinations.length}{destinations.length===80?' shown (search to narrow)':''}
+            </div>
             {destinations.map(loc=><button key={loc.id} onClick={()=>chooseDestination(loc)}
               className="w-full rounded-lg bg-gray-900/45 border border-gray-800 hover:border-amber-600 px-3 py-3 text-left flex items-center gap-3">
               <MapPin className="w-5 h-5 shrink-0 text-amber-400"/>
               <div className="min-w-0 flex-1"><div className="text-sm font-medium truncate">{loc.location_area}</div>
-                <div className="text-xs text-gray-500 truncate">{buildLocationPathString(loc.id,locations)}</div></div>
+                <div className="text-xs text-gray-500 truncate">{buildLocationPathString(loc.id,locations)}</div>
+                {loc.project_id&&<span className="text-[10px] text-indigo-300">Project-specific storage</span>}</div>
               <ArrowRight className="w-4 h-4 shrink-0 text-gray-400"/>
             </button>)}
-            {destinations.length===0&&<p className="text-sm text-gray-500 py-8 text-center">No matching physical locations.</p>}
-          </div>
+            {destinations.length===0&&<p className="text-sm text-gray-500 py-8 text-center">No matching physical locations. Try searching by shelf, trailer, or project name.</p>}
+          </div>}
         </>}
         {step==='review'&&<>
           <div className="rounded-xl border border-amber-800/60 bg-amber-950/15 p-4 space-y-3">
@@ -255,10 +298,11 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
             <ArrowRight className="w-5 h-5 text-amber-400"/>
             <div className="text-[11px] uppercase tracking-wide text-gray-400">To</div>
             <p className="font-semibold text-lg">{destination?.location_area}</p>
+            {destination?.project_id&&<p className="text-xs text-indigo-300">Project-specific storage — verify that this part belongs at this project location.</p>
             <p className="text-xs text-gray-400">{buildLocationPathString(destination?.id,locations)}</p>
           </div>
           <div className="rounded-xl border border-gray-800 p-3">
-            <h3 className="text-sm font-semibold mb-2">Confirm {lineRows.length} lines · {totalQty} units</h3>
+            <h3 className="text-sm font-semibold mb-2">Confirm {lineRows.length} stock {lineRows.length===1?'line':'lines'} · {totalQty} {totalQty===1?'unit':'units'}</h3>
             <div className="space-y-2">
               {lineRows.map(({i,part,qty})=><div key={i.id} className="text-sm flex justify-between gap-3 border-b border-gray-800 pb-2">
                 <span className="min-w-0">{part?.part_name||i.part_id}</span><span className="font-mono shrink-0">{qty}</span>
@@ -271,7 +315,17 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
           <div className={`rounded-xl border p-5 space-y-3 ${result?.success?'border-green-800 bg-green-950/10':'border-amber-800 bg-amber-950/10'}`}>
             {result?.success?<CheckCircle2 className="w-9 h-9 text-green-400"/>:<CircleAlert className="w-9 h-9 text-amber-400"/>}
             <h3 className="text-xl font-semibold">{result?.success?'Location updated':result?.uncertain?'Move status needs verification':'Some items were not placed'}</h3>
-            <p className="text-sm text-gray-300">{result?.executed||0} confirmed lines moved · {result?.failed||0} failed</p>
+            <p className="text-sm text-gray-300">{result?.executed||0} confirmed {result?.executed===1?'line':'lines'} moved · {result?.failed||0} failed</p>
+            {result?.success && <div className="border-t border-green-900/40 pt-3 space-y-2">
+              <div className="text-xs text-gray-400">From <strong className="text-gray-200">{sourceLabel}</strong> to</div>
+              <div className="flex items-start gap-2"><MapPin className="w-5 h-5 text-green-400 shrink-0"/>
+                <div><p className="font-semibold">{destination?.location_area}</p>
+                  <p className="text-xs text-gray-400">{buildLocationPathString(destination?.id,locations)}</p></div>
+              </div>
+              {lineRows.map(({i,part,qty})=><div key={i.id} className="flex justify-between gap-2 border-t border-gray-800/60 pt-2 text-sm">
+                <span>{part?.part_name||i.part_id}</span><strong className="shrink-0">{qty} {qty===1?'unit':'units'}</strong>
+              </div>)}
+            </div>
             {result?.error&&<p className="text-sm text-amber-200">{result.error}</p>}
             {result?.errors?.length>0&&<div className="text-xs text-gray-400 space-y-1">{result.errors.map((e,index)=><p key={index}>Line {e.index+1}: {e.error}</p>)}</div>}
             {!result?.success&&<p className="text-xs text-amber-200">Do not repeat this transfer until you verify the actual stock state. The backend can partially execute a batch.</p>}
