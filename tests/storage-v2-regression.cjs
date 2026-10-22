@@ -44,12 +44,20 @@ async function storedPropertyTests(){
   assert.equal(add.data.success,true);
   const duplicate=await h.invoke({action:'add_photo',container_id:ALPHA,property_id:pid,file_uri:'private/client/photos/01.jpg'});
   assert.equal(duplicate.data.idempotent_hit,true);assert.equal(h.rows.StoredPropertyPhoto.length,1);
+  const gsUri='gs://base44-private-bucket/photos/02.jpg';
+  const cloud=await h.invoke({action:'add_photo',container_id:ALPHA,property_id:pid,file_uri:gsUri});
+  assert.equal(cloud.data.success,true);
+  const cloudAgain=await h.invoke({action:'add_photo',container_id:ALPHA,property_id:pid,file_uri:gsUri});
+  assert.equal(cloudAgain.data.idempotent_hit,true);
+  assert.equal(h.rows.StoredPropertyPhoto.length,2);
   for(const unsafe of ['https://example.com/photo.jpg','ftp://someone/file.jpg','other-app/file.jpg','private/../secret.jpg']){
     assert.equal((await h.invoke({action:'add_photo',container_id:ALPHA,property_id:pid,file_uri:unsafe})).status,400);
   }
-  const list=await h.invoke({action:'list_container',container_id:ALPHA});assert.equal(list.data.items[0].photo_count,1);
+  const list=await h.invoke({action:'list_container',container_id:ALPHA});assert.equal(list.data.items[0].photo_count,2);
   assert.ok(!JSON.stringify(list.data).includes('private/client/photos'));
   const photos=await h.invoke({action:'get_photos',property_id:pid});assert.ok(photos.data.photos[0].signed_url);
+  assert.equal(photos.data.photos.length,2);
+  assert.ok(photos.data.photos.every(p=>p.signed_url));
   assert.ok(!JSON.stringify(photos.data).includes('file_uri'));
   const details=await h.invoke({action:'update_group',container_id:ALPHA,property_id:pid,
     name:'Identified trim and clips',property_type:'miscellaneous',condition:'used',
