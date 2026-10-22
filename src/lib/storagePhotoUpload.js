@@ -44,7 +44,7 @@ function describeUploadResponse(raw) {
   return `Private storage response incompatible (fields: ${keys}; payload: ${innerKeys}; URI format: ${uriFormat})`;
 }
 
-const safeText=s=>String(s||'').replace(/https?:\/\/\S+/gi,'[URL omitted]').replace(/private\/\S+/gi,'[private path omitted]').slice(0,240);
+const safeText=s=>String(s||'').replace(/https?:\/\/\S+/gi,'[URL omitted]').replace(/(?:private\/|gs:\/\/)\S+/gi,'[private path omitted]').slice(0,240);
 
 export function uploadErrorDetail(error,stage) {
   const data=error?.response?.data||error?.data;
