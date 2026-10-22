@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { 
-  Search, ChevronRight, Package, LayoutGrid, List, X, ArrowLeft, ScanLine, Printer, MapPin, AlertTriangle
+  Search, ChevronRight, Package, LayoutGrid, List, X, ArrowLeft, ScanLine, Printer, MapPin, AlertTriangle, Camera
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig, buildLocationPathString } from "./locationTypeConfig";
@@ -31,6 +31,7 @@ import AddToContainerModal from "./AddToContainerModal";
 import EmptyContainerModal from "./EmptyContainerModal";
 import ScannerModal from "./ScannerModal";
 import PropertyIntakeModal from "./PropertyIntakeModal";
+import StorageDocumentBoxPicker from "./StorageDocumentBoxPicker";
 import BatchStorageLabelsModal from "./BatchStorageLabelsModal";
 import { useIsAdmin } from "@/lib/clientAccounts";
 import InventoryMoveWorkflow from "./move/InventoryMoveWorkflow";
@@ -102,6 +103,20 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scanIntent, setScanIntent] = useState('browse');
   const [documentContainer, setDocumentContainer] = useState(null);
+  const [documentBoxPickerOpen, setDocumentBoxPickerOpen] = useState(false);
+  const openDocumentBoxPicker = () => setDocumentBoxPickerOpen(true);
+  const chooseBoxToDocument = (box) => {
+    setDocumentBoxPickerOpen(false);
+    setDocumentContainer(box);
+  };
+  const scanBoxFromPicker = () => {
+    setDocumentBoxPickerOpen(false);
+    startBoxScan();
+  };
+  const labelsFromPicker = () => {
+    setDocumentBoxPickerOpen(false);
+    setBatchLabelsOpen(true);
+  };
   const startBoxScan = () => { setScanIntent('document'); setScannerOpen(true); };
   const [batchLabelsOpen, setBatchLabelsOpen] = useState(false);
   const [moveWorkflowSource, setMoveWorkflowSource] = useState(null); // { type, id, entity }
@@ -518,6 +533,10 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
         intent={scanIntent} onOpenLocation={handleScanOpenLocation} onOpenContainer={handleScanOpenContainer}
         onDocumentContainer={(box) => { setDocumentContainer(box); setScannerOpen(false); }}
         onClose={() => setScannerOpen(false)} />}
+      {documentBoxPickerOpen && <StorageDocumentBoxPicker
+        containers={containers} locations={locations} projects={projects} isAdmin={isAdmin}
+        onChooseBox={chooseBoxToDocument} onScan={scanBoxFromPicker}
+        onPrintLabels={labelsFromPicker} onClose={() => setDocumentBoxPickerOpen(false)} />}
       {documentContainer && <PropertyIntakeModal container={documentContainer}
         onClose={() => setDocumentContainer(null)} />}
       {isAdmin && batchLabelsOpen && <BatchStorageLabelsModal onClose={() => setBatchLabelsOpen(false)} />}
@@ -699,6 +718,10 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
               className="h-9 gap-1.5 bg-amber-600 hover:bg-amber-700 text-white shrink-0" title="Move unassigned loose stock to a physical shelf">
               <MapPin className="w-4 h-4"/> Assign Location {needsPlacementCount>0&&`(${needsPlacementCount})`}
             </Button>
+            <Button size="sm" variant="outline" onClick={openDocumentBoxPicker}
+              className="h-9 gap-1.5 border-indigo-700/70 text-indigo-200 hover:bg-indigo-950/40 shrink-0" title="Photograph contents of an existing or QR-labeled box">
+              <Camera className="w-4 h-4" /> Document Box
+            </Button>
             {/* Batch label generation requires admin; scanning and activation remain separate. */}
             {isAdmin && <Button size="sm" variant="outline" onClick={() => setBatchLabelsOpen(true)}
               className="h-9 gap-1.5 border-gray-700 text-gray-300 hover:border-red-700 shrink-0">
@@ -740,6 +763,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
               onToggleEmpty={handleToggleEmpty}
               inventoryItems={inventoryItems} containers={containers}
               onOpenAssignLocation={() => openAssignLocation()}
+              onOpenDocumentBox={openDocumentBoxPicker}
               onOpenPutAway={() => setPutAwayOpen(true)}
             />
           </div>
@@ -797,8 +821,12 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                   <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
                     <Package className="w-12 h-12 text-gray-700 mb-3" />
                     <h3 className="text-base font-semibold text-gray-300">Where is it in the shop?</h3>
-                    <p className="text-sm text-gray-500 mt-2 max-w-sm">Choose a shelf on the left, search for an item, or put stock in its proper location.</p>
-                    <Button onClick={() => openAssignLocation()} className="mt-5 gap-2 bg-amber-600 hover:bg-amber-700"><MapPin className="w-4 h-4"/> Assign Location</Button>
+                    <p className="text-sm text-gray-500 mt-2 max-w-sm">Place stocked parts on a shelf, or photograph miscellaneous and client-owned items inside a box.</p>
+                    <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                      <Button onClick={() => openAssignLocation()} className="gap-2 bg-amber-600 hover:bg-amber-700"><MapPin className="w-4 h-4"/> Assign Stock Location</Button>
+                      <Button variant="outline" onClick={openDocumentBoxPicker} className="gap-2 border-indigo-700 text-indigo-200 hover:bg-indigo-950/40"><Camera className="w-4 h-4"/> Document Box Contents</Button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-3 max-w-sm">Stored client property remains separate from Parts Tracker stock and purchasing.</p>
                   </div>
                 )}
               </div>
