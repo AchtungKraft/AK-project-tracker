@@ -10,13 +10,17 @@ const TYPES = new Set(['unidentified','miscellaneous','take_off','client_supplie
 const CONDITIONS = new Set(['unknown','new','used','damaged','mixed']);
 const safeText=(s,n)=>typeof s==='string' ? s.trim().slice(0,n) : '';
 const idOk=(s)=>typeof s==='string'&&/^[a-zA-Z0-9_-]{12,120}$/.test(s);
-// Base44 private upload may return either a private/ path or gs://bucket/object.
-// gs:// is a private storage object identifier, NOT a publicly accessible URL.
-// Reject https:// signed links and arbitrary protocols even for authenticated AK staff.
-const photoUri=(s)=>typeof s==='string'&&s.length>=9&&s.length<=1200
-  && !/[?#\\\u0000-\u001f]/.test(s)&&!s.includes('..')
-  && (/^private\/[^/]+(?:\/.+)?$/.test(s)
-     || /^gs:\/\/[a-zA-Z0-9][a-zA-Z0-9._-]{1,220}\/[^/].+/.test(s));
+// Base44 UploadPrivateFile can return opaque relative object identifiers in
+// addition to gs:// and private/ URIs. A syntax check alone does NOT prove privacy.
+// Every new URI is verified using the private CreateFileSignedUrl integration
+// below, before saving a StoredPropertyPhoto record.
+const photoUri=(s)=>{
+  if(typeof s!=='string'||s.length<3||s.length>2048||
+     /[?#\\\u0000-\u001f]/.test(s)||s.includes('..')||s.startsWith('//'))return false;
+  if(/^gs:\/\/[a-zA-Z0-9][a-zA-Z0-9._-]{1,220}\/[^/].+/.test(s))return true;
+  if(/^[a-z][a-z\d+.-]*:/i.test(s))return false;
+  return /^\/?[a-zA-Z0-9][a-zA-Z0-9_./% +@=-]*$/.test(s);
+};
 const trimPhoto=(p)=>({id:p.id,stored_property_id:p.stored_property_id,sort_order:p.sort_order,caption:p.caption,captured_at:p.captured_at});
 
 Deno.serve(async (req)=>{
@@ -140,9 +144,19 @@ Deno.serve(async (req)=>{
       const [item]=await db.entities.StoredProperty.filter({id:propertyId,container_id:container.id});
       if(!item||item.status!=='in_storage') return respond({error:'Property is not in this box'},409);
       const uri=body.file_uri;
-      if(!photoUri(uri)) return respond({error:'Expected a private storage URI (private/ or gs://), not a public URL'},400);
+      if(!photoUri(uri)) return respond({error:'Invalid private file reference format (public URLs are not accepted)'},400);
       const existing=await db.entities.StoredPropertyPhoto.filter({stored_property_id:item.id,file_uri:uri});
       if(existing.length) return respond({success:true,idempotent_hit:true,photo:trimPhoto(existing[0])});
+      // Critical privacy boundary: never assume a relative URI proves a file
+      // is private. Only persist a file that Base44 can sign as private.
+      try {
+        const signed=await db.integrations.Core.CreateFileSignedUrl({file_uri:uri,expires_in:60});
+        if(typeof signed?.signed_url!=='string'||!signed.signed_url.startsWith('https://')){
+          return respond({error:'Private storage could not verify this photo reference',code:'PRIVATE_URI_NOT_VERIFIED'},422);
+        }
+      }catch(_error){
+        return respond({error:'Private storage could not verify this photo reference',code:'PRIVATE_URI_NOT_VERIFIED'},422);
+      }
       const total=await db.entities.StoredPropertyPhoto.filter({stored_property_id:item.id},'-created_date',100);
       if(total.length>=100) return respond({error:'100 photo limit for a group'},409);
       const photo=await db.entities.StoredPropertyPhoto.create({
