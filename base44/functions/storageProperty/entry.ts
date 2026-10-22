@@ -15,7 +15,7 @@ const idOk=(s)=>typeof s==='string'&&/^[a-zA-Z0-9_-]{12,120}$/.test(s);
 // Reject https:// signed links and arbitrary protocols even for authenticated AK staff.
 const photoUri=(s)=>typeof s==='string'&&s.length>=9&&s.length<=1200
   && !/[?#\\\u0000-\u001f]/.test(s)&&!s.includes('..')
-  && (/^private\/[^/]+\/.+/.test(s)
+  && (/^private\/[^/]+(?:\/.+)?$/.test(s)
      || /^gs:\/\/[a-zA-Z0-9][a-zA-Z0-9._-]{1,220}\/[^/].+/.test(s));
 const trimPhoto=(p)=>({id:p.id,stored_property_id:p.stored_property_id,sort_order:p.sort_order,caption:p.caption,captured_at:p.captured_at});
 
