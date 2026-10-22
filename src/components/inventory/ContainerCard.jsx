@@ -15,7 +15,9 @@ export default function ContainerCard({
   const TypeIcon = tc.icon;
   const displayColor = container.color || tc.color;
   const isAwayFromHome = homeLocation && container.location_id !== container.home_location_id;
-  const isEmpty = itemCount === 0;
+  // Stock-only itemCount cannot describe photographed client property. Never label
+  // a box "Empty" solely because it has no Part / InventoryItem records.
+  const noStockParts = itemCount === 0;
 
   const handlePrintQR = (e) => {
     e.stopPropagation();
@@ -25,6 +27,9 @@ export default function ContainerCard({
   return (
     <div
       onClick={() => onSelect?.(container)}
+      role="button" tabIndex={0}
+      aria-label={`Open box ${container.name || container.short_code}`}
+      onKeyDown={e=>{if(e.target===e.currentTarget && (e.key==='Enter'||e.key===' ')){e.preventDefault();onSelect?.(container);}}}
       className={cn(
         "flex items-center gap-3 rounded-lg border transition-all cursor-pointer group",
         isSelected
@@ -71,8 +76,8 @@ export default function ContainerCard({
           </Badge>
         </div>
         <div className="flex items-center gap-2 text-[10px] text-gray-500 mt-0.5 flex-wrap">
-          {isEmpty ? (
-            <span className="text-gray-600">Empty</span>
+          {noStockParts ? (
+            <span className="text-gray-400">View stored contents</span>
           ) : (
             <span>{itemCount} part{itemCount !== 1 ? 's' : ''}</span>
           )}
