@@ -64,3 +64,28 @@ test('errors redact private file paths and public URLs',()=>{
  const info=uploadErrorDetail({message:'failed private/user123/secret-file.jpg at https://example.org?token=x'},'register');
  assert.ok(!info.message.includes('secret-file'));assert.ok(!info.message.includes('token=x'));
 });
+
+import {prepareStoragePhotoFile} from '../src/lib/storagePhotoPrepare.js';
+
+test('small uploaded photos stay byte-for-byte untouched', async()=>{
+  const file={name:'seat.jpg',size:275_000,type:'image/jpeg'};
+  assert.equal(await prepareStoragePhotoFile(file),file);
+});
+
+test('large photos are downscaled when browser encoding is available', async()=>{
+  const previous={doc:globalThis.document,File:globalThis.File,create:globalThis.createImageBitmap};
+  const draw=[];
+  globalThis.File=class {constructor(blobs,name,options){this.name=name;this.type=options.type;this.size=blobs[0].size;}};
+  globalThis.document={createElement:()=>({width:0,height:0,
+    getContext:()=>({drawImage:(...args)=>draw.push(args)}),
+    toBlob:(done)=>done(new Blob(['small JPEG'],'image/jpeg'))})};
+  globalThis.createImageBitmap=async()=>({width:4000,height:3000,close(){}});
+  try{
+    const original={name:'seats.png',type:'image/png',size:9*1024*1024,lastModified:1};
+    const out=await prepareStoragePhotoFile(original);
+    assert.equal(out.name,'seats.jpg');assert.equal(out.type,'image/jpeg');
+    assert.ok(out.size<original.size);assert.equal(draw.length,1);
+  }finally{
+    globalThis.document=previous.doc;globalThis.File=previous.File;globalThis.createImageBitmap=previous.create;
+  }
+});
