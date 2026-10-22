@@ -20,7 +20,7 @@ export default function ReservedStorageLabelActivation({ container, locations = 
     setBusy(true);
     try {
       const response = await base44.functions.invoke('storageLabels',{
-        action:'activate',container_id:container.id,project_id:projectId,
+        action:'activate',label_id:container.id,project_id:projectId,
         location_id:locationId,name:name.trim(),
       });
       const result = response?.data || response;
