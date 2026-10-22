@@ -14,6 +14,7 @@ import { getContainerTypeConfig } from "./containerTypeConfig";
 import { printContainerQRLabel } from "./containerQRLabel";
 import LocationBreadcrumb from "./LocationBreadcrumb";
 import StoragePartRow from "./StoragePartRow";
+import ContainerStoredProperty from "./ContainerStoredProperty";
 
 export default function ContainerDetailPanel({
   container, locations, inventoryItems, parts, projects, vendors,
@@ -162,13 +163,14 @@ export default function ContainerDetailPanel({
         </div>
       )}
 
-      {/* Contents — the main thing */}
+      {/* Physical property is independent of inventory, reservations, and stock totals. */}
       <div className="flex-1 overflow-y-auto p-4">
+        <ContainerStoredProperty key={container.id} container={container} parts={parts} />
         {containedParts.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-8">
             <Package className="w-14 h-14 text-gray-700 mb-3" />
-            <p className="text-base text-gray-400 font-medium">Empty</p>
-            <p className="text-sm text-gray-600 mt-1">No parts in this container</p>
+            <p className="text-base text-gray-400 font-medium">No Stock Inventory</p>
+            <p className="text-sm text-gray-600 mt-1">This box may contain uncatalogued Stored Property above.</p>
             {onAddParts && (
               <Button size="sm" variant="outline" className="mt-4 gap-1.5" onClick={() => onAddParts(container)}>
                 <Plus className="w-4 h-4" /> Add Parts
