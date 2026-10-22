@@ -40,10 +40,23 @@ Deno.serve(async (req)=>{
       const containerIds=[...new Set(items.map(i=>i.container_id).filter(Boolean))];
       const containers=await Promise.all(containerIds.map(async cid=>(await db.entities.StorageContainer.filter({id:cid}))[0]));
       const byId=new Map(containers.filter(Boolean).map(c=>[c.id,c]));
+      const idsFor=(field)=>[...new Set(items.map(i=>i[field]).filter(Boolean))];
+      let projects=[],clients=[];
+      try{
+        const results=await Promise.all([
+          idsFor('project_id').length?db.entities.Project.filter({id:{$in:idsFor('project_id')}}):[],
+          idsFor('client_account_id').length?db.entities.ClientAccount.filter({id:{$in:idsFor('client_account_id')}}):[],
+        ]);
+        projects=results[0]||[];
+        clients=results[1]||[];
+      }catch(_){ /* preserve successful property lookup even if display-name enrichment fails */ }
+      const projectNames=new Map(projects.map(p=>[p.id,p.name]));
+      const clientNames=new Map(clients.map(c=>[c.id,c.name]));
       return respond({success:true,items:items.map(i=>({
         id:i.id,name:i.name,property_type:i.property_type,condition:i.condition,
         quantity_known:i.quantity_known,quantity:i.quantity,ownership_type:i.ownership_type,
-        client_account_id:i.client_account_id,project_id:i.project_id,
+        client_account_id:i.client_account_id,client_name:clientNames.get(i.client_account_id)||null,
+        project_id:i.project_id,project_name:projectNames.get(i.project_id)||null,
         container_id:i.container_id,container_name:byId.get(i.container_id)?.name,
         container_code:byId.get(i.container_id)?.short_code,
         location_id:byId.get(i.container_id)?.location_id||i.location_id||null,
