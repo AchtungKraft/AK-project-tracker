@@ -165,4 +165,34 @@ async function shopAssignmentTests(){
   assert.equal(total,9);assert.equal(h.rows.InventoryItem.find(i=>i.location_id===SHELF).quantity_on_hand,7);
   console.log('PASS shop assignment: no-location source guard, legacy location, partial available quantity, reserved units, stock conservation');
 }
-(async()=>{await storedPropertyTests();await labelTests();await moveTests();await shopAssignmentTests()})().catch(err=>{console.error(err);process.exitCode=1});
+async function unifiedContentsRegression(){
+  const id='7'.repeat(24);
+  const h=harness('base44/functions/storageProperty/entry.ts',{storage:{
+    StorageContainer:[{id:ALPHA,name:'Test Box',status:'active',active:true,location_id:BETA}],
+    StoredProperty:[{id,container_id:ALPHA,name:'Seats',property_type:'miscellaneous',
+      condition:'unknown',description:'',notes:'',quantity_known:true,quantity:2,status:'in_storage'}],
+    InventoryItem:[{id:GAMMA,part_id:EPS,quantity_on_hand:3,quantity_reserved:1}],
+  }});
+  const edited=await h.invoke({action:'update_group',container_id:ALPHA,property_id:id,
+    name:'Seats and headrests',property_type:'take_off',condition:'used',
+    description:'Pair of seat assemblies',notes:'Keep all hardware together',quantity_known:true,quantity:2});
+  assert.equal(edited.data.success,true);
+  for(const uri of ['files/private/seat-front.jpg','files/private/seat-rear.jpg']){
+    const photo=await h.invoke({action:'add_photo',container_id:ALPHA,property_id:id,file_uri:uri});
+    assert.equal(photo.data.success,true);
+    const retry=await h.invoke({action:'add_photo',container_id:ALPHA,property_id:id,file_uri:uri});
+    assert.equal(retry.data.idempotent_hit,true);
+  }
+  assert.equal(h.rows.StoredProperty.length,1, 'Edit never creates a second property group');
+  assert.equal(h.rows.StoredPropertyPhoto.length,2);
+  assert.equal(h.rows.StoredProperty[0].description,'Pair of seat assemblies');
+  assert.equal(h.rows.StoredProperty[0].name,'Seats and headrests');
+  assert.equal(h.rows.InventoryItem[0].quantity_on_hand,3);
+  assert.equal(h.rows.InventoryItem[0].quantity_reserved,1);
+  assert(!h.calls.some(c=>/^StoredProperty.create|^InventoryItem.(create|update)|^Part.(create|update)/.test(c)));
+  const existing=await h.invoke({action:'get_photos',property_id:id});
+  assert.equal(existing.data.photos.length,2);
+  assert(existing.data.photos.every(p=>p.signed_url));
+  console.log('PASS unified contents: update details and add private photos to same group without duplicates or stock writes');
+}
+(async()=>{await storedPropertyTests();await labelTests();await moveTests();await shopAssignmentTests();await unifiedContentsRegression()})().catch(err=>{console.error(err);process.exitCode=1});
