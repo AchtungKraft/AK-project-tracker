@@ -88,8 +88,7 @@
       "enum": [
         "active",
         "empty",
-        "archived",
-        "reserved"
+        "archived"
       ],
       "default": "active",
       "description": "Container status"
