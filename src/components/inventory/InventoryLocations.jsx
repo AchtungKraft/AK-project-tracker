@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { 
-  Search, ChevronRight, Package, LayoutGrid, List, X, ArrowLeft, ScanLine, ArrowRightLeft, Printer, MapPin, AlertTriangle
+  Search, ChevronRight, Package, LayoutGrid, List, X, ArrowLeft, ScanLine, Printer, MapPin, AlertTriangle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig, buildLocationPathString } from "./locationTypeConfig";
@@ -25,7 +25,6 @@ import useLocationFavorites from "./useLocationFavorites";
 import StoragePartRow from "./StoragePartRow";
 import StoragePartCard from "./StoragePartCard";
 import ContainerDetailPanel from "./ContainerDetailPanel";
-import ContainerCard from "./ContainerCard";
 import CreateContainerModal from "./CreateContainerModal";
 import MoveContainerModal from "./MoveContainerModal";
 import AddToContainerModal from "./AddToContainerModal";

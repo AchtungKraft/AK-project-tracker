@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Package, ChevronRight, ChevronDown, Printer, Star, Plus, ArrowRightLeft } from "lucide-react";
+import { Package, ChevronRight, ChevronDown, Printer, Star, Plus, ArrowRightLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig } from "./locationTypeConfig";
 import LocationBreadcrumb from "./LocationBreadcrumb";
