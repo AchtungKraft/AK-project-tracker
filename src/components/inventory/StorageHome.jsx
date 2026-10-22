@@ -96,8 +96,8 @@ export default function StorageHome({
             <Star className={cn("w-3 h-3", isFavorite(location.id) && "fill-yellow-500")} />
           </button>
           {partCount > 0 && <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400">{partCount}</span>}
+          {(locationsWithContainers.get(location.id) || 0) > 0 && <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-indigo-950/40 text-indigo-300">{locationsWithContainers.get(location.id)} boxes</span>}
         </div>
-        {(locationsWithContainers.get(location.id) || 0) > 0 && <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-indigo-950/40 text-indigo-300">{locationsWithContainers.get(location.id)} boxes</span>}
         {hasChildren && isExpanded && (
           <div>
             {children.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)).filter(c => showEmptyLocations || (locationPartCounts[c.id] || 0) > 0 || locationsWithContainers.has(c.id)).map(c => renderLocationNode(c, level + 1))}
