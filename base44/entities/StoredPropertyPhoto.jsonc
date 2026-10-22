@@ -6,9 +6,9 @@
       "type": "string",
       "description": "Physical property or group being photographed"
     },
-    "photo_url": {
+    "file_uri": {
       "type": "string",
-      "description": "Uploaded source URL; access controls required"
+      "description": "Private Base44 file URI; never a public or signed URL"
     },
     "media_asset_id": {
       "type": "string",
@@ -43,7 +43,7 @@
   },
   "required": [
     "stored_property_id",
-    "photo_url"
+    "file_uri"
   ],
   "rls": {
     "create": {
