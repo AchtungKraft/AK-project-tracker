@@ -10,9 +10,13 @@ const TYPES = new Set(['unidentified','miscellaneous','take_off','client_supplie
 const CONDITIONS = new Set(['unknown','new','used','damaged','mixed']);
 const safeText=(s,n)=>typeof s==='string' ? s.trim().slice(0,n) : '';
 const idOk=(s)=>typeof s==='string'&&/^[a-zA-Z0-9_-]{12,120}$/.test(s);
-// The Base44 private-upload integration returns a URI such as private/user123/photo.jpg.
-// Reject public URLs and arbitrary protocols even when sent by an authenticated client.
-const photoUri=(s)=>typeof s==='string'&&s.length<1100&&s.length>8&&/^private\/[^?#\\\u0000-\u001f]+$/.test(s)&&!s.includes('..');
+// Base44 private upload may return either a private/ path or gs://bucket/object.
+// gs:// is a private storage object identifier, NOT a publicly accessible URL.
+// Reject https:// signed links and arbitrary protocols even for authenticated AK staff.
+const photoUri=(s)=>typeof s==='string'&&s.length>=9&&s.length<=1200
+  && !/[?#\\\u0000-\u001f]/.test(s)&&!s.includes('..')
+  && (/^private\/[^/]+\/.+/.test(s)
+     || /^gs:\/\/[a-zA-Z0-9][a-zA-Z0-9._-]{1,220}\/[^/].+/.test(s));
 const trimPhoto=(p)=>({id:p.id,stored_property_id:p.stored_property_id,sort_order:p.sort_order,caption:p.caption,captured_at:p.captured_at});
 
 Deno.serve(async (req)=>{
@@ -136,7 +140,7 @@ Deno.serve(async (req)=>{
       const [item]=await db.entities.StoredProperty.filter({id:propertyId,container_id:container.id});
       if(!item||item.status!=='in_storage') return respond({error:'Property is not in this box'},409);
       const uri=body.file_uri;
-      if(!photoUri(uri)) return respond({error:'Expected a private storage file URI, not a public URL'},400);
+      if(!photoUri(uri)) return respond({error:'Expected a private storage URI (private/ or gs://), not a public URL'},400);
       const existing=await db.entities.StoredPropertyPhoto.filter({stored_property_id:item.id,file_uri:uri});
       if(existing.length) return respond({success:true,idempotent_hit:true,photo:trimPhoto(existing[0])});
       const total=await db.entities.StoredPropertyPhoto.filter({stored_property_id:item.id},'-created_date',100);
