@@ -84,7 +84,9 @@ export function resolveStorageScan(rawQR, { locations = [], containers = [], inv
 
   // ── CONTAINER by ID ──
   if (parsed.type === 'CONTAINER') {
-    const ctr = containers.find(c => c.id === parsed.id);
+    // Newly printed labels retain their original label QR after a physical container is activated.
+    // Legacy labels still encode StorageContainer.id directly.
+    const ctr = containers.find(c => c.id === parsed.id || c.qr_code_value === rawQR.trim());
     if (!ctr) {
       return { ...base, entity_type: 'CONTAINER', entity_id: parsed.id, error: 'Container no longer exists' };
     }
