@@ -34,6 +34,30 @@
       "type": "string",
       "description": "Optional reference to Project this container is associated with"
     },
+    "client_account_id": {
+      "type": "string",
+      "description": "Physical property owner; not inferred from where box is placed"
+    },
+    "label_batch_id": {
+      "type": "string",
+      "description": "StorageLabelBatch owning a preprinted identity"
+    },
+    "label_state": {
+      "type": "string",
+      "enum": [
+        "reserved",
+        "activated",
+        "voided"
+      ],
+      "description": "Lifecycle of an identity created through batch printing"
+    },
+    "label_activated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "label_activated_by": {
+      "type": "string"
+    },
     "short_code": {
       "type": "string",
       "description": "Short identifier for labels and quick reference"
@@ -64,7 +88,8 @@
       "enum": [
         "active",
         "empty",
-        "archived"
+        "archived",
+        "reserved"
       ],
       "default": "active",
       "description": "Container status"
