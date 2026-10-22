@@ -161,6 +161,22 @@ Deno.serve(async (req)=>{
         patch.name=name;
       }
       if(body.description!==undefined)patch.description=safeText(body.description,1200);
+      if(body.notes!==undefined)patch.notes=safeText(body.notes,1200);
+      if(body.condition!==undefined){
+        if(!CONDITIONS.has(body.condition))return respond({error:'Invalid condition'},400);
+        patch.condition=body.condition;
+      }
+      if(body.quantity_known!==undefined){
+        if(typeof body.quantity_known!=='boolean')return respond({error:'Invalid quantity_known'},400);
+        if(body.quantity_known){
+          if(!Number.isFinite(body.quantity)||body.quantity<=0||body.quantity>99999){
+            return respond({error:'Quantity must be a positive number'},400);
+          }
+          patch.quantity_known=true;patch.quantity=body.quantity;
+        }else{
+          patch.quantity_known=false;patch.quantity=null;
+        }
+      }
       if(body.property_type!==undefined){
         if(!TYPES.has(body.property_type))return respond({error:'Invalid type'},400);
         patch.property_type=body.property_type;
