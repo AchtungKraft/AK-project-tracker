@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  ArrowLeft, ArrowRightLeft, Printer, Package, MapPin, Plus, Home, Trash2,
+  ArrowLeft, ArrowRightLeft, Printer, Package, Plus, Home, Trash2,
   ChevronRight, ChevronDown, CheckCircle2, StickyNote, Pencil, X, Check
 } from "lucide-react";
 import { cn } from "@/lib/utils";
