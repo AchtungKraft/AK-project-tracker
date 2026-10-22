@@ -303,7 +303,7 @@ export default function ShopAssignLocation({ locations=[], inventoryItems=[], pa
             <ArrowRight className="w-5 h-5 text-amber-400"/>
             <div className="text-[11px] uppercase tracking-wide text-gray-400">To</div>
             <p className="font-semibold text-lg">{destination?.location_area}</p>
-            {destination?.project_id&&<p className="text-xs text-indigo-300">Project-specific storage — verify that this part belongs at this project location.</p>
+            {destination?.project_id&&<p className="text-xs text-indigo-300">Project-specific storage — verify that this part belongs at this project location.</p>}
             <p className="text-xs text-gray-400">{buildLocationPathString(destination?.id,locations)}</p>
           </div>
           <div className="rounded-xl border border-gray-800 p-3">
