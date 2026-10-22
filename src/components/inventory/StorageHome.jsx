@@ -45,6 +45,24 @@ export default function StorageHome({
     [containers]
   );
 
+  // A shelf holding only client property boxes is occupied physical storage,
+  // even when it has zero canonical Part / InventoryItem stock lines.
+  const locationsWithContainers = useMemo(() => {
+    const occupied = new Set();
+    const byId = new Map(locations.map(l => [l.id, l]));
+    for (const c of containers) {
+      if (c.active === false || c.status === 'archived') continue;
+      let id = c.location_id;
+      const visited = new Set();
+      while (id && !visited.has(id)) {
+        visited.add(id);
+        occupied.add(id);
+        id = byId.get(id)?.parent_id;
+      }
+    }
+    return occupied;
+  }, [containers, locations]);
+
   const rootLocations = locations
     .filter(l => !l.parent_id && l.active)
     .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
@@ -55,7 +73,7 @@ export default function StorageHome({
     const hasChildren = children.length > 0;
     const isExpanded = expandedLocations[location.id];
     const partCount = locationPartCounts[location.id] || 0;
-    if (partCount === 0 && !showEmptyLocations) return null;
+    if (partCount === 0 && !locationsWithContainers.has(location.id) && !showEmptyLocations) return null;
 
     return (
       <div key={location.id}>
@@ -81,7 +99,7 @@ export default function StorageHome({
         </div>
         {hasChildren && isExpanded && (
           <div>
-            {children.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)).filter(c => showEmptyLocations || (locationPartCounts[c.id] || 0) > 0).map(c => renderLocationNode(c, level + 1))}
+            {children.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)).filter(c => showEmptyLocations || (locationPartCounts[c.id] || 0) > 0 || locationsWithContainers.has(c.id)).map(c => renderLocationNode(c, level + 1))}
           </div>
         )}
       </div>
