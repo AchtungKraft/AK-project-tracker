@@ -29,12 +29,12 @@
       "type": "integer",
       "description": "Total number of labels requested"
     },
-    "container_ids": {
+    "label_ids": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "Reserved container identities, in print order"
+      "description": "Permanent label record identities, in print order"
     },
     "status": {
       "type": "string",
