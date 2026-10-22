@@ -1,9 +1,8 @@
-import React, { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   MapPin, Package, Box, RefreshCw, Search, AlertTriangle,
-  ChevronRight, FolderOpen, ExternalLink
+  FolderOpen
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buildBreadcrumb } from "@/lib/resolveStorageScan";
@@ -186,7 +185,6 @@ function ContainerScanResult({ container, locations, inventoryItems, projects, o
   const TypeIcon = tc.icon;
   const displayColor = container.color || tc.color;
 
-  const location = locations.find(l => l.id === container.location_id);
   const breadcrumb = container.location_id ? buildBreadcrumb(container.location_id, locations) : 'No location';
   const project = container.project_id ? projects.find(p => p.id === container.project_id) : null;
 
