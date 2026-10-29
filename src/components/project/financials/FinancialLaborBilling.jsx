@@ -24,6 +24,12 @@ export default function FinancialLaborBilling({ projectId, lb, labor }) {
         </Button>
       </div>
       <div className="rounded border border-gray-800 bg-gray-900/50 p-2"><LaborRateEditor projectId={projectId} lb={lb} /></div>
+      {lb.project_rate != null && h.logged > 0 && h.unclassified >= h.logged && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-gray-700 bg-gray-900/60 p-2 text-xs text-gray-300">
+          <span>{h.unclassified.toFixed(1)} logged hours are not yet classified for billing. Classify tasks to include eligible labor in project financial totals.</span>
+          <Button size="sm" variant="ghost" onClick={() => setOpen(true)} className="h-7 text-red-400 hover:text-red-300">Manage Task Classification</Button>
+        </div>
+      )}
       <div className="grid md:grid-cols-2 gap-x-6 gap-y-1.5">
         <div className="space-y-1.5">
           <Row label={`Total logged (${labor.entries} entries)`} value={hrs(h.logged)} />
