@@ -22,10 +22,11 @@ export default function FinancialSummaryCards({ summary: s }) {
         <Stat label="Total projected billable" value={money(s.total_projected_billable)} sub={`Incl. ${money(s.labor_projected_remaining)} remaining labor`} />
         <Stat label="Finalized invoiced" value={money(s.finalized_invoiced)} sub={`Drafts ${money(s.draft_invoice_amount)} not counted`} />
         <Stat label="Outstanding balance" value={money(s.outstanding_balance)} sub={`Paid ${money(s.paid_amount)}`} />
-        <Stat label="Available to invoice" value={money(s.available_to_invoice)} tone="text-green-400" sub={`Uninvoiced ${money(s.remaining_uninvoiced)}`} />
+        <Stat label="Parts & Services available to invoice" value={money(s.available_to_invoice)} tone="text-green-400" sub={`Uninvoiced ${money(s.remaining_uninvoiced)}`} />
         <Stat label="Est. gross profit (P&S)" value={money(s.estimated_gross_profit)} sub={`${pct(s.estimated_gross_margin_pct)} margin${s.cost_complete ? "" : " · incomplete cost"}`}
           tone={s.estimated_gross_profit < 0 ? "text-red-400" : "text-green-400"} />
       </div>
+      <p className="text-[11px] text-gray-500">Labor billing is included in project financial estimates but is not yet available through the invoice workflow.</p>
       <button onClick={() => setMore((m) => !m)} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300">
         {more ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />} All metrics
       </button>

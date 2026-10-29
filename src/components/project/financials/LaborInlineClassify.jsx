@@ -5,12 +5,12 @@ import { Loader2 } from "lucide-react";
 import useLaborBillingAction from "./useLaborBillingAction";
 
 // Per-task classification. In-service needs a service pick + explicit Save.
-export default function LaborInlineClassify({ projectId, t, services }) {
+export default function LaborInlineClassify({ projectId, t, services, onSaved }) {
   const [pending, setPending] = useState(false);
   const [svc, setSvc] = useState(t.service_commitment_id || "");
   const action = useLaborBillingAction(projectId);
   const save = (billing_type, service_commitment_id) =>
-    action.mutate({ action: "classify_tasks", task_ids: [t.id], billing_type, service_commitment_id }, { onSuccess: () => setPending(false) });
+    action.mutate({ action: "classify_tasks", task_ids: [t.id], billing_type, service_commitment_id }, { onSuccess: () => { setPending(false); onSaved?.(); } });
   const onType = (v) => (v === "INCLUDED_IN_SERVICE" ? setPending(true) : save(v));
 
   return (

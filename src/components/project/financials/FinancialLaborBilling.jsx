@@ -13,6 +13,8 @@ const Row = ({ label, value, muted }) => (
 // Consolidated Labor Hours & Billing section.
 export default function FinancialLaborBilling({ projectId, lb, labor }) {
   const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [filter, setFilter] = useState("needs");
   const h = lb.hours;
   const needs = lb.unclassified_tasks + lb.invalid_service_links + lb.unpriced_tasks;
   return (
@@ -50,7 +52,7 @@ export default function FinancialLaborBilling({ projectId, lb, labor }) {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side="right" className="w-full sm:max-w-3xl overflow-y-auto bg-gray-950 border-gray-800">
           <SheetHeader><SheetTitle className="text-white">Task labor classification</SheetTitle></SheetHeader>
-          <LaborTaskClassifier projectId={projectId} lb={lb} />
+          <LaborTaskClassifier projectId={projectId} lb={lb} q={q} setQ={setQ} filter={filter} setFilter={setFilter} />
         </SheetContent>
       </Sheet>
     </div>
