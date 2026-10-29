@@ -196,6 +196,39 @@ Deno.serve(async (req) => {
     }
     const unlinkedHrs = timeEntries.filter((e) => !e.task_id || !taskIds.has(e.task_id)).reduce((a, e) => a + (Number(e.hours) || 0), 0);
 
+    // ── LABOR BILLING ── only BILLABLE tasks with an explicit rate (task override, else project rate) earn value.
+    const projectRate = project.labor_billing_rate ?? null;
+    const svcById = new Map(services.map((s) => [s.id, s]));
+    const entriesByTask = new Map();
+    for (const e of timeEntries) if (e.task_id) { const a = entriesByTask.get(e.task_id) || []; a.push({ id: e.id, work_date: e.work_date, hours: Number(e.hours) || 0, by: e.performed_by_name || null }); entriesByTask.set(e.task_id, a); }
+    const LB = { billable: 0, included: 0, nonbill: 0, unclass: unlinkedHrs, cancelled: 0, toDate: 0, remHrs: 0, remAmt: 0, unpricedHrs: 0, unpricedTasks: 0, invalidLinks: 0, unclassTasks: 0 };
+    const laborTasks = tasks.map((t) => {
+      const logged = hoursByTask.get(t.id) || 0;
+      const type = t.labor_billing_type || 'UNCLASSIFIED';
+      const cancelled = isCancelled(t); const done = isDone(t);
+      const rate = t.labor_rate_override ?? projectRate;
+      const est = t.estimated_hours > 0 ? t.estimated_hours : 0;
+      const remHrs = !cancelled && !done && est ? Math.max(est - logged, 0) : 0;
+      const issues = [];
+      let toDate = null, remAmt = null;
+      if (cancelled) LB.cancelled += logged;
+      else if (type === 'BILLABLE') {
+        LB.billable += logged; LB.remHrs += remHrs;
+        if (rate == null) { issues.push('rate_not_set'); LB.unpricedHrs += logged; LB.unpricedTasks++; }
+        else { toDate = logged * rate; remAmt = remHrs * rate; LB.toDate += toDate; LB.remAmt += remAmt; }
+      } else if (type === 'INCLUDED_IN_SERVICE') {
+        LB.included += logged;
+        if (!t.labor_service_commitment_id || !svcById.has(t.labor_service_commitment_id)) { issues.push('invalid_service_link'); LB.invalidLinks++; }
+      } else if (type === 'NON_BILLABLE') LB.nonbill += logged;
+      else { LB.unclass += logged; if (logged > 0 || remHrs > 0) LB.unclassTasks++; }
+      return {
+        id: t.id, name: t.name, status: statusLabel.get(t.status_id) || null, cancelled, done, estimated_hours: est || null,
+        logged: r2(logged), remaining_hours: r2(remHrs), billing_type: type, service_commitment_id: t.labor_service_commitment_id || null,
+        rate_override: t.labor_rate_override ?? null, effective_rate: rate, billable_to_date: toDate == null ? null : r2(toDate),
+        projected_remaining: remAmt == null ? null : r2(remAmt), issues, entries: entriesByTask.get(t.id) || [],
+      };
+    });
+
     // ── WARNINGS ──
     if (P.missing_cost) warnings.push({ code: 'PARTS_MISSING_COST', count: P.missing_cost, message: `${P.missing_cost} part line(s) have no cost — estimated cost and margin are incomplete.` });
     if (S.missing_cost) warnings.push({ code: 'SERVICES_MISSING_COST', count: S.missing_cost, message: `${S.missing_cost} service(s) have no cost — estimated cost and margin are incomplete.` });
@@ -210,6 +243,8 @@ Deno.serve(async (req) => {
       },
     };
     if (P.duplicate_draft + S.duplicate_draft) warnings.push({ code: 'DUPLICATE_DRAFT', count: P.duplicate_draft + S.duplicate_draft, message: 'Some items appear on more than one draft (or exceed uninvoiced quantity). Only one can be sent; the server blocks the rest.' });
+    if (LB.invalidLinks) warnings.push({ code: 'LABOR_INVALID_SERVICE_LINK', count: LB.invalidLinks, message: `${LB.invalidLinks} task(s) are marked "included in service" but the linked service is missing. Review classification; the hours are not billed.` });
+    if (LB.unpricedTasks) warnings.push({ code: 'LABOR_RATE_NOT_SET', count: LB.unpricedTasks, message: `${LB.unpricedTasks} billable task(s) have no billing rate — their ${r2(LB.unpricedHrs)}h are not priced.` });
     if (S.billed_unlinked) warnings.push({ code: 'SERVICE_BILLED_UNLINKED', count: S.billed_unlinked, message: `${S.billed_unlinked} service(s) are flagged billed but not linked to a sent or paid invoice. Review manually.` });
 
     const billable = P.billable + S.billable;
@@ -231,6 +266,19 @@ Deno.serve(async (req) => {
         paid_amount: r2(paidAmount), outstanding_balance: r2(outstanding), credits_applied: r2(creditsApplied),
         remaining_uninvoiced: r2(remaining), allocated_to_drafts: r2(allocated),
         available_to_invoice: r2(Math.max(0, remaining - allocated)),
+        // Parts & Services figures above are unchanged; labor is additive and kept separate.
+        labor_billable_to_date: r2(LB.toDate), labor_projected_remaining: r2(LB.remAmt),
+        total_current_billable: r2(billable + LB.toDate),
+        total_projected_billable: r2(billable + LB.toDate + LB.remAmt),
+        labor_cost_configured: false,
+      },
+      labor_billing: {
+        project_rate: projectRate, rate_set_by: project.labor_rate_set_by || null, rate_set_at: project.labor_rate_set_at || null,
+        hours: { logged: r2(hoursLogged), billable: r2(LB.billable), included_in_service: r2(LB.included), non_billable: r2(LB.nonbill), unclassified: r2(LB.unclass), cancelled_tasks: r2(LB.cancelled), billable_unpriced: r2(LB.unpricedHrs) },
+        billable_to_date: r2(LB.toDate), remaining_billable_hours: r2(LB.remHrs), projected_remaining: r2(LB.remAmt), projected_total: r2(LB.toDate + LB.remAmt),
+        unclassified_tasks: LB.unclassTasks, invalid_service_links: LB.invalidLinks, unpriced_tasks: LB.unpricedTasks,
+        tasks: laborTasks,
+        services: services.map((s) => ({ id: s.id, description: s.description || '(no description)', status: s.status || null })),
       },
       categories: {
         parts: { billable: r2(P.billable), estimated_cost: r2(P.est_cost), actual_cost: P.actual_known ? r2(P.actual_cost) : null, actual_cost_lines: P.actual_known, estimated_only_lines: P.estimated_only, zero_cost_legit_lines: P.zero_legit, remaining_uninvoiced: r2(P.uninvoiced), allocated_to_drafts: r2(P.allocated), active_lines: activeCount.active, cancelled_lines: activeCount.cancelled, missing_cost: P.missing_cost },

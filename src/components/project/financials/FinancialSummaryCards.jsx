@@ -12,10 +12,14 @@ function Stat({ label, value, sub, tone = "text-white" }) {
 }
 
 export default function FinancialSummaryCards({ summary: s }) {
-  const est = s.cost_complete ? "Estimated" : "Estimated · incomplete cost";
+  const est = `P&S only · ${s.cost_complete ? "estimated" : "incomplete cost"}`;
   return (
     <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-      <Stat label="Current billable scope" value={money(s.current_billable)} />
+      <Stat label="Parts & services billable" value={money(s.current_billable)} />
+      <Stat label="Labor billable to date" value={money(s.labor_billable_to_date)} sub="Billable hours × approved rate" />
+      <Stat label="Projected remaining labor" value={money(s.labor_projected_remaining)} sub="Estimate, not actual" />
+      <Stat label="Total current billable" value={money(s.total_current_billable)} sub="P&S + labor to date" />
+      <Stat label="Total projected billable" value={money(s.total_projected_billable)} sub="Incl. remaining labor" />
       <Stat label="Estimated cost" value={money(s.estimated_cost)} sub={est} />
       <Stat label="Est. gross profit" value={money(s.estimated_gross_profit)} sub={est}
         tone={s.estimated_gross_profit < 0 ? "text-red-400" : "text-green-400"} />

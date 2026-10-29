@@ -208,6 +208,28 @@
       ],
       "format": "date-time",
       "description": "When the billing lock was taken; stale after 2 minutes"
+    },
+    "labor_billing_rate": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "Approved hourly labor billing rate (USD). Null = not set. Set only via laborBillingAction (admin)."
+    },
+    "labor_rate_set_by": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Admin email who last set the labor billing rate"
+    },
+    "labor_rate_set_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time",
+      "description": "When the labor billing rate was last set"
     }
   },
   "required": [

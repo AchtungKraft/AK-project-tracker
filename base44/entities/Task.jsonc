@@ -179,6 +179,46 @@
       "format": "date-time",
       "description": "When the operational state was last calculated"
     },
+    "labor_billing_type": {
+      "type": "string",
+      "enum": [
+        "UNCLASSIFIED",
+        "BILLABLE",
+        "INCLUDED_IN_SERVICE",
+        "NON_BILLABLE"
+      ],
+      "default": "UNCLASSIFIED",
+      "description": "Labor billing classification. Only BILLABLE generates labor billing. Set via laborBillingAction (admin)."
+    },
+    "labor_service_commitment_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Required when INCLUDED_IN_SERVICE: same-project ServiceCommitment that already charges this labor"
+    },
+    "labor_rate_override": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "Optional approved hourly rate for this task; takes precedence over project rate"
+    },
+    "labor_classified_by": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Admin email who last set labor billing fields"
+    },
+    "labor_classified_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time",
+      "description": "When labor billing fields were last set"
+    },
     "is_phase_required": {
       "type": "boolean",
       "default": true,

@@ -9,6 +9,7 @@ import FinancialSummaryCards from "./FinancialSummaryCards";
 import FinancialCategoryBreakdown from "./FinancialCategoryBreakdown";
 import FinancialInvoiceSummary from "./FinancialInvoiceSummary";
 import FinancialLaborSummary from "./FinancialLaborSummary";
+import FinancialLaborBilling from "./FinancialLaborBilling";
 import FinancialLineItems from "./FinancialLineItems";
 
 export default function ProjectFinancialsTab({ projectId }) {
@@ -55,7 +56,8 @@ export default function ProjectFinancialsTab({ projectId }) {
       <FinancialWarnings warnings={data.warnings} lines={data.lines} />
       <DataQualityIndicator dataQuality={data.data_quality} lines={data.lines} />
       <FinancialSummaryCards summary={data.summary} />
-      <FinancialCategoryBreakdown categories={data.categories} summary={data.summary} />
+      <FinancialCategoryBreakdown categories={data.categories} summary={data.summary} laborBilling={data.labor_billing} />
+      <FinancialLaborBilling projectId={projectId} lb={data.labor_billing} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <FinancialInvoiceSummary invoices={data.invoices} summary={data.summary} />
         <FinancialLaborSummary labor={data.labor} />

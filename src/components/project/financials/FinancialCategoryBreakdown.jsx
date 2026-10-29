@@ -1,5 +1,6 @@
 import React from "react";
 import { money, pct } from "./finFormat";
+import LaborCategoryRow from "./LaborCategoryRow";
 
 function Row({ name, c }) {
   const profit = c.billable - c.estimated_cost;
@@ -28,11 +29,11 @@ function Row({ name, c }) {
   );
 }
 
-export default function FinancialCategoryBreakdown({ categories, summary }) {
+export default function FinancialCategoryBreakdown({ categories, summary, laborBilling }) {
   return (
     <div className="rounded-lg border border-red-900/30 bg-black/40 p-3 overflow-x-auto">
-      <div className="text-sm font-medium text-white mb-1">Parts & Services — cost vs billable</div>
-      <p className="text-[11px] text-gray-500 mb-1">Margin uses estimated cost. Actual cost is shown only for lines where it was recorded and is not used for margin.</p>
+      <div className="text-sm font-medium text-white mb-1">Parts, Services & Labor — cost vs billable</div>
+      <p className="text-[11px] text-gray-500 mb-1">Margin uses estimated cost and covers Parts & Services only — internal labor cost is not configured. Actual cost is shown only where recorded.</p>
       <table className="w-full text-sm text-gray-300">
         <thead className="text-[11px] uppercase text-gray-500">
           <tr>
@@ -45,12 +46,13 @@ export default function FinancialCategoryBreakdown({ categories, summary }) {
         <tbody>
           <Row name="Parts" c={categories.parts} />
           <Row name="Services" c={categories.services} />
+          <LaborCategoryRow lb={laborBilling} />
           <tr className="border-t border-gray-700 font-semibold text-white">
-            <td className="py-2 pr-2">Total</td>
-            <td className="py-2 px-2 text-right tabular-nums">{money(summary.current_billable)}</td>
-            <td className="py-2 px-2 text-right tabular-nums">{money(summary.estimated_cost)}</td>
+            <td className="py-2 pr-2">Total<div className="text-[10px] font-normal text-gray-500">Projected {money(summary.total_projected_billable)}</div></td>
+            <td className="py-2 px-2 text-right tabular-nums">{money(summary.total_current_billable)}</td>
+            <td className="py-2 px-2 text-right tabular-nums">{money(summary.estimated_cost)}<div className="text-[10px] font-normal text-gray-500">P&S only</div></td>
             <td className="hidden md:table-cell" />
-            <td className="py-2 px-2 text-right tabular-nums">{pct(summary.estimated_gross_margin_pct)}</td>
+            <td className="py-2 px-2 text-right tabular-nums">{pct(summary.estimated_gross_margin_pct)}<div className="text-[10px] font-normal text-gray-500">P&S only</div></td>
             <td className="hidden md:table-cell" />
             <td className="py-2 px-2 text-right tabular-nums">{money(summary.remaining_uninvoiced)}</td>
             <td className="py-2 pl-2 text-right tabular-nums hidden md:table-cell">{money(summary.allocated_to_drafts)}</td>
