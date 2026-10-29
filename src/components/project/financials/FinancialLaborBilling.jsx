@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ListChecks } from "lucide-react";
 import { money, hrs } from "./finFormat";
 import LaborRateEditor from "./LaborRateEditor";
@@ -9,21 +10,23 @@ const Row = ({ label, value, muted }) => (
   <div className={`flex justify-between gap-3 ${muted ? "text-gray-500" : ""}`}><span>{label}</span><span className="tabular-nums">{value}</span></div>
 );
 
-export default function FinancialLaborBilling({ projectId, lb }) {
+// Consolidated Labor Hours & Billing section.
+export default function FinancialLaborBilling({ projectId, lb, labor }) {
   const [open, setOpen] = useState(false);
   const h = lb.hours;
   const needs = lb.unclassified_tasks + lb.invalid_service_links + lb.unpriced_tasks;
   return (
-    <div className="rounded-lg border border-red-900/30 bg-black/40 p-3 text-sm text-gray-300">
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <div className="font-medium text-white">Labor billing <span className="text-xs text-gray-500">(estimated, not invoiced)</span></div>
-        <Button size="sm" variant="outline" onClick={() => setOpen((o) => !o)} className="h-8 border-gray-700 text-gray-200">
-          <ListChecks className="w-4 h-4 mr-1" />{open ? "Hide tasks" : "Classify tasks"}{needs > 0 && <span className="ml-1 text-amber-400">({needs})</span>}
+    <div className="rounded-lg border border-red-900/30 bg-black/40 p-3 text-sm text-gray-300 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="font-medium text-white">Labor hours & billing <span className="text-xs text-gray-500">(estimated, not invoiced)</span></div>
+        <Button size="sm" variant="outline" onClick={() => setOpen(true)} className="h-8 border-gray-700 text-gray-200">
+          <ListChecks className="w-4 h-4 mr-1" />Manage task classification{needs > 0 && <span className="ml-1 text-amber-400">({needs})</span>}
         </Button>
       </div>
+      <div className="rounded border border-gray-800 bg-gray-900/50 p-2"><LaborRateEditor projectId={projectId} lb={lb} /></div>
       <div className="grid md:grid-cols-2 gap-x-6 gap-y-1.5">
         <div className="space-y-1.5">
-          <Row label="Total logged" value={hrs(h.logged)} />
+          <Row label={`Total logged (${labor.entries} entries)`} value={hrs(h.logged)} />
           <Row label="Separately billable" value={hrs(h.billable)} />
           <Row label="Included in a service" value={hrs(h.included_in_service)} />
           <Row label="Non-billable" value={hrs(h.non_billable)} />
@@ -31,14 +34,19 @@ export default function FinancialLaborBilling({ projectId, lb }) {
           {h.cancelled_tasks > 0 && <Row muted label="On cancelled tasks" value={hrs(h.cancelled_tasks)} />}
         </div>
         <div className="space-y-1.5">
-          <LaborRateEditor projectId={projectId} lb={lb} />
           <Row label="Labor billable to date" value={money(lb.billable_to_date)} />
           <Row label={`Remaining billable estimate (${hrs(lb.remaining_billable_hours)})`} value={money(lb.projected_remaining)} />
           <Row label="Projected total labor" value={money(lb.projected_total)} />
           {h.billable_unpriced > 0 && <Row muted label="Billable hours without a rate" value={hrs(h.billable_unpriced)} />}
+          <Row muted label="Total estimate / left on open tasks" value={`${hrs(labor.hours_estimated)} / ${hrs(labor.hours_remaining)}`} />
         </div>
       </div>
-      {open && <LaborTaskClassifier projectId={projectId} lb={lb} />}
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-3xl overflow-y-auto bg-gray-950 border-gray-800">
+          <SheetHeader><SheetTitle className="text-white">Task labor classification</SheetTitle></SheetHeader>
+          <LaborTaskClassifier projectId={projectId} lb={lb} />
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

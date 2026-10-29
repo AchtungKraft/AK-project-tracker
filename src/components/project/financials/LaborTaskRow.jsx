@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 import { ChevronRight, ChevronDown } from "lucide-react";
 import { money, hrs } from "./finFormat";
+import LaborInlineClassify from "./LaborInlineClassify";
 
 const TYPE = { UNCLASSIFIED: ["Unclassified", "text-amber-400"], BILLABLE: ["Billable", "text-green-400"], INCLUDED_IN_SERVICE: ["In service", "text-blue-300"], NON_BILLABLE: ["Non-billable", "text-gray-400"] };
 const ISSUE = { rate_not_set: "Billing rate not set", invalid_service_link: "Linked service missing — review" };
 
-export default function LaborTaskRow({ t, svcName, checked, onToggle }) {
+export default function LaborTaskRow({ projectId, services, t, svcName, checked, onToggle }) {
   const [open, setOpen] = useState(false);
   const [label, tone] = TYPE[t.billing_type] || TYPE.UNCLASSIFIED;
   return (
@@ -22,6 +23,7 @@ export default function LaborTaskRow({ t, svcName, checked, onToggle }) {
             {t.done && <span className="text-gray-500"> · done</span>}
             {t.issues.map((i) => <span key={i} className="text-red-400"> · {ISSUE[i]}</span>)}
           </div>
+          <div className="mt-1"><LaborInlineClassify projectId={projectId} t={t} services={services} /></div>
         </div>
         <span className="w-40 text-right tabular-nums text-gray-400 hidden md:block">{hrs(t.logged)} / {hrs(t.remaining_hours)}</span>
         <span className="w-28 text-right tabular-nums">{t.billing_type === "BILLABLE" ? money(t.billable_to_date) : "—"}</span>
