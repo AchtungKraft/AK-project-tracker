@@ -180,36 +180,87 @@
       "description": "When the operational state was last calculated"
     },
     "labor_billing_type": {
-      "type": "string",
+      "type": [
+        "string",
+        "null"
+      ],
       "enum": [
         "UNCLASSIFIED",
         "BILLABLE",
         "INCLUDED_IN_SERVICE",
-        "NON_BILLABLE"
+        "NON_BILLABLE",
+        null
       ],
-      "default": "UNCLASSIFIED",
-      "description": "Labor billing classification. Only BILLABLE generates labor billing. Set via laborBillingAction (admin)."
+      "description": "Labor billing classification. Missing/null = UNCLASSIFIED. Only BILLABLE generates labor billing. Admin-only via laborBillingAction.",
+      "rls": {
+        "create": {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        "update": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      }
     },
     "labor_service_commitment_id": {
       "type": [
         "string",
         "null"
       ],
-      "description": "Required when INCLUDED_IN_SERVICE: same-project ServiceCommitment that already charges this labor"
+      "description": "Required when INCLUDED_IN_SERVICE: same-project ServiceCommitment that already charges this labor",
+      "rls": {
+        "create": {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        "update": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      }
     },
     "labor_rate_override": {
       "type": [
         "number",
         "null"
       ],
-      "description": "Optional approved hourly rate for this task; takes precedence over project rate"
+      "description": "Optional approved hourly rate for this task; takes precedence over project rate",
+      "rls": {
+        "create": {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        "update": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      }
     },
     "labor_classified_by": {
       "type": [
         "string",
         "null"
       ],
-      "description": "Admin email who last set labor billing fields"
+      "description": "Admin email who last set labor billing fields",
+      "rls": {
+        "create": {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        "update": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      }
     },
     "labor_classified_at": {
       "type": [
@@ -217,7 +268,19 @@
         "null"
       ],
       "format": "date-time",
-      "description": "When labor billing fields were last set"
+      "description": "When labor billing fields were last set",
+      "rls": {
+        "create": {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        "update": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      }
     },
     "is_phase_required": {
       "type": "boolean",
@@ -228,5 +291,63 @@
   "required": [
     "name",
     "project_id"
-  ]
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "user"
+          }
+        }
+      ]
+    },
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "user"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "user"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "user"
+          }
+        }
+      ]
+    }
+  }
 }

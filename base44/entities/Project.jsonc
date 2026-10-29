@@ -214,14 +214,38 @@
         "number",
         "null"
       ],
-      "description": "Approved hourly labor billing rate (USD). Null = not set. Set only via laborBillingAction (admin)."
+      "description": "Approved hourly labor billing rate (USD). Null = not set. Set only via laborBillingAction (admin).",
+      "rls": {
+        "create": {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        "update": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      }
     },
     "labor_rate_set_by": {
       "type": [
         "string",
         "null"
       ],
-      "description": "Admin email who last set the labor billing rate"
+      "description": "Admin email who last set the labor billing rate",
+      "rls": {
+        "create": {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        "update": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      }
     },
     "labor_rate_set_at": {
       "type": [
@@ -229,10 +253,80 @@
         "null"
       ],
       "format": "date-time",
-      "description": "When the labor billing rate was last set"
+      "description": "When the labor billing rate was last set",
+      "rls": {
+        "create": {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        "update": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      }
     }
   },
   "required": [
     "name"
-  ]
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "user"
+          }
+        }
+      ]
+    },
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "user"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "user"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "user"
+          }
+        }
+      ]
+    }
+  }
 }
