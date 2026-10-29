@@ -58,7 +58,7 @@ export default function ProjectFinancialsTab({ projectId }) {
       <FinancialCategoryBreakdown categories={data.categories} summary={data.summary} laborBilling={data.labor_billing} />
       <FinancialLaborBilling projectId={projectId} lb={data.labor_billing} labor={data.labor} />
       <FinancialInvoiceSummary invoices={data.invoices} summary={data.summary} />
-      <FinancialLineItems lines={data.lines} />
+      <FinancialLineItems lines={data.lines} laborBilling={data.labor_billing} />
     </div>
   );
 }

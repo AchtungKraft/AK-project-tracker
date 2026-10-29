@@ -4,6 +4,7 @@ import FinancialPartRows from "./FinancialPartRows";
 import FinancialServiceRows from "./FinancialServiceRows";
 import DraftReconciliationNote from "./DraftReconciliationNote";
 import StaleTotalsDrilldown from "./StaleTotalsDrilldown";
+import FinancialLaborRows from "./FinancialLaborRows";
 
 function Section({ title, count, note, children }) {
   const [open, setOpen] = useState(false);
@@ -18,7 +19,7 @@ function Section({ title, count, note, children }) {
   );
 }
 
-export default function FinancialLineItems({ lines }) {
+export default function FinancialLineItems({ lines, laborBilling }) {
   const stale = lines.parts.filter((p) => p.stale_detail);
   const partNote = stale.length > 0 && (
     <div className="text-[11px] text-gray-400">
@@ -31,6 +32,12 @@ export default function FinancialLineItems({ lines }) {
       <DraftReconciliationNote lines={lines} />
       <Section title="Part line items" count={lines.parts.length} note={partNote}><FinancialPartRows rows={lines.parts} /></Section>
       <Section title="Service line items" count={lines.services.length}><FinancialServiceRows rows={lines.services} /></Section>
+      {laborBilling && (
+        <Section title="Labor line items" count={(laborBilling.tasks || []).filter((t) => t.logged > 0 || t.remaining_hours > 0).length}
+          note={<p className="text-[11px] text-gray-500">Estimated, not invoiced. Labor included in a service is not counted again. Internal labor cost is not configured.</p>}>
+          <FinancialLaborRows lb={laborBilling} />
+        </Section>
+      )}
     </div>
   );
 }
