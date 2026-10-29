@@ -129,6 +129,19 @@ Deno.serve(async (req) => {
     }
     commitmentTotals.planned_retail_total += commitmentTotals.services_planned_retail;
 
+    // CANONICAL line-level remaining uninvoiced (same rule as getProjectFinancialOverview):
+    // parts: max(0, required − removed − invoiced_qty) × unit retail
+    // services: full billable when not flagged billed and not linked to an invoice
+    let remainingUninvoiced = 0;
+    for (const c of activeCommitments) {
+      const avail = Math.max(0, (c.required_total ?? 0) - (c.qty_removed ?? 0) - (c.invoiced_qty ?? 0));
+      remainingUninvoiced += avail * (c.unit_retail_snapshot ?? 0);
+    }
+    for (const sc of serviceCommitments) {
+      const billed = sc.is_billed === true || sc.status === 'billed' || !!sc.invoice_id;
+      if (!billed) remainingUninvoiced += sc.total_billable ?? 0;
+    }
+
     // ============================================================
     // PHASE 2B: INVOICE TOTALS
     // Aggregates (total/paid/balance/credit) count FINALIZED invoices only (sent, paid).
@@ -257,7 +270,10 @@ Deno.serve(async (req) => {
       canonical.planned_retail - canonical.total_paid - canonical.credit_applied
     );
     
-    canonical.remaining_to_bill = round2(
+    // Remaining = line-level uninvoiced work (never negative). Historical invoiced totals
+    // are kept separately; their difference from current scope is informational only.
+    canonical.remaining_to_bill = round2(remainingUninvoiced);
+    canonical.scope_vs_finalized_invoiced_delta = round2(
       canonical.planned_retail - canonical.total_invoiced
     );
 
@@ -285,6 +301,9 @@ Deno.serve(async (req) => {
       // Net exposure should not be negative (unless overpaid)
       net_exposure_non_negative: canonical.net_exposure >= -TOLERANCE,
       
+      // Line-level remaining can never be negative
+      remaining_to_bill_non_negative: canonical.remaining_to_bill >= -TOLERANCE,
+
       // Outstanding balance validation
       // NOTE: balance_due on paid invoices may be stale; this is informational
       outstanding_matches: true, // Informational only
@@ -314,13 +333,7 @@ Deno.serve(async (req) => {
       
       const deltas = {
         // Compare commitment-based vs invoice-based exposure
-        supply_vs_invoice_exposure_delta: round2(
-          commitmentTotals.planned_retail_total - invoiceTotals.total - canonical.remaining_to_bill
-        ),
-        
-        // Compare exposure calculation methods
-        net_exposure_alt_delta: round2(canonical.net_exposure - altNetExposure),
-        
+
         // Credit consistency
         credit_ledger_vs_allocation_delta: round2(
           (creditTotals.original_credit - creditTotals.remaining_amount) - creditTotals.net_allocated

@@ -10,7 +10,14 @@ function Row({ name, c }) {
       <td className="py-2 pr-2 text-white">{name}{c.missing_cost > 0 && <span className="ml-1 text-amber-400 text-xs">({c.missing_cost} no cost)</span>}</td>
       <td className="py-2 px-2 text-right tabular-nums">{money(c.billable)}</td>
       <td className="py-2 px-2 text-right tabular-nums">{money(c.estimated_cost)}</td>
-      <td className="py-2 px-2 text-right tabular-nums hidden md:table-cell">{c.actual_cost == null ? "—" : money(c.actual_cost)}</td>
+      <td className="py-2 px-2 text-right tabular-nums hidden md:table-cell">
+        {c.actual_cost == null ? <span className="text-gray-500">None recorded</span> : money(c.actual_cost)}
+        <div className="text-[10px] text-gray-500">
+          {c.actual_cost_lines} of {c.active_lines ?? c.lines} lines actual
+          {c.estimated_only_lines > 0 && ` · ${c.estimated_only_lines} est. only`}
+          {c.zero_cost_legit_lines > 0 && ` · ${c.zero_cost_legit_lines} $0 client-supplied`}
+        </div>
+      </td>
       <td className="py-2 px-2 text-right tabular-nums">{pct(margin)}</td>
       <td className="py-2 px-2 hidden md:table-cell w-32">
         <div className="h-2 rounded bg-green-700/60 overflow-hidden"><div className="h-full bg-red-600" style={{ width: `${costShare}%` }} /></div>
@@ -25,6 +32,7 @@ export default function FinancialCategoryBreakdown({ categories, summary }) {
   return (
     <div className="rounded-lg border border-red-900/30 bg-black/40 p-3 overflow-x-auto">
       <div className="text-sm font-medium text-white mb-1">Parts & Services — cost vs billable</div>
+      <p className="text-[11px] text-gray-500 mb-1">Margin uses estimated cost. Actual cost is shown only for lines where it was recorded and is not used for margin.</p>
       <table className="w-full text-sm text-gray-300">
         <thead className="text-[11px] uppercase text-gray-500">
           <tr>

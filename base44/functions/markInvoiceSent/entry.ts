@@ -47,6 +47,37 @@ Deno.serve(async (req) => {
       return Response.json({ error: `Cannot mark as sent: invoice is ${invoice.status}, must be draft` }, { status: 400 });
     }
 
+    // ══════════════════════════════════════════════
+    // CONCURRENCY: per-project billing lock via atomic conditional update
+    // (updateMany with a filter is compare-and-set: exactly one caller matches).
+    // Serializes all finalizations for a project so eligibility checks can't race.
+    // ══════════════════════════════════════════════
+    const Proj = base44.asServiceRole.entities.Project;
+    const lockToken = `inv_${invoice_id}_${crypto.randomUUID()}`;
+    const STALE_MS = 120000;
+    const now = () => new Date().toISOString();
+    let acquired = (await Proj.updateMany({ id: invoice.project_id, billing_lock_token: null },
+      { $set: { billing_lock_token: lockToken, billing_lock_at: now() } })).updated === 1;
+    if (!acquired) {
+      const p = await Proj.get(invoice.project_id);
+      if (p?.billing_lock_token && p.billing_lock_at && Date.now() - new Date(p.billing_lock_at).getTime() > STALE_MS) {
+        acquired = (await Proj.updateMany({ id: invoice.project_id, billing_lock_token: p.billing_lock_token },
+          { $set: { billing_lock_token: lockToken, billing_lock_at: now() } })).updated === 1;
+      }
+    }
+    if (!acquired) {
+      return Response.json({ success: false, error: 'Another invoice for this project is being finalized. Try again in a moment.', code: 'BILLING_LOCKED' }, { status: 409 });
+    }
+    const releaseLock = () => Proj.updateMany({ id: invoice.project_id, billing_lock_token: lockToken },
+      { $set: { billing_lock_token: null, billing_lock_at: null } }).catch((e) => console.error('[markInvoiceSent] lock release failed', e.message));
+
+    try {
+    // Re-read invoice inside the lock (guards double-send of the same draft)
+    const fresh = await base44.entities.ProjectInvoice.get(invoice_id);
+    if (fresh.status !== 'draft') {
+      return Response.json({ error: `Cannot mark as sent: invoice is ${fresh.status}, must be draft` }, { status: 409 });
+    }
+
     // Fetch lines
     const lines = await base44.entities.ProjectInvoiceLine.filter({ invoice_id });
 
@@ -259,6 +290,9 @@ Deno.serve(async (req) => {
       commitment_updates: commitmentUpdates,
       service_updates: serviceUpdates,
     });
+    } finally {
+      await releaseLock();
+    }
   } catch (error) {
     console.error('markInvoiceSent error:', error);
     return Response.json({ error: error.message }, { status: 500 });

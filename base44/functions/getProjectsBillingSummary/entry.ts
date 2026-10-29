@@ -222,6 +222,22 @@ Deno.serve(async (req) => {
 
     const partMap = Object.fromEntries(allParts.map(p => [p.id, p]));
 
+    // Open-draft allocations (same rule as getProjectFinancialOverview):
+    // part = min(available qty, qty on drafts) × unit price; service = full amount if on any draft.
+    const draftInvoices = await base44.entities.ProjectInvoice.filter({ status: 'draft' });
+    const draftIds = draftInvoices.map(i => i.id);
+    const draftLines = draftIds.length
+      ? await base44.entities.ProjectInvoiceLine.filter({ invoice_id: { $in: draftIds } })
+      : [];
+    const draftQtyBySource = new Map();
+    const draftCountByProject = {};
+    for (const inv of draftInvoices) draftCountByProject[inv.project_id] = (draftCountByProject[inv.project_id] || 0) + 1;
+    for (const l of draftLines) {
+      const sid = l.source_id || l.part_commitment_id;
+      if (!sid) continue;
+      draftQtyBySource.set(sid, (draftQtyBySource.get(sid) ?? 0) + (l.type === 'service' ? 1 : (l.qty ?? 0)));
+    }
+
     const commitmentsByProject = {};
     for (const c of allCommitments) {
       if (!commitmentsByProject[c.project_id]) commitmentsByProject[c.project_id] = [];
@@ -255,6 +271,15 @@ Deno.serve(async (req) => {
       const serviceItems = items.filter(i => i.type === 'service');
       const totalAmount = items.reduce((s, i) => s + i.line_total, 0);
       const totalCost = items.reduce((s, i) => s + (i.cost_total ?? 0), 0);
+      let allocatedAmount = 0;
+      let availableCount = 0;
+      for (const i of items) {
+        const dq = draftQtyBySource.get(i.source_id) ?? 0;
+        const allocQty = Math.min(i.qty_available_to_bill, dq);
+        allocatedAmount += allocQty * i.unit_price;
+        if (i.qty_available_to_bill - allocQty > 1e-9) availableCount++;
+      }
+      const r2 = (n) => Math.round(n * 100) / 100;
 
       const topItems = [...items]
         .sort((a, b) => b.line_total - a.line_total)
@@ -272,6 +297,11 @@ Deno.serve(async (req) => {
         billable_count: items.length,
         total_billable_amount: Math.round(totalAmount * 100) / 100,
         total_cost: Math.round(totalCost * 100) / 100,
+        // total_billable_amount = current uninvoiced scope (unchanged meaning)
+        allocated_to_drafts: r2(allocatedAmount),
+        available_to_invoice: r2(Math.max(0, totalAmount - allocatedAmount)),
+        available_count: availableCount,
+        open_draft_count: draftCountByProject[project.id] || 0,
         top_items: topItems,
         breakdown: {
           parts_count: partItems.length,

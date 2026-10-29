@@ -124,7 +124,7 @@ export function CanonicalFinancialStrip({ projectId, className }) {
           variant="positive"
         />
         <FinancialMetric
-          label="Left to Bill"
+          label="Uninvoiced Work"
           value={canonical.remaining_to_bill}
           variant={canonical.remaining_to_bill > 0 ? "warning" : "muted"}
         />

@@ -58,10 +58,14 @@ export default function ReadyToInvoiceSection({ onCreateInvoice }) {
   }
 
   // Group by value tier — PHASE 3: already sorted DESC by aggregator, but re-sort within tiers
-  const sortDesc = (arr) => [...arr].sort((a, b) => b.total_billable_amount - a.total_billable_amount);
-  const high = sortDesc(projects.filter(p => p.total_billable_amount > 1000));
-  const medium = sortDesc(projects.filter(p => p.total_billable_amount >= 200 && p.total_billable_amount <= 1000));
-  const low = sortDesc(projects.filter(p => p.total_billable_amount < 200));
+  // Tiers use amount available for a NEW invoice (excludes work already on open drafts)
+  const avail = (p) => p.available_to_invoice ?? p.total_billable_amount;
+  const sortDesc = (arr) => [...arr].sort((a, b) => avail(b) - avail(a));
+  const ready = projects.filter(p => avail(p) > 0);
+  const onDraftsOnly = sortDesc(projects.filter(p => avail(p) <= 0));
+  const high = sortDesc(ready.filter(p => avail(p) > 1000));
+  const medium = sortDesc(ready.filter(p => avail(p) >= 200 && avail(p) <= 1000));
+  const low = sortDesc(ready.filter(p => avail(p) < 200));
 
   const renderGroup = (label, items, color) => {
     if (items.length === 0) return null;
@@ -94,6 +98,7 @@ export default function ReadyToInvoiceSection({ onCreateInvoice }) {
           {renderGroup("High Value (>$1,000)", high, "text-red-400")}
           {renderGroup("Medium ($200–$1,000)", medium, "text-amber-400")}
           {renderGroup("Low (<$200)", low, "text-gray-400")}
+          {renderGroup("Fully on open drafts", onDraftsOnly, "text-amber-400")}
         </CardContent>
       </Card>
     </div>
@@ -152,9 +157,18 @@ function ProjectBillableRow({ project, onCreateInvoice }) {
 
       {/* Total with cost/margin */}
       <div className="text-right shrink-0 min-w-[90px]">
-        <p className="font-mono font-semibold text-white">
-          {formatCurrencyUSD(project.total_billable_amount)}
+        <p className="text-[10px] uppercase tracking-wide text-gray-500">Available</p>
+        <p className={cn("font-mono font-semibold", project.available_to_invoice > 0 ? "text-white" : "text-gray-500")}>
+          {formatCurrencyUSD(project.available_to_invoice ?? project.total_billable_amount)}
         </p>
+        {project.allocated_to_drafts > 0 && (
+          <p className="text-[10px] text-amber-400">
+            {formatCurrencyUSD(project.allocated_to_drafts)} on {project.open_draft_count} draft{project.open_draft_count !== 1 ? "s" : ""}
+          </p>
+        )}
+        {project.allocated_to_drafts > 0 && (
+          <p className="text-[10px] text-gray-500">Uninvoiced: {formatCurrencyUSD(project.total_billable_amount)}</p>
+        )}
         {project.total_cost > 0 && (
           <p className="text-[10px] text-gray-500">
             Cost: {formatCurrencyUSD(project.total_cost)}

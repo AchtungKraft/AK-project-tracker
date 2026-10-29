@@ -35,7 +35,7 @@ export default function ProjectFinancialsTab({ projectId }) {
           <RefreshCw className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`} />
         </Button>
       </div>
-      <FinancialWarnings warnings={data.warnings} />
+      <FinancialWarnings warnings={data.warnings} lines={data.lines} />
       <FinancialSummaryCards summary={data.summary} />
       <FinancialCategoryBreakdown categories={data.categories} summary={data.summary} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

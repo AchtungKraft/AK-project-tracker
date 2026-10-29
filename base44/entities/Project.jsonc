@@ -193,6 +193,21 @@
       "type": "string",
       "format": "date-time",
       "description": "When the workflow was last resolved"
+    },
+    "billing_lock_token": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Server-only invoice finalization lock (compare-and-set). Null = unlocked."
+    },
+    "billing_lock_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time",
+      "description": "When the billing lock was taken; stale after 2 minutes"
     }
   },
   "required": [

@@ -36,6 +36,9 @@ Deno.serve(async (req) => {
     const lines = invIds.length ? await db.ProjectInvoiceLine.filter({ invoice_id: { $in: invIds } }) : [];
     const invById = new Map(invoices.map((i) => [i.id, i]));
     const draftLines = lines.filter((l) => invById.get(l.invoice_id)?.status === 'draft');
+    const partIds = [...new Set(commitments.map((c) => c.part_id).filter(Boolean))];
+    const parts = partIds.length ? await db.Part.filter({ id: { $in: partIds } }) : [];
+    const partById = new Map(parts.map((p) => [p.id, p]));
 
     // Draft allocations per source
     const draftPartQty = new Map(); // source -> { qty, invoiceIds:Set }
@@ -54,7 +57,7 @@ Deno.serve(async (req) => {
     // ── PARTS ──
     const warnings = [];
     const partLines = [];
-    const P = { billable: 0, est_cost: 0, actual_cost: 0, actual_known: 0, uninvoiced: 0, allocated: 0, invoiced_qty_value: 0, missing_cost: 0, stale_stored: 0, duplicate_draft: 0 };
+    const P = { billable: 0, est_cost: 0, actual_cost: 0, actual_known: 0, uninvoiced: 0, allocated: 0, invoiced_qty_value: 0, missing_cost: 0, stale_stored: 0, duplicate_draft: 0, estimated_only: 0, zero_legit: 0 };
     const activeCount = { active: 0, cancelled: 0 };
     for (const c of commitments) {
       const active = !c.cancelled_at && c.is_archived !== true && c.commitment_status !== 'cancelled';
@@ -84,8 +87,24 @@ Deno.serve(async (req) => {
       if (stale) P.stale_stored++;
       if (duplicate) P.duplicate_draft++;
 
+      // Cost state — never presents a missing cost as zero
+      const costState = hasActual
+        ? (c.actual_unit_cost === 0 ? 'actual_zero' : 'actual')
+        : clientSupplied && !unitCost ? 'zero_client_supplied'
+        : unitCost ? 'estimated_only' : 'missing';
+      if (costState === 'estimated_only') P.estimated_only++;
+      if (costState === 'zero_client_supplied') P.zero_legit++;
+      const part = partById.get(c.part_id);
+
       partLines.push({
-        id: c.id, part_id: c.part_id, source: c.supply_source_type || null, qty, qty_removed: c.qty_removed ?? 0,
+        id: c.id, part_id: c.part_id, part_name: part?.part_name || null, part_number: part?.vendor_part_number || part?.part_number || null,
+        cost_state: costState,
+        stale_detail: stale ? {
+          stored: r2(c.planned_retail_total), calculated: r2(billable), difference: r2(billable - c.planned_retail_total),
+          qty_source: `required_total ${c.required_total ?? 0} − qty_removed ${c.qty_removed ?? 0} = ${qty}`,
+          price_source: `unit_retail_snapshot ${unitRetail ?? 'missing'}${c.retail_override ? ' (manual override)' : ''}`,
+        } : null,
+        source: c.supply_source_type || null, qty, qty_removed: c.qty_removed ?? 0,
         qty_installed: c.qty_installed ?? 0, unit_retail: unitRetail ?? null, unit_cost: unitCost ?? null,
         billable: r2(billable), est_cost: r2(estCost), actual_unit_cost: c.actual_unit_cost ?? null,
         invoiced_qty: invoicedQty, invoiced_amount: r2(c.invoiced_amount ?? 0), available_qty: availQty,
@@ -97,7 +116,7 @@ Deno.serve(async (req) => {
 
     // ── SERVICES ──
     const svcLines = [];
-    const S = { billable: 0, est_cost: 0, actual_cost: 0, actual_known: 0, uninvoiced: 0, allocated: 0, missing_cost: 0, duplicate_draft: 0, billed_unlinked: 0 };
+    const S = { billable: 0, est_cost: 0, actual_cost: 0, actual_known: 0, uninvoiced: 0, allocated: 0, missing_cost: 0, duplicate_draft: 0, billed_unlinked: 0, estimated_only: 0 };
     for (const s of services) {
       const billable = s.total_billable ?? 0;
       const cost = s.total_cost;
@@ -118,8 +137,10 @@ Deno.serve(async (req) => {
       if (duplicate) S.duplicate_draft++;
       if (billedUnlinked) S.billed_unlinked++;
 
+      const svcCostState = s.actual_cost != null ? (s.actual_cost === 0 ? 'actual_zero' : 'actual') : cost ? 'estimated_only' : billable > 0 ? 'missing' : 'zero_no_charge';
+      if (svcCostState === 'estimated_only') S.estimated_only++;
       svcLines.push({
-        id: s.id, description: s.description || null, status: s.status || null, billable: r2(billable),
+        id: s.id, cost_state: svcCostState, description: s.description || null, status: s.status || null, billable: r2(billable),
         est_cost: cost ?? null, actual_cost: s.actual_cost ?? null, invoiced: isInvoiced,
         draft_count: drafts?.size ?? 0, allocated: !!allocated,
         flags: [missingCost && 'missing_cost', duplicate && 'duplicate_draft', billedUnlinked && 'billed_without_final_invoice'].filter(Boolean),
@@ -181,14 +202,22 @@ Deno.serve(async (req) => {
         available_to_invoice: r2(Math.max(0, remaining - allocated)),
       },
       categories: {
-        parts: { billable: r2(P.billable), estimated_cost: r2(P.est_cost), actual_cost: P.actual_known ? r2(P.actual_cost) : null, actual_cost_lines: P.actual_known, remaining_uninvoiced: r2(P.uninvoiced), allocated_to_drafts: r2(P.allocated), active_lines: activeCount.active, cancelled_lines: activeCount.cancelled, missing_cost: P.missing_cost },
-        services: { billable: r2(S.billable), estimated_cost: r2(S.est_cost), actual_cost: S.actual_known ? r2(S.actual_cost) : null, actual_cost_lines: S.actual_known, remaining_uninvoiced: r2(S.uninvoiced), allocated_to_drafts: r2(S.allocated), lines: services.length, missing_cost: S.missing_cost },
+        parts: { billable: r2(P.billable), estimated_cost: r2(P.est_cost), actual_cost: P.actual_known ? r2(P.actual_cost) : null, actual_cost_lines: P.actual_known, estimated_only_lines: P.estimated_only, zero_cost_legit_lines: P.zero_legit, remaining_uninvoiced: r2(P.uninvoiced), allocated_to_drafts: r2(P.allocated), active_lines: activeCount.active, cancelled_lines: activeCount.cancelled, missing_cost: P.missing_cost },
+        services: { billable: r2(S.billable), estimated_cost: r2(S.est_cost), actual_cost: S.actual_known ? r2(S.actual_cost) : null, actual_cost_lines: S.actual_known, estimated_only_lines: S.estimated_only, zero_cost_legit_lines: 0, remaining_uninvoiced: r2(S.uninvoiced), allocated_to_drafts: r2(S.allocated), lines: services.length, missing_cost: S.missing_cost },
       },
       invoices: {
         by_status: Object.fromEntries(Object.entries(inv).map(([k, v]) => [k, { count: v.count, total: r2(v.total) }])),
         line_split: { final: { part: r2(lineSplit.final.part), service: r2(lineSplit.final.service), other: r2(lineSplit.final.other) }, draft: { part: r2(lineSplit.draft.part), service: r2(lineSplit.draft.service), other: r2(lineSplit.draft.other) } },
       },
-      labor: { hours_logged: r2(hoursLogged), entries: timeEntries.length, hours_estimated: wh.hours_estimated ?? null, hours_remaining: wh.hours_remaining ?? null },
+      // Definitions: hours_logged = sum of TaskTimeEntry.hours; hours_estimated = sum of estimates on non-cancelled tasks;
+      // hours_remaining = Σ over OPEN tasks of max(estimate − logged on that task, 0) (done tasks and overruns contribute 0).
+      labor: {
+        hours_logged: r2(hoursLogged), entries: timeEntries.length,
+        hours_estimated: wh.hours_estimated ?? null, hours_remaining: wh.hours_remaining ?? null,
+        hours_logged_estimated_tasks: wh.hours_logged_estimated_tasks ?? null,
+        hours_logged_unestimated_tasks: wh.hours_logged_unestimated_tasks ?? null,
+        resolved_at: project.workflow_resolved_at ?? null,
+      },
       lines: { parts: partLines, services: svcLines },
       warnings,
     });
