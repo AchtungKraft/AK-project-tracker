@@ -19,7 +19,10 @@ export default function FinancialServiceRows({ rows }) {
             <td className="text-right tabular-nums">{money(r.billable)}</td>
             <td className="text-right tabular-nums">{r.est_cost == null ? <span className="text-amber-400">Not recorded</span> : money(r.est_cost)}</td>
             <td className="text-right tabular-nums">{r.actual_cost == null ? <span className="text-gray-500">Not recorded</span> : money(r.actual_cost)}</td>
-            <td className="pl-2">{r.invoiced ? "Invoiced" : r.allocated ? `On ${r.draft_count} draft(s)` : "Uninvoiced"}</td>
+            <td className="pl-2">
+              {r.invoiced ? "Invoiced" : r.allocated ? <span className="text-blue-300">On {r.draft_count} draft(s)</span> : "Available"}
+              {r.allocated && <div className={`text-[10px] ${Math.abs(r.draft_amount - r.billable) > 0.01 ? "text-amber-400" : "text-gray-500"}`}>{money(r.draft_amount)} on draft</div>}
+            </td>
             <td className="pl-2"><FlagChips flags={r.flags} /></td>
           </tr>
         ))}

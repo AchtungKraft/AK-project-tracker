@@ -45,9 +45,11 @@ Deno.serve(async (req) => {
     // Draft allocations per source
     const draftPartQty = new Map(); // source -> { qty, invoiceIds:Set }
     const draftSvc = new Map(); // source -> Set(invoiceIds)
+    const draftAmt = new Map(); // source -> sum of draft line_total (display/reconciliation only)
     for (const l of draftLines) {
       const sid = l.source_id || l.part_commitment_id;
       if (!sid) continue;
+      draftAmt.set(sid, (draftAmt.get(sid) || 0) + (l.line_total ?? (l.qty || 0) * (l.unit_price || 0)));
       if (l.type === 'part') {
         const e = draftPartQty.get(sid) || { qty: 0, invoiceIds: new Set() };
         e.qty += l.qty ?? 0; e.invoiceIds.add(l.invoice_id); draftPartQty.set(sid, e);
@@ -116,6 +118,7 @@ Deno.serve(async (req) => {
         billable: r2(billable), est_cost: r2(estCost), actual_unit_cost: c.actual_unit_cost ?? null,
         invoiced_qty: invoicedQty, invoiced_amount: r2(c.invoiced_amount ?? 0), available_qty: availQty,
         draft_qty: d?.qty ?? 0, allocated_qty: allocQty, retail_override: !!c.retail_override,
+        draft_amount: r2(draftAmt.get(c.id) ?? 0), allocated_current_value: r2(allocQty * (unitRetail ?? 0)),
         stored_retail_total: c.planned_retail_total ?? null,
         flags: [missingCost && 'missing_cost', missingRetail && 'missing_retail', stale && 'stale_stored_total', duplicate && 'duplicate_draft', clientSupplied && 'client_supplied'].filter(Boolean),
       });
@@ -149,7 +152,7 @@ Deno.serve(async (req) => {
       svcLines.push({
         id: s.id, cost_state: svcCostState, description: s.description || null, status: s.status || null, billable: r2(billable),
         est_cost: cost ?? null, actual_cost: s.actual_cost ?? null, invoiced: isInvoiced,
-        draft_count: drafts?.size ?? 0, allocated: !!allocated,
+        draft_count: drafts?.size ?? 0, allocated: !!allocated, draft_amount: r2(draftAmt.get(s.id) ?? 0),
         flags: [missingCost && 'missing_cost', duplicate && 'duplicate_draft', billedUnlinked && 'billed_without_final_invoice'].filter(Boolean),
       });
     }
