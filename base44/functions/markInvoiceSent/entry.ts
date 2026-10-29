@@ -51,6 +51,45 @@ Deno.serve(async (req) => {
     const lines = await base44.entities.ProjectInvoiceLine.filter({ invoice_id });
 
     // ══════════════════════════════════════════════
+    // PHASE 0: Eligibility re-check (prevents duplicate finalization
+    // when the same items sit on more than one draft)
+    // ══════════════════════════════════════════════
+    const partQtyBySource = new Map();
+    const serviceSources = new Set();
+    for (const line of lines) {
+      if (line.type === 'part') {
+        const sid = line.source_id || line.part_commitment_id;
+        if (sid) partQtyBySource.set(sid, (partQtyBySource.get(sid) ?? 0) + (line.qty ?? 0));
+      } else if (line.type === 'service' && line.source_id) {
+        serviceSources.add(line.source_id);
+      }
+    }
+    const ineligible = [];
+    for (const [sid, qty] of partQtyBySource) {
+      const [c] = await base44.entities.PartCommitment.filter({ id: sid });
+      if (!c) continue; // handled in Phase 1
+      const effective = Math.max(0, (c.required_total ?? 0) - (c.qty_removed ?? 0));
+      const available = Math.max(0, effective - (c.invoiced_qty ?? 0));
+      if (qty > available + 1e-9) {
+        ineligible.push({ source_id: sid, type: 'part', reason: 'EXCEEDS_UNINVOICED_QTY', line_qty: qty, available_qty: available });
+      }
+    }
+    for (const sid of serviceSources) {
+      const [sc] = await base44.entities.ServiceCommitment.filter({ id: sid });
+      if (!sc) continue;
+      if (sc.invoice_id && sc.invoice_id !== invoice_id) {
+        ineligible.push({ source_id: sid, type: 'service', reason: 'ALREADY_BILLED', billed_on_invoice_id: sc.invoice_id });
+      }
+    }
+    if (ineligible.length > 0) {
+      return Response.json({
+        success: false,
+        error: 'Invoice contains items already invoiced on another invoice. Edit or cancel this draft before sending.',
+        ineligible,
+      }, { status: 409 });
+    }
+
+    // ══════════════════════════════════════════════
     // PHASE 1: Mutate source records (billing state)
     // ══════════════════════════════════════════════
     const commitmentUpdates = [];

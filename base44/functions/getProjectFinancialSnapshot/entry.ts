@@ -58,14 +58,14 @@ Deno.serve(async (req) => {
     const [
       commitments,
       invoices,
-      invoiceLines,
+      serviceCommitments,
       creditLedger,
       creditAllocations,
       project,
     ] = await Promise.all([
       base44.entities.PartCommitment.filter({ project_id }),
       base44.entities.ProjectInvoice.filter({ project_id }),
-      base44.entities.ProjectInvoiceLine.filter({}), // Will filter by invoice_id
+      base44.entities.ServiceCommitment.filter({ project_id }).catch(() => []),
       base44.entities.ProjectCreditLedger.filter({ project_id }),
       base44.entities.CreditAllocation.filter({ project_id }),
       base44.entities.Project.filter({ id: project_id }),
@@ -75,9 +75,11 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Project not found' }, { status: 404 });
     }
 
-    // Build invoice ID set for filtering lines
-    const invoiceIds = new Set(invoices.map(inv => inv.id));
-    const projectInvoiceLines = invoiceLines.filter(line => invoiceIds.has(line.invoice_id));
+    // Project-scoped invoice lines (no app-wide query)
+    const projectInvoiceIds = invoices.map(inv => inv.id);
+    const projectInvoiceLines = projectInvoiceIds.length > 0
+      ? await base44.entities.ProjectInvoiceLine.filter({ invoice_id: { $in: projectInvoiceIds } })
+      : [];
 
     // ============================================================
     // PHASE 2A: COMMITMENT TOTALS (Source of Planned Retail)
@@ -104,8 +106,10 @@ Deno.serve(async (req) => {
     };
 
     for (const c of activeCommitments) {
-      const plannedRetail = c.planned_retail_total ?? 
-        ((c.unit_retail_snapshot ?? 0) * (c.required_total ?? 0));
+      // CANONICAL (matches resolveProjectFinancialTotals): unit retail × (required − removed).
+      // Stored planned_retail_total is not trusted (can be stale).
+      const plannedRetail = (c.unit_retail_snapshot ?? 0) *
+        Math.max(0, (c.required_total ?? 0) - (c.qty_removed ?? 0));
       
       commitmentTotals.planned_retail_total += plannedRetail;
       commitmentTotals.invoiced_amount += c.invoiced_amount ?? 0;
@@ -118,8 +122,17 @@ Deno.serve(async (req) => {
       }
     }
 
+    commitmentTotals.parts_planned_retail = commitmentTotals.planned_retail_total;
+    commitmentTotals.services_planned_retail = 0;
+    for (const sc of serviceCommitments) {
+      commitmentTotals.services_planned_retail += sc.total_billable ?? 0;
+    }
+    commitmentTotals.planned_retail_total += commitmentTotals.services_planned_retail;
+
     // ============================================================
     // PHASE 2B: INVOICE TOTALS
+    // Aggregates (total/paid/balance/credit) count FINALIZED invoices only (sent, paid).
+    // Drafts are reported in by_status.draft but are not invoiced revenue.
     // ============================================================
     
     // Exclude cancelled/void invoices from totals
@@ -152,13 +165,15 @@ Deno.serve(async (req) => {
       const invPaid = inv.paid_amount ?? 0;
       const invBalance = inv.balance_due ?? (invTotal - invPaid);
       const invCreditApplied = inv.credit_applied ?? 0;
-
-      invoiceTotals.total += invTotal;
-      invoiceTotals.paid_amount += invPaid;
-      invoiceTotals.balance_due += invBalance;
-      invoiceTotals.credit_applied += invCreditApplied;
-
       const status = inv.status || 'draft';
+
+      if (status === 'sent' || status === 'paid') {
+        invoiceTotals.total += invTotal;
+        invoiceTotals.paid_amount += invPaid;
+        invoiceTotals.balance_due += invBalance;
+        invoiceTotals.credit_applied += invCreditApplied;
+      }
+
       if (invoiceTotals.by_status[status]) {
         invoiceTotals.by_status[status].count++;
         invoiceTotals.by_status[status].total += invTotal;

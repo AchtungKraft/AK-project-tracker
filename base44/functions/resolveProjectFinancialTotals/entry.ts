@@ -164,7 +164,8 @@ export async function resolveFinancials(base44, project_id) {
   // ══════════════════════════════════════════════
   // Use all_commitments_invoiced (incl cancelled) for both checks
   // because invoice lines/headers may reference cancelled commitments
-  const all_invoiced = round2(all_commitments_invoiced);
+  // Invoice totals include service lines, so compare against parts + services invoiced
+  const all_invoiced = round2(all_commitments_invoiced + services_invoiced_amount);
   const invoice_vs_commitment_delta = round2(invoice_entity_total - all_invoiced);
   const line_vs_commitment_delta = round2(invoice_lines_total - all_invoiced);
 

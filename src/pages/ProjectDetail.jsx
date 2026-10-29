@@ -25,6 +25,9 @@ import ProjectServicesSection from "../components/supply/ProjectServicesSection"
 import ProjectPagesTab from "../components/clientpages/ProjectPagesTab";
 import ProjectStorageView from "../components/project/ProjectStorageView";
 import ProjectLaborSummary from "../components/project/ProjectLaborSummary";
+import ProjectFinancialsTab from "@/components/project/financials/ProjectFinancialsTab";
+import { useAuth } from "@/lib/AuthContext";
+import { DollarSign } from "lucide-react";
 
 // Stable query defaults for reference data (rarely changes)
 const REF_DATA_OPTS = { staleTime: 60000, gcTime: 300000, retry: 1, refetchOnWindowFocus: false, refetchOnReconnect: false };
@@ -35,6 +38,8 @@ export default function ProjectDetail() {
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
+  const { user: authUser } = useAuth();
+  const isAdmin = authUser?.role === 'admin';
   const urlParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const projectId = urlParams.get('id');
   const tabParam = urlParams.get('tab') || 'overview';
@@ -298,6 +303,15 @@ export default function ProjectDetail() {
               <Clock className="w-4 h-4" />
               Hours
             </TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger 
+                value="financials"
+                className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 gap-2"
+              >
+                <DollarSign className="w-4 h-4" />
+                Financials
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* Mobile Hamburger Menu */}
@@ -315,6 +329,7 @@ export default function ProjectDetail() {
                     {activeTab === 'pages' && <><FileText className="w-4 h-4" /> Pages</>}
                     {activeTab === 'storage' && <><MapPin className="w-4 h-4" /> Storage</>}
                     {activeTab === 'hours' && <><Clock className="w-4 h-4" /> Hours</>}
+                    {activeTab === 'financials' && <><DollarSign className="w-4 h-4" /> Financials</>}
                   </span>
                   <Menu className="w-4 h-4" />
                 </Button>
@@ -374,6 +389,14 @@ export default function ProjectDetail() {
                  >
                    <Clock className="w-4 h-4" /> Hours
                  </DropdownMenuItem>
+                 {isAdmin && (
+                   <DropdownMenuItem 
+                     onClick={() => handleTabChange('financials')}
+                     className={`gap-2 ${activeTab === 'financials' ? 'bg-red-600 text-white' : 'text-gray-300'}`}
+                   >
+                     <DollarSign className="w-4 h-4" /> Financials
+                   </DropdownMenuItem>
+                 )}
                 </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -430,6 +453,12 @@ export default function ProjectDetail() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {isAdmin && (
+            <TabsContent value="financials" className={isMobile ? 'mt-3' : 'mt-6'}>
+              {activeTab === 'financials' && <ProjectFinancialsTab projectId={projectId} />}
+            </TabsContent>
+          )}
         </Tabs>
       </div>
 

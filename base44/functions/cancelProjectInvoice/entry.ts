@@ -119,6 +119,11 @@ Deno.serve(async (req) => {
         if (!sourceId) continue;
 
         try {
+          const [scCurrent] = await base44.entities.ServiceCommitment.filter({ id: sourceId });
+          if (scCurrent && scCurrent.invoice_id && scCurrent.invoice_id !== invoice_id) {
+            serviceResults.push({ source_id: sourceId, status: 'skipped', reason: 'billed_on_other_invoice' });
+            continue;
+          }
           await base44.asServiceRole.entities.ServiceCommitment.update(sourceId, {
             is_billed: false,
             invoice_id: null,
