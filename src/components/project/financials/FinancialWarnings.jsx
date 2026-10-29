@@ -1,6 +1,5 @@
 import React from "react";
 import { AlertTriangle } from "lucide-react";
-import StaleTotalsDrilldown from "./StaleTotalsDrilldown";
 
 export default function FinancialWarnings({ warnings, lines }) {
   if (!warnings?.length) return null;
@@ -12,7 +11,6 @@ export default function FinancialWarnings({ warnings, lines }) {
             <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-400" />
             <span>{w.message}</span>
           </div>
-          {w.code === "STALE_STORED_TOTALS" && <StaleTotalsDrilldown parts={lines?.parts} />}
         </div>
       ))}
     </div>

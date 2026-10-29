@@ -18,7 +18,10 @@ export default function FinancialLaborSummary({ labor }) {
         <Row label="Logged (all tasks)" hint={labor.hours_logged_unestimated_tasks != null ? `${hrs(labor.hours_logged_estimated_tasks)} on estimated tasks · ${hrs(labor.hours_logged_unestimated_tasks)} on unestimated` : null}
           value={<>{hrs(labor.hours_logged)} <span className="text-gray-500">({labor.entries} entries)</span></>} />
         <Row label="Total estimate" hint="All tasks with an estimate, open or done" value={hrs(labor.hours_estimated)} />
-        <Row label="Estimate left on open tasks" hint="Per open task: estimate minus hours logged on it (min 0)" value={hrs(labor.hours_remaining)} />
+        <Row label="Estimate left on open tasks" hint={`Per open task: estimate minus hours logged (min 0) · ${labor.open_estimated_tasks ?? 0} open estimated task(s)${labor.open_tasks_over_estimate ? `, ${labor.open_tasks_over_estimate} over estimate` : ""}`} value={hrs(labor.hours_remaining)} />
+        {(labor.hours_on_cancelled_tasks > 0 || labor.hours_unlinked > 0) && (
+          <Row label="Not in split" hint="Logged on cancelled tasks or without a task" value={hrs((labor.hours_on_cancelled_tasks || 0) + (labor.hours_unlinked || 0))} />
+        )}
       </div>
     </div>
   );

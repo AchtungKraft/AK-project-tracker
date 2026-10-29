@@ -1,5 +1,6 @@
-import React from "react";
-import { useQuery } from "@tanstack/react-query";
+import React, { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import DataQualityIndicator from "./DataQualityIndicator";
 import { base44 } from "@/api/base44Client";
 import { Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,12 +12,28 @@ import FinancialLaborSummary from "./FinancialLaborSummary";
 import FinancialLineItems from "./FinancialLineItems";
 
 export default function ProjectFinancialsTab({ projectId }) {
+  const queryClient = useQueryClient();
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["projectFinancialOverview", projectId],
     queryFn: async () => (await base44.functions.invoke("getProjectFinancialOverview", { project_id: projectId })).data,
     enabled: !!projectId,
     staleTime: 30000,
   });
+
+  // Live refresh when this project's time entries or tasks change
+  useEffect(() => {
+    if (!projectId) return;
+    let timer;
+    // Short delay: the server read can lag a write by ~1s
+    const onChange = (ev) => {
+      if (ev.data?.project_id !== projectId && ev.type !== "delete") return;
+      clearTimeout(timer);
+      timer = setTimeout(() => queryClient.invalidateQueries({ queryKey: ["projectFinancialOverview", projectId] }), 1500);
+    };
+    const u1 = base44.entities.TaskTimeEntry.subscribe(onChange);
+    const u2 = base44.entities.Task.subscribe(onChange);
+    return () => { clearTimeout(timer); u1(); u2(); };
+  }, [projectId, queryClient]);
 
   if (isLoading) {
     return <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-red-500" /></div>;
@@ -36,6 +53,7 @@ export default function ProjectFinancialsTab({ projectId }) {
         </Button>
       </div>
       <FinancialWarnings warnings={data.warnings} lines={data.lines} />
+      <DataQualityIndicator dataQuality={data.data_quality} lines={data.lines} />
       <FinancialSummaryCards summary={data.summary} />
       <FinancialCategoryBreakdown categories={data.categories} summary={data.summary} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

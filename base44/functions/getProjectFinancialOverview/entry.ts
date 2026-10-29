@@ -21,13 +21,15 @@ Deno.serve(async (req) => {
     if (!project_id) return Response.json({ error: 'project_id is required' }, { status: 400 });
 
     const db = base44.asServiceRole.entities;
-    const [projects, commitments, services, invoices, credits, timeEntries] = await Promise.all([
+    const [projects, commitments, services, invoices, credits, timeEntries, tasks, taskStatuses] = await Promise.all([
       db.Project.filter({ id: project_id }),
       db.PartCommitment.filter({ project_id }),
       db.ServiceCommitment.filter({ project_id }),
       db.ProjectInvoice.filter({ project_id }),
       db.CreditAllocation.filter({ project_id, is_reversed: false }).catch(() => []),
-      db.TaskTimeEntry.filter({ project_id }).catch(() => []),
+      db.TaskTimeEntry.filter({ project_id }, '-created_date', 5000),
+      db.Task.filter({ project_id }, '-created_date', 5000),
+      db.StatusList.filter({ scope: 'Task' }),
     ]);
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
@@ -103,6 +105,11 @@ Deno.serve(async (req) => {
           stored: r2(c.planned_retail_total), calculated: r2(billable), difference: r2(billable - c.planned_retail_total),
           qty_source: `required_total ${c.required_total ?? 0} − qty_removed ${c.qty_removed ?? 0} = ${qty}`,
           price_source: `unit_retail_snapshot ${unitRetail ?? 'missing'}${c.retail_override ? ' (manual override)' : ''}`,
+          // stored $0 with a real price = price entered after creation; stored = price × an older qty = quantity changed
+          kind: (c.planned_retail_total === 0 && unitRetail > 0) ? 'price_entered_later'
+            : (unitRetail > 0 && Math.abs(c.planned_retail_total / unitRetail - Math.round(c.planned_retail_total / unitRetail)) < 1e-6 && Math.round(c.planned_retail_total / unitRetail) !== qty) ? 'quantity_changed'
+            : 'other',
+          stored_qty_implied: unitRetail > 0 ? r2(c.planned_retail_total / unitRetail) : null,
         } : null,
         source: c.supply_source_type || null, qty, qty_removed: c.qty_removed ?? 0,
         qty_installed: c.qty_installed ?? 0, unit_retail: unitRetail ?? null, unit_cost: unitCost ?? null,
@@ -171,13 +178,37 @@ Deno.serve(async (req) => {
     const creditsApplied = credits.reduce((a, c) => a + (c.amount_applied ?? 0), 0);
 
     // ── LABOR (informational) ──
-    const hoursLogged = timeEntries.reduce((a, t) => a + (t.hours ?? 0), 0);
-    const wh = project.workflow_health || {};
+    // Live from current time entries + tasks (same rules as the workflow resolver; never the stored snapshot).
+    const statusLabel = new Map(taskStatuses.map((s) => [s.id, (s.label || '').toLowerCase().trim()]));
+    const isCancelled = (t) => ['cancelled', 'canceled'].includes(statusLabel.get(t.status_id));
+    const isDone = (t) => ['done', 'completed', 'complete'].includes(statusLabel.get(t.status_id));
+    const hoursByTask = new Map();
+    for (const e of timeEntries) if (e.task_id) hoursByTask.set(e.task_id, (hoursByTask.get(e.task_id) || 0) + (Number(e.hours) || 0));
+    const hoursLogged = timeEntries.reduce((a, t) => a + (Number(t.hours) || 0), 0);
+    const L = { est: 0, logEst: 0, logUnest: 0, remaining: 0, openEst: 0, overrun: 0, cancelledHrs: 0 };
+    const taskIds = new Set(tasks.map((t) => t.id));
+    for (const t of tasks) {
+      const logged = hoursByTask.get(t.id) || 0;
+      if (isCancelled(t)) { L.cancelledHrs += logged; continue; }
+      const est = t.estimated_hours > 0 ? t.estimated_hours : 0;
+      if (est) { L.est += est; L.logEst += logged; } else L.logUnest += logged;
+      if (est && !isDone(t)) { L.openEst++; L.remaining += Math.max(est - logged, 0); if (logged > est) L.overrun++; }
+    }
+    const unlinkedHrs = timeEntries.filter((e) => !e.task_id || !taskIds.has(e.task_id)).reduce((a, e) => a + (Number(e.hours) || 0), 0);
 
     // ── WARNINGS ──
     if (P.missing_cost) warnings.push({ code: 'PARTS_MISSING_COST', count: P.missing_cost, message: `${P.missing_cost} part line(s) have no cost — estimated cost and margin are incomplete.` });
     if (S.missing_cost) warnings.push({ code: 'SERVICES_MISSING_COST', count: S.missing_cost, message: `${S.missing_cost} service(s) have no cost — estimated cost and margin are incomplete.` });
-    if (P.stale_stored) warnings.push({ code: 'STALE_STORED_TOTALS', count: P.stale_stored, message: `${P.stale_stored} part line(s) have a stored sale total that differs from unit price × quantity. Calculated value is used; stored value not changed.` });
+    // Stale stored totals are data-quality info only (calculated values are always used) — not a billing warning.
+    const staleLines = partLines.filter((l) => l.stale_detail);
+    const dataQuality = {
+      stale_stored_totals: {
+        count: staleLines.length,
+        price_entered_later: staleLines.filter((l) => l.stale_detail.kind === 'price_entered_later').length,
+        quantity_changed: staleLines.filter((l) => l.stale_detail.kind === 'quantity_changed').length,
+        other: staleLines.filter((l) => l.stale_detail.kind === 'other').length,
+      },
+    };
     if (P.duplicate_draft + S.duplicate_draft) warnings.push({ code: 'DUPLICATE_DRAFT', count: P.duplicate_draft + S.duplicate_draft, message: 'Some items appear on more than one draft (or exceed uninvoiced quantity). Only one can be sent; the server blocks the rest.' });
     if (S.billed_unlinked) warnings.push({ code: 'SERVICE_BILLED_UNLINKED', count: S.billed_unlinked, message: `${S.billed_unlinked} service(s) are flagged billed but not linked to a sent or paid invoice. Review manually.` });
 
@@ -213,13 +244,14 @@ Deno.serve(async (req) => {
       // hours_remaining = Σ over OPEN tasks of max(estimate − logged on that task, 0) (done tasks and overruns contribute 0).
       labor: {
         hours_logged: r2(hoursLogged), entries: timeEntries.length,
-        hours_estimated: wh.hours_estimated ?? null, hours_remaining: wh.hours_remaining ?? null,
-        hours_logged_estimated_tasks: wh.hours_logged_estimated_tasks ?? null,
-        hours_logged_unestimated_tasks: wh.hours_logged_unestimated_tasks ?? null,
-        resolved_at: project.workflow_resolved_at ?? null,
+        hours_estimated: r2(L.est), hours_remaining: r2(L.remaining),
+        hours_logged_estimated_tasks: r2(L.logEst), hours_logged_unestimated_tasks: r2(L.logUnest),
+        hours_on_cancelled_tasks: r2(L.cancelledHrs), hours_unlinked: r2(unlinkedHrs),
+        open_estimated_tasks: L.openEst, open_tasks_over_estimate: L.overrun,
+        source: 'live',
       },
       lines: { parts: partLines, services: svcLines },
-      warnings,
+      warnings, data_quality: dataQuality,
     });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
