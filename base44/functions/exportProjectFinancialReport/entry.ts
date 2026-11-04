@@ -130,8 +130,8 @@ function buildPdf(o, opts) {
     doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...RED); doc.text(name, L, y + 12); doc.setTextColor(20);
     y += 18;
   };
-  const subheading = (name) => {
-    if (y + 16 + 70 > H - 40) { doc.addPage(); y = 40; } // keep with header + first rows
+  const subheading = (name, minBelow = 70) => {
+    if (y + 16 + minBelow > H - 40) { doc.addPage(); y = 40; } // keep with header + first rows
     doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(...DARK); doc.text(name, L, y + 10); doc.setTextColor(20); doc.setFont('helvetica', 'normal');
     y += 15;
   };
@@ -243,7 +243,7 @@ function buildPdf(o, opts) {
         body.push([`${g.title} subtotal (billable only)`, hrs(g.h), '', usd(g.b), ...(proj ? [hrs(g.rh), usd(g.pa)] : []), '']);
         table(head, body, opt(body.length));
       });
-      subheading('Labor Grand Totals');
+      subheading('Labor Grand Totals', 120);
       const gt = [['Total billable logged hours', hrs(T.laborHours)], ['Total labor billable to date (current)', usd(T.laborToDate)]];
       if (proj) gt.push(['Total remaining estimated billable hours (projected)', hrs(T.laborRemHours)], ['Total projected additional labor (estimate)', usd(T.laborProjected)], ['= Projected total labor billing', usd(r2(T.laborToDate + T.laborProjected))]);
       table(['Labor grand totals', 'Value'], gt, { right: [1], marks: { [gt.length - 1]: 'grand' }, widths: { 1: 110 } });
