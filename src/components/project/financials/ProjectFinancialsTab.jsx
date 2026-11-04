@@ -1,8 +1,9 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import DataQualityIndicator from "./DataQualityIndicator";
 import { base44 } from "@/api/base44Client";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, FileText, FileSpreadsheet } from "lucide-react";
+import FinancialExportDialog from "./FinancialExportDialog";
 import { Button } from "@/components/ui/button";
 import FinancialWarnings from "./FinancialWarnings";
 import FinancialSummaryCards from "./FinancialSummaryCards";
@@ -13,6 +14,7 @@ import FinancialLineItems from "./FinancialLineItems";
 
 export default function ProjectFinancialsTab({ projectId }) {
   const queryClient = useQueryClient();
+  const [exportFormat, setExportFormat] = useState(null);
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["projectFinancialOverview", projectId],
     queryFn: async () => (await base44.functions.invoke("getProjectFinancialOverview", { project_id: projectId })).data,
@@ -44,14 +46,19 @@ export default function ProjectFinancialsTab({ projectId }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <p className="text-xs text-gray-500">
           Current scope uses today's quantities and prices. Invoice figures are historical and never recalculated.
         </p>
-        <Button size="sm" variant="ghost" onClick={() => refetch()} className="text-gray-400 shrink-0">
-          <RefreshCw className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`} />
-        </Button>
+        <div className="flex items-center gap-1 shrink-0">
+          <Button size="sm" variant="outline" onClick={() => setExportFormat("pdf")} className="h-8"><FileText className="w-4 h-4 mr-1" />Export PDF</Button>
+          <Button size="sm" variant="outline" onClick={() => setExportFormat("xlsx")} className="h-8"><FileSpreadsheet className="w-4 h-4 mr-1" />Export Excel</Button>
+          <Button size="sm" variant="ghost" onClick={() => refetch()} className="text-gray-400">
+            <RefreshCw className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
       </div>
+      {exportFormat && <FinancialExportDialog projectId={projectId} format={exportFormat} onClose={() => setExportFormat(null)} />}
       <FinancialWarnings warnings={data.warnings} lines={data.lines} />
       <DataQualityIndicator dataQuality={data.data_quality} lines={data.lines} />
       <FinancialSummaryCards summary={data.summary} />
