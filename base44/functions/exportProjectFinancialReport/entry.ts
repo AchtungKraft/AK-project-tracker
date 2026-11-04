@@ -121,7 +121,7 @@ function summaryGroups(o, client, proj) {
     ['Paid', s.paid_amount],
     ['Outstanding', s.outstanding_balance],
     ['Allocated to drafts', s.allocated_to_drafts],
-    ['Parts & Services available to invoice', s.available_to_invoice, true],
+    ...(client ? [] : [['Parts & Services available to invoice', s.available_to_invoice, true]]),
   ] });
   if (!client) g.push({ title: 'Parts & Services Profitability (internal)', rows: [
     ['Estimated Parts & Services cost' + (s.cost_complete ? '' : ' (incomplete)'), s.estimated_cost],
@@ -347,7 +347,7 @@ function buildPdf(o, opts) {
   const rr = reconRows(o, proj).map((r) => r.map((v, i) => (i === 0 ? v : v == null ? '—' : usd(v))));
   table(proj ? ['Category', 'Current billable', 'Projected additional', 'Projected total'] : ['Category', 'Current billable'], rr, { right: proj ? [1, 2, 3] : [1], marks: { 3: 'grand' } });
   const s = o.summary;
-  table(['Invoice position (Parts & Services only)', 'Amount'], [['Finalized invoiced', usd(s.finalized_invoiced)], ['Paid', usd(s.paid_amount)], ['Outstanding', usd(s.outstanding_balance)], ['Allocated to drafts', usd(s.allocated_to_drafts)], ['Available to invoice', usd(s.available_to_invoice)]], { right: [1], marks: { 4: 'sub' }, widths: { 1: 110 } });
+  table(['Invoice position (Parts & Services only)', 'Amount'], [['Finalized invoiced', usd(s.finalized_invoiced)], ['Paid', usd(s.paid_amount)], ['Outstanding', usd(s.outstanding_balance)], ['Allocated to drafts', usd(s.allocated_to_drafts)], ...(client ? [] : [['Available to invoice', usd(s.available_to_invoice)]])], { right: [1], marks: client ? {} : { 4: 'sub' }, widths: { 1: 110 } });
   note(client ? 'Projected totals are estimates and are not amounts currently payable. Labor is valued but not yet invoiced.' : 'Invoice position covers Parts & Services only. Labor is valued but not yet supported by the invoicing workflow and is not included in available-to-invoice.');
 
   const n = doc.getNumberOfPages();
@@ -476,7 +476,7 @@ async function buildXlsx(o, opts) {
     const s = o.summary;
     ws.addRow({}); styleRow(ws.addRow({ n: 'Invoice position (Parts & Services only)' }), 'group');
     [['Finalized invoiced', s.finalized_invoiced], ['Paid', s.paid_amount], ['Outstanding', s.outstanding_balance], ['Allocated to drafts', s.allocated_to_drafts]].forEach(([n, v]) => ws.addRow({ n, tot: v }));
-    styleRow(ws.addRow({ n: 'Available to invoice', tot: s.available_to_invoice }), 'sub');
+    if (!client) styleRow(ws.addRow({ n: 'Available to invoice', tot: s.available_to_invoice }), 'sub');
   }
   return new Uint8Array(await wb.xlsx.writeBuffer());
 }
