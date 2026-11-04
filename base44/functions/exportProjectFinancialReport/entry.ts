@@ -121,7 +121,7 @@ function buildPdf(o, opts) {
     styles: { fontSize: 8, cellPadding: 3.5, overflow: 'linebreak', valign: 'middle', lineColor: [209, 213, 219], lineWidth: 0.5 },
     headStyles: { fillColor: DARK, textColor: 255, fontStyle: 'bold', fontSize: 8 },
   };
-  const heading = (name, minBelow = 95) => {
+  const heading = (name, minBelow = 130) => {
     if (y + 22 + minBelow > H - 40) { doc.addPage(); y = 40; }
     doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...RED); doc.text(name, L, y + 12); doc.setTextColor(20);
     y += 18;
