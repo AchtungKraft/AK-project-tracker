@@ -36,7 +36,10 @@ const svcBreakdown = (o, s) => {
 const CLIENT_TYPE = { vendor_cost: 'Outside service / materials', internal_labor: 'Work performed by AK' };
 const clientDesc = (d) => (d || '').replace(/\s*\/\/\s*\.?\s*achtung\s+kraft\s+labor\s*\.?\s*$/i, '').trim() || '—';
 // PDF-only text safety: standard PDF fonts can't render glyphs outside Latin-1 (e.g. U+276D "❭").
-const pdfSafe = (t) => String(t ?? '').replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"').replace(/[\u2013\u2014]/g, '-').replace(/[\u2039\u203A\u276D\u276F\u00BB\u00AB\u2192]/g, '>').replace(/[^\x20-\x7E\xA0-\xFF\n]/g, '').replace(/[ \t]+/g, ' ').trim();
+// NFKC first so compatibility glyphs (e.g. U+FB00 "ﬀ" ligature) become plain letters instead of being dropped;
+// anything still unrenderable shows as "?" so content loss is visible, never silent.
+const pdfText = (t) => String(t ?? '').normalize('NFKC').replace(/\u2044/g, '/').replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"').replace(/[\u2013\u2014]/g, '-').replace(/[\u2022]/g, '-').replace(/[\u2039\u203A\u276D\u276F\u00BB\u00AB\u2192]/g, '>').replace(/[^\x20-\x7E\xA0-\xFF\n]/g, '?');
+const pdfSafe = (t) => pdfText(t).replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"').replace(/[\u2013\u2014]/g, '-').replace(/[\u2039\u203A\u276D\u276F\u00BB\u00AB\u2192]/g, '>').replace(/[^\x20-\x7E\xA0-\xFF\n]/g, '').replace(/[ \t]+/g, ' ').trim();
 // Drop a trailing copy of the part number from the name (it already prints on its own line).
 const pdfPartName = (p) => {
   let n = pdfSafe(p.part_name) || 'Unknown part';
@@ -192,9 +195,10 @@ function buildPdf(o, opts) {
     doc.text(t, L, y + 8); y += t.length * 10 + 4; doc.setTextColor(20); doc.setFont('helvetica', 'normal');
   };
   // marks: { [rowIndex]: 'sub' | 'grand' | 'group' }
-  const table = (head, body, { right = [], marks = {}, widths = {} } = {}) => {
+  const table = (head, body, { right = [], marks = {}, widths = {}, parentOf = null, fontSize = null } = {}) => {
     const columnStyles = {};
-    right.forEach((i) => (columnStyles[i] = { halign: 'right' }));
+    for (let i = 0; fontSize && i < head.length; i++) columnStyles[i] = { fontSize };
+    right.forEach((i) => (columnStyles[i] = { ...(columnStyles[i] || {}), halign: 'right' }));
     Object.entries(widths).forEach(([i, w]) => (columnStyles[i] = { ...(columnStyles[i] || {}), cellWidth: w }));
     // Keep short tables (summaries, reconciliation) together on one page.
     if (body.length <= 12 && y + 20 + body.length * 14 > H - 40) { doc.addPage(); y = 40; }
@@ -210,23 +214,37 @@ function buildPdf(o, opts) {
         if (pg[i] === pg[i - 1]) continue;
         // row i starts a new page
         if (rm[i] === 'sub' || rm[i] === 'grand') cut = rm[i - 1] === 'sub' || rm[i - 1] === 'grand' ? i - 2 : i - 1;
-        else if (rm[i - 1] === 'phase') cut = i - 1;
+        else if (rm[i - 1] === 'phase' || rm[i - 1] === 'group') cut = i - 1;
       }
-      // Never leave a phase heading behind when rows are pulled onto the next page.
-      while (cut > 0 && rm[cut - 1] === 'phase') cut--;
+      // Never leave a phase/service heading behind when rows are pulled onto the next page.
+      while (cut > 0 && (rm[cut - 1] === 'phase' || rm[cut - 1] === 'group')) cut--;
       if (cut < 0) break;
       if (cut === 0) { if (y <= 60) break; doc.addPage(); y = 40; continue; }
-      draw(head, rest.slice(0, cut), rm, columnStyles);
+      draw(head, rest.slice(0, cut), rm, columnStyles, parentOf);
       doc.addPage(); y = 40;
       const nm = {}; Object.entries(rm).forEach(([k, v]) => { if (+k >= cut) nm[+k - cut] = v; });
       rest = rest.slice(cut); rm = nm;
     }
-    draw(head, rest, rm, columnStyles);
+    draw(head, rest, rm, columnStyles, parentOf);
   };
-  const draw = (head, body, marks, columnStyles) => {
+  // Compact "continued" label above a table that resumes mid-service on a new page.
+  const contLabel = (name, at) => {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(90);
+    doc.text(pdfSafe(`${name} (continued)`).slice(0, 140), L, at); doc.setTextColor(20); doc.setFont('helvetica', 'normal');
+  };
+  const draw = (head, body, marks, columnStyles, parentOf) => {
+    const first = {};
+    if (parentOf && y <= 40 && parentOf.get(body[0]) && marks[0] !== 'group') { contLabel(parentOf.get(body[0]), y + 6); y += 12; }
     autoTable(doc, {
       ...base, startY: y, head: [head], body, columnStyles,
+      didDrawCell: (d) => { if (d.section === 'body' && first[d.pageNumber] == null) first[d.pageNumber] = d.row.index; },
+      didDrawPage: (d) => {
+        if (!parentOf || d.pageNumber < 2) return;
+        const r = first[d.pageNumber];
+        if (r != null && marks[r] !== 'group' && parentOf.get(body[r])) contLabel(parentOf.get(body[r]), 34);
+      },
       didParseCell: (d) => {
+        d.cell.text = d.cell.text.map(pdfText);
         if (d.section !== 'body') return;
         const k = marks[d.row.index];
         if (k === 'sub') { d.cell.styles.fontStyle = 'bold'; d.cell.styles.fillColor = SUB; }
@@ -252,7 +270,8 @@ function buildPdf(o, opts) {
   }
 
   if (S.includes('parts')) {
-    heading('Parts Detail');
+    // Short tables are kept whole by table(); reserve the same space so the heading moves with them.
+    heading('Parts Detail', m.parts.length + 1 <= 12 ? 22 + (m.parts.length + 1) * 14 : 110);
     if (!m.parts.length) empty('No parts recorded.');
     else {
       const T = m.tot;
@@ -264,7 +283,7 @@ function buildPdf(o, opts) {
       } else {
         const body = m.parts.map((p) => [name(p), p.qty, p.invoiced_qty, p.allocated_qty, avail(p), p.cost_state === 'zero_client_supplied' ? '$0.00 (client)' : usd(partEst(p)), p.actual_unit_cost == null ? 'Not recorded' : usd(partAct(p)), usd(p.unit_retail), usd(p.billable), partStatus(p)]);
         body.push(['Parts subtotal', T.qReq, T.qFin, T.qDraft, T.qAvail, usd(T.partsEst), '', '', usd(T.parts), '']);
-        table(['Description / Part #', 'Required', 'Finalized', 'On draft', 'Available', 'Est. cost (ext.)', 'Actual cost (ext.)', 'Unit sale price', 'Billable', 'Billing status'], body, { right: [1, 2, 3, 4, 5, 6, 7, 8], marks: { [body.length - 1]: 'sub' }, widths: { 0: 200, 9: 110 } });
+        table(['Description / Part #', 'Required', 'Finalized', 'On draft', 'Available', 'Est. cost (ext.)', 'Actual cost (ext.)', 'Unit sale price', 'Billable', 'Billing status'], body, { right: [1, 2, 3, 4, 5, 6, 7, 8], marks: { [body.length - 1]: 'sub' }, widths: { 0: 190, 1: 44, 2: 46, 3: 42, 4: 46, 9: 104 }, fontSize: 7 });
         note('Estimated and actual cost are extended (quantity × unit cost). Unit sale price is the per-unit billing price; unit prices are not totaled.');
       }
     }
@@ -277,32 +296,37 @@ function buildPdf(o, opts) {
       const T = m.tot;
       const dr = (s) => (s.allocated ? usd(s.draft_amount) : '—');
       if (client) {
-        const body = [], marks = {};
+        const body = [], marks = {}, parentOf = new Map();
         for (const s of m.services) {
           const bd = clientBreakdown(o, s);
+          const start = body.length;
           if (bd) marks[body.length] = 'group';
           body.push([`${s.description || '—'} — ${usd(s.billable)}`, 1, usd(s.billable), dr(s), svcStatus(s)]);
           if (!bd) continue;
           bd.rows.forEach((r) => body.push([`      ${r.t}: ${r.d}`, r.q ?? '—', r.b == null ? '—' : usd(r.b), '', '']));
+          marks[body.length] = 'sub';
           body.push([`      Service subtotal — ${s.description || '—'}`, '', usd(s.billable), '', '']);
+          body.slice(start).forEach((row) => parentOf.set(row, s.description || 'Service'));
         }
         body.push(['TOTAL SERVICES BILLABLE', T.svcQty, usd(T.services), usd(T.svcDraft), '']);
-        marks[body.length - 1] = 'sub';
-        table(['Description', 'Qty / hrs', 'Billable', 'Draft allocation', 'Billing status'], body, { right: [1, 2, 3], marks, widths: { 0: 250 } });
+        marks[body.length - 1] = 'grand';
+        table(['Description', 'Qty / hrs', 'Billable', 'Draft allocation', 'Billing status'], body, { right: [1, 2, 3], marks, widths: { 0: 250 }, parentOf });
         note('Indented lines show what each service includes; they are part of the service total, not additional charges. Draft allocation is the amount locked when drafted.');
       } else {
-        const body = [], marks = {};
+        const body = [], marks = {}, parentOf = new Map();
         for (const s of m.services) {
           const bd = svcBreakdown(o, s);
+          const start = body.length;
           if (bd) marks[body.length] = 'group';
           body.push([s.description || '—', 1, usd(s.est_cost), s.actual_cost == null ? 'Not recorded' : usd(s.actual_cost), usd(s.billable), dr(s), svcStatus(s)]);
           if (!bd) continue;
           bd.rows.forEach((r) => body.push([`      ${r.t}: ${r.d}`, r.q ?? '—', r.c == null ? '—' : usd(r.c), '—', r.b == null ? '—' : usd(r.b), '', 'Component (info)']));
           if (bd.dc || bd.db) body.push(['      Difference: service total − components', '', usd(bd.dc), '', usd(bd.db), '', 'Review']);
+          body.slice(start).forEach((row) => parentOf.set(row, s.description || 'Service'));
         }
         body.push(['Services subtotal', T.svcQty, usd(T.svcEst), T.svcAct == null ? (T.svcActPartial ? `${usd(T.svcActPartial)} (partial)` : 'Not recorded') : usd(T.svcAct), usd(T.services), usd(T.svcDraft), '']);
         marks[body.length - 1] = 'sub';
-        table(['Description', 'Qty / hrs', 'Est. cost', 'Actual cost', 'Billable', 'Draft allocation', 'Billing status'], body, { right: [1, 2, 3, 4, 5], marks, widths: { 0: 260 } });
+        table(['Description', 'Qty / hrs', 'Est. cost', 'Actual cost', 'Billable', 'Draft allocation', 'Billing status'], body, { right: [1, 2, 3, 4, 5], marks, widths: { 0: 260 }, parentOf });
         note('Shaded rows carry service totals; indented components are explanatory and not added again. Draft allocation is the amount locked when drafted.');
       }
     }
@@ -323,9 +347,9 @@ function buildPdf(o, opts) {
           const b = isBill(t);
           body.push([t.name, hrs(t.logged), ...(client ? [] : [b && t.effective_rate != null ? `${usd(t.effective_rate)}/h` : '']), b ? money(t.billable_to_date) : '—', ...(proj ? [b ? hrs(t.remaining_hours) : '—', b ? money(t.projected_remaining) : '—'] : []), b ? '' : t._lbl + (t.service_commitment_id ? ` — ${m.other.svc(t)}` : '')]);
         }
-        const extra = [ph.nbH && `No Charge ${hrs(ph.nbH)}`, ph.incH && `Incl. in Service ${hrs(ph.incH)}`, !client && ph.uncH && `Unclassified ${hrs(ph.uncH)}`, proj && ph.pa && `Proj. total ${usd(ph.pt)}`].filter(Boolean).join(' · ');
+        const extra = [ph.nbH && `No Charge ${hrs(ph.nbH)}`, ph.incH && `Incl. in Service ${hrs(ph.incH)}`, !client && ph.uncH && `Unclassified ${hrs(ph.uncH)}`, proj && ph.pa && `Proj. total ${usd(ph.pt)}`].filter(Boolean).join('\n');
         marks[body.length] = 'sub';
-        body.push([`${ph.name} subtotal`, ph.h === ph.allH ? hrs(ph.allH) : `${hrs(ph.allH)} (${hrs(ph.h)} billable)`, ...(client ? [] : ['']), usd(ph.b), ...(proj ? [hrs(ph.rh), usd(ph.pa)] : []), extra]);
+        body.push([`${ph.name} subtotal`, ph.h === ph.allH ? hrs(ph.allH) : `${hrs(ph.allH)} total\n${hrs(ph.h)} billable`, ...(client ? [] : ['']), usd(ph.b), ...(proj ? [hrs(ph.rh), usd(ph.pa)] : []), extra]);
       }
       marks[body.length] = 'grand';
       body.push(['PROJECT LABOR GRAND TOTAL', `${hrs(T.laborHours)} billable`, ...(client ? [] : ['']), usd(T.laborToDate), ...(proj ? [hrs(T.laborRemHours), usd(T.laborProjected)] : []), proj ? `Proj. total ${usd(r2(T.laborToDate + T.laborProjected))}` : '']);
