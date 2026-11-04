@@ -258,9 +258,9 @@ function buildPdf(o, opts) {
       const T = m.tot;
       const name = (p) => { const n = pdfPartName(p); return p.part_number ? `${n}\n${p.part_number}` : n; };
       if (client) {
-        const body = m.parts.map((p) => [name(p), p.qty, p.invoiced_qty, p.allocated_qty, avail(p), usd(p.unit_retail), usd(p.billable), partStatus(p)]);
-        body.push(['Parts subtotal', T.qReq, T.qFin, T.qDraft, T.qAvail, '', usd(T.parts), '']);
-        table(['Description / Part #', 'Required', 'Finalized', 'On draft', 'Available', 'Unit price', 'Billable', 'Billing status'], body, { right: [1, 2, 3, 4, 5, 6], marks: { [body.length - 1]: 'sub' }, widths: { 0: 150, 7: 80 } });
+        const body = m.parts.map((p) => [name(p), p.qty, usd(p.unit_retail), usd(p.billable)]);
+        body.push(['TOTAL PARTS', T.qReq, '—', usd(T.parts)]);
+        table(['Part Description / Part #', 'Qty', 'Unit Price', 'Total'], body, { right: [1, 2, 3], marks: { [body.length - 1]: 'sub' }, widths: { 1: 40, 2: 80, 3: 85 } });
       } else {
         const body = m.parts.map((p) => [name(p), p.qty, p.invoiced_qty, p.allocated_qty, avail(p), p.cost_state === 'zero_client_supplied' ? '$0.00 (client)' : usd(partEst(p)), p.actual_unit_cost == null ? 'Not recorded' : usd(partAct(p)), usd(p.unit_retail), usd(p.billable), partStatus(p)]);
         body.push(['Parts subtotal', T.qReq, T.qFin, T.qDraft, T.qAvail, usd(T.partsEst), '', '', usd(T.parts), '']);
@@ -410,7 +410,11 @@ async function buildXlsx(o, opts) {
     reconRows(o, proj).forEach((r) => { const row = ws.addRow({ k: r[0], v: r[1], ...(proj ? { v2: r[2] ?? '—', v3: r[3] } : {}) }); if (r[0] === 'TOTAL') styleRow(row, 'grand'); });
   }
 
-  if (S.includes('parts')) {
+  if (S.includes('parts') && client) {
+    sheet('Parts', [{ h: 'Part Description / Part #', k: 'd', w: 60, wrap: true }, { h: 'Qty', k: 'q', w: 8, f: QTY, sum: 1 }, { h: 'Unit Price', k: 'up', w: 14, f: MONEY }, { h: 'Total', k: 'b', w: 16, f: MONEY, sum: 1 }],
+      m.parts.map((p) => ({ d: (p.part_name || 'Unknown part') + (p.part_number ? `\n${p.part_number}` : ''), q: p.qty, up: p.unit_retail ?? 'Missing', b: p.billable })),
+      { d: 'TOTAL PARTS', q: T.qReq, up: '—', b: T.parts }, 'No parts recorded.');
+  } else if (S.includes('parts')) {
     const cols = [{ h: 'Description', k: 'd', w: 40, wrap: true }, { h: 'Part #', k: 'pn', w: 18 }, { h: 'Required Qty', k: 'q', w: 11, f: QTY, sum: 1 }, { h: 'Finalized Qty', k: 'fq', w: 11, f: QTY, sum: 1 }, { h: 'Draft Qty', k: 'dq', w: 10, f: QTY, sum: 1 }, { h: 'Available Qty', k: 'aq', w: 11, f: QTY, sum: 1 }];
     if (!client) cols.push({ h: 'Estimated Cost (ext.)', k: 'ec', f: MONEY, sum: 1 }, { h: 'Actual Cost (ext.)', k: 'ac', f: MONEY });
     cols.push({ h: 'Unit Sale Price', k: 'up', f: MONEY }, { h: 'Billable', k: 'b', f: MONEY, sum: 1 }, { h: 'Draft Amount', k: 'da', f: MONEY, sum: 1 }, { h: 'Billing Status', k: 's', w: 30, wrap: true }, { h: 'Invoice Eligible Now', k: 'el', w: 12 });
