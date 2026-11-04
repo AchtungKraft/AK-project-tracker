@@ -121,7 +121,7 @@ function buildPdf(o, opts) {
     styles: { fontSize: 8, cellPadding: 3.5, overflow: 'linebreak', valign: 'middle', lineColor: [209, 213, 219], lineWidth: 0.5 },
     headStyles: { fillColor: DARK, textColor: 255, fontStyle: 'bold', fontSize: 8 },
   };
-  const heading = (name, minBelow = 60) => {
+  const heading = (name, minBelow = 95) => {
     if (y + 22 + minBelow > H - 40) { doc.addPage(); y = 40; }
     doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...RED); doc.text(name, L, y + 12); doc.setTextColor(20);
     y += 18;
@@ -139,6 +139,23 @@ function buildPdf(o, opts) {
     Object.entries(widths).forEach(([i, w]) => (columnStyles[i] = { ...(columnStyles[i] || {}), cellWidth: w }));
     // Keep short tables (summaries, reconciliation) together on one page.
     if (body.length <= 12 && y + 20 + body.length * 17 > H - 40) { doc.addPage(); y = 40; }
+    const subIdx = body.length - 1;
+    if (marks[subIdx] === 'sub' && body.length > 3) {
+      // Dry-run on a scratch doc: if the subtotal would land alone on a new page, break before the last data row.
+      const scratch = new jsPDF({ orientation: client ? 'portrait' : 'landscape', unit: 'pt', format: 'letter' });
+      const pg = {};
+      autoTable(scratch, { ...base, startY: y, head: [head], body, columnStyles, didDrawCell: (d) => { if (d.section === 'body') pg[d.row.index] = d.pageNumber; } });
+      if (pg[subIdx] !== pg[subIdx - 1]) {
+        const cut = subIdx - 1;
+        draw(head, body.slice(0, cut), marks, columnStyles);
+        doc.addPage(); y = 40;
+        draw(head, body.slice(cut), { 1: 'sub' }, columnStyles);
+        return;
+      }
+    }
+    draw(head, body, marks, columnStyles);
+  };
+  const draw = (head, body, marks, columnStyles) => {
     autoTable(doc, {
       ...base, startY: y, head: [head], body, columnStyles,
       didParseCell: (d) => {
