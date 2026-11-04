@@ -161,13 +161,13 @@ function buildPdf(o, opts) {
 
   const base = {
     theme: 'grid', showHead: 'everyPage', rowPageBreak: 'avoid', margin: { left: L, right: L, top: 40, bottom: 40 },
-    styles: { fontSize: 8, cellPadding: 3.5, overflow: 'linebreak', valign: 'middle', lineColor: [209, 213, 219], lineWidth: 0.5 },
+    styles: { fontSize: 7.5, cellPadding: 2.5, overflow: 'linebreak', valign: 'middle', lineColor: [209, 213, 219], lineWidth: 0.5 },
     headStyles: { fillColor: DARK, textColor: 255, fontStyle: 'bold', fontSize: 8 },
   };
-  const heading = (name, minBelow = 130) => {
-    if (y + 22 + minBelow > H - 40) { doc.addPage(); y = 40; }
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...RED); doc.text(name, L, y + 12); doc.setTextColor(20);
-    y += 18;
+  const heading = (name, minBelow = 70) => {
+    if (y + 18 + minBelow > H - 40) { doc.addPage(); y = 40; }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(...RED); doc.text(name, L, y + 10); doc.setTextColor(20);
+    y += 14;
   };
   const subheading = (name, minBelow = 70) => {
     if (y + 16 + minBelow > H - 40) { doc.addPage(); y = 40; } // keep with header + first rows
@@ -211,6 +211,7 @@ function buildPdf(o, opts) {
         const k = marks[d.row.index];
         if (k === 'sub') { d.cell.styles.fontStyle = 'bold'; d.cell.styles.fillColor = SUB; }
         if (k === 'grand') { d.cell.styles.fontStyle = 'bold'; d.cell.styles.fillColor = GRAND; d.cell.styles.textColor = [127, 29, 29]; }
+        if (k === 'phase') { d.cell.styles.fontStyle = 'bold'; d.cell.styles.fillColor = [55, 65, 81]; d.cell.styles.textColor = 255; }
         if (k === 'group') { d.cell.styles.fontStyle = 'bold'; d.cell.styles.fillColor = [243, 244, 246]; d.cell.styles.textColor = [55, 65, 81]; }
       },
     });
@@ -268,7 +269,7 @@ function buildPdf(o, opts) {
         body.push(['TOTAL SERVICES BILLABLE', T.svcQty, usd(T.services), usd(T.svcDraft), '']);
         marks[body.length - 1] = 'sub';
         table(['Description', 'Qty / hrs', 'Billable', 'Draft allocation', 'Billing status'], body, { right: [1, 2, 3], marks, widths: { 0: 250 } });
-        note('Indented lines show what each service includes; they are part of the service total above, not additional charges.');
+        note('Indented lines show what each service includes; they are part of the service total, not additional charges. Draft allocation is the amount locked when drafted.');
       } else {
         const body = [], marks = {};
         for (const s of m.services) {
@@ -282,9 +283,8 @@ function buildPdf(o, opts) {
         body.push(['Services subtotal', T.svcQty, usd(T.svcEst), T.svcAct == null ? (T.svcActPartial ? `${usd(T.svcActPartial)} (partial)` : 'Not recorded') : usd(T.svcAct), usd(T.services), usd(T.svcDraft), '']);
         marks[body.length - 1] = 'sub';
         table(['Description', 'Qty / hrs', 'Est. cost', 'Actual cost', 'Billable', 'Draft allocation', 'Billing status'], body, { right: [1, 2, 3, 4, 5], marks, widths: { 0: 260 } });
-        note('Shaded rows are services and carry the authoritative totals. Indented component rows explain each service (quantity × unit cost / billing rate) and are not added to the subtotal.');
+        note('Shaded rows carry service totals; indented components are explanatory and not added again. Draft allocation is the amount locked when drafted.');
       }
-      note('Draft allocation is the amount locked on a draft invoice at the time it was drafted; it can differ from the current billable price.');
     }
   }
 
@@ -293,46 +293,25 @@ function buildPdf(o, opts) {
     if (!m.labor.length && !m.other.groups.length) empty('No labor recorded.');
     else {
       const T = m.tot;
-      const head = ['Task', 'Billable logged hrs', 'Approved rate', 'Billable to date', ...(proj ? ['Remaining est. hrs', 'Projected add\'l billing'] : []), 'Classification'];
-      const opt = (n) => ({ right: proj ? [1, 2, 3, 4, 5] : [1, 2, 3], marks: { [n - 1]: 'sub' }, widths: { 0: client ? 140 : 220 } });
-      const phaseHeading = (name) => {
-        if (y + 22 + 90 > H - 40) { doc.addPage(); y = 40; } // keep phase heading with first group + rows
-        doc.setFillColor(...DARK); doc.rect(L, y, W - 2 * L, 18, 'F');
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(255); doc.text(`PHASE: ${name.toUpperCase()}`, L + 6, y + 12.5); doc.setTextColor(20); doc.setFont('helvetica', 'normal');
-        y += 24;
-      };
-      m.phases.forEach((ph) => {
-      phaseHeading(ph.name);
-      ph.groups.forEach((g) => {
-        if (!g.rows.length) return;
-        subheading(`${g.title} (${g.rows.length} task${g.rows.length === 1 ? '' : 's'})`);
-        const body = g.rows.map((t) => [t.name, isBill(t) ? hrs(t.logged) : `${hrs(t.logged)} (not billed separately)`, isBill(t) && t.effective_rate != null ? `${usd(t.effective_rate)}/h` : '—', isBill(t) ? usd(t.billable_to_date) : '—', ...(proj ? [isBill(t) ? hrs(t.remaining_hours) : '—', isBill(t) ? usd(t.projected_remaining) : '—'] : []), laborStatus(t)]);
-        body.push([`${g.title} subtotal (billable only)`, hrs(g.h), '', usd(g.b), ...(proj ? [hrs(g.rh), usd(g.pa)] : []), '']);
-        table(head, body, opt(body.length));
-      });
-      if (ph.other.length) {
-        subheading(`${OTHER_TITLE} (${ph.other.reduce((n, g) => n + g.rows.length, 0)} tasks) — hours only, $0 additional billing`);
-        const oh = ['Task', 'Classification', 'Linked service', 'Recorded hrs (logged)', 'Estimated hrs', 'Remaining est. hrs (future)'];
-        ph.other.forEach((g) => {
-          subheading(`${g.title} (${g.rows.length})`);
-          const body = g.rows.map((t) => [t.name, g.title, m.other.svc(t), hrs(t.logged), hrs(t.estimated_hours), hrs(t.remaining_hours)]);
-          body.push([`${g.title} subtotal (no revenue)`, '', '', hrs(g.h), hrs(g.eh), hrs(g.rh)]);
-          table(oh, body, { right: [3, 4, 5], marks: { [body.length - 1]: 'sub' }, widths: { 0: client ? 150 : 220 } });
-        });
+      // One table: phase rows, task rows, one subtotal per phase, one grand total.
+      const head = ['Task', 'Logged hrs', ...(client ? [] : ['Rate']), 'Current billable', ...(proj ? ['Remaining est. hrs', 'Projected add\'l'] : []), 'Classification'];
+      const nc = head.length, body = [], marks = {};
+      const money = (v) => (v ? usd(v) : '—');
+      for (const ph of m.phases) {
+        marks[body.length] = 'phase'; body.push([{ content: ph.name.toUpperCase(), colSpan: nc }]);
+        for (const t of [...ph.groups.flatMap((g) => g.rows), ...ph.other.flatMap((g) => g.rows.map((r) => ({ ...r, _lbl: g.title })))]) {
+          const b = isBill(t);
+          body.push([t.name, hrs(t.logged), ...(client ? [] : [b && t.effective_rate != null ? `${usd(t.effective_rate)}/h` : '']), b ? money(t.billable_to_date) : '—', ...(proj ? [b ? hrs(t.remaining_hours) : '—', b ? money(t.projected_remaining) : '—'] : []), b ? '' : t._lbl + (t.service_commitment_id ? ` — ${m.other.svc(t)}` : '')]);
+        }
+        const extra = [ph.nbH && `No Charge ${hrs(ph.nbH)}`, ph.incH && `Incl. in Service ${hrs(ph.incH)}`, !client && ph.uncH && `Unclassified ${hrs(ph.uncH)}`, proj && ph.pa && `Proj. total ${usd(ph.pt)}`].filter(Boolean).join(' · ');
+        marks[body.length] = 'sub';
+        body.push([`${ph.name} subtotal`, ph.h === ph.allH ? hrs(ph.allH) : `${hrs(ph.allH)} (${hrs(ph.h)} billable)`, ...(client ? [] : ['']), usd(ph.b), ...(proj ? [hrs(ph.rh), usd(ph.pa)] : []), extra]);
       }
-      const pt = [['Total logged hours (all classifications)', hrs(ph.allH)], ['Separately billable logged hours', hrs(ph.h)], ['Labor billable to date (current)', usd(ph.b)]];
-      if (proj) pt.push(['Remaining estimated billable hours (projected)', hrs(ph.rh)], ['Projected additional labor billing (estimate)', usd(ph.pa)], ['Projected total labor billing', usd(ph.pt)]);
-      pt.push(['No Charge recorded hours (no revenue)', hrs(ph.nbH)], ['Included in Service recorded hours (no revenue)', hrs(ph.incH)]);
-      if (!client) pt.push(['Needs Classification / cancelled recorded hours (no revenue)', hrs(ph.uncH)]);
-      if (y + 30 + pt.length * 16 > H - 40) { doc.addPage(); y = 40; } // keep phase total together
-      table([`PHASE TOTAL — ${ph.name}`, 'Value'], pt, { right: [1], marks: Object.fromEntries(pt.map((_, i) => [i, 'sub'])), widths: { 1: 110 } });
-      });
-      if (m.other.groups.length) note('Other Labor is hours only — $0 additional labor billing. Recorded hours are work already logged; estimated and remaining hours are future estimates.');
-      subheading('PROJECT LABOR GRAND TOTAL', 120);
-      const gt = [['Total billable logged hours', hrs(T.laborHours)], ['Total labor billable to date (current)', usd(T.laborToDate)]];
-      if (proj) gt.push(['Total remaining estimated billable hours (projected)', hrs(T.laborRemHours)], ['Total projected additional labor (estimate)', usd(T.laborProjected)], ['= Projected total labor billing', usd(r2(T.laborToDate + T.laborProjected))]);
-      table(['Labor grand totals', 'Value'], gt, { right: [1], marks: { [gt.length - 1]: 'grand' }, widths: { 1: 110 } });
-      note((client ? '' : 'Internal labor costs are not configured; labor margin is not calculated. ') + 'Only labor classified Billable is valued. Service-included, non-billable and unclassified hours are not counted as additional labor revenue. Rates are not totaled.');
+      marks[body.length] = 'grand';
+      body.push(['PROJECT LABOR GRAND TOTAL', `${hrs(T.laborHours)} billable`, ...(client ? [] : ['']), usd(T.laborToDate), ...(proj ? [hrs(T.laborRemHours), usd(T.laborProjected)] : []), proj ? `Proj. total ${usd(r2(T.laborToDate + T.laborProjected))}` : '']);
+      const R = client ? (proj ? [1, 2, 3, 4] : [1, 2]) : (proj ? [1, 2, 3, 4, 5] : [1, 2, 3]);
+      table(head, body, { right: R, marks, widths: { 0: client ? 230 : 280, [nc - 1]: client ? 150 : 170 } });
+      note('Only Billable labor is valued (not yet invoiced). No Charge, Included in Service' + (client ? '' : ', unclassified') + ' hours carry no additional billing. Projected amounts are estimates.' + (client ? '' : ' Internal labor cost not configured.'));
     }
   }
 
@@ -442,48 +421,28 @@ async function buildXlsx(o, opts) {
       { d: 'Services subtotal', q: T.svcQty, ...(client ? {} : { ec: T.svcEst, ac: T.svcAct ?? (T.svcActPartial ? `Partial: ${usd(T.svcActPartial)}` : 'Not recorded') }), b: T.services, da: T.svcDraft }, 'No services recorded.');
   }
   if (S.includes('labor')) {
-    const cols = [{ h: 'Task', k: 'd', w: 44, wrap: true }, { h: 'Billable Logged Hours', k: 'h', f: HRS, sum: 1 }];
-    cols.push({ h: 'Logged Hours (all)', k: 'lh', f: HRS });
-    cols.push({ h: 'Approved Rate', k: 'r', f: MONEY }, { h: 'Billable To Date', k: 'b', f: MONEY, sum: 1 });
-    if (proj) cols.push({ h: 'Remaining Est. Hours', k: 'rh', f: HRS, sum: 1 }, { h: 'Projected Additional Billing', k: 'pa', f: MONEY, sum: 1 });
-    cols.push({ h: 'Classification', k: 's', w: 32, wrap: true });
-    if (!client) cols.push({ h: 'Internal Labor Cost', k: 'ic', w: 16 });
-    cols.unshift({ h: 'Phase', k: 'ph', w: 22 }, { h: 'Row Type', k: 'rt', w: 14 }, { h: 'Labor Group', k: 'g', w: 28 });
-    const row = (t, g) => ({ g, d: t.name, h: isBill(t) ? t.logged : 0, lh: t.logged, r: isBill(t) ? t.effective_rate : null, b: isBill(t) ? t.billable_to_date : null, rh: isBill(t) ? t.remaining_hours : null, pa: isBill(t) ? t.projected_remaining : null, s: laborStatus(t), ic: 'Not configured' });
+    const cols = [{ h: 'Phase', k: 'ph', w: 22 }, { h: 'Row Type', k: 'rt', w: 12 }, { h: 'Task', k: 'd', w: 46, wrap: true }, { h: 'Logged Hours', k: 'lh', f: HRS }, { h: 'Billable Logged Hours', k: 'h', f: HRS }];
+    if (!client) cols.push({ h: 'Approved Rate', k: 'r', f: MONEY });
+    cols.push({ h: 'Current Billable', k: 'b', f: MONEY });
+    if (proj) cols.push({ h: 'Remaining Est. Hours', k: 'rh', f: HRS }, { h: 'Projected Additional Billing', k: 'pa', f: MONEY });
+    cols.push({ h: 'Classification', k: 's', w: 30, wrap: true });
     const ws = wb.addWorksheet('Labor', { views: [{ state: 'frozen', ySplit: 1 }] });
     ws.columns = cols.map((c) => ({ header: c.h, key: c.k, width: c.w || 14, style: { ...(c.f ? { numFmt: c.f } : {}), alignment: { wrapText: !!c.wrap, vertical: 'top', ...(c.f ? { horizontal: 'right' } : {}) } } }));
     const hr = ws.getRow(1); hr.font = { bold: true, color: { argb: 'FFFFFFFF' } }; hr.fill = fill('FF1F2937'); hr.alignment = { wrapText: true, vertical: 'middle' }; hr.height = 30;
     if (!m.labor.length && !m.other.groups.length) ws.addRow({ d: 'No labor recorded.' }).font = { italic: true, color: { argb: 'FF6B7280' } };
     else {
-      // Row Type separates task rows from subtotal rows so filters/sums on task rows cannot double-count.
-      m.phases.forEach((ph) => {
-        const P = { ph: ph.name };
-        styleRow(ws.addRow({ ...P, rt: 'Phase', d: `PHASE: ${ph.name}` }), 'grand');
-        ph.groups.forEach((g) => {
-          if (!g.rows.length) return;
-          styleRow(ws.addRow({ ...P, rt: 'Group', g: g.title, d: `${g.rows.length} task(s)` }), 'group');
-          g.rows.forEach((t) => ws.addRow({ ...P, rt: 'Task', ...row(t, g.title) }));
-          styleRow(ws.addRow({ ...P, rt: 'Group subtotal', g: g.title, d: `${g.title} subtotal (billable only)`, h: g.h, b: g.b, ...(proj ? { rh: g.rh, pa: g.pa } : {}) }), 'sub');
-        });
-        ph.other.forEach((g) => {
-          const gl = `${OTHER_TITLE}: ${g.title}`;
-          styleRow(ws.addRow({ ...P, rt: 'Group', g: gl, d: `${g.rows.length} task(s) — hours only, $0 additional billing` }), 'group');
-          g.rows.forEach((t) => ws.addRow({ ...P, rt: 'Task', g: gl, d: t.name, h: 0, lh: t.logged || 0, s: `${g.title}${t.service_commitment_id ? ` — ${m.other.svc(t)}` : ''}` }));
-          styleRow(ws.addRow({ ...P, rt: 'Group subtotal', g: gl, d: `${g.title} subtotal (no revenue)`, lh: g.h }), 'sub');
-        });
-        styleRow(ws.addRow({ ...P, rt: 'Phase total', d: `PHASE TOTAL — ${ph.name} (separately billable)`, h: ph.h, lh: ph.allH, b: ph.b, ...(proj ? { rh: ph.rh, pa: ph.pa } : {}), s: `No Charge ${ph.nbH} h · Included in Service ${ph.incH} h${client ? '' : ` · Needs Classification/cancelled ${ph.uncH} h`}` }), 'sub');
-        if (proj) ws.addRow({ ...P, rt: 'Phase total', d: `Projected total labor billing — ${ph.name}`, b: ph.pt });
-        ws.addRow({});
-      });
-      ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: ws.rowCount, column: cols.length } };
-      styleRow(ws.addRow({ rt: 'Grand total', d: 'PROJECT LABOR GRAND TOTAL' }), 'group');
-      ws.addRow({ d: 'Total billable logged hours', h: T.laborHours });
-      ws.addRow({ d: 'Total labor billable to date (current)', b: T.laborToDate });
-      if (proj) {
-        ws.addRow({ d: 'Total remaining estimated billable hours (projected)', rh: T.laborRemHours });
-        ws.addRow({ d: 'Total projected additional labor (estimate)', pa: T.laborProjected });
-        styleRow(ws.addRow({ d: '= Projected total labor billing', b: r2(T.laborToDate + T.laborProjected) }), 'grand');
+      // One row per task; Row Type = Task | Phase subtotal | Grand total, so filtering on Task rows cannot double-count.
+      for (const ph of m.phases) {
+        const tasks = [...ph.groups.flatMap((g) => g.rows), ...ph.other.flatMap((g) => g.rows.map((r) => ({ ...r, _lbl: g.title })))];
+        for (const t of tasks) {
+          const b = isBill(t);
+          ws.addRow({ ph: ph.name, rt: 'Task', d: t.name, lh: t.logged || 0, h: b ? t.logged || 0 : 0, r: b ? t.effective_rate : null, b: b ? t.billable_to_date : null, rh: b ? t.remaining_hours : null, pa: b ? t.projected_remaining : null, s: b ? 'Billable' : t._lbl + (t.service_commitment_id ? ` — ${m.other.svc(t)}` : '') });
+        }
+        const extra = [ph.nbH && `No Charge ${ph.nbH} h`, ph.incH && `Included in Service ${ph.incH} h`, !client && ph.uncH && `Unclassified ${ph.uncH} h`].filter(Boolean).join(' · ');
+        styleRow(ws.addRow({ ph: ph.name, rt: 'Phase subtotal', d: `${ph.name} subtotal`, lh: ph.allH, h: ph.h, b: ph.b, ...(proj ? { rh: ph.rh, pa: ph.pa } : {}), s: extra }), 'sub');
       }
+      ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: ws.rowCount, column: cols.length } };
+      styleRow(ws.addRow({ rt: 'Grand total', d: 'PROJECT LABOR GRAND TOTAL', h: T.laborHours, b: T.laborToDate, ...(proj ? { rh: T.laborRemHours, pa: T.laborProjected, s: `Projected total labor ${usd(r2(T.laborToDate + T.laborProjected))}` } : {}) }), 'grand');
     }
   }
   if (S.includes('invoices')) {
