@@ -32,6 +32,15 @@ const svcBreakdown = (o, s) => {
   if (!rows.length) return null;
   return { rows, dc: r2((s.est_cost ?? 0) - sum(rows, (r) => r.c)), db: r2((s.billable ?? 0) - sum(rows, (r) => r.b)) };
 };
+// Client-safe presentation: removes only the recognized trailing internal tag "// Achtung Kraft Labor"; stored text untouched.
+const CLIENT_TYPE = { vendor_cost: 'Outside service / materials', internal_labor: 'Work performed by AK' };
+const clientDesc = (d) => (d || '').replace(/\s*\/\/\s*\.?\s*achtung\s+kraft\s+labor\s*\.?\s*$/i, '').trim() || '—';
+const clientBreakdown = (o, s) => {
+  const items = o.svc_components?.[s.id] || [];
+  if (!items.length) return null;
+  const rows = items.map((li) => ({ t: CLIENT_TYPE[li.type] || 'Service item', d: clientDesc(li.description), q: li.quantity ?? null, b: li.billing_rate == null ? null : r2(li.billing_rate * (li.quantity ?? 1)), long: (li.description || '').length > 200 }));
+  return { rows, db: r2((s.billable ?? 0) - sum(rows, (r) => r.b)) };
+};
 
 function buildModel(o, client) {
   const parts = o.lines.parts.filter((p) => !client || p.qty > 0);
@@ -236,9 +245,19 @@ function buildPdf(o, opts) {
       const T = m.tot;
       const dr = (s) => (s.allocated ? usd(s.draft_amount) : '—');
       if (client) {
-        const body = m.services.map((s) => [s.description || '—', 1, usd(s.billable), dr(s), svcStatus(s)]);
-        body.push(['Services subtotal', T.svcQty, usd(T.services), usd(T.svcDraft), '']);
-        table(['Description', 'Qty', 'Billable', 'Draft allocation', 'Billing status'], body, { right: [1, 2, 3], marks: { [body.length - 1]: 'sub' } });
+        const body = [], marks = {};
+        for (const s of m.services) {
+          const bd = clientBreakdown(o, s);
+          if (bd) marks[body.length] = 'group';
+          body.push([`${s.description || '—'} — ${usd(s.billable)}`, 1, usd(s.billable), dr(s), svcStatus(s)]);
+          if (!bd) continue;
+          bd.rows.forEach((r) => body.push([`      ${r.t}: ${r.d}`, r.q ?? '—', r.b == null ? '—' : usd(r.b), '', '']));
+          body.push([`      Service subtotal — ${s.description || '—'}`, '', usd(s.billable), '', '']);
+        }
+        body.push(['TOTAL SERVICES BILLABLE', T.svcQty, usd(T.services), usd(T.svcDraft), '']);
+        marks[body.length - 1] = 'sub';
+        table(['Description', 'Qty / hrs', 'Billable', 'Draft allocation', 'Billing status'], body, { right: [1, 2, 3], marks, widths: { 0: 250 } });
+        note('Indented lines show what each service includes; they are part of the service total above, not additional charges.');
       } else {
         const body = [], marks = {};
         for (const s of m.services) {
@@ -379,11 +398,18 @@ async function buildXlsx(o, opts) {
     const cols = [{ h: 'Description', k: 'd', w: 46, wrap: true }, { h: 'Qty', k: 'q', w: 8, f: QTY, sum: 1 }];
     if (!client) cols.push({ h: 'Estimated Cost', k: 'ec', f: MONEY, sum: 1 }, { h: 'Actual Cost', k: 'ac', f: MONEY });
     cols.push({ h: 'Billable', k: 'b', f: MONEY, sum: 1 }, { h: 'Draft Amount', k: 'da', f: MONEY, sum: 1 }, { h: 'Billing Status', k: 's', w: 20 }, { h: 'Invoice Eligible Now', k: 'el', w: 12 });
-    if (!client) cols.push({ h: 'Row Type', k: 'rt', w: 16 }, { h: 'Service', k: 'sv', w: 30, wrap: true }, { h: 'Component Qty / Hrs', k: 'cq', f: QTY }, { h: 'Component Est. Cost (info)', k: 'cc', f: MONEY }, { h: 'Component Billable (info)', k: 'cb', f: MONEY });
+    cols.push({ h: 'Row Type', k: 'rt', w: 16 }, { h: 'Service', k: 'sv', w: 30, wrap: true }, { h: 'Component Qty / Hrs', k: 'cq', f: QTY });
+    if (!client) cols.push({ h: 'Component Est. Cost (info)', k: 'cc', f: MONEY });
+    cols.push({ h: client ? 'Component Billable (included in service)' : 'Component Billable (info)', k: 'cb', f: MONEY });
     const svcRows = [];
     for (const s of m.services) {
-      svcRows.push({ d: s.description || '—', q: 1, ...(client ? {} : { ec: s.est_cost ?? 'Missing', ac: s.actual_cost ?? 'Not recorded', rt: 'Service', sv: s.description || '—' }), b: s.billable, da: s.allocated ? s.draft_amount : null, s: svcStatus(s), el: !s.invoiced && !s.allocated ? 'Yes' : 'No' });
-      const bd = !client && svcBreakdown(o, s);
+      svcRows.push({ d: s.description || '—', q: 1, ...(client ? {} : { ec: s.est_cost ?? 'Missing', ac: s.actual_cost ?? 'Not recorded' }), rt: 'Service', sv: s.description || '—', b: s.billable, da: s.allocated ? s.draft_amount : null, s: svcStatus(s), el: !s.invoiced && !s.allocated ? 'Yes' : 'No' });
+      if (client) {
+        const cb = clientBreakdown(o, s);
+        if (cb) cb.rows.forEach((r) => svcRows.push({ d: `   ${r.t}: ${r.d}`, rt: 'Component (included)', sv: s.description || '—', cq: r.q, cb: r.b }));
+        continue;
+      }
+      const bd = svcBreakdown(o, s);
       if (!bd) continue;
       bd.rows.forEach((r) => svcRows.push({ d: `   ${r.t}: ${r.d}`, rt: 'Component (info)', sv: s.description || '—', cq: r.q, cc: r.c, cb: r.b }));
       if (bd.dc || bd.db) svcRows.push({ d: '   Difference: service total − components', rt: 'Difference', sv: s.description || '—', cc: bd.dc, cb: bd.db });
@@ -473,7 +499,7 @@ Deno.serve(async (req) => {
 
     // Internal only: explanatory service components (read-only ServiceLineItem records; parent stays authoritative).
     o.svc_components = {};
-    if (report_type === 'internal' && sections.includes('services') && o.lines.services.length) {
+    if (sections.includes('services') && o.lines.services.length) {
       const items = await base44.entities.ServiceLineItem.filter({ service_commitment_id: { $in: o.lines.services.map((s) => s.id) } }, 'sort_order', 1000);
       for (const li of items) (o.svc_components[li.service_commitment_id] ||= []).push(li);
     }
@@ -482,7 +508,9 @@ Deno.serve(async (req) => {
     const safe = (o.project_name || 'project').replace(/[^a-z0-9]+/gi, '_').slice(0, 40);
     const filename = `${safe}_${report_type === 'client' ? 'Billing_Detail' : 'Internal_Financials'}_${o.generated_at.slice(0, 10)}.${format}`;
     const { tot, laborGroups, other } = buildModel(o, report_type === 'client');
-    const check = { total_current_billable: o.summary.total_current_billable, total_projected_billable: o.summary.total_projected_billable, parts: tot.parts, parts_rows: tot.partsRows, services: tot.services, services_rows: tot.servicesRows, qty: [tot.qReq, tot.qFin, tot.qDraft, tot.qAvail], labor: [tot.laborHours, tot.laborRowsHours, tot.laborToDate, tot.laborRowsToDate, tot.laborRemHours, tot.laborRowsRemHours, tot.laborProjected, tot.laborRowsProjected], drafts: [tot.partsDraft, tot.svcDraft, o.summary.allocated_to_drafts] };
+    const check = { total_current_billable: o.summary.total_current_billable, total_projected_billable: o.summary.total_projected_billable, parts: tot.parts, parts_rows: tot.partsRows, services: tot.services, services_rows: tot.servicesRows, qty: [tot.qReq, tot.qFin, tot.qDraft, tot.qAvail], labor: [tot.laborHours, tot.laborRowsHours, tot.laborToDate, tot.laborRowsToDate, tot.laborRemHours, tot.laborRowsRemHours, tot.laborProjected, tot.laborRowsProjected], drafts: [tot.partsDraft, tot.svcDraft, o.summary.allocated_to_drafts],
+      // Internal-only review flags (never rendered in client files)
+      service_review: o.lines.services.map((s) => { const cb = clientBreakdown(o, s); return cb && { service: s.description, components: cb.rows.length, component_billable: sum(cb.rows, (r) => r.b), parent_billable: s.billable, unreconciled: cb.db, long_descriptions: cb.rows.filter((r) => r.long).length }; }).filter(Boolean) };
     check.labor_groups = laborGroups.map((g) => ({ title: g.title, tasks: g.rows.map((t) => t.task_id || t.id || t.name), h: g.h, b: g.b, rh: g.rh, pa: g.pa }));
     check.other_groups = other.groups.map((g) => ({ title: g.title, tasks: g.rows.map((t) => t.id || t.name), h: g.h, rh: g.rh }));
     check.all_logged = sum(o.labor_billing.tasks, (t) => t.logged);
