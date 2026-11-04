@@ -29,10 +29,14 @@ function buildModel(o, client) {
   const services = o.lines.services;
   const labor = o.labor_billing.tasks.filter((t) => (client ? isBill(t) && t.effective_rate != null : t.logged > 0 || t.remaining_hours > 0));
   const bl = labor.filter(isBill);
+  // Group by canonical remaining estimated BILLABLE hours (non-billable tasks count as 0). Not a completion status.
+  const remBill = (t) => (isBill(t) ? t.remaining_hours || 0 : 0);
+  const grp = (title, rows) => ({ title, rows, h: sum(rows.filter(isBill), (t) => t.logged), b: sum(rows.filter(isBill), (t) => t.billable_to_date), rh: sum(rows.filter(isBill), (t) => t.remaining_hours), pa: sum(rows.filter(isBill), (t) => t.projected_remaining) });
+  const laborGroups = [grp('Remaining Estimated Work', labor.filter((t) => remBill(t) > 0)), grp('No Remaining Estimated Hours', labor.filter((t) => !(remBill(t) > 0)))];
   const svcActKnown = services.every((s) => s.actual_cost != null);
   const s = o.summary;
   return {
-    parts, services, labor,
+    parts, services, labor, laborGroups,
     tot: {
       parts: o.categories.parts.billable, services: o.categories.services.billable,
       partsRows: sum(parts, (p) => p.billable), servicesRows: sum(services, (x) => x.billable),
@@ -125,6 +129,11 @@ function buildPdf(o, opts) {
     if (y + 22 + minBelow > H - 40) { doc.addPage(); y = 40; }
     doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...RED); doc.text(name, L, y + 12); doc.setTextColor(20);
     y += 18;
+  };
+  const subheading = (name) => {
+    if (y + 16 + 70 > H - 40) { doc.addPage(); y = 40; } // keep with header + first rows
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(...DARK); doc.text(name, L, y + 10); doc.setTextColor(20); doc.setFont('helvetica', 'normal');
+    y += 15;
   };
   const note = (txt) => {
     doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(90);
@@ -225,10 +234,19 @@ function buildPdf(o, opts) {
     if (!m.labor.length) empty('No labor recorded.');
     else {
       const T = m.tot;
-      const body = m.labor.map((t) => [t.name, isBill(t) ? hrs(t.logged) : `${hrs(t.logged)} (not billed separately)`, isBill(t) && t.effective_rate != null ? `${usd(t.effective_rate)}/h` : '—', isBill(t) ? usd(t.billable_to_date) : '—', ...(proj ? [isBill(t) ? hrs(t.remaining_hours) : '—', isBill(t) ? usd(t.projected_remaining) : '—'] : []), laborStatus(t)]);
-      body.push(['Labor subtotal (billable only)', hrs(T.laborHours), '', usd(T.laborToDate), ...(proj ? [hrs(T.laborRemHours), usd(T.laborProjected)] : []), '']);
-      table(['Task', 'Billable logged hrs', 'Approved rate', 'Billable to date', ...(proj ? ['Remaining est. hrs', 'Projected add\'l billing'] : []), 'Classification'], body, { right: proj ? [1, 2, 3, 4, 5] : [1, 2, 3], marks: { [body.length - 1]: 'sub' }, widths: { 0: client ? 140 : 220 } });
-      if (proj) table(['Projected Total Labor Billing', 'Amount'], [['Labor billable to date', usd(T.laborToDate)], ['+ Projected remaining labor', usd(T.laborProjected)], ['= Projected total labor billing', usd(r2(T.laborToDate + T.laborProjected))]], { right: [1], marks: { 2: 'grand' }, widths: { 1: 110 } });
+      const head = ['Task', 'Billable logged hrs', 'Approved rate', 'Billable to date', ...(proj ? ['Remaining est. hrs', 'Projected add\'l billing'] : []), 'Classification'];
+      const opt = (n) => ({ right: proj ? [1, 2, 3, 4, 5] : [1, 2, 3], marks: { [n - 1]: 'sub' }, widths: { 0: client ? 140 : 220 } });
+      m.laborGroups.forEach((g) => {
+        subheading(`${g.title} (${g.rows.length} task${g.rows.length === 1 ? '' : 's'})`);
+        if (!g.rows.length) { empty('No tasks in this group.'); return; }
+        const body = g.rows.map((t) => [t.name, isBill(t) ? hrs(t.logged) : `${hrs(t.logged)} (not billed separately)`, isBill(t) && t.effective_rate != null ? `${usd(t.effective_rate)}/h` : '—', isBill(t) ? usd(t.billable_to_date) : '—', ...(proj ? [isBill(t) ? hrs(t.remaining_hours) : '—', isBill(t) ? usd(t.projected_remaining) : '—'] : []), laborStatus(t)]);
+        body.push([`${g.title} subtotal (billable only)`, hrs(g.h), '', usd(g.b), ...(proj ? [hrs(g.rh), usd(g.pa)] : []), '']);
+        table(head, body, opt(body.length));
+      });
+      subheading('Labor Grand Totals');
+      const gt = [['Total billable logged hours', hrs(T.laborHours)], ['Total labor billable to date (current)', usd(T.laborToDate)]];
+      if (proj) gt.push(['Total remaining estimated billable hours (projected)', hrs(T.laborRemHours)], ['Total projected additional labor (estimate)', usd(T.laborProjected)], ['= Projected total labor billing', usd(r2(T.laborToDate + T.laborProjected))]);
+      table(['Labor grand totals', 'Value'], gt, { right: [1], marks: { [gt.length - 1]: 'grand' }, widths: { 1: 110 } });
       note((client ? '' : 'Internal labor costs are not configured; labor margin is not calculated. ') + 'Only labor classified Billable is valued. Service-included, non-billable and unclassified hours are not counted as additional labor revenue. Rates are not totaled.');
     }
   }
@@ -329,13 +347,29 @@ async function buildXlsx(o, opts) {
     if (proj) cols.push({ h: 'Remaining Est. Hours', k: 'rh', f: HRS, sum: 1 }, { h: 'Projected Additional Billing', k: 'pa', f: MONEY, sum: 1 });
     cols.push({ h: 'Classification', k: 's', w: 32, wrap: true });
     if (!client) cols.push({ h: 'Internal Labor Cost', k: 'ic', w: 16 });
-    const ws = sheet('Labor', cols, m.labor.map((t) => ({ d: t.name, h: isBill(t) ? t.logged : 0, lh: t.logged, r: isBill(t) ? t.effective_rate : null, b: isBill(t) ? t.billable_to_date : null, rh: isBill(t) ? t.remaining_hours : null, pa: isBill(t) ? t.projected_remaining : null, s: laborStatus(t), ic: 'Not configured' })),
-      { d: 'Labor subtotal (billable only)', h: T.laborHours, b: T.laborToDate, ...(proj ? { rh: T.laborRemHours, pa: T.laborProjected } : {}) }, 'No labor recorded.');
-    if (proj && m.labor.length) {
+    cols.unshift({ h: 'Labor Group', k: 'g', w: 28 });
+    const row = (t, g) => ({ g, d: t.name, h: isBill(t) ? t.logged : 0, lh: t.logged, r: isBill(t) ? t.effective_rate : null, b: isBill(t) ? t.billable_to_date : null, rh: isBill(t) ? t.remaining_hours : null, pa: isBill(t) ? t.projected_remaining : null, s: laborStatus(t), ic: 'Not configured' });
+    const ws = wb.addWorksheet('Labor', { views: [{ state: 'frozen', ySplit: 1 }] });
+    ws.columns = cols.map((c) => ({ header: c.h, key: c.k, width: c.w || 14, style: { ...(c.f ? { numFmt: c.f } : {}), alignment: { wrapText: !!c.wrap, vertical: 'top', ...(c.f ? { horizontal: 'right' } : {}) } } }));
+    const hr = ws.getRow(1); hr.font = { bold: true, color: { argb: 'FFFFFFFF' } }; hr.fill = fill('FF1F2937'); hr.alignment = { wrapText: true, vertical: 'middle' }; hr.height = 30;
+    if (!m.labor.length) ws.addRow({ d: 'No labor recorded.' }).font = { italic: true, color: { argb: 'FF6B7280' } };
+    else {
+      m.laborGroups.forEach((g) => {
+        styleRow(ws.addRow({ g: g.title, d: `${g.rows.length} task(s)` }), 'group');
+        g.rows.forEach((t) => ws.addRow(row(t, g.title)));
+        if (!g.rows.length) ws.addRow({ g: g.title, d: 'No tasks in this group.' }).font = { italic: true, color: { argb: 'FF6B7280' } };
+        styleRow(ws.addRow({ g: g.title, d: `${g.title} subtotal (billable only)`, h: g.h, b: g.b, ...(proj ? { rh: g.rh, pa: g.pa } : {}) }), 'sub');
+      });
+      ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: ws.rowCount, column: cols.length } };
       ws.addRow({});
-      ws.addRow({ d: 'Labor billable to date', b: T.laborToDate });
-      ws.addRow({ d: '+ Projected remaining labor', b: T.laborProjected });
-      styleRow(ws.addRow({ d: '= Projected total labor billing', b: r2(T.laborToDate + T.laborProjected) }), 'grand');
+      styleRow(ws.addRow({ d: 'Labor Grand Totals' }), 'group');
+      ws.addRow({ d: 'Total billable logged hours', h: T.laborHours });
+      ws.addRow({ d: 'Total labor billable to date (current)', b: T.laborToDate });
+      if (proj) {
+        ws.addRow({ d: 'Total remaining estimated billable hours (projected)', rh: T.laborRemHours });
+        ws.addRow({ d: 'Total projected additional labor (estimate)', pa: T.laborProjected });
+        styleRow(ws.addRow({ d: '= Projected total labor billing', b: r2(T.laborToDate + T.laborProjected) }), 'grand');
+      }
     }
   }
   if (S.includes('invoices')) {
@@ -372,8 +406,9 @@ Deno.serve(async (req) => {
     const bytes = format === 'pdf' ? buildPdf(o, opts) : await buildXlsx(o, opts);
     const safe = (o.project_name || 'project').replace(/[^a-z0-9]+/gi, '_').slice(0, 40);
     const filename = `${safe}_${report_type === 'client' ? 'Billing_Detail' : 'Internal_Financials'}_${o.generated_at.slice(0, 10)}.${format}`;
-    const { tot } = buildModel(o, report_type === 'client');
+    const { tot, laborGroups } = buildModel(o, report_type === 'client');
     const check = { total_current_billable: o.summary.total_current_billable, total_projected_billable: o.summary.total_projected_billable, parts: tot.parts, parts_rows: tot.partsRows, services: tot.services, services_rows: tot.servicesRows, qty: [tot.qReq, tot.qFin, tot.qDraft, tot.qAvail], labor: [tot.laborHours, tot.laborRowsHours, tot.laborToDate, tot.laborRowsToDate, tot.laborRemHours, tot.laborRowsRemHours, tot.laborProjected, tot.laborRowsProjected], drafts: [tot.partsDraft, tot.svcDraft, o.summary.allocated_to_drafts] };
+    check.labor_groups = laborGroups.map((g) => ({ title: g.title, tasks: g.rows.map((t) => t.task_id || t.id || t.name), h: g.h, b: g.b, rh: g.rh, pa: g.pa }));
     if (report_type === 'internal') check.est_cost = [o.summary.estimated_cost, o.summary.estimated_gross_profit];
     return Response.json({ success: true, filename, file_base64: b64(bytes), generated_at: o.generated_at, check });
   } catch (error) {
