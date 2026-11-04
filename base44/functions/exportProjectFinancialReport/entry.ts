@@ -212,7 +212,10 @@ function buildPdf(o, opts) {
         if (rm[i] === 'sub' || rm[i] === 'grand') cut = rm[i - 1] === 'sub' || rm[i - 1] === 'grand' ? i - 2 : i - 1;
         else if (rm[i - 1] === 'phase') cut = i - 1;
       }
-      if (cut <= 0) break;
+      // Never leave a phase heading behind when rows are pulled onto the next page.
+      while (cut > 0 && rm[cut - 1] === 'phase') cut--;
+      if (cut < 0) break;
+      if (cut === 0) { if (y <= 60) break; doc.addPage(); y = 40; continue; }
       draw(head, rest.slice(0, cut), rm, columnStyles);
       doc.addPage(); y = 40;
       const nm = {}; Object.entries(rm).forEach(([k, v]) => { if (+k >= cut) nm[+k - cut] = v; });
