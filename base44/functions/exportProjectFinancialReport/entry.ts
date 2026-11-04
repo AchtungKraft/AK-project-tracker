@@ -61,10 +61,21 @@ function buildModel(o, client) {
     return { key: k, title: OTHER_LABEL[k], rows, h: sum(rows, (t) => t.logged), eh: sum(rows, (t) => t.estimated_hours), rh: sum(rows, (t) => t.remaining_hours) };
   }).filter((g) => g.rows.length);
   const other = { groups: otherGroups, h: sum(otherTasks, (t) => t.logged), eh: sum(otherTasks, (t) => t.estimated_hours), rh: sum(otherTasks, (t) => t.remaining_hours), svc: (t) => (t.service_commitment_id ? svcName.get(t.service_commitment_id) || 'Linked service' : '—') };
+  // Phase grouping: canonical Task.kanban_bucket_id → ProjectKanbanBucket (Workload order). Each task appears once.
+  const phaseOf = (t) => o.task_phase?.[t.id] ?? null;
+  const phases = [...(o.phases || []), { id: null, name: 'Unassigned Phase' }].map((p) => {
+    const inP = (t) => phaseOf(t) === p.id;
+    const groups = laborGroups.map((g) => grp(g.title, g.rows.filter(inP)));
+    const og = otherGroups.map((g) => { const rows = g.rows.filter(inP); return { ...g, rows, h: sum(rows, (t) => t.logged), eh: sum(rows, (t) => t.estimated_hours), rh: sum(rows, (t) => t.remaining_hours) }; }).filter((g) => g.rows.length);
+    const bill = groups.flatMap((g) => g.rows), oth = og.flatMap((g) => g.rows);
+    const kh = (k) => sum(og.filter((g) => g.key === k), (g) => g.h);
+    const b = sum(bill, (t) => t.billable_to_date), pa = sum(bill, (t) => t.projected_remaining);
+    return { name: p.name, groups, other: og, n: bill.length + oth.length, allH: r2(sum(bill, (t) => t.logged) + sum(oth, (t) => t.logged)), h: sum(bill, (t) => t.logged), b, rh: sum(bill, (t) => t.remaining_hours), pa, pt: r2(b + pa), nbH: kh('NON_BILLABLE'), incH: kh('INCLUDED_IN_SERVICE'), uncH: r2(kh('UNCLASSIFIED') + kh('CANCELLED')) };
+  }).filter((p) => p.n);
   const svcActKnown = services.every((s) => s.actual_cost != null);
   const s = o.summary;
   return {
-    parts, services, labor, laborGroups, other,
+    parts, services, labor, laborGroups, other, phases,
     tot: {
       parts: o.categories.parts.billable, services: o.categories.services.billable,
       partsRows: sum(parts, (p) => p.billable), servicesRows: sum(services, (x) => x.billable),
@@ -284,27 +295,40 @@ function buildPdf(o, opts) {
       const T = m.tot;
       const head = ['Task', 'Billable logged hrs', 'Approved rate', 'Billable to date', ...(proj ? ['Remaining est. hrs', 'Projected add\'l billing'] : []), 'Classification'];
       const opt = (n) => ({ right: proj ? [1, 2, 3, 4, 5] : [1, 2, 3], marks: { [n - 1]: 'sub' }, widths: { 0: client ? 140 : 220 } });
-      m.laborGroups.forEach((g) => {
+      const phaseHeading = (name) => {
+        if (y + 22 + 90 > H - 40) { doc.addPage(); y = 40; } // keep phase heading with first group + rows
+        doc.setFillColor(...DARK); doc.rect(L, y, W - 2 * L, 18, 'F');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(255); doc.text(`PHASE: ${name.toUpperCase()}`, L + 6, y + 12.5); doc.setTextColor(20); doc.setFont('helvetica', 'normal');
+        y += 24;
+      };
+      m.phases.forEach((ph) => {
+      phaseHeading(ph.name);
+      ph.groups.forEach((g) => {
+        if (!g.rows.length) return;
         subheading(`${g.title} (${g.rows.length} task${g.rows.length === 1 ? '' : 's'})`);
-        if (!g.rows.length) { empty('No tasks in this group.'); return; }
         const body = g.rows.map((t) => [t.name, isBill(t) ? hrs(t.logged) : `${hrs(t.logged)} (not billed separately)`, isBill(t) && t.effective_rate != null ? `${usd(t.effective_rate)}/h` : '—', isBill(t) ? usd(t.billable_to_date) : '—', ...(proj ? [isBill(t) ? hrs(t.remaining_hours) : '—', isBill(t) ? usd(t.projected_remaining) : '—'] : []), laborStatus(t)]);
         body.push([`${g.title} subtotal (billable only)`, hrs(g.h), '', usd(g.b), ...(proj ? [hrs(g.rh), usd(g.pa)] : []), '']);
         table(head, body, opt(body.length));
       });
-      subheading(`${OTHER_TITLE} (${m.other.groups.reduce((n, g) => n + g.rows.length, 0)} tasks)`);
-      if (!m.other.groups.length) empty('No other labor recorded.');
-      else {
-        note('Hours only — $0 additional labor billing. Recorded hours are work already logged; estimated and remaining hours are future estimates.');
+      if (ph.other.length) {
+        subheading(`${OTHER_TITLE} (${ph.other.reduce((n, g) => n + g.rows.length, 0)} tasks) — hours only, $0 additional billing`);
         const oh = ['Task', 'Classification', 'Linked service', 'Recorded hrs (logged)', 'Estimated hrs', 'Remaining est. hrs (future)'];
-        m.other.groups.forEach((g) => {
+        ph.other.forEach((g) => {
           subheading(`${g.title} (${g.rows.length})`);
           const body = g.rows.map((t) => [t.name, g.title, m.other.svc(t), hrs(t.logged), hrs(t.estimated_hours), hrs(t.remaining_hours)]);
           body.push([`${g.title} subtotal (no revenue)`, '', '', hrs(g.h), hrs(g.eh), hrs(g.rh)]);
           table(oh, body, { right: [3, 4, 5], marks: { [body.length - 1]: 'sub' }, widths: { 0: client ? 150 : 220 } });
         });
-        table(['Other labor totals (no revenue)', 'Recorded hrs', 'Remaining est. hrs'], [['Total other labor', hrs(m.other.h), hrs(m.other.rh)]], { right: [1, 2], marks: { 0: 'sub' } });
       }
-      subheading('Labor Grand Totals', 120);
+      const pt = [['Total logged hours (all classifications)', hrs(ph.allH)], ['Separately billable logged hours', hrs(ph.h)], ['Labor billable to date (current)', usd(ph.b)]];
+      if (proj) pt.push(['Remaining estimated billable hours (projected)', hrs(ph.rh)], ['Projected additional labor billing (estimate)', usd(ph.pa)], ['Projected total labor billing', usd(ph.pt)]);
+      pt.push(['No Charge recorded hours (no revenue)', hrs(ph.nbH)], ['Included in Service recorded hours (no revenue)', hrs(ph.incH)]);
+      if (!client) pt.push(['Needs Classification / cancelled recorded hours (no revenue)', hrs(ph.uncH)]);
+      if (y + 30 + pt.length * 16 > H - 40) { doc.addPage(); y = 40; } // keep phase total together
+      table([`PHASE TOTAL — ${ph.name}`, 'Value'], pt, { right: [1], marks: Object.fromEntries(pt.map((_, i) => [i, 'sub'])), widths: { 1: 110 } });
+      });
+      if (m.other.groups.length) note('Other Labor is hours only — $0 additional labor billing. Recorded hours are work already logged; estimated and remaining hours are future estimates.');
+      subheading('PROJECT LABOR GRAND TOTAL', 120);
       const gt = [['Total billable logged hours', hrs(T.laborHours)], ['Total labor billable to date (current)', usd(T.laborToDate)]];
       if (proj) gt.push(['Total remaining estimated billable hours (projected)', hrs(T.laborRemHours)], ['Total projected additional labor (estimate)', usd(T.laborProjected)], ['= Projected total labor billing', usd(r2(T.laborToDate + T.laborProjected))]);
       table(['Labor grand totals', 'Value'], gt, { right: [1], marks: { [gt.length - 1]: 'grand' }, widths: { 1: 110 } });
@@ -419,45 +443,40 @@ async function buildXlsx(o, opts) {
   }
   if (S.includes('labor')) {
     const cols = [{ h: 'Task', k: 'd', w: 44, wrap: true }, { h: 'Billable Logged Hours', k: 'h', f: HRS, sum: 1 }];
-    if (!client) cols.push({ h: 'Logged Hours (all)', k: 'lh', f: HRS });
+    cols.push({ h: 'Logged Hours (all)', k: 'lh', f: HRS });
     cols.push({ h: 'Approved Rate', k: 'r', f: MONEY }, { h: 'Billable To Date', k: 'b', f: MONEY, sum: 1 });
     if (proj) cols.push({ h: 'Remaining Est. Hours', k: 'rh', f: HRS, sum: 1 }, { h: 'Projected Additional Billing', k: 'pa', f: MONEY, sum: 1 });
     cols.push({ h: 'Classification', k: 's', w: 32, wrap: true });
     if (!client) cols.push({ h: 'Internal Labor Cost', k: 'ic', w: 16 });
-    cols.unshift({ h: 'Labor Group', k: 'g', w: 28 });
+    cols.unshift({ h: 'Phase', k: 'ph', w: 22 }, { h: 'Row Type', k: 'rt', w: 14 }, { h: 'Labor Group', k: 'g', w: 28 });
     const row = (t, g) => ({ g, d: t.name, h: isBill(t) ? t.logged : 0, lh: t.logged, r: isBill(t) ? t.effective_rate : null, b: isBill(t) ? t.billable_to_date : null, rh: isBill(t) ? t.remaining_hours : null, pa: isBill(t) ? t.projected_remaining : null, s: laborStatus(t), ic: 'Not configured' });
     const ws = wb.addWorksheet('Labor', { views: [{ state: 'frozen', ySplit: 1 }] });
     ws.columns = cols.map((c) => ({ header: c.h, key: c.k, width: c.w || 14, style: { ...(c.f ? { numFmt: c.f } : {}), alignment: { wrapText: !!c.wrap, vertical: 'top', ...(c.f ? { horizontal: 'right' } : {}) } } }));
     const hr = ws.getRow(1); hr.font = { bold: true, color: { argb: 'FFFFFFFF' } }; hr.fill = fill('FF1F2937'); hr.alignment = { wrapText: true, vertical: 'middle' }; hr.height = 30;
     if (!m.labor.length && !m.other.groups.length) ws.addRow({ d: 'No labor recorded.' }).font = { italic: true, color: { argb: 'FF6B7280' } };
     else {
-      m.laborGroups.forEach((g) => {
-        styleRow(ws.addRow({ g: g.title, d: `${g.rows.length} task(s)` }), 'group');
-        g.rows.forEach((t) => ws.addRow(row(t, g.title)));
-        if (!g.rows.length) ws.addRow({ g: g.title, d: 'No tasks in this group.' }).font = { italic: true, color: { argb: 'FF6B7280' } };
-        styleRow(ws.addRow({ g: g.title, d: `${g.title} subtotal (billable only)`, h: g.h, b: g.b, ...(proj ? { rh: g.rh, pa: g.pa } : {}) }), 'sub');
+      // Row Type separates task rows from subtotal rows so filters/sums on task rows cannot double-count.
+      m.phases.forEach((ph) => {
+        const P = { ph: ph.name };
+        styleRow(ws.addRow({ ...P, rt: 'Phase', d: `PHASE: ${ph.name}` }), 'grand');
+        ph.groups.forEach((g) => {
+          if (!g.rows.length) return;
+          styleRow(ws.addRow({ ...P, rt: 'Group', g: g.title, d: `${g.rows.length} task(s)` }), 'group');
+          g.rows.forEach((t) => ws.addRow({ ...P, rt: 'Task', ...row(t, g.title) }));
+          styleRow(ws.addRow({ ...P, rt: 'Group subtotal', g: g.title, d: `${g.title} subtotal (billable only)`, h: g.h, b: g.b, ...(proj ? { rh: g.rh, pa: g.pa } : {}) }), 'sub');
+        });
+        ph.other.forEach((g) => {
+          const gl = `${OTHER_TITLE}: ${g.title}`;
+          styleRow(ws.addRow({ ...P, rt: 'Group', g: gl, d: `${g.rows.length} task(s) — hours only, $0 additional billing` }), 'group');
+          g.rows.forEach((t) => ws.addRow({ ...P, rt: 'Task', g: gl, d: t.name, h: 0, lh: t.logged || 0, s: `${g.title}${t.service_commitment_id ? ` — ${m.other.svc(t)}` : ''}` }));
+          styleRow(ws.addRow({ ...P, rt: 'Group subtotal', g: gl, d: `${g.title} subtotal (no revenue)`, lh: g.h }), 'sub');
+        });
+        styleRow(ws.addRow({ ...P, rt: 'Phase total', d: `PHASE TOTAL — ${ph.name} (separately billable)`, h: ph.h, lh: ph.allH, b: ph.b, ...(proj ? { rh: ph.rh, pa: ph.pa } : {}), s: `No Charge ${ph.nbH} h · Included in Service ${ph.incH} h${client ? '' : ` · Needs Classification/cancelled ${ph.uncH} h`}` }), 'sub');
+        if (proj) ws.addRow({ ...P, rt: 'Phase total', d: `Projected total labor billing — ${ph.name}`, b: ph.pt });
+        ws.addRow({});
       });
       ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: ws.rowCount, column: cols.length } };
-      ws.addRow({});
-      // Group C — separate sheet section with hours-only columns (no rate / revenue).
-      styleRow(ws.addRow({ g: OTHER_TITLE, d: 'Hours only — $0 additional labor billing' }), 'group');
-      // Fixed columns: A group, B task, C recorded, D estimated, E remaining, F linked service, G classification.
-      const put = (vals, kind) => {
-        const r = ws.addRow([]);
-        vals.forEach((v, i) => { const c = r.getCell(i + 1); c.value = v; c.numFmt = i >= 2 && i <= 4 && typeof v === 'number' ? HRS : 'General'; c.alignment = { horizontal: i >= 2 && i <= 4 ? 'right' : 'left', wrapText: true, vertical: 'top' }; });
-        if (kind) styleRow(r, kind);
-        return r;
-      };
-      put(['Labor Group', 'Task', 'Recorded Hours (logged)', 'Estimated Hours', 'Remaining Est. Hours (future)', 'Linked Service', 'Classification']).font = { bold: true };
-      m.other.groups.forEach((g) => {
-        const gl = `${OTHER_TITLE}: ${g.title}`;
-        g.rows.forEach((t) => put([gl, t.name, t.logged || 0, t.estimated_hours ?? 0, t.remaining_hours || 0, m.other.svc(t), g.title]));
-        put([gl, `${g.title} subtotal (no revenue)`, g.h, g.eh, g.rh, '', ''], 'sub');
-      });
-      if (!m.other.groups.length) put([OTHER_TITLE, 'No other labor recorded.']);
-      else put([OTHER_TITLE, 'Total other labor (no revenue)', m.other.h, m.other.eh, m.other.rh, '', ''], 'sub');
-      ws.addRow({});
-      styleRow(ws.addRow({ d: 'Labor Grand Totals' }), 'group');
+      styleRow(ws.addRow({ rt: 'Grand total', d: 'PROJECT LABOR GRAND TOTAL' }), 'group');
       ws.addRow({ d: 'Total billable logged hours', h: T.laborHours });
       ws.addRow({ d: 'Total labor billable to date (current)', b: T.laborToDate });
       if (proj) {
@@ -503,12 +522,22 @@ Deno.serve(async (req) => {
       const items = await base44.entities.ServiceLineItem.filter({ service_commitment_id: { $in: o.lines.services.map((s) => s.id) } }, 'sort_order', 1000);
       for (const li of items) (o.svc_components[li.service_commitment_id] ||= []).push(li);
     }
+    // Read-only phase lookup (same source/order as Project Workload).
+    const [buckets, ptasks] = await Promise.all([
+      base44.entities.ProjectKanbanBucket.filter({ project_id }, 'order', 500),
+      base44.entities.Task.filter({ project_id }, null, 5000),
+    ]);
+    buckets.sort((a, b) => (a.order || 0) - (b.order || 0));
+    const bucketIds = new Set(buckets.map((b) => b.id));
+    o.phases = buckets.map((b) => ({ id: b.id, name: b.name || 'Unnamed phase' }));
+    o.task_phase = Object.fromEntries(ptasks.map((t) => [t.id, bucketIds.has(t.kanban_bucket_id) ? t.kanban_bucket_id : null]));
     const opts = { report_type, sections, include_projected: !!include_projected };
     const bytes = format === 'pdf' ? buildPdf(o, opts) : await buildXlsx(o, opts);
     const safe = (o.project_name || 'project').replace(/[^a-z0-9]+/gi, '_').slice(0, 40);
     const filename = `${safe}_${report_type === 'client' ? 'Billing_Detail' : 'Internal_Financials'}_${o.generated_at.slice(0, 10)}.${format}`;
-    const { tot, laborGroups, other } = buildModel(o, report_type === 'client');
+    const { tot, laborGroups, other, phases } = buildModel(o, report_type === 'client');
     const check = { total_current_billable: o.summary.total_current_billable, total_projected_billable: o.summary.total_projected_billable, parts: tot.parts, parts_rows: tot.partsRows, services: tot.services, services_rows: tot.servicesRows, qty: [tot.qReq, tot.qFin, tot.qDraft, tot.qAvail], labor: [tot.laborHours, tot.laborRowsHours, tot.laborToDate, tot.laborRowsToDate, tot.laborRemHours, tot.laborRowsRemHours, tot.laborProjected, tot.laborRowsProjected], drafts: [tot.partsDraft, tot.svcDraft, o.summary.allocated_to_drafts],
+      phase_check: { phases: phases.map((p) => ({ name: p.name, tasks: p.n, h: p.h, b: p.b, rh: p.rh, pa: p.pa, pt: p.pt, allH: p.allH, nbH: p.nbH, incH: p.incH, uncH: p.uncH })), sum_h: sum(phases, (p) => p.h), sum_b: sum(phases, (p) => p.b), sum_rh: sum(phases, (p) => p.rh), sum_pa: sum(phases, (p) => p.pa), sum_pt: sum(phases, (p) => p.pt), task_rows: phases.reduce((n, p) => n + p.n, 0), model_tasks: laborGroups.reduce((n, g) => n + g.rows.length, 0) + other.groups.reduce((n, g) => n + g.rows.length, 0) },
       // Internal-only review flags (never rendered in client files)
       service_review: o.lines.services.map((s) => { const cb = clientBreakdown(o, s); return cb && { service: s.description, components: cb.rows.length, component_billable: sum(cb.rows, (r) => r.b), parent_billable: s.billable, unreconciled: cb.db, long_descriptions: cb.rows.filter((r) => r.long).length }; }).filter(Boolean) };
     check.labor_groups = laborGroups.map((g) => ({ title: g.title, tasks: g.rows.map((t) => t.task_id || t.id || t.name), h: g.h, b: g.b, rh: g.rh, pa: g.pa }));
