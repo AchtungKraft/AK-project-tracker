@@ -35,6 +35,17 @@ const svcBreakdown = (o, s) => {
 // Client-safe presentation: removes only the recognized trailing internal tag "// Achtung Kraft Labor"; stored text untouched.
 const CLIENT_TYPE = { vendor_cost: 'Outside service / materials', internal_labor: 'Work performed by AK' };
 const clientDesc = (d) => (d || '').replace(/\s*\/\/\s*\.?\s*achtung\s+kraft\s+labor\s*\.?\s*$/i, '').trim() || '—';
+// PDF-only text safety: standard PDF fonts can't render glyphs outside Latin-1 (e.g. U+276D "❭").
+const pdfSafe = (t) => String(t ?? '').replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"').replace(/[\u2013\u2014]/g, '-').replace(/[\u2039\u203A\u276D\u276F\u00BB\u00AB\u2192]/g, '>').replace(/[^\x20-\x7E\xA0-\xFF\n]/g, '').replace(/[ \t]+/g, ' ').trim();
+// Drop a trailing copy of the part number from the name (it already prints on its own line).
+const pdfPartName = (p) => {
+  let n = pdfSafe(p.part_name) || 'Unknown part';
+  const pn = (p.part_number || '').trim();
+  if (pn) { const esc = pn.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); n = n.replace(new RegExp(`\\s*[>|#:-]?\\s*${esc}\\s*$`), '').trim() || n; }
+  return n;
+};
+// Accounting wording that may need a customer-facing rewrite (flagged for admin review, not changed).
+const NEEDS_REVIEW = /\b(cost|markup|margin|internal)\b/i;
 const clientBreakdown = (o, s) => {
   const items = o.svc_components?.[s.id] || [];
   if (!items.length) return null;
@@ -186,22 +197,28 @@ function buildPdf(o, opts) {
     right.forEach((i) => (columnStyles[i] = { halign: 'right' }));
     Object.entries(widths).forEach(([i, w]) => (columnStyles[i] = { ...(columnStyles[i] || {}), cellWidth: w }));
     // Keep short tables (summaries, reconciliation) together on one page.
-    if (body.length <= 12 && y + 20 + body.length * 17 > H - 40) { doc.addPage(); y = 40; }
-    const subIdx = body.length - 1;
-    if (marks[subIdx] === 'sub' && body.length > 3) {
-      // Dry-run on a scratch doc: if the subtotal would land alone on a new page, break before the last data row.
+    if (body.length <= 12 && y + 20 + body.length * 14 > H - 40) { doc.addPage(); y = 40; }
+    // Dry-run on a scratch doc, then break early so subtotal/grand rows never start a page
+    // without their last task, and phase name rows never end a page alone.
+    let rest = body, rm = marks;
+    for (let guard = 0; guard < 50 && rest.length > 2; guard++) {
       const scratch = new jsPDF({ orientation: client ? 'portrait' : 'landscape', unit: 'pt', format: 'letter' });
       const pg = {};
-      autoTable(scratch, { ...base, startY: y, head: [head], body, columnStyles, didDrawCell: (d) => { if (d.section === 'body') pg[d.row.index] = d.pageNumber; } });
-      if (pg[subIdx] !== pg[subIdx - 1]) {
-        const cut = subIdx - 1;
-        draw(head, body.slice(0, cut), marks, columnStyles);
-        doc.addPage(); y = 40;
-        draw(head, body.slice(cut), { 1: 'sub' }, columnStyles);
-        return;
+      autoTable(scratch, { ...base, startY: y, head: [head], body: rest, columnStyles, didDrawCell: (d) => { if (d.section === 'body' && pg[d.row.index] == null) pg[d.row.index] = d.pageNumber; } });
+      let cut = -1;
+      for (let i = 1; i < rest.length && cut < 0; i++) {
+        if (pg[i] === pg[i - 1]) continue;
+        // row i starts a new page
+        if (rm[i] === 'sub' || rm[i] === 'grand') cut = rm[i - 1] === 'sub' || rm[i - 1] === 'grand' ? i - 2 : i - 1;
+        else if (rm[i - 1] === 'phase') cut = i - 1;
       }
+      if (cut <= 0) break;
+      draw(head, rest.slice(0, cut), rm, columnStyles);
+      doc.addPage(); y = 40;
+      const nm = {}; Object.entries(rm).forEach(([k, v]) => { if (+k >= cut) nm[+k - cut] = v; });
+      rest = rest.slice(cut); rm = nm;
     }
-    draw(head, body, marks, columnStyles);
+    draw(head, rest, rm, columnStyles);
   };
   const draw = (head, body, marks, columnStyles) => {
     autoTable(doc, {
@@ -236,7 +253,7 @@ function buildPdf(o, opts) {
     if (!m.parts.length) empty('No parts recorded.');
     else {
       const T = m.tot;
-      const name = (p) => (p.part_number ? `${p.part_name || 'Unknown part'}\n${p.part_number}` : p.part_name || 'Unknown part');
+      const name = (p) => { const n = pdfPartName(p); return p.part_number ? `${n}\n${p.part_number}` : n; };
       if (client) {
         const body = m.parts.map((p) => [name(p), p.qty, p.invoiced_qty, p.allocated_qty, avail(p), usd(p.unit_retail), usd(p.billable), partStatus(p)]);
         body.push(['Parts subtotal', T.qReq, T.qFin, T.qDraft, T.qAvail, '', usd(T.parts), '']);
@@ -323,7 +340,7 @@ function buildPdf(o, opts) {
   }
 
   // Final reconciliation
-  heading('Financial Reconciliation', 250); // keep reconciliation + invoice position + note together
+  heading('Financial Reconciliation', 190); // keep reconciliation + invoice position + note together
   const rr = reconRows(o, proj).map((r) => r.map((v, i) => (i === 0 ? v : v == null ? '—' : usd(v))));
   table(proj ? ['Category', 'Current billable', 'Projected additional', 'Projected total'] : ['Category', 'Current billable'], rr, { right: proj ? [1, 2, 3] : [1], marks: { 3: 'grand' } });
   const s = o.summary;
@@ -498,7 +515,7 @@ Deno.serve(async (req) => {
     const check = { total_current_billable: o.summary.total_current_billable, total_projected_billable: o.summary.total_projected_billable, parts: tot.parts, parts_rows: tot.partsRows, services: tot.services, services_rows: tot.servicesRows, qty: [tot.qReq, tot.qFin, tot.qDraft, tot.qAvail], labor: [tot.laborHours, tot.laborRowsHours, tot.laborToDate, tot.laborRowsToDate, tot.laborRemHours, tot.laborRowsRemHours, tot.laborProjected, tot.laborRowsProjected], drafts: [tot.partsDraft, tot.svcDraft, o.summary.allocated_to_drafts],
       phase_check: { phases: phases.map((p) => ({ name: p.name, tasks: p.n, h: p.h, b: p.b, rh: p.rh, pa: p.pa, pt: p.pt, allH: p.allH, nbH: p.nbH, incH: p.incH, uncH: p.uncH })), sum_h: sum(phases, (p) => p.h), sum_b: sum(phases, (p) => p.b), sum_rh: sum(phases, (p) => p.rh), sum_pa: sum(phases, (p) => p.pa), sum_pt: sum(phases, (p) => p.pt), task_rows: phases.reduce((n, p) => n + p.n, 0), model_tasks: laborGroups.reduce((n, g) => n + g.rows.length, 0) + other.groups.reduce((n, g) => n + g.rows.length, 0) },
       // Internal-only review flags (never rendered in client files)
-      service_review: o.lines.services.map((s) => { const cb = clientBreakdown(o, s); return cb && { service: s.description, components: cb.rows.length, component_billable: sum(cb.rows, (r) => r.b), parent_billable: s.billable, unreconciled: cb.db, long_descriptions: cb.rows.filter((r) => r.long).length }; }).filter(Boolean) };
+      service_review: o.lines.services.map((s) => { const cb = clientBreakdown(o, s); return cb && { service: s.description, components: cb.rows.length, component_billable: sum(cb.rows, (r) => r.b), parent_billable: s.billable, unreconciled: cb.db, long_descriptions: cb.rows.filter((r) => r.long).length, needs_admin_review: cb.rows.filter((r) => NEEDS_REVIEW.test(r.d)).map((r) => r.d) }; }).filter(Boolean) };
     check.labor_groups = laborGroups.map((g) => ({ title: g.title, tasks: g.rows.map((t) => t.task_id || t.id || t.name), h: g.h, b: g.b, rh: g.rh, pa: g.pa }));
     check.other_groups = other.groups.map((g) => ({ title: g.title, tasks: g.rows.map((t) => t.id || t.name), h: g.h, rh: g.rh }));
     check.all_logged = sum(o.labor_billing.tasks, (t) => t.logged);
