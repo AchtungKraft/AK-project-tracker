@@ -81,23 +81,24 @@ export default function InlineEstimateEditor({ value, onSave, disabled = false, 
       <PopoverTrigger asChild>
         <button
           className={cn(
-            "text-[10px] w-10 shrink-0 text-right tabular-nums transition-colors rounded px-0.5",
+            "text-[10px] min-w-10 shrink-0 text-right tabular-nums whitespace-nowrap transition-colors rounded px-0.5",
             display
-              ? "text-gray-500 hover:text-blue-400"
-              : "text-gray-700 hover:text-gray-400 opacity-0 group-hover/row:opacity-100",
+              ? "text-gray-400 hover:text-blue-400"
+              : "text-gray-600 hover:text-blue-400",
             disabled && "pointer-events-none",
             className
           )}
           title={display ? `Est: ${display} — click to edit` : "Add estimate"}
           onClick={e => e.stopPropagation()}
         >
-          {display || "—"}
+          {display || "+ Est. hrs"}
         </button>
       </PopoverTrigger>
       <PopoverContent
         className="w-48 p-2 bg-gray-900 border-gray-700"
-        side="left"
-        align="start"
+        side="bottom"
+        align="end"
+        collisionPadding={8}
         onClick={e => e.stopPropagation()}
       >
         {!showCustom ? (

@@ -262,7 +262,7 @@ function TaskRow({
       <span className="text-[11px] text-gray-500 w-14 truncate shrink-0 hidden md:block text-right">{assignee?.full_name?.split(" ")[0] || "\u2014"}</span>
       <span className={cn("text-[11px] w-12 shrink-0 text-right hidden sm:block tabular-nums", isOverdue ? "text-red-400 font-semibold" : "text-gray-500")}>{due ? format(due, "M/d") : "\u2014"}</span>
       {/* Estimated hours — inline editor */}
-      <span className="hidden lg:block shrink-0" onClick={e => e.stopPropagation()}>
+      <span className="block shrink-0" onClick={e => e.stopPropagation()}>
         {updateTaskMutation ? (
           <InlineEstimateEditor
             value={task.estimated_hours}
