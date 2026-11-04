@@ -137,6 +137,8 @@ function buildPdf(o, opts) {
     const columnStyles = {};
     right.forEach((i) => (columnStyles[i] = { halign: 'right' }));
     Object.entries(widths).forEach(([i, w]) => (columnStyles[i] = { ...(columnStyles[i] || {}), cellWidth: w }));
+    // Keep short tables (summaries, reconciliation) together on one page.
+    if (body.length <= 12 && y + 20 + body.length * 17 > H - 40) { doc.addPage(); y = 40; }
     autoTable(doc, {
       ...base, startY: y, head: [head], body, columnStyles,
       didParseCell: (d) => {
@@ -215,14 +217,14 @@ function buildPdf(o, opts) {
   }
 
   if (S.includes('invoices')) {
-    heading('Invoices');
     const list = o.invoice_list || [];
+    heading('Invoices', list.length <= 12 ? 30 + list.length * 17 : 60);
     if (!list.length) empty('No invoices recorded.');
     else table(['Invoice', 'Type', 'Status', 'Issue date', 'Total', 'Paid', 'Balance due'], list.map((i) => [i.number || i.id.slice(-6), i.type || '', i.status, i.issue_date || '', usd(i.total), usd(i.paid), i.balance_due == null ? '—' : usd(i.balance_due)]), { right: [4, 5, 6] });
   }
 
   // Final reconciliation
-  heading('Financial Reconciliation', 110);
+  heading('Financial Reconciliation', 250); // keep reconciliation + invoice position + note together
   const rr = reconRows(o, proj).map((r) => r.map((v, i) => (i === 0 ? v : v == null ? '—' : usd(v))));
   table(proj ? ['Category', 'Current billable', 'Projected additional', 'Projected total'] : ['Category', 'Current billable'], rr, { right: proj ? [1, 2, 3] : [1], marks: { 3: 'grand' } });
   const s = o.summary;
