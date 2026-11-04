@@ -259,6 +259,8 @@ Deno.serve(async (req) => {
     return Response.json({
       success: true,
       project_id, project_name: project.name, generated_at: new Date().toISOString(),
+      project_info: { client_name: project.client_name || null, vin: project.vin || null },
+      invoice_list: invoices.map((i) => ({ id: i.id, number: i.qb_invoice_number || null, type: i.invoice_type || null, status: i.status, issue_date: i.issue_date || null, total: r2(i.total ?? i.subtotal ?? 0), paid: r2(i.paid_amount ?? 0), balance_due: i.balance_due ?? null })),
       summary: {
         current_billable: r2(billable), estimated_cost: r2(estCost),
         estimated_gross_profit: r2(billable - estCost),
