@@ -39,7 +39,7 @@ function buildModel(o, client) {
   const svcName = new Map(services.map((x) => [x.id || x.commitment_id, x.description]));
   const kind = (t) => (t.cancelled ? 'CANCELLED' : t.billing_type === 'INCLUDED_IN_SERVICE' || t.billing_type === 'NON_BILLABLE' ? t.billing_type : 'UNCLASSIFIED');
   const otherKinds = client ? ['INCLUDED_IN_SERVICE', 'NON_BILLABLE'] : ['INCLUDED_IN_SERVICE', 'NON_BILLABLE', 'UNCLASSIFIED', 'CANCELLED'];
-  const otherTasks = o.labor_billing.tasks.filter((t) => !isBill(t) && hasHours(t) && otherKinds.includes(kind(t)));
+  const otherTasks = o.labor_billing.tasks.filter((t) => !isBill(t) && (hasHours(t) || !t.cancelled) && otherKinds.includes(kind(t)));
   const otherGroups = otherKinds.map((k) => {
     const rows = otherTasks.filter((t) => kind(t) === k);
     return { key: k, title: OTHER_LABEL[k], rows, h: sum(rows, (t) => t.logged), eh: sum(rows, (t) => t.estimated_hours), rh: sum(rows, (t) => t.remaining_hours) };
