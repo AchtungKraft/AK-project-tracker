@@ -25,6 +25,13 @@ const svcStatus = (s) => (s.invoiced ? 'Finalized' : s.allocated ? `On ${s.draft
 const isBill = (t) => t.billing_type === 'BILLABLE' && !t.cancelled;
 const laborStatus = (t) => (t.cancelled ? 'Cancelled' : TYPE[t.billing_type] || 'Unclassified') + (isBill(t) ? ' (valued, not invoiced)' : '');
 const sum = (a, f) => r2(a.reduce((x, r) => x + (f(r) || 0), 0));
+const COMP_TYPE = { vendor_cost: 'Vendor', internal_labor: 'AK labor' };
+// Explanatory component rows for one service; never added to totals. diff = parent − components.
+const svcBreakdown = (o, s) => {
+  const rows = (o.svc_components?.[s.id] || []).map((li) => ({ t: COMP_TYPE[li.type] || li.type || 'Item', d: li.description || '—', q: li.quantity ?? null, c: li.cost == null ? null : r2(li.cost * (li.quantity ?? 1)), b: li.billing_rate == null ? null : r2(li.billing_rate * (li.quantity ?? 1)) }));
+  if (!rows.length) return null;
+  return { rows, dc: r2((s.est_cost ?? 0) - sum(rows, (r) => r.c)), db: r2((s.billable ?? 0) - sum(rows, (r) => r.b)) };
+};
 
 function buildModel(o, client) {
   const parts = o.lines.parts.filter((p) => !client || p.qty > 0);
@@ -233,9 +240,19 @@ function buildPdf(o, opts) {
         body.push(['Services subtotal', T.svcQty, usd(T.services), usd(T.svcDraft), '']);
         table(['Description', 'Qty', 'Billable', 'Draft allocation', 'Billing status'], body, { right: [1, 2, 3], marks: { [body.length - 1]: 'sub' } });
       } else {
-        const body = m.services.map((s) => [s.description || '—', 1, usd(s.est_cost), s.actual_cost == null ? 'Not recorded' : usd(s.actual_cost), usd(s.billable), dr(s), svcStatus(s)]);
+        const body = [], marks = {};
+        for (const s of m.services) {
+          const bd = svcBreakdown(o, s);
+          if (bd) marks[body.length] = 'group';
+          body.push([s.description || '—', 1, usd(s.est_cost), s.actual_cost == null ? 'Not recorded' : usd(s.actual_cost), usd(s.billable), dr(s), svcStatus(s)]);
+          if (!bd) continue;
+          bd.rows.forEach((r) => body.push([`      ${r.t}: ${r.d}`, r.q ?? '—', r.c == null ? '—' : usd(r.c), '—', r.b == null ? '—' : usd(r.b), '', 'Component (info)']));
+          if (bd.dc || bd.db) body.push(['      Difference: service total − components', '', usd(bd.dc), '', usd(bd.db), '', 'Review']);
+        }
         body.push(['Services subtotal', T.svcQty, usd(T.svcEst), T.svcAct == null ? (T.svcActPartial ? `${usd(T.svcActPartial)} (partial)` : 'Not recorded') : usd(T.svcAct), usd(T.services), usd(T.svcDraft), '']);
-        table(['Description', 'Qty', 'Est. cost', 'Actual cost', 'Billable', 'Draft allocation', 'Billing status'], body, { right: [1, 2, 3, 4, 5], marks: { [body.length - 1]: 'sub' }, widths: { 0: 240 } });
+        marks[body.length - 1] = 'sub';
+        table(['Description', 'Qty / hrs', 'Est. cost', 'Actual cost', 'Billable', 'Draft allocation', 'Billing status'], body, { right: [1, 2, 3, 4, 5], marks, widths: { 0: 260 } });
+        note('Shaded rows are services and carry the authoritative totals. Indented component rows explain each service (quantity × unit cost / billing rate) and are not added to the subtotal.');
       }
       note('Draft allocation is the amount locked on a draft invoice at the time it was drafted; it can differ from the current billable price.');
     }
@@ -362,7 +379,16 @@ async function buildXlsx(o, opts) {
     const cols = [{ h: 'Description', k: 'd', w: 46, wrap: true }, { h: 'Qty', k: 'q', w: 8, f: QTY, sum: 1 }];
     if (!client) cols.push({ h: 'Estimated Cost', k: 'ec', f: MONEY, sum: 1 }, { h: 'Actual Cost', k: 'ac', f: MONEY });
     cols.push({ h: 'Billable', k: 'b', f: MONEY, sum: 1 }, { h: 'Draft Amount', k: 'da', f: MONEY, sum: 1 }, { h: 'Billing Status', k: 's', w: 20 }, { h: 'Invoice Eligible Now', k: 'el', w: 12 });
-    sheet('Services', cols, m.services.map((s) => ({ d: s.description || '—', q: 1, ...(client ? {} : { ec: s.est_cost ?? 'Missing', ac: s.actual_cost ?? 'Not recorded' }), b: s.billable, da: s.allocated ? s.draft_amount : null, s: svcStatus(s), el: !s.invoiced && !s.allocated ? 'Yes' : 'No' })),
+    if (!client) cols.push({ h: 'Row Type', k: 'rt', w: 16 }, { h: 'Service', k: 'sv', w: 30, wrap: true }, { h: 'Component Qty / Hrs', k: 'cq', f: QTY }, { h: 'Component Est. Cost (info)', k: 'cc', f: MONEY }, { h: 'Component Billable (info)', k: 'cb', f: MONEY });
+    const svcRows = [];
+    for (const s of m.services) {
+      svcRows.push({ d: s.description || '—', q: 1, ...(client ? {} : { ec: s.est_cost ?? 'Missing', ac: s.actual_cost ?? 'Not recorded', rt: 'Service', sv: s.description || '—' }), b: s.billable, da: s.allocated ? s.draft_amount : null, s: svcStatus(s), el: !s.invoiced && !s.allocated ? 'Yes' : 'No' });
+      const bd = !client && svcBreakdown(o, s);
+      if (!bd) continue;
+      bd.rows.forEach((r) => svcRows.push({ d: `   ${r.t}: ${r.d}`, rt: 'Component (info)', sv: s.description || '—', cq: r.q, cc: r.c, cb: r.b }));
+      if (bd.dc || bd.db) svcRows.push({ d: '   Difference: service total − components', rt: 'Difference', sv: s.description || '—', cc: bd.dc, cb: bd.db });
+    }
+    sheet('Services', cols, svcRows,
       { d: 'Services subtotal', q: T.svcQty, ...(client ? {} : { ec: T.svcEst, ac: T.svcAct ?? (T.svcActPartial ? `Partial: ${usd(T.svcActPartial)}` : 'Not recorded') }), b: T.services, da: T.svcDraft }, 'No services recorded.');
   }
   if (S.includes('labor')) {
@@ -445,6 +471,12 @@ Deno.serve(async (req) => {
     const o = res?.data ?? res;
     if (!o?.success) return Response.json({ error: o?.error || 'Could not load financials' }, { status: 404 });
 
+    // Internal only: explanatory service components (read-only ServiceLineItem records; parent stays authoritative).
+    o.svc_components = {};
+    if (report_type === 'internal' && sections.includes('services') && o.lines.services.length) {
+      const items = await base44.entities.ServiceLineItem.filter({ service_commitment_id: { $in: o.lines.services.map((s) => s.id) } }, 'sort_order', 1000);
+      for (const li of items) (o.svc_components[li.service_commitment_id] ||= []).push(li);
+    }
     const opts = { report_type, sections, include_projected: !!include_projected };
     const bytes = format === 'pdf' ? buildPdf(o, opts) : await buildXlsx(o, opts);
     const safe = (o.project_name || 'project').replace(/[^a-z0-9]+/gi, '_').slice(0, 40);
