@@ -6,7 +6,8 @@ import { formatDollarRange } from "./scopePricingHelpers";
 export default function ScopeListPrintTotals({ totals: t, showStatus, label = "TOTAL", asBody = false }) {
   const tbd = t.hard_cost_tbd_count + t.legacy_budget_tbd_count;
   const cell = { borderTop: "2px solid #111827", fontWeight: 700, fontSize: "9.5pt" };
-  const Wrapper = asBody ? React.Fragment : "tfoot";
+  // Never use tfoot: browsers repeat it on every printed page.
+  const Wrapper = React.Fragment;
   return (
     <Wrapper>
       <tr>
