@@ -1,0 +1,241 @@
+{
+  "name": "ScopeEstimateBaseline",
+  "type": "object",
+  "properties": {
+    "baseline_key": {
+      "type": "string",
+      "description": "Idempotency key: scope-baseline:{scope_item_id}"
+    },
+    "scope_item_id": {
+      "type": "string",
+      "description": "Source ScopeItem"
+    },
+    "request_id": {
+      "type": "string",
+      "description": "Source ClientFeedbackRequest (client_scope_review)"
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Task this approved estimate is the baseline for"
+    },
+    "baseline_version": {
+      "type": "integer",
+      "default": 1
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "conversion",
+        "backfill"
+      ],
+      "description": "conversion = created with the task; backfill = attached to an already-converted task"
+    },
+    "approval_fingerprint": {
+      "type": "string",
+      "description": "ScopeItem.material_hash at approval time"
+    },
+    "fingerprint_match": {
+      "type": "boolean",
+      "description": "True when captured values matched the approval fingerprint exactly"
+    },
+    "reconciliation_note": {
+      "type": "string",
+      "description": "Admin note required when the baseline was captured under an ambiguous condition"
+    },
+    "ambiguity_reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "approved_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "approved_by_type": {
+      "type": "string"
+    },
+    "approved_by_id": {
+      "type": "string"
+    },
+    "scope_confirmation_revision": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "request_title": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "description_snapshot": {
+      "type": "string"
+    },
+    "category_id": {
+      "type": "string"
+    },
+    "category_name": {
+      "type": "string"
+    },
+    "group_id": {
+      "type": "string"
+    },
+    "group_name": {
+      "type": "string"
+    },
+    "pricing_model": {
+      "type": "string",
+      "enum": [
+        "legacy_estimate",
+        "hard_cost_plus_labor"
+      ]
+    },
+    "hard_cost_min": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "Estimated hard cost (parts/materials/outside services) min, USD"
+    },
+    "hard_cost_max": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "hard_cost_tbd": {
+      "type": "boolean",
+      "default": false
+    },
+    "hard_cost_note": {
+      "type": "string"
+    },
+    "legacy_budget_min": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "legacy_budget_max": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "legacy_budget_tbd": {
+      "type": "boolean",
+      "default": false
+    },
+    "budget_note": {
+      "type": "string"
+    },
+    "labor_lines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "labor_group_id": {
+            "type": "string"
+          },
+          "labor_group_name": {
+            "type": "string"
+          },
+          "rate": {
+            "type": "number"
+          },
+          "hours_min": {
+            "type": "number"
+          },
+          "hours_max": {
+            "type": "number"
+          },
+          "dollars_min": {
+            "type": "number"
+          },
+          "dollars_max": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "labor_hours_min": {
+      "type": "number"
+    },
+    "labor_hours_max": {
+      "type": "number"
+    },
+    "labor_dollars_min": {
+      "type": "number"
+    },
+    "labor_dollars_max": {
+      "type": "number"
+    },
+    "labor_estimated": {
+      "type": "boolean"
+    },
+    "total_estimate_min": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "total_estimate_max": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "captured_by_email": {
+      "type": "string"
+    },
+    "captured_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "baseline_key",
+    "scope_item_id",
+    "request_id",
+    "project_id",
+    "task_id",
+    "source",
+    "captured_at"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "user"
+          }
+        }
+      ]
+    },
+    "create": {
+      "user_condition": {
+        "role": "scope_baseline_service_only"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "scope_baseline_service_only"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "scope_baseline_service_only"
+      }
+    }
+  }
+}
