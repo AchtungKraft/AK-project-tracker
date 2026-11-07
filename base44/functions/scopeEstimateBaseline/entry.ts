@@ -1,0 +1,411 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
+
+// Scope Review approved estimate → Task baseline.
+// The ONLY write path for ScopeEstimateBaseline (entity RLS blocks browser writes).
+// Read-only with respect to supply, purchasing, invoices and labor billing: this function never
+// creates/updates PartCommitment, ServiceCommitment, Order, ProjectInvoice(Line) or labor fields.
+//
+// Actions:
+//   convert            (staff) create Task + immutable baseline for approved, unconverted scope items
+//   backfill_preview   (admin) read-only classification of already-converted items
+//   backfill_apply     (admin) attach baselines to existing tasks; ambiguous rows need explicit confirm + note
+//   task_summary       (staff) baseline + estimated / committed / actual / billed for one task
+//   request_reconciliation (staff) read-only per-item estimate vs commitments for a scope review
+
+const err = (status, error, extra = {}) => Response.json({ error, ...extra }, { status });
+const STAFF = new Set(['admin', 'user']);
+const r2 = (n) => Math.round(n * 100) / 100;
+const isId = (v) => typeof v === 'string' && /^[a-zA-Z0-9_-]{6,64}$/.test(v);
+const keyFor = (scopeItemId) => `scope-baseline:${scopeItemId}`;
+
+async function listAll(E, query, opts = {}) {
+  const out = [];
+  let cursor;
+  do {
+    const page = await E.filter(query, { limit: 500, cursor, ...opts });
+    out.push(...page.items);
+    cursor = page.has_more ? page.next_cursor : null;
+  } while (cursor);
+  return out;
+}
+async function byIds(E, ids, opts = {}) {
+  const uniq = [...new Set(ids.filter(Boolean))];
+  const out = [];
+  for (let i = 0; i < uniq.length; i += 100) out.push(...(await listAll(E, { id: { $in: uniq.slice(i, i + 100) } }, opts)));
+  return out;
+}
+
+// Must match src/components/scope/scopeHelpers.js computeMaterialHash exactly (key order matters).
+function materialHash(item, labor) {
+  const itemLabor = labor
+    .map((le) => ({ gid: le.labor_group_id || '', hmin: le.hours_min, hmax: le.hours_max, rate: le.rate_snapshot }))
+    .sort((a, b) => (a.gid || '').localeCompare(b.gid || ''));
+  return JSON.stringify({
+    title: item.title || '',
+    description: item.description || '',
+    budget_min: item.budget_min ?? null,
+    budget_max: item.budget_max ?? null,
+    budget_note: item.budget_note || '',
+    hard_cost_min: item.hard_cost_min ?? null,
+    hard_cost_max: item.hard_cost_max ?? null,
+    hard_cost_tbd: item.hard_cost_tbd || false,
+    hard_cost_note: item.hard_cost_note || '',
+    images: (item.images || []).slice().sort(),
+    labor: itemLabor,
+  });
+}
+
+// Approved snapshot: parsed from the approval fingerprint when present (these ARE the approved values),
+// otherwise the current item values (flagged as ambiguous).
+function approvedSnapshot(item, labor) {
+  if (item.material_hash) {
+    try {
+      const s = JSON.parse(item.material_hash);
+      if (s && typeof s === 'object' && Array.isArray(s.labor)) return { snap: s, fromFingerprint: true };
+    } catch (_) { /* fall through */ }
+  }
+  return { snap: JSON.parse(materialHash(item, labor)), fromFingerprint: false };
+}
+
+function buildBaselineValues({ item, snap, groupNames, catName, grpName, request }) {
+  const lines = snap.labor.map((l) => {
+    const hmin = Number(l.hmin) || 0, hmax = Number(l.hmax) || 0, rate = Number(l.rate) || 0;
+    return { labor_group_id: l.gid || '', labor_group_name: groupNames.get(l.gid) || 'Labor', rate, hours_min: hmin, hours_max: hmax, dollars_min: r2(hmin * rate), dollars_max: r2(hmax * rate) };
+  });
+  const sum = (k) => r2(lines.reduce((s, l) => s + l[k], 0));
+  const labor_hours_min = sum('hours_min'), labor_hours_max = sum('hours_max');
+  const labor_estimated = lines.length > 0 && (labor_hours_min > 0 || labor_hours_max > 0);
+  const model = item.pricing_model === 'hard_cost_plus_labor' ? 'hard_cost_plus_labor' : 'legacy_estimate';
+  const classified = model === 'hard_cost_plus_labor';
+  const hcMin = classified ? (snap.hard_cost_min ?? null) : null;
+  const hcMax = classified ? (snap.hard_cost_max ?? null) : null;
+  const hcTbd = classified ? !!snap.hard_cost_tbd : false;
+  const hcAvail = classified && !hcTbd && hcMin != null && hcMax != null;
+  const complete = hcAvail && labor_estimated;
+  return {
+    request_title: request.title || '',
+    title: snap.title || item.title || '',
+    description_snapshot: snap.description || '',
+    category_id: item.category_id || '', category_name: catName || '',
+    group_id: item.group_id || '', group_name: grpName || '',
+    pricing_model: model,
+    hard_cost_min: hcMin, hard_cost_max: hcMax, hard_cost_tbd: hcTbd,
+    hard_cost_note: classified ? (snap.hard_cost_note || '') : '',
+    legacy_budget_min: classified ? null : (snap.budget_min ?? null),
+    legacy_budget_max: classified ? null : (snap.budget_max ?? null),
+    legacy_budget_tbd: classified ? false : !!item.budget_tbd,
+    budget_note: snap.budget_note || '',
+    labor_lines: lines,
+    labor_hours_min, labor_hours_max,
+    labor_dollars_min: sum('dollars_min'), labor_dollars_max: sum('dollars_max'),
+    labor_estimated,
+    total_estimate_min: complete ? r2(hcMin + sum('dollars_min')) : null,
+    total_estimate_max: complete ? r2(hcMax + sum('dollars_max')) : null,
+    approved_at: item.decision_at || null,
+    approved_by_type: item.decision_actor_type || '',
+    approved_by_id: item.decision_actor_id || '',
+    approval_fingerprint: item.material_hash || '',
+  };
+}
+
+const money = (v) => '$' + Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 });
+const range = (a, b, unit = '') => (a == null && b == null ? null : a === b || b == null ? `${a}${unit}` : `${a}–${b}${unit}`);
+const mRange = (a, b) => (a == null && b == null ? null : a === b || b == null ? money(a) : `${money(a)}–${money(b)}`);
+
+function taskDescription(v, images) {
+  const out = [];
+  if (v.description_snapshot) out.push(v.description_snapshot.trim(), '');
+  out.push(`From scope review: ${v.request_title || 'Scope Review'}`);
+  out.push(`Category / Group: ${[v.category_name, v.group_name].filter(Boolean).join(' / ')}`);
+  if (v.pricing_model === 'legacy_estimate') out.push(`Budget: ${v.legacy_budget_tbd ? 'TBD' : mRange(v.legacy_budget_min, v.legacy_budget_max) || '—'}`);
+  else out.push(`Hard cost / parts: ${v.hard_cost_tbd ? 'TBD' : mRange(v.hard_cost_min, v.hard_cost_max) || 'Not estimated'}`);
+  if (v.hard_cost_note) out.push(`Hard cost note: ${v.hard_cost_note}`);
+  if (v.labor_estimated) {
+    out.push(`AK labor: ${range(v.labor_hours_min, v.labor_hours_max, ' hrs')} (${mRange(v.labor_dollars_min, v.labor_dollars_max)})`);
+    for (const l of v.labor_lines) out.push(`  • ${l.labor_group_name}: ${range(l.hours_min, l.hours_max, ' hrs')} @ $${l.rate}/hr`);
+  }
+  if (v.total_estimate_min != null) out.push(`Total estimate: ${mRange(v.total_estimate_min, v.total_estimate_max)}`);
+  if (v.budget_note) out.push(`Note: ${v.budget_note}`);
+  if (images?.length) out.push('', 'Reference images:', ...images);
+  return out.join('\n');
+}
+
+// Converge concurrent creates for the same scope item: oldest baseline wins.
+async function resolveWinner(db, scopeItemId) {
+  const all = (await db.ScopeEstimateBaseline.filter({ baseline_key: keyFor(scopeItemId) }, { sort: 'created_date', limit: 20 })).items;
+  return all;
+}
+
+async function loadRequestContext(db, request) {
+  const [items, labor, cats, grps, baselines, confs] = await Promise.all([
+    listAll(db.ScopeItem, { request_id: request.id }),
+    listAll(db.ScopeItemLaborEstimate, { request_id: request.id }),
+    listAll(db.ScopeCategory, { request_id: request.id }),
+    listAll(db.ScopeGroup, { request_id: request.id }),
+    listAll(db.ScopeEstimateBaseline, { request_id: request.id }),
+    db.ScopeConfirmation.filter({ request_id: request.id }, { sort: '-confirmed_at', limit: 1 }).then((p) => p.items),
+  ]);
+  const gids = [...new Set(labor.map((l) => l.labor_group_id).filter(Boolean))];
+  items.forEach((i) => { try { JSON.parse(i.material_hash || '{}').labor?.forEach((l) => l.gid && gids.push(l.gid)); } catch (_) { /* ignore */ } });
+  const lgs = await byIds(db.ScopeLaborGroup, gids, { fields: ['name'] });
+  const laborByItem = new Map();
+  labor.forEach((l) => { if (!laborByItem.has(l.scope_item_id)) laborByItem.set(l.scope_item_id, []); laborByItem.get(l.scope_item_id).push(l); });
+  const baselineByItem = new Map();
+  baselines.slice().sort((a, b) => (a.created_date || '').localeCompare(b.created_date || '')).forEach((b) => { if (!baselineByItem.has(b.scope_item_id)) baselineByItem.set(b.scope_item_id, b); });
+  const latestConf = confs[0] || null;
+  return {
+    items, laborByItem, baselineByItem, baselines,
+    catName: new Map(cats.map((c) => [c.id, c.name])),
+    grpName: new Map(grps.map((g) => [g.id, g.name])),
+    groupNames: new Map(lgs.map((g) => [g.id, g.name])),
+    confRevisionFor: (itemId) => (latestConf && (latestConf.approved_item_ids || []).includes(itemId) ? latestConf.revision ?? null : null),
+  };
+}
+
+function classify(item, ctx, taskMap, projectId) {
+  const base = { scope_item_id: item.id, title: item.title, decision_status: item.decision_status, linked_task_ids: item.linked_task_ids || [] };
+  const existing = ctx.baselineByItem.get(item.id);
+  if (existing) return { ...base, status: 'baselined', baseline_id: existing.id, task_id: existing.task_id };
+  const linked = item.linked_task_ids || [];
+  if (!linked.length) return { ...base, status: item.decision_status === 'approved' ? 'not_converted' : 'not_applicable' };
+  const blocking = [], ambiguous = [];
+  if (item.decision_status !== 'approved') blocking.push('not_currently_approved');
+  const found = linked.map((id) => taskMap.get(id)).filter(Boolean);
+  if (found.length < linked.length) (found.length ? ambiguous : blocking).push('linked_task_missing');
+  const inProject = found.filter((t) => t.project_id === projectId);
+  if (found.length && !inProject.length) blocking.push('task_in_other_project');
+  const taken = new Set(ctx.baselines.map((b) => b.task_id));
+  const candidates = inProject.filter((t) => !taken.has(t.id));
+  if (inProject.length && !candidates.length) blocking.push('task_already_has_baseline');
+  if (candidates.length > 1) ambiguous.push('multiple_linked_tasks');
+  if (!item.material_hash) ambiguous.push('no_approval_fingerprint');
+  else if (materialHash(item, ctx.laborByItem.get(item.id) || []) !== item.material_hash) ambiguous.push('edited_since_approval');
+  const status = blocking.length ? 'blocked' : ambiguous.length ? 'needs_confirmation' : 'ready';
+  return { ...base, status, reasons: [...blocking, ...ambiguous], candidate_tasks: candidates.map((t) => ({ id: t.id, name: t.name })) };
+}
+
+// ── Read-only per-task financial view. Never writes. ──
+async function taskFinancials(db, taskIds, project) {
+  const tasks = await byIds(db.Task, taskIds, { fields: ['name', 'project_id', 'estimated_hours', 'labor_billing_type', 'labor_rate_override'] });
+  const links = [];
+  for (let i = 0; i < taskIds.length; i += 100) links.push(...(await listAll(db.TaskPartLink, { task_id: { $in: taskIds.slice(i, i + 100) } })));
+  const commitIds = [...new Set(links.map((l) => l.commitment_id).filter(Boolean))];
+  const [commitments, sharedLinks, parts, entries] = await Promise.all([
+    byIds(db.PartCommitment, commitIds),
+    commitIds.length ? listAll(db.TaskPartLink, { commitment_id: { $in: commitIds } }, { fields: ['task_id', 'commitment_id'] }) : [],
+    byIds(db.Part, links.map((l) => l.part_id), { fields: ['part_name', 'vendor_part_number'] }),
+    listAll(db.TaskTimeEntry, { task_id: { $in: taskIds } }, { fields: ['task_id', 'hours'] }),
+  ]);
+  const cMap = new Map(commitments.map((c) => [c.id, c]));
+  const pMap = new Map(parts.map((p) => [p.id, p]));
+  const result = {};
+  for (const t of tasks) {
+    const tl = links.filter((l) => l.task_id === t.id);
+    const acc = { committed: [0, 0], actual: [0, 0], retail: [0, 0], billed: [0, 0] }; // [known_total, unknown_count]
+    const add = (k, v) => (v == null ? acc[k][1]++ : (acc[k][0] += v));
+    let excluded = 0;
+    const lines = tl.map((l) => {
+      const c = l.commitment_id ? cMap.get(l.commitment_id) : null;
+      const qty = Number(l.qty_allocated) || 0;
+      const line = { link_id: l.id, part_id: l.part_id, part_name: pMap.get(l.part_id)?.part_name || 'Part', part_number: pMap.get(l.part_id)?.vendor_part_number || '', commitment_id: l.commitment_id || null, qty };
+      if (!c) { Object.assign(line, { state: 'no_commitment', committed_cost: null, actual_cost: null, planned_retail: null, billed: null }); ['committed', 'actual', 'retail', 'billed'].forEach((k) => add(k, null)); return line; }
+      if (c.commitment_status === 'cancelled' || c.cancelled_at) { excluded++; return { ...line, state: 'cancelled' }; }
+      const committed = c.unit_cost_snapshot != null ? r2(c.unit_cost_snapshot * qty) : null;
+      const actual = c.actual_unit_cost != null ? r2(c.actual_unit_cost * qty) : null;
+      const retail = c.unit_retail_snapshot != null ? r2(c.unit_retail_snapshot * qty) : null;
+      const exclusive = sharedLinks.filter((s) => s.commitment_id === c.id).every((s) => s.task_id === t.id);
+      const billed = !exclusive ? null : (c.billing_status === 'invoiced' || c.billing_status === 'paid') ? (c.invoiced_amount ?? null) : c.billing_status === 'not_billable' ? 0 : (c.invoiced_amount || 0);
+      add('committed', committed); add('actual', actual); add('retail', retail); add('billed', billed);
+      return { ...line, state: 'committed', billing_status: c.billing_status || 'unbilled', shared_commitment: !exclusive, committed_cost: committed, actual_cost: actual, planned_retail: retail, billed };
+    });
+    const pack = (k) => ({ known_total: r2(acc[k][0]), unknown_count: acc[k][1] });
+    const myEntries = entries.filter((e) => e.task_id === t.id);
+    const logged = r2(myEntries.reduce((s, e) => s + (Number(e.hours) || 0), 0));
+    const rate = t.labor_rate_override ?? project?.labor_billing_rate ?? null;
+    const billingType = t.labor_billing_type || 'UNCLASSIFIED';
+    result[t.id] = {
+      task: { id: t.id, name: t.name, project_id: t.project_id, estimated_hours: t.estimated_hours ?? null },
+      parts: { link_count: tl.length, cancelled_excluded: excluded, lines, committed_cost: pack('committed'), actual_cost: pack('actual'), planned_retail: pack('retail'), billed: pack('billed') },
+      labor: {
+        logged_hours: logged, entry_count: myEntries.length, billing_type: billingType,
+        rate, rate_source: t.labor_rate_override != null ? 'task_override' : project?.labor_billing_rate != null ? 'project' : null,
+        charge_at_rate: billingType === 'BILLABLE' && rate != null ? r2(logged * rate) : null,
+      },
+    };
+  }
+  return result;
+}
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me().catch((e) => (e.status === 401 ? null : Promise.reject(e)));
+    if (!user) return err(401, 'Unauthorized');
+    if (!STAFF.has(user.role)) return err(403, 'Internal staff only.');
+    const isAdmin = user.role === 'admin';
+    const db = base44.asServiceRole.entities;
+    const body = await req.json().catch(() => ({}));
+    const { action } = body;
+    const one = async (E, id) => (isId(id) ? (await db[E].filter({ id }, { limit: 1 })).items[0] || null : null);
+
+    const loadRequest = async () => {
+      const request = await one('ClientFeedbackRequest', body.requestId);
+      if (!request) return { error: err(404, 'Scope review not found.') };
+      if (request.request_type !== 'client_scope_review') return { error: err(400, 'Not a scope review.') };
+      if (body.projectId && body.projectId !== request.project_id) return { error: err(400, 'Scope review does not belong to this project.') };
+      const project = await one('Project', request.project_id);
+      if (!project) return { error: err(404, 'Project not found.') };
+      return { request, project };
+    };
+
+    // ── CONVERT ──
+    if (action === 'convert') {
+      const { request, project, error } = await loadRequest();
+      if (error) return error;
+      if (project.is_system_project) return err(400, 'Cannot convert scope into a system project.');
+      const ids = body.scopeItemIds;
+      if (!Array.isArray(ids) || !ids.length || ids.length > 100 || !ids.every(isId)) return err(400, 'scopeItemIds must be 1–100 ids.');
+      if (body.bucketId) {
+        const b = await one('ProjectKanbanBucket', body.bucketId);
+        if (!b || b.project_id !== project.id) return err(400, 'Phase does not belong to this project.');
+      }
+      if (body.statusId) {
+        const s = await one('StatusList', body.statusId);
+        if (!s || s.scope !== 'Task') return err(400, 'Invalid task status.');
+      }
+      const ctx = await loadRequestContext(db, request);
+      const itemMap = new Map(ctx.items.map((i) => [i.id, i]));
+      const results = [];
+      for (const id of [...new Set(ids)]) {
+        const item = itemMap.get(id);
+        if (!item) { results.push({ scope_item_id: id, status: 'rejected', reason: 'not_in_this_review' }); continue; }
+        if (item.decision_status !== 'approved') { results.push({ scope_item_id: id, status: 'rejected', reason: 'not_approved' }); continue; }
+        if ((item.linked_task_ids || []).length || ctx.baselineByItem.has(id)) { results.push({ scope_item_id: id, status: 'skipped', reason: 'already_converted' }); continue; }
+        const labor = ctx.laborByItem.get(id) || [];
+        const reasons = [];
+        if (!item.material_hash) reasons.push('no_approval_fingerprint');
+        else if (materialHash(item, labor) !== item.material_hash) { results.push({ scope_item_id: id, status: 'rejected', reason: 'edited_since_approval' }); continue; }
+        const { snap } = approvedSnapshot(item, labor);
+        const v = buildBaselineValues({ item, snap, groupNames: ctx.groupNames, catName: ctx.catName.get(item.category_id), grpName: ctx.grpName.get(item.group_id), request });
+        const hours = v.labor_hours_max || v.labor_hours_min;
+        // Task is created with the caller's token so normal Task permissions/ownership apply.
+        const task = await base44.entities.Task.create({
+          name: v.title, description: taskDescription(v, snap.images), project_id: project.id,
+          ...(body.bucketId ? { kanban_bucket_id: body.bucketId } : {}),
+          ...(body.statusId ? { status_id: body.statusId } : {}),
+          ...(hours ? { estimated_hours: hours } : {}),
+        });
+        let mine;
+        try {
+          mine = await db.ScopeEstimateBaseline.create({
+            ...v, baseline_key: keyFor(id), scope_item_id: id, request_id: request.id, project_id: project.id, task_id: task.id,
+            baseline_version: 1, source: 'conversion', fingerprint_match: reasons.length === 0, ambiguity_reasons: reasons,
+            scope_confirmation_revision: ctx.confRevisionFor(id), captured_by_email: user.email, captured_at: new Date().toISOString(),
+          });
+        } catch (e) {
+          await base44.entities.Task.delete(task.id).catch(() => null);
+          throw e;
+        }
+        const all = await resolveWinner(db, id);
+        const winner = all[0];
+        if (winner.id !== mine.id) {
+          // A concurrent conversion won; remove only what this call just created.
+          await db.ScopeEstimateBaseline.delete(mine.id);
+          await base44.entities.Task.delete(task.id).catch(() => null);
+          results.push({ scope_item_id: id, status: 'skipped', reason: 'concurrent_conversion', task_id: winner.task_id });
+          continue;
+        }
+        await db.ScopeItem.update(id, { linked_task_ids: [winner.task_id] });
+        results.push({ scope_item_id: id, status: 'created', task_id: task.id, baseline_id: mine.id, ambiguity_reasons: reasons });
+      }
+      return Response.json({ results, created: results.filter((r) => r.status === 'created').length });
+    }
+
+    // ── BACKFILL (admin) ──
+    if (action === 'backfill_preview' || action === 'backfill_apply') {
+      if (!isAdmin) return err(403, 'Only admins can backfill scope baselines.');
+      const { request, project, error } = await loadRequest();
+      if (error) return error;
+      const ctx = await loadRequestContext(db, request);
+      const taskMap = new Map((await byIds(db.Task, ctx.items.flatMap((i) => i.linked_task_ids || []), { fields: ['name', 'project_id'] })).map((t) => [t.id, t]));
+      const rows = ctx.items.map((i) => classify(i, ctx, taskMap, project.id)).filter((r) => r.status !== 'not_applicable');
+      if (action === 'backfill_preview') {
+        const counts = rows.reduce((m, r) => ((m[r.status] = (m[r.status] || 0) + 1), m), {});
+        return Response.json({ request: { id: request.id, title: request.title }, project: { id: project.id, name: project.name }, counts, rows });
+      }
+      const picks = body.items;
+      if (!Array.isArray(picks) || !picks.length || picks.length > 100) return err(400, 'items must be 1–100 entries.');
+      const rowMap = new Map(rows.map((r) => [r.scope_item_id, r]));
+      const itemMap = new Map(ctx.items.map((i) => [i.id, i]));
+      const results = [];
+      for (const p of picks) {
+        const row = rowMap.get(p?.scope_item_id);
+        if (!row) { results.push({ scope_item_id: p?.scope_item_id, status: 'rejected', reason: 'not_in_this_review' }); continue; }
+        if (row.status === 'baselined') { results.push({ scope_item_id: row.scope_item_id, status: 'skipped', reason: 'already_baselined' }); continue; }
+        if (row.status !== 'ready' && row.status !== 'needs_confirmation') { results.push({ scope_item_id: row.scope_item_id, status: 'rejected', reason: row.status, reasons: row.reasons }); continue; }
+        const note = typeof p.note === 'string' ? p.note.trim() : '';
+        if (row.status === 'needs_confirmation' && (p.confirm !== true || note.length < 5)) { results.push({ scope_item_id: row.scope_item_id, status: 'rejected', reason: 'confirmation_and_note_required', reasons: row.reasons }); continue; }
+        const taskId = row.candidate_tasks.length === 1 ? row.candidate_tasks[0].id : p.task_id;
+        if (!row.candidate_tasks.some((t) => t.id === taskId) || (p.task_id && p.task_id !== taskId)) { results.push({ scope_item_id: row.scope_item_id, status: 'rejected', reason: 'invalid_task_choice' }); continue; }
+        const item = itemMap.get(row.scope_item_id);
+        const { snap } = approvedSnapshot(item, ctx.laborByItem.get(item.id) || []);
+        const v = buildBaselineValues({ item, snap, groupNames: ctx.groupNames, catName: ctx.catName.get(item.category_id), grpName: ctx.grpName.get(item.group_id), request });
+        const mine = await db.ScopeEstimateBaseline.create({
+          ...v, baseline_key: keyFor(item.id), scope_item_id: item.id, request_id: request.id, project_id: project.id, task_id: taskId,
+          baseline_version: 1, source: 'backfill', fingerprint_match: !(row.reasons || []).some((r) => r === 'no_approval_fingerprint' || r === 'edited_since_approval'),
+          ambiguity_reasons: row.reasons || [], reconciliation_note: note, scope_confirmation_revision: ctx.confRevisionFor(item.id),
+          captured_by_email: user.email, captured_at: new Date().toISOString(),
+        });
+        const all = await resolveWinner(db, item.id);
+        if (all[0].id !== mine.id) { await db.ScopeEstimateBaseline.delete(mine.id); results.push({ scope_item_id: item.id, status: 'skipped', reason: 'concurrent_backfill' }); continue; }
+        results.push({ scope_item_id: item.id, status: 'created', baseline_id: mine.id, task_id: taskId });
+      }
+      return Response.json({ results, created: results.filter((r) => r.status === 'created').length });
+    }
+
+    // ── TASK SUMMARY (read-only) ──
+    if (action === 'task_summary') {
+      const task = await one('Task', body.taskId);
+      if (!task) return err(404, 'Task not found.');
+      const baselines = (await db.ScopeEstimateBaseline.filter({ task_id: task.id }, { sort: 'created_date', limit: 20 })).items.filter((b) => b.project_id === task.project_id);
+      if (!baselines.length) return Response.json({ baselines: [] });
+      const project = await one('Project', task.project_id);
+      const fin = (await taskFinancials(db, [task.id], project))[task.id];
+      const serviceCount = (await db.ServiceCommitment.filter({ project_id: task.project_id }, { limit: 200, fields: ['status'] })).items.length;
+      return Response.json({ baselines, financials: fin, services: { project_service_count: serviceCount, attributable_to_task: false } });
+    }
+
+    // ── REQUEST RECONCILIATION (read-only) ──
+    if (action === 'request_reconciliation') {
+      const { request, project, error } = await loadRequest();
+      if (error) return error;
+      const ctx = await loadRequestContext(db, request);
+      const winners = [...ctx.baselineByItem.values()];
+      const fin = winners.length ? await taskFinancials(db, winners.map((b) => b.task_id), project) : {};
+      const rows = winners.map((b) => ({
+        baseline_id: b.id, scope_item_id: b.scope_item_id, task_id: b.task_id, title: b.title, category_name: b.category_name, group_name: b.group_name,
+        source: b.source, fingerprint_match: b.fingerprint_match, pricing_model: b.pricing_model,
+        hard_cost_min: b.hard_cost_min, hard_cost_max: b.hard_cost_max, hard_cost_tbd: b.hard_cost_tbd,
+        labor_hours_min: b.labor_hours_min, labor_hours_max: b.labor_hours_max, labor_dollars_min: b.labor_dollars_min, labor_dollars_max: b.labor_dollars_max,
+        task_found: !!fin[b.task_id], parts: fin[b.task_id]?.parts ? { link_count: fin[b.task_id].parts.link_count, committed_cost: fin[b.task_id].parts.committed_cost, actual_cost: fin[b.task_id].parts.actual_cost, planned_retail: fin[b.task_id].parts.planned_retail, billed: fin[b.task_id].parts.billed } : null,
+        labor: fin[b.task_id]?.labor || null,
+      }));
+      const approved = ctx.items.filter((i) => i.decision_status === 'approved');
+      return Response.json({
+        request: { id: request.id, title: request.title }, rows,
+        coverage: {
+          approved_items: approved.length,
+          baselined: winners.length,
+          converted_without_baseline: ctx.items.filter((i) => (i.linked_task_ids || []).length && !ctx.baselineByItem.has(i.id)).length,
+          approved_not_converted: approved.filter((i) => !(i.linked_task_ids || []).length).length,
+          duplicate_baseline_records: ctx.baselines.length - winners.length,
+        },
+        estimate_billing: { enabled: false, reason: 'Estimate-based client billing is disabled until canonical coverage reconciliation is verified.' },
+      });
+    }
+
+    return err(400, 'Unknown action.');
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+});
