@@ -42,6 +42,7 @@ import LinkPreviewGrid from "@/components/shared/LinkPreviewGrid";
 import { extractLinks } from "@/utils/extractLinks";
 import ScopeReviewDisplay from "@/components/scope/ScopeReviewDisplay";
 import ScopeReviewPrintView from "@/components/scope/ScopeReviewPrintView";
+import ScopeListPrintView from "@/components/scope/ScopeListPrintView";
 
 export default function ClientFeedbackDetail() {
   const isMobile = useIsMobile();
@@ -674,7 +675,8 @@ export default function ClientFeedbackDetail() {
                 onResend={handleResendForApproval}
                 onArchive={handleArchive}
                 onDelete={handleDeleteRequest}
-                onPrintScopeReview={request?.request_type === 'client_scope_review' ? () => setShowScopePrint(true) : undefined}
+                onPrintScopeReview={request?.request_type === 'client_scope_review' ? () => setShowScopePrint('detailed') : undefined}
+                onPrintScopeList={request?.request_type === 'client_scope_review' ? () => setShowScopePrint('list') : undefined}
                 onStartReviewing={() => updateRequestMutation.mutate({
                   id: requestId,
                   data: { review_state: 'in_review', review_started_at: new Date().toISOString() }
@@ -759,6 +761,8 @@ export default function ClientFeedbackDetail() {
                 isMobile={isMobile}
                 userId={user.id}
                 userName={user.full_name}
+                projectId={projectId || request.project_id}
+                requestTitle={request.title}
               />
               {threadRequest && (
                 <ClientFeedbackThread
@@ -981,6 +985,7 @@ export default function ClientFeedbackDetail() {
           requestId={requestId}
           request={request}
           project={project}
+          layout={showScopePrint}
           onClose={() => setShowScopePrint(false)}
         />
       )}
@@ -994,7 +999,7 @@ export default function ClientFeedbackDetail() {
  * This ensures @media print can hide #root while the print content
  * remains in normal document flow for multi-page pagination.
  */
-function ScopePrintLoader({ requestId, request, project, onClose }) {
+function ScopePrintLoader({ requestId, request, project, layout, onClose }) {
   const [portalEl, setPortalEl] = useState(null);
 
   // Create a persistent portal container on document.body
@@ -1031,6 +1036,21 @@ function ScopePrintLoader({ requestId, request, project, onClose }) {
       <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
       </div>,
+      portalEl
+    );
+  }
+
+  if (layout === 'list') {
+    return createPortal(
+      <ScopeListPrintView
+        request={request}
+        project={project}
+        categories={data.categories}
+        groups={data.groups}
+        items={data.items}
+        laborEstimates={data.laborEstimates}
+        onClose={onClose}
+      />,
       portalEl
     );
   }

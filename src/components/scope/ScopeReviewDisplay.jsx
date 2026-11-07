@@ -3,7 +3,9 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, ListPlus } from "lucide-react";
+import ConvertScopeToTasksModal from "./ConvertScopeToTasksModal";
+import { getConvertibleScopeItems } from "./scopeTaskConversion";
 import { useToast } from "@/components/ui/use-toast";
 import {
   buildScopeHierarchy,
@@ -36,8 +38,11 @@ export default function ScopeReviewDisplay({
   clientContactId,
   userId,
   userName,
+  projectId,
+  requestTitle,
 }) {
   const queryClient = useQueryClient();
+  const [showConvert, setShowConvert] = useState(false);
   const { toast } = useToast();
   const [filter, setFilter] = useState("all");
   const [addItemState, setAddItemState] = useState(null); // null | { categoryId?, groupId? }
@@ -77,6 +82,7 @@ export default function ScopeReviewDisplay({
   const lastConfirmation = confirmations.sort((a, b) => new Date(b.confirmed_at) - new Date(a.confirmed_at))[0];
 
   const hierarchy = useMemo(() => buildScopeHierarchy(categories, groups, items), [categories, groups, items]);
+  const convertibleCount = useMemo(() => getConvertibleScopeItems(items).length, [items]);
   const stats = useMemo(() => computeRollup(items, laborEstimates), [items, laborEstimates]);
 
   const invalidate = useCallback(() => {
@@ -467,10 +473,33 @@ export default function ScopeReviewDisplay({
       )}
 
       {/* Persistent Add Item button — visible when categories and groups exist */}
-      {canEdit && categories.length > 0 && groups.length > 0 && (
-        <Button size="sm" onClick={() => handleAddItem({})} className="bg-gray-700 hover:bg-gray-600 text-white gap-1">
-          <Plus className="w-3.5 h-3.5" /> Add Scope Item
-        </Button>
+      {canEdit && (
+        <div className="flex flex-wrap gap-2">
+          {categories.length > 0 && groups.length > 0 && (
+            <Button size="sm" onClick={() => handleAddItem({})} className="bg-gray-700 hover:bg-gray-600 text-white gap-1">
+              <Plus className="w-3.5 h-3.5" /> Add Scope Item
+            </Button>
+          )}
+          {projectId && (
+            <Button size="sm" onClick={() => setShowConvert(true)} className="bg-emerald-700 hover:bg-emerald-600 text-white gap-1">
+              <ListPlus className="w-3.5 h-3.5" /> Convert Approved to Tasks
+              {convertibleCount > 0 && <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[10px]">{convertibleCount}</span>}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {showConvert && (
+        <ConvertScopeToTasksModal
+          projectId={projectId}
+          requestId={requestId}
+          requestTitle={requestTitle}
+          items={items}
+          categories={categories}
+          groups={groups}
+          laborEstimates={laborEstimates}
+          onClose={() => setShowConvert(false)}
+        />
       )}
 
       {/* Item Editor Drawer — add or edit (replaces inline editor) */}

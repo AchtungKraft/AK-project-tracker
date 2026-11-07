@@ -46,6 +46,7 @@ export default function DetailActionBar({
   onResumeInQueue,
   onMoveToDraft,
   onPrintScopeReview,
+  onPrintScopeList,
 }) {
   if (!canonicalState || !request) return null;
 
@@ -118,6 +119,7 @@ export default function DetailActionBar({
   let printAction = null;
   if (onPrintScopeReview) {
     printAction = (
+      <>
       <Button
         size="sm"
         variant="outline"
@@ -130,6 +132,21 @@ export default function DetailActionBar({
         <Printer className="w-3.5 h-3.5 mr-1" />
         Print Scope Review
       </Button>
+      {onPrintScopeList && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onPrintScopeList}
+          className={cn(
+            "border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white",
+            isMobile ? "flex-1 h-10" : "h-8 text-xs"
+          )}
+        >
+          <Printer className="w-3.5 h-3.5 mr-1" />
+          Print List
+        </Button>
+      )}
+      </>
     );
   }
 
