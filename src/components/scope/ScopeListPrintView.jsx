@@ -42,8 +42,22 @@ export default function ScopeListPrintView({ request, project, categories, group
     () => (filter === "approved" ? items.filter(i => i.decision_status === "approved") : items),
     [items, filter]
   );
-  const hierarchy = useMemo(() => buildScopeHierarchy(categories, groups, visible), [categories, groups, visible]);
+  const statusGroups = useMemo(() => {
+    const statuses = [
+      ["approved", "APPROVED"],
+      ["needs_review", "PENDING / NEEDS REVIEW"],
+      ["request_changes", "CHANGES REQUESTED"],
+      ["reapproval_required", "REAPPROVAL REQUIRED"],
+      ["not_now", "LATER / NOT NOW"],
+    ];
+    return statuses.map(([status, label]) => {
+      const groupItems = visible.filter(item => (item.decision_status || "needs_review") === status);
+      return { status, label, items: groupItems, hierarchy: buildScopeHierarchy(categories, groups, groupItems), totals: computeScopePricingRollup(groupItems, laborEstimates) };
+    }).filter(group => group.items.length > 0);
+  }, [visible, categories, groups, laborEstimates]);
   const totals = useMemo(() => computeScopePricingRollup(visible, laborEstimates), [visible, laborEstimates]);
+  const approvedTotals = useMemo(() => computeScopePricingRollup(items.filter(i => i.decision_status === "approved"), laborEstimates), [items, laborEstimates]);
+  const unapprovedTotals = useMemo(() => computeScopePricingRollup(items.filter(i => i.decision_status !== "approved"), laborEstimates), [items, laborEstimates]);
 
   return (
     <>
@@ -75,10 +89,24 @@ export default function ScopeListPrintView({ request, project, categories, group
             </tr>
           </thead>
           <tbody>
-            <ScopeListPrintRows hierarchy={hierarchy} laborEstimates={laborEstimates} showStatus={filter === "all"} statusLabels={DECISION_LABELS} />
+            {statusGroups.map(group => (
+              <React.Fragment key={group.status}>
+                <tr className="sl-status-heading"><td colSpan={filter === "all" ? 6 : 5} style={{ background: "#dbe4ee", borderTop: "2px solid #475569", fontWeight: 800, fontSize: "10pt", padding: "8px 6px" }}>{group.label} — {group.items.length} ITEM(S)</td></tr>
+                <ScopeListPrintRows hierarchy={group.hierarchy} laborEstimates={laborEstimates} showStatus={filter === "all"} statusLabels={DECISION_LABELS} />
+                <ScopeListPrintTotals totals={group.totals} showStatus={filter === "all"} label={`${group.label} SUBTOTAL`} asBody />
+              </React.Fragment>
+            ))}
           </tbody>
-          <ScopeListPrintTotals totals={totals} showStatus={filter === "all"} />
+          <ScopeListPrintTotals totals={totals} showStatus={filter === "all"} label={filter === "all" ? "ALL SCOPE TOTAL" : "APPROVED SCOPE TOTAL"} />
         </table>
+        {filter === "all" && <div style={{ marginTop: 14, breakInside: "avoid" }}>
+          <div style={{ fontWeight: 800, fontSize: "10pt", marginBottom: 5 }}>FINANCIAL SUMMARY BY DECISION</div>
+          <table><tbody>
+            <ScopeListPrintTotals totals={approvedTotals} showStatus={false} label="APPROVED SCOPE" asBody />
+            <ScopeListPrintTotals totals={unapprovedTotals} showStatus={false} label="UNAPPROVED / DEFERRED SCOPE" asBody />
+            <ScopeListPrintTotals totals={totals} showStatus={false} label="ALL SCOPE" asBody />
+          </tbody></table>
+        </div>}
         <p style={{ color: "#6b7280", fontSize: "7.5pt", marginTop: 12 }}>
           Estimates are ranges. Hard cost covers parts, materials and outside services; labor is Ächtung Kraft shop time. TBD items are not included in totals.
         </p>
