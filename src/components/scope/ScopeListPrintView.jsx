@@ -8,9 +8,11 @@ import ScopeListPrintTotals from "./ScopeListPrintTotals";
 const STYLES = `
 @media print {
   #root { display: none !important; }
+  html, body { height: auto !important; overflow: visible !important; background: white !important; }
+  #scope-print-portal { display: block !important; position: static !important; inset: auto !important; width: 100% !important; height: auto !important; max-height: none !important; overflow: visible !important; transform: none !important; background: white !important; }
   .sl-bar { display: none !important; }
   @page { margin: 0.5in; }
-  #scope-list-root { padding: 0 !important; box-shadow: none !important; max-width: none !important; }
+  #scope-list-root { display: block !important; position: static !important; height: auto !important; min-height: 0 !important; overflow: visible !important; transform: none !important; padding: 0 !important; margin: 0 !important; box-shadow: none !important; max-width: none !important; }
   #scope-list-root tr { break-inside: avoid; }
   #scope-list-root thead { display: table-header-group; }
   #scope-list-root * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
