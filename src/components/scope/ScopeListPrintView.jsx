@@ -96,8 +96,8 @@ export default function ScopeListPrintView({ request, project, categories, group
                 <ScopeListPrintTotals totals={group.totals} showStatus={filter === "all"} label={`${group.label} SUBTOTAL`} asBody />
               </React.Fragment>
             ))}
+            <ScopeListPrintTotals totals={totals} showStatus={filter === "all"} label={filter === "all" ? "ALL SCOPE TOTAL" : "APPROVED SCOPE TOTAL"} />
           </tbody>
-          <ScopeListPrintTotals totals={totals} showStatus={filter === "all"} label={filter === "all" ? "ALL SCOPE TOTAL" : "APPROVED SCOPE TOTAL"} />
         </table>
         {filter === "all" && <div style={{ marginTop: 14, breakInside: "avoid" }}>
           <div style={{ fontWeight: 800, fontSize: "10pt", marginBottom: 5 }}>FINANCIAL SUMMARY BY DECISION</div>
