@@ -7,6 +7,7 @@ import { Plus, Loader2, ListPlus } from "lucide-react";
 import ConvertScopeToTasksModal from "./ConvertScopeToTasksModal";
 import ScopeBaselineBackfillPanel from "./ScopeBaselineBackfillPanel";
 import ScopeReconciliationSummary from "./ScopeReconciliationSummary";
+import ScopeImageBackfillPanel from "./ScopeImageBackfillPanel";
 import { useAuth } from "@/lib/AuthContext";
 import { ScopeConversionProvider, useScopeConversionData } from "./ScopeConversionContext";
 import ScopeConversionSummary from "./ScopeConversionSummary";
@@ -522,6 +523,7 @@ export default function ScopeReviewDisplay({
         <div className="space-y-2">
           <ScopeReconciliationSummary requestId={requestId} projectId={projectId} />
           {isAdmin && <ScopeBaselineBackfillPanel requestId={requestId} projectId={projectId} />}
+          {isAdmin && <ScopeImageBackfillPanel requestId={requestId} projectId={projectId} />}
         </div>
       )}
 

@@ -112,7 +112,24 @@ const money = (v) => '$' + Number(v).toLocaleString('en-US', { maximumFractionDi
 const range = (a, b, unit = '') => (a == null && b == null ? null : a === b || b == null ? `${a}${unit}` : `${a}–${b}${unit}`);
 const mRange = (a, b) => (a == null && b == null ? null : a === b || b == null ? money(a) : `${money(a)}–${money(b)}`);
 
-function taskDescription(v, images) {
+// ── Task execution draft (single-item review) limits + sanitizers ──
+const MAX_DESC = 20000, MAX_CHECK = 100, MAX_CHECK_LEN = 500, MAX_IMAGES = 50;
+// eslint-disable-next-line no-control-regex
+const clean = (s, max) => String(s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').trim().slice(0, max);
+const isHttpsUrl = (u) => typeof u === 'string' && u.length <= 2000 && /^https:\/\/[^\s<>"'`]+$/.test(u);
+// Approved images only (from the approval fingerprint snapshot), in the item's display order.
+function approvedImages(item, snap) {
+  const ok = new Set((snap.images || []).filter(isHttpsUrl));
+  const ordered = (item.images || []).filter((u) => ok.has(u));
+  for (const u of ok) if (!ordered.includes(u)) ordered.push(u);
+  return [...new Set(ordered)];
+}
+const imageRefs = (urls, itemId, email) => {
+  const at = new Date().toISOString();
+  return urls.map((url) => ({ url, source_type: 'scope_item', source_id: itemId, added_by: email, added_at: at }));
+};
+
+function taskDescription(v) {
   const out = [];
   if (v.description_snapshot) out.push(v.description_snapshot.trim(), '');
   out.push(`From scope review: ${v.request_title || 'Scope Review'}`);
@@ -126,7 +143,7 @@ function taskDescription(v, images) {
   }
   if (v.total_estimate_min != null) out.push(`Total estimate: ${mRange(v.total_estimate_min, v.total_estimate_max)}`);
   if (v.budget_note) out.push(`Note: ${v.budget_note}`);
-  if (images?.length) out.push('', 'Reference images:', ...images);
+  // Reference images are stored structurally on Task.reference_images (rendered as thumbnails).
   return out.join('\n');
 }
 
@@ -273,6 +290,22 @@ Deno.serve(async (req) => {
         const s = await one('StatusList', body.statusId);
         if (!s || s.scope !== 'Task') return err(400, 'Invalid task status.');
       }
+      // Optional execution draft — single-item conversion only. Affects the Task's description,
+      // checklist and reference images; never the baseline (built from the approval snapshot) or the ScopeItem.
+      let overrides = null;
+      if (body.taskOverrides != null) {
+        if (ids.length !== 1) return err(400, 'Task edits are only allowed when converting a single item.');
+        const o = body.taskOverrides;
+        if (typeof o !== 'object' || Array.isArray(o)) return err(400, 'Invalid taskOverrides.');
+        if (o.description != null && (typeof o.description !== 'string' || o.description.length > MAX_DESC)) return err(400, `Description must be text up to ${MAX_DESC} characters.`);
+        if (o.checklist != null && (!Array.isArray(o.checklist) || o.checklist.length > MAX_CHECK || !o.checklist.every((c) => typeof c === 'string' && c.length <= MAX_CHECK_LEN))) return err(400, `Checklist must be up to ${MAX_CHECK} rows of up to ${MAX_CHECK_LEN} characters.`);
+        if (o.imageUrls != null && (!Array.isArray(o.imageUrls) || o.imageUrls.length > MAX_IMAGES || !o.imageUrls.every(isHttpsUrl))) return err(400, 'Invalid reference images.');
+        overrides = {
+          description: o.description != null ? clean(o.description, MAX_DESC) : null,
+          checklist: (o.checklist || []).map((c) => clean(c, MAX_CHECK_LEN)).filter(Boolean),
+          imageUrls: o.imageUrls != null ? [...new Set(o.imageUrls)] : null,
+        };
+      }
       const ctx = await loadRequestContext(db, request);
       const itemMap = new Map(ctx.items.map((i) => [i.id, i]));
       const results = [];
@@ -280,43 +313,140 @@ Deno.serve(async (req) => {
         const item = itemMap.get(id);
         if (!item) { results.push({ scope_item_id: id, status: 'rejected', reason: 'not_in_this_review' }); continue; }
         if (item.decision_status !== 'approved') { results.push({ scope_item_id: id, status: 'rejected', reason: 'not_approved' }); continue; }
-        if ((item.linked_task_ids || []).length || ctx.baselineByItem.has(id)) { results.push({ scope_item_id: id, status: 'skipped', reason: 'already_converted' }); continue; }
+        const existingBaseline = ctx.baselineByItem.get(id);
+        if ((item.linked_task_ids || []).length || existingBaseline) {
+          // Reconcile: a prior run created task + baseline but failed to link the ScopeItem. Repair the link only.
+          if (existingBaseline && !(item.linked_task_ids || []).length && existingBaseline.project_id === project.id) {
+            const t = await one('Task', existingBaseline.task_id);
+            if (t && t.project_id === project.id) {
+              await db.ScopeItem.update(id, { linked_task_ids: [t.id] });
+              results.push({ scope_item_id: id, status: 'skipped', reason: 'already_converted_link_repaired', task_id: t.id });
+              continue;
+            }
+          }
+          results.push({ scope_item_id: id, status: 'skipped', reason: 'already_converted' });
+          continue;
+        }
         const labor = ctx.laborByItem.get(id) || [];
         const reasons = [];
         if (!item.material_hash) reasons.push('no_approval_fingerprint');
         else if (materialHash(item, labor) !== item.material_hash) { results.push({ scope_item_id: id, status: 'rejected', reason: 'edited_since_approval' }); continue; }
         const { snap } = approvedSnapshot(item, labor);
         const v = buildBaselineValues({ item, snap, groupNames: ctx.groupNames, catName: ctx.catName.get(item.category_id), grpName: ctx.grpName.get(item.group_id), request });
+        const sourceImgs = approvedImages(item, snap);
+        if (overrides?.imageUrls && !overrides.imageUrls.every((u) => sourceImgs.includes(u))) { results.push({ scope_item_id: id, status: 'rejected', reason: 'image_not_from_source' }); continue; }
+        const images = overrides?.imageUrls ?? sourceImgs;
+        const description = overrides?.description != null ? overrides.description : taskDescription(v);
+        const checklist = overrides?.checklist || [];
         const hours = v.labor_hours_max || v.labor_hours_min;
-        // Task is created with the caller's token so normal Task permissions/ownership apply.
-        const task = await base44.entities.Task.create({
-          name: v.title, description: taskDescription(v, snap.images), project_id: project.id,
-          ...(body.bucketId ? { kanban_bucket_id: body.bucketId } : {}),
-          ...(body.statusId ? { status_id: body.statusId } : {}),
-          ...(hours ? { estimated_hours: hours } : {}),
-        });
-        let mine;
+
+        // All-or-nothing: task (+images), checklist and baseline. Any failure rolls back what this call created.
+        let task = null, mine = null;
+        const rollback = async () => {
+          if (mine) await db.ScopeEstimateBaseline.delete(mine.id).catch(() => null);
+          if (task) {
+            const rows = (await base44.entities.TaskChecklistItem.filter({ task_id: task.id }, { limit: 500 }).catch(() => ({ items: [] }))).items || [];
+            await Promise.allSettled(rows.map((r) => base44.entities.TaskChecklistItem.delete(r.id)));
+            await base44.entities.Task.delete(task.id).catch(() => null);
+          }
+        };
         try {
+          // Task + checklist use the caller's token so normal Task permissions apply.
+          task = await base44.entities.Task.create({
+            name: v.title, description, project_id: project.id,
+            ...(images.length ? { reference_images: imageRefs(images, id, user.email) } : {}),
+            ...(body.bucketId ? { kanban_bucket_id: body.bucketId } : {}),
+            ...(body.statusId ? { status_id: body.statusId } : {}),
+            ...(hours ? { estimated_hours: hours } : {}),
+          });
+          if (checklist.length) {
+            await base44.entities.TaskChecklistItem.bulkCreate(checklist.map((title, i) => ({ task_id: task.id, title, sort_order: i, is_complete: false, visibility: 'internal' })));
+            const saved = (await base44.entities.TaskChecklistItem.filter({ task_id: task.id }, { limit: 500 })).items || [];
+            if (saved.length !== checklist.length) throw new Error('Checklist was not fully saved.');
+          }
           mine = await db.ScopeEstimateBaseline.create({
             ...v, baseline_key: keyFor(id), scope_item_id: id, request_id: request.id, project_id: project.id, task_id: task.id,
             baseline_version: 1, source: 'conversion', fingerprint_match: reasons.length === 0, ambiguity_reasons: reasons,
             scope_confirmation_revision: ctx.confRevisionFor(id), captured_by_email: user.email, captured_at: new Date().toISOString(),
           });
         } catch (e) {
-          await base44.entities.Task.delete(task.id).catch(() => null);
-          throw e;
+          await rollback();
+          results.push({ scope_item_id: id, status: 'error', reason: 'persistence_failed', detail: String(e?.message || e).slice(0, 300) });
+          continue;
         }
         const all = await resolveWinner(db, id);
         const winner = all[0];
         if (winner.id !== mine.id) {
           // A concurrent conversion won; remove only what this call just created.
-          await db.ScopeEstimateBaseline.delete(mine.id);
-          await base44.entities.Task.delete(task.id).catch(() => null);
+          await rollback();
           results.push({ scope_item_id: id, status: 'skipped', reason: 'concurrent_conversion', task_id: winner.task_id });
           continue;
         }
-        await db.ScopeItem.update(id, { linked_task_ids: [winner.task_id] });
-        results.push({ scope_item_id: id, status: 'created', task_id: task.id, baseline_id: mine.id, ambiguity_reasons: reasons });
+        try {
+          await db.ScopeItem.update(id, { linked_task_ids: [winner.task_id] });
+        } catch (e) {
+          // Task + baseline are committed; re-running convert on this item repairs the link.
+          results.push({ scope_item_id: id, status: 'error', reason: 'scope_link_failed', task_id: task.id });
+          continue;
+        }
+        results.push({ scope_item_id: id, status: 'created', task_id: task.id, baseline_id: mine.id, ambiguity_reasons: reasons, images: images.length, checklist: checklist.length });
+      }
+      return Response.json({ results, created: results.filter((r) => r.status === 'created').length });
+    }
+
+    // ── CONVERT PREVIEW (read-only): defaults for the single-item review modal ──
+    if (action === 'convert_preview') {
+      const { request, error } = await loadRequest();
+      if (error) return error;
+      const ctx = await loadRequestContext(db, request);
+      const item = ctx.items.find((i) => i.id === body.scopeItemId);
+      if (!item) return err(404, 'Scope item not in this review.');
+      const labor = ctx.laborByItem.get(item.id) || [];
+      let reason = null;
+      if (item.decision_status !== 'approved') reason = 'not_approved';
+      else if ((item.linked_task_ids || []).length || ctx.baselineByItem.has(item.id)) reason = 'already_converted';
+      else if (item.material_hash && materialHash(item, labor) !== item.material_hash) reason = 'edited_since_approval';
+      const { snap } = approvedSnapshot(item, labor);
+      const v = buildBaselineValues({ item, snap, groupNames: ctx.groupNames, catName: ctx.catName.get(item.category_id), grpName: ctx.grpName.get(item.group_id), request });
+      return Response.json({ eligible: !reason, reason, title: v.title, description: taskDescription(v), images: approvedImages(item, snap), limits: { description: MAX_DESC, checklist: MAX_CHECK, checklist_row: MAX_CHECK_LEN } });
+    }
+
+    // ── IMAGE BACKFILL (admin): attach approved ScopeItem images to already-converted tasks ──
+    // Only sets Task.reference_images when it is empty. Never touches description or any other field.
+    if (action === 'image_backfill_preview' || action === 'image_backfill_apply') {
+      if (!isAdmin) return err(403, 'Only admins can backfill task images.');
+      const { request, project, error } = await loadRequest();
+      if (error) return error;
+      const ctx = await loadRequestContext(db, request);
+      const winners = [...ctx.baselineByItem.values()];
+      const tasks = new Map((await byIds(db.Task, winners.map((b) => b.task_id), { fields: ['name', 'project_id', 'reference_images'] })).map((t) => [t.id, t]));
+      const itemMap = new Map(ctx.items.map((i) => [i.id, i]));
+      const rows = winners.map((b) => {
+        const item = itemMap.get(b.scope_item_id);
+        const t = tasks.get(b.task_id);
+        const imgs = item ? approvedImages(item, approvedSnapshot(item, ctx.laborByItem.get(item.id) || []).snap) : [];
+        const row = { scope_item_id: b.scope_item_id, task_id: b.task_id, title: b.title, task_name: t?.name || null, images: imgs };
+        if (!item) return { ...row, status: 'item_missing' };
+        if (!t) return { ...row, status: 'task_missing' };
+        if (t.project_id !== project.id || b.project_id !== project.id) return { ...row, status: 'other_project' };
+        if ((t.reference_images || []).length) return { ...row, status: 'has_images', existing: t.reference_images.length };
+        if (!imgs.length) return { ...row, status: 'no_images' };
+        return { ...row, status: 'ready' };
+      });
+      if (action === 'image_backfill_preview') return Response.json({ rows });
+      if (body.confirm !== true) return err(400, 'Explicit confirmation required.');
+      const pick = body.scopeItemIds;
+      if (!Array.isArray(pick) || !pick.length || pick.length > 100 || !pick.every(isId)) return err(400, 'scopeItemIds must be 1–100 ids.');
+      const results = [];
+      for (const sid of [...new Set(pick)]) {
+        const row = rows.find((r) => r.scope_item_id === sid);
+        if (!row) { results.push({ scope_item_id: sid, status: 'rejected', reason: 'not_in_this_review' }); continue; }
+        if (row.status === 'has_images') { results.push({ scope_item_id: sid, status: 'skipped', reason: 'already_has_images' }); continue; }
+        if (row.status !== 'ready') { results.push({ scope_item_id: sid, status: 'rejected', reason: row.status }); continue; }
+        const fresh = await one('Task', row.task_id);
+        if (!fresh || (fresh.reference_images || []).length) { results.push({ scope_item_id: sid, status: 'skipped', reason: 'already_has_images' }); continue; }
+        await db.Task.update(row.task_id, { reference_images: imageRefs(row.images, sid, user.email) });
+        results.push({ scope_item_id: sid, status: 'created', task_id: row.task_id, images: row.images.length });
       }
       return Response.json({ results, created: results.filter((r) => r.status === 'created').length });
     }

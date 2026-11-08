@@ -13,6 +13,10 @@ export default function BaselineResultsList({ results, titleFor }) {
           <div className="min-w-0 text-sm">
             <div className="text-white truncate">{titleFor(r.scope_item_id)}</div>
             {r.reason && <div className="text-xs text-gray-400">{reasonText(r.reason)}</div>}
+            {r.detail && <div className="text-xs text-red-400/80 break-words">{r.detail}</div>}
+            {r.status === "created" && (r.images > 0 || r.checklist > 0) && (
+              <div className="text-xs text-gray-500">{[r.images ? `${r.images} image${r.images === 1 ? "" : "s"}` : null, r.checklist ? `${r.checklist} checklist row${r.checklist === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ")}</div>
+            )}
             {r.reasons?.length > 0 && <div className="text-xs text-gray-500">{r.reasons.map(reasonText).join(" · ")}</div>}
             {r.ambiguity_reasons?.length > 0 && <div className="text-xs text-amber-400">Captured with: {r.ambiguity_reasons.map(reasonText).join(" · ")}</div>}
           </div>

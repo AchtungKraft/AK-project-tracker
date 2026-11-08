@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -11,12 +11,13 @@ import { useToast } from "@/components/ui/use-toast";
 import { useTaskStatuses } from "@/components/tasks/useTaskDropdownData";
 import { getConvertibleScopeItems } from "./scopeTaskConversion";
 import { invalidateBaselineCaches } from "./scopeBaselineCache";
-import { errorText } from "./baselineFormat";
+import { errorText, reasonText } from "./baselineFormat";
 import BaselineResultsList from "./BaselineResultsList";
+import SingleTaskDraftFields from "./SingleTaskDraftFields";
 
 // Conversion runs server-side (scopeEstimateBaseline 'convert'): creates the Task + immutable
 // approved-estimate baseline and links the ScopeItem. No Task writes from the browser.
-// onlyItemId: per-item "Create Task" — restricts eligibility to that single item (same server path).
+// onlyItemId: per-item "Create Task" — single eligible item plus an editable execution draft.
 export default function ConvertScopeToTasksModal({ projectId, requestId, items, categories, groups, onClose, onlyItemId = null }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -30,6 +31,17 @@ export default function ConvertScopeToTasksModal({ projectId, requestId, items, 
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState(null);
   const [error, setError] = useState(null);
+  const [draft, setDraft] = useState(null);
+
+  const { data: preview, isLoading: previewLoading, error: previewError } = useQuery({
+    queryKey: ["scopeConvertPreview", requestId, onlyItemId],
+    queryFn: async () => (await base44.functions.invoke("scopeEstimateBaseline", { action: "convert_preview", requestId, projectId, scopeItemId: onlyItemId })).data,
+    enabled: !!onlyItemId && candidates.length > 0,
+    staleTime: 0,
+  });
+  useEffect(() => {
+    if (preview && !draft) setDraft({ description: preview.description || "", imageUrls: preview.images || [], checklist: [] });
+  }, [preview, draft]);
 
   const { data: buckets = [] } = useQuery({
     queryKey: ["projectBuckets", projectId],
@@ -43,6 +55,9 @@ export default function ConvertScopeToTasksModal({ projectId, requestId, items, 
 
   const toggle = (id) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
+  const single = !!onlyItemId;
+  const singleBlocked = single && (previewLoading || !draft || preview?.eligible === false);
+
   const handleConvert = async () => {
     const scopeItemIds = candidates.filter(i => selected.has(i.id)).map(i => i.id);
     setBusy(true);
@@ -52,6 +67,7 @@ export default function ConvertScopeToTasksModal({ projectId, requestId, items, 
         action: "convert", requestId, projectId, scopeItemIds,
         bucketId: bucketId || undefined,
         statusId: statusId || taskStatuses[0]?.id || undefined,
+        ...(single ? { taskOverrides: { description: draft.description, imageUrls: draft.imageUrls, checklist: draft.checklist.map(c => c.trim()).filter(Boolean) } } : {}),
       });
       const list = res.data?.results || [];
       setResults(list);
@@ -74,9 +90,11 @@ export default function ConvertScopeToTasksModal({ projectId, requestId, items, 
     <Dialog open onOpenChange={() => !busy && onClose()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-gray-900 border-gray-700 text-white">
         <DialogHeader>
-          <DialogTitle>{onlyItemId ? "Create task from approved scope item" : "Convert approved scope to tasks"}</DialogTitle>
+          <DialogTitle>{single ? `Create task: ${candidates[0]?.title || "scope item"}` : "Convert approved scope to tasks"}</DialogTitle>
           <DialogDescription className="text-gray-400">
-            Each item becomes a project task and its approved estimate is locked as a reference baseline. Items already converted are skipped; items edited since approval are rejected until re-approved. Nothing is ordered or billed.
+            {single
+              ? "Review the task before creating it. Description, images and checklist apply to the task only; the approved estimate is locked as the baseline. Nothing is ordered or billed."
+              : "Each item becomes a project task with its full description and images, and its approved estimate is locked as a reference baseline. Items already converted are skipped; items edited since approval are rejected until re-approved. Nothing is ordered or billed."}
           </DialogDescription>
         </DialogHeader>
 
@@ -85,7 +103,7 @@ export default function ConvertScopeToTasksModal({ projectId, requestId, items, 
         {results ? (
           <BaselineResultsList results={results} titleFor={titleFor} />
         ) : candidates.length === 0 ? (
-          <p className="text-sm text-gray-400 py-6 text-center">{onlyItemId ? "This item is not eligible: it is already converted or no longer approved." : "No new approved items to convert."}</p>
+          <p className="text-sm text-gray-400 py-6 text-center">{single ? "This item is not eligible: it is already converted or no longer approved." : "No new approved items to convert."}</p>
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -110,31 +128,40 @@ export default function ConvertScopeToTasksModal({ projectId, requestId, items, 
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-xs text-gray-400 mt-2">
-              <span>{selected.size} of {candidates.length} selected</span>
-              <button className="text-blue-400 hover:text-blue-300" onClick={() => setSelected(selected.size === candidates.length ? new Set() : new Set(candidates.map(i => i.id)))}>
-                {selected.size === candidates.length ? "Clear all" : "Select all"}
-              </button>
-            </div>
-            <div className="border border-gray-800 rounded-md divide-y divide-gray-800 max-h-[45vh] overflow-y-auto">
-              {candidates.map(item => (
-                <label key={item.id} className="flex items-start gap-3 px-3 py-2 cursor-pointer hover:bg-gray-800/50">
-                  <Checkbox checked={selected.has(item.id)} onCheckedChange={() => toggle(item.id)} className="mt-0.5" />
-                  <div className="min-w-0">
-                    <div className="text-sm text-white">{item.title}</div>
-                    <div className="text-xs text-gray-500">{[catName(item.category_id), grpName(item.group_id)].filter(Boolean).join(" / ")}</div>
-                  </div>
-                </label>
-              ))}
-            </div>
+            {single ? (
+              previewError ? <p className="text-sm text-red-400">{errorText(previewError)}</p>
+              : preview?.eligible === false ? <p className="text-sm text-amber-400">Not eligible: {reasonText(preview.reason)}</p>
+              : !draft ? <div className="py-6 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+              : <SingleTaskDraftFields draft={draft} setDraft={setDraft} images={preview.images || []} limits={preview.limits} />
+            ) : (
+              <>
+                <div className="flex items-center justify-between text-xs text-gray-400 mt-2">
+                  <span>{selected.size} of {candidates.length} selected</span>
+                  <button className="text-blue-400 hover:text-blue-300" onClick={() => setSelected(selected.size === candidates.length ? new Set() : new Set(candidates.map(i => i.id)))}>
+                    {selected.size === candidates.length ? "Clear all" : "Select all"}
+                  </button>
+                </div>
+                <div className="border border-gray-800 rounded-md divide-y divide-gray-800 max-h-[45vh] overflow-y-auto">
+                  {candidates.map(item => (
+                    <label key={item.id} className="flex items-start gap-3 px-3 py-2 cursor-pointer hover:bg-gray-800/50">
+                      <Checkbox checked={selected.has(item.id)} onCheckedChange={() => toggle(item.id)} className="mt-0.5" />
+                      <div className="min-w-0">
+                        <div className="text-sm text-white">{item.title}</div>
+                        <div className="text-xs text-gray-500">{[catName(item.category_id), grpName(item.group_id)].filter(Boolean).join(" / ")}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
           </>
         )}
 
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="outline" onClick={onClose} disabled={busy}>{results ? "Done" : "Cancel"}</Button>
           {!results && candidates.length > 0 && (
-            <Button onClick={handleConvert} disabled={busy || selected.size === 0} className="bg-red-600 hover:bg-red-700">
-              {busy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating {selected.size}…</> : `Create ${selected.size} task${selected.size === 1 ? "" : "s"}`}
+            <Button onClick={handleConvert} disabled={busy || selected.size === 0 || singleBlocked} className="bg-red-600 hover:bg-red-700">
+              {busy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating…</> : single ? "Create task" : `Create ${selected.size} task${selected.size === 1 ? "" : "s"}`}
             </Button>
           )}
         </div>

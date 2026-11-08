@@ -20,6 +20,7 @@ import TaskCommentsSection from "./TaskCommentsSection";
 import ExecutionChecklistSection from "./ExecutionChecklistSection";
 import TaskPartsSection from "./TaskPartsSection";
 import TaskScopeEstimatePanel from "./TaskScopeEstimatePanel";
+import TaskReferenceImages from "./TaskReferenceImages";
 import TaskKnowledgeSection from "@/components/knowledge/TaskKnowledgeSection";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { getMobileInputClass, getMobileTextareaClass, getMobileSelectClass } from "@/components/mobile/MobileFormStyles";
@@ -529,6 +530,7 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
 
           {/* Description — immediately under title, tight to title */}
           {!editing && <DescriptionBlock text={task?.description} />}
+          {!editing && <TaskReferenceImages images={task?.reference_images} />}
 
           {/* Time tracking — removed from header; now shown in Hours & Work Log section */}
 

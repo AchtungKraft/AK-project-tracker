@@ -286,6 +286,35 @@
       "type": "boolean",
       "default": true,
       "description": "Whether this task must be completed for its phase to be considered complete"
+    },
+    "reference_images": {
+      "type": "array",
+      "description": "Reference images linked to this task (existing stored URLs, no re-upload). Set by scope conversion or admin image backfill.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "scope_item"
+            ]
+          },
+          "source_id": {
+            "type": "string",
+            "description": "Source ScopeItem id"
+          },
+          "added_by": {
+            "type": "string"
+          },
+          "added_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
     }
   },
   "required": [

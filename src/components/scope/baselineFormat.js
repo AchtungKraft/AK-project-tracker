@@ -72,6 +72,16 @@ export const REASON_LABELS = {
   concurrent_backfill: "Backfilled by another user at the same time",
   blocked: "Blocked",
   not_converted: "Not converted yet",
+  already_converted_link_repaired: "Already converted — scope link repaired",
+  image_not_from_source: "Image is not from the approved scope item",
+  persistence_failed: "Save failed — nothing was created, safe to retry",
+  scope_link_failed: "Task saved but scope link failed — retry to repair",
+  already_has_images: "Task already has images",
+  has_images: "Already has images",
+  no_images: "No source images",
+  task_missing: "Task missing",
+  item_missing: "Scope item missing",
+  other_project: "Different project",
 };
 
 export const reasonText = (r) => REASON_LABELS[r] || r;
@@ -84,6 +94,7 @@ export const STATUS_STYLES = {
   needs_confirmation: "bg-amber-900/40 text-amber-300 border-amber-700/50",
   blocked: "bg-red-900/40 text-red-300 border-red-700/50",
   rejected: "bg-red-900/40 text-red-300 border-red-700/50",
+  error: "bg-red-900/40 text-red-300 border-red-700/50",
 };
 
 export const STATUS_LABELS = {
@@ -94,6 +105,7 @@ export const STATUS_LABELS = {
   needs_confirmation: "Needs confirmation",
   blocked: "Blocked",
   rejected: "Rejected",
+  error: "Error",
 };
 
 export const errorText = (e) => e?.response?.data?.error || e?.message || "Request failed";
