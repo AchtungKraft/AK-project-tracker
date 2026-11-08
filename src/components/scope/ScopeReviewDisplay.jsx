@@ -8,6 +8,8 @@ import ConvertScopeToTasksModal from "./ConvertScopeToTasksModal";
 import ScopeBaselineBackfillPanel from "./ScopeBaselineBackfillPanel";
 import ScopeReconciliationSummary from "./ScopeReconciliationSummary";
 import { useAuth } from "@/lib/AuthContext";
+import { ScopeConversionProvider, useScopeConversionData } from "./ScopeConversionContext";
+import ScopeConversionSummary from "./ScopeConversionSummary";
 import { getConvertibleScopeItems } from "./scopeTaskConversion";
 import { useToast } from "@/components/ui/use-toast";
 import {
@@ -89,6 +91,7 @@ export default function ScopeReviewDisplay({
   const hierarchy = useMemo(() => buildScopeHierarchy(categories, groups, items), [categories, groups, items]);
   const convertibleCount = useMemo(() => getConvertibleScopeItems(items).length, [items]);
   const stats = useMemo(() => computeRollup(items, laborEstimates), [items, laborEstimates]);
+  const conversion = useScopeConversionData({ items, requestId, projectId, enabled: canEdit && !!projectId });
 
   const invalidate = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['scopeReviewData', requestId] });
@@ -450,6 +453,7 @@ export default function ScopeReviewDisplay({
   const showEditor = canEdit && (addItemState !== null || editingItem);
 
   return (
+    <ScopeConversionProvider value={canEdit && projectId ? conversion : null}>
     <div className="space-y-4">
       {/* Summary Bar */}
       <ScopeSummaryBar stats={stats} items={items} laborEstimates={laborEstimates} isMobile={isMobile} isClientView={isClientView} />
@@ -491,6 +495,7 @@ export default function ScopeReviewDisplay({
               {convertibleCount > 0 && <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[10px]">{convertibleCount}</span>}
             </Button>
           )}
+          {projectId && <ScopeConversionSummary />}
         </div>
       )}
 
@@ -589,5 +594,6 @@ export default function ScopeReviewDisplay({
 
       )}
     </div>
+    </ScopeConversionProvider>
   );
 }

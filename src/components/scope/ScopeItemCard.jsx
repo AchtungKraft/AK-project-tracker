@@ -8,6 +8,7 @@ import { DECISION_LABELS, DECISION_COLORS } from "./scopeHelpers";
 import StaffStatusOverrideMenu from "./StaffStatusOverrideMenu";
 import ScopeItemPricingDisplay from "./ScopeItemPricingDisplay";
 import ImageModal from "@/components/ui/ImageModal";
+import ScopeTaskConversionBadge from "./ScopeTaskConversionBadge";
 import { format } from "date-fns";
 
 export default function ScopeItemCard({
@@ -80,6 +81,9 @@ export default function ScopeItemCard({
             )}
           </div>
         </div>
+
+        {/* Task conversion status — internal only, separate from approval */}
+        {isStaff && <ScopeTaskConversionBadge itemId={item.id} />}
 
         {/* Reapproval warning */}
         {status === "reapproval_required" && (
