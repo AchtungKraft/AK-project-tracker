@@ -7,6 +7,7 @@ import { Loader2, Plus, AlertTriangle } from "lucide-react";
 import { cents } from "./fundingFormat";
 import { draftFromPlan, evaluateDraft, approvedWarnings, newMilestone } from "./fundingDraft";
 import AgreedBudgetEditor from "./AgreedBudgetEditor";
+import FundingTargetEditor from "./FundingTargetEditor";
 import MilestoneEditorRow from "./MilestoneEditorRow";
 import FundingPlanHistory from "./FundingPlanHistory";
 
@@ -33,6 +34,7 @@ export default function FundingPlanEditor({ projectId, planData, approved }) {
         <span className="text-violet-300 font-semibold">Planned total (draft): {cents(ev.total)}</span>
       </div>
       <AgreedBudgetEditor draft={draft} setDraft={setDraft} plan={plan} />
+      <FundingTargetEditor draft={draft} setDraft={setDraft} />
       <div className="space-y-2">
         {ev.rows.map((r, i) => <MilestoneEditorRow key={r.id} row={r} index={i} options={planData.scope_options} onChange={(row) => setRow(i, row)} onRemove={() => setDraft({ ...draft, milestones: draft.milestones.filter((_, j) => j !== i) })} />)}
         <Button size="sm" variant="outline" disabled={draft.milestones.length >= 50} onClick={() => setDraft({ ...draft, milestones: [...draft.milestones, newMilestone()] })} className="h-8"><Plus className="w-4 h-4 mr-1" />Add milestone</Button>

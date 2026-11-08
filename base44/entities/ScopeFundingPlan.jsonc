@@ -50,6 +50,16 @@
     "agreed_budget_note": {
       "type": "string"
     },
+    "funding_target_cents": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Explicit admin target: client funds required before ordering, integer cents. Null = not set (never treated as 0)."
+    },
+    "funding_target_note": {
+      "type": "string"
+    },
     "notes": {
       "type": "string"
     },

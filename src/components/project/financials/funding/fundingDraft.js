@@ -6,6 +6,8 @@ export const draftFromPlan = (plan) => ({
   budget: centsToInput(plan?.agreed_client_budget_cents),
   confirmed: !!plan?.agreed_budget_confirmed,
   budgetNote: plan?.agreed_budget_note || "",
+  target: centsToInput(plan?.funding_target_cents),
+  targetNote: plan?.funding_target_note || "",
   notes: plan?.notes || "",
   changeNote: "",
   milestones: (plan?.milestones || []).map((m) => ({
@@ -20,6 +22,8 @@ export function evaluateDraft(d) {
   const budget = parseMoneyToCents(d.budget);
   if (Number.isNaN(budget)) errors.push("Agreed client budget: enter a dollar amount with up to 2 decimals.");
   const okBudget = Number.isNaN(budget) ? null : budget;
+  const target = parseMoneyToCents(d.target ?? "");
+  if (Number.isNaN(target)) errors.push("Funding target: enter a dollar amount with up to 2 decimals, or leave empty.");
   const rows = d.milestones.map((m, i) => {
     let calc = null, err = null;
     if (!m.name.trim()) err = "Name required";
@@ -42,6 +46,7 @@ export function evaluateDraft(d) {
   const payload = {
     agreed_client_budget_cents: okBudget, confirm_agreed_budget: okBudget != null && d.confirmed,
     agreed_budget_note: d.budgetNote, notes: d.notes, change_note: d.changeNote,
+    funding_target_cents: Number.isNaN(target) ? null : target, funding_target_note: d.targetNote ?? "",
     milestones: rows.map((r) => ({
       id: r.id, name: r.name.trim(), method: r.method,
       amount_cents: r.method === "FIXED_PARTS_FUNDING" ? parseMoneyToCents(r.amount) : null,

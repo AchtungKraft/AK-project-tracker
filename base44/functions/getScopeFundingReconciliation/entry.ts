@@ -124,13 +124,14 @@ Deno.serve(async (req) => {
     const budget = budgetRes.data;
     if (!budget?.success) return Response.json({ error: budget?.error || 'Approved scope budget unavailable' }, { status: 502 });
 
-    const [tasks, entries, statuses, commitments, services, invoices] = await Promise.all([
+    const [tasks, entries, statuses, commitments, services, invoices, credits] = await Promise.all([
       listAll(db.Task, { project_id }, { fields: ['name', 'project_id', 'status_id', 'estimated_hours', 'labor_billing_type', 'labor_rate_override'] }),
       listAll(db.TaskTimeEntry, { project_id }, { fields: ['task_id', 'hours'] }),
       listAll(db.StatusList, { scope: 'Task' }, { fields: ['label'] }),
       listAll(db.PartCommitment, { project_id }),
       listAll(db.ServiceCommitment, { project_id }, { fields: ['description', 'service_id', 'status', 'is_billed', 'planned_cost', 'total_billable', 'invoice_id'] }),
-      listAll(db.ProjectInvoice, { project_id }, { fields: ['status', 'total', 'paid_amount', 'invoice_type'] }),
+      listAll(db.ProjectInvoice, { project_id }, { fields: ['status', 'total', 'paid_amount', 'invoice_type', 'credit_applied', 'credit_proposed'] }),
+      listAll(db.ProjectCreditLedger, { project_id }, { fields: ['source_invoice_id', 'credit_amount', 'remaining_amount', 'reversed_from_invoice_id', 'payment_idempotency_key'] }),
     ]);
     const items = budget.reviews.flatMap((r) => r.categories.flatMap((c) => c.groups.flatMap((g) => g.items.map((i) => ({ ...i, category_name: c.name, group_name: g.name, review_title: r.title })))));
     const scopeTaskIds = items.filter((i) => i.task_id).map((i) => i.task_id);
@@ -151,7 +152,7 @@ Deno.serve(async (req) => {
     const vInvoices = await inChunks(db.VendorInvoice, 'id', viLines.map((v) => v.invoice_id), { fields: ['invoice_status'] });
 
     const orphanPoLines = await db.PartPurchaseLineItem.count({ $or: [{ commitment_id: null }, { commitment_id: { $exists: false } }, { commitment_id: '' }] }).catch(() => null);
-    return Response.json(computeReconciliation({ project, project_id, budget, tasks, entries, statuses, commitments, services, invoices, linksByCommit, linksByTask, poLines, externals, orders, viLines, parts, vInvoices, orphanPoLines }));
+    return Response.json(computeReconciliation({ project, project_id, budget, tasks, entries, statuses, commitments, services, invoices, credits, linksByCommit, linksByTask, poLines, externals, orders, viLines, parts, vInvoices, orphanPoLines }));
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }
@@ -159,7 +160,7 @@ Deno.serve(async (req) => {
 
 // Pure calculation over already-loaded records (no I/O) — exercised by self_test with fixtures.
 function computeReconciliation(d) {
-    const { project, project_id, budget, tasks, entries, statuses, commitments, services, invoices, linksByCommit, linksByTask, poLines, externals, orders, viLines, parts, vInvoices, orphanPoLines } = d;
+    const { project, project_id, budget, tasks, entries, statuses, commitments, services, invoices, credits = [], linksByCommit, linksByTask, poLines, externals, orders, viLines, parts, vInvoices, orphanPoLines } = d;
     const items = budget.reviews.flatMap((r) => r.categories.flatMap((c) => c.groups.flatMap((g) => g.items.map((i) => ({ ...i, category_name: c.name, group_name: g.name, review_title: r.title })))));
     const scopeTaskIds = items.filter((i) => i.task_id).map((i) => i.task_id);
     const orderById = new Map(orders.map((o) => [o.id, o]));
@@ -269,8 +270,48 @@ function computeReconciliation(d) {
         global_po_lines_without_commitment: orphanPoLines,
         note: 'PO lines without a commitment carry no project reference, so they cannot be attributed to any project.',
       },
-      funding_actuals: { invoiced_total: r2(live.reduce((s, v) => s + (Number(v.total) || 0), 0)), received_total: r2(live.reduce((s, v) => s + (Number(v.paid_amount) || 0), 0)), live_invoices: live.length, draft_invoices: drafts.length, draft_total: r2(drafts.reduce((s, v) => s + (Number(v.total) || 0), 0)) },
+      funding_actuals: { invoiced_total: r2(live.reduce((s, v) => s + (Number(v.total) || 0), 0)), received_total: r2(live.reduce((s, v) => s + (Number(v.paid_amount) || 0), 0)), live_invoices: live.length, draft_invoices: drafts.length, draft_total: r2(drafts.reduce((s, v) => s + (Number(v.total) || 0), 0)), ...fundingBreakdown(invoices, credits) },
+      purchasing_gap: purchasingGap(projectAcc),
+      cash_available: { available: false, reason: 'No vendor cash-disbursement records are linked to projects (vendor payments are recorded per vendor invoice, not per project). Cash available cannot be calculated; it is NOT deposit minus costs.' },
     };
+}
+
+// Canonical invoice + credit ledger figures, read only. Credit remaining is NOT cash; received is NOT cash on hand.
+const RESIDUE = 0.005; // ledger rows below half a cent are floating-point residue, not real credit
+function fundingBreakdown(invoices, credits) {
+  const LIVE = ['sent', 'partial', 'paid', 'overdue'];
+  const by_type = {};
+  for (const t of ['deposit', 'progress', 'final']) {
+    const xs = invoices.filter((v) => v.invoice_type === t);
+    const live = xs.filter((v) => LIVE.includes(v.status)), drafts = xs.filter((v) => v.status === 'draft');
+    by_type[t] = { invoiced: r2(live.reduce((s, v) => s + (Number(v.total) || 0), 0)), received: r2(live.reduce((s, v) => s + (Number(v.paid_amount) || 0), 0)), live_count: live.length, paid_count: live.filter((v) => v.status === 'paid').length, draft_count: drafts.length, draft_total: r2(drafts.reduce((s, v) => s + (Number(v.total) || 0), 0)) };
+  }
+  const typeOf = new Map(invoices.map((v) => [v.id, v.invoice_type]));
+  const src = (c) => (c.reversed_from_invoice_id ? 'reversal' : typeOf.get(c.source_invoice_id) === 'deposit' ? 'deposit' : String(c.payment_idempotency_key || '').startsWith('pay_credit:') ? 'overpayment' : 'other');
+  const by_source = {};
+  let issued = 0, remaining = 0, residue = 0;
+  for (const c of credits) {
+    const amt = Number(c.credit_amount) || 0;
+    let rem = Number(c.remaining_amount) || 0;
+    if (rem > 0 && rem < RESIDUE) { residue++; rem = 0; }
+    const k = src(c);
+    by_source[k] = by_source[k] || { issued: 0, remaining: 0, rows: 0 };
+    by_source[k].issued = r2(by_source[k].issued + amt); by_source[k].remaining = r2(by_source[k].remaining + rem); by_source[k].rows++;
+    issued += amt; remaining += rem;
+  }
+  const live = invoices.filter((v) => LIVE.includes(v.status)), drafts = invoices.filter((v) => v.status === 'draft');
+  return {
+    by_type,
+    credits: { issued: r2(issued), remaining: r2(remaining), used: r2(issued - remaining), rows: credits.length, rounding_residue_rows: residue, by_source },
+    credit_applied_on_invoices: r2(live.reduce((s, v) => s + (Number(v.credit_applied) || 0), 0)),
+    credit_proposed_on_drafts: r2(drafts.reduce((s, v) => s + (Number(v.credit_proposed) || 0), 0)),
+  };
+}
+// Planned purchases not yet on an AK PO — only when both sides are fully known.
+function purchasingGap(acc) {
+  const p = acc.planned_cost, c = acc.po_committed_cost;
+  if (p.unknown || c.unknown) return { available: false, reason: `${p.unknown + c.unknown} commitment(s)/PO line(s) have no cost`, planned: p.known, committed: c.known };
+  return { available: true, planned: p.known, committed: c.known, not_on_po: r2(Math.max(p.known - c.known, 0)), committed_over_planned: r2(Math.max(c.known - p.known, 0)) };
 }
 
 // ───────────── Fixture self-test (in-memory only, no database access) ─────────────
@@ -308,8 +349,9 @@ function runSelfTest() {
   const tasks = [{ id: 'T1', name: 'Task 1', status_id: 'S1', estimated_hours: 4 }, { id: 'T2', name: 'Task 2', status_id: 'S2', estimated_hours: null }, { id: 'T3', name: 'Other', status_id: 'S1' }, { id: 'T4', name: 'Task 4', status_id: 'S1', estimated_hours: 2, labor_rate_override: 200 }];
   const entries = [{ task_id: 'T1', hours: 5 }, { task_id: 'T2', hours: 1 }, { task_id: 'T3', hours: 2 }, { task_id: null, hours: 0.5 }];
   const statuses = [{ id: 'S1', label: 'To Do' }, { id: 'S2', label: 'Done' }];
-  const invoices = [{ status: 'paid', total: 500, paid_amount: 500 }, { status: 'sent', total: 200, paid_amount: 0 }, { status: 'draft', total: 300 }, { status: 'void', total: 999 }];
-  const out = computeReconciliation({ project: { labor_billing_rate: 100 }, project_id: 'PRJ', budget, tasks, entries, statuses, commitments, services: [{ id: 's1', planned_cost: 80 }], invoices, linksByCommit, linksByTask, poLines, externals, orders, viLines, parts: [{ id: 'PA', part_name: 'Pad' }], vInvoices, orphanPoLines: 0 });
+  const invoices = [{ id: 'iv1', invoice_type: 'deposit', status: 'paid', total: 500, paid_amount: 500 }, { id: 'iv2', invoice_type: 'progress', status: 'sent', total: 200, paid_amount: 0, credit_applied: 150 }, { id: 'iv3', invoice_type: 'progress', status: 'draft', total: 300, credit_proposed: 100 }, { id: 'iv4', invoice_type: 'progress', status: 'void', total: 999 }];
+  const credits = [{ id: 'k1', source_invoice_id: 'iv1', credit_amount: 500, remaining_amount: 350 }, { id: 'k2', source_invoice_id: 'iv2', credit_amount: 40, remaining_amount: 0.0000000000018, payment_idempotency_key: 'pay_credit:iv2' }, { id: 'k3', source_invoice_id: 'iv4', reversed_from_invoice_id: 'iv4', credit_amount: 20, remaining_amount: 20 }];
+  const out = computeReconciliation({ project: { labor_billing_rate: 100 }, project_id: 'PRJ', budget, tasks, entries, statuses, commitments, services: [{ id: 's1', planned_cost: 80 }], invoices, credits, linksByCommit, linksByTask, poLines, externals, orders, viLines, parts: [{ id: 'PA', part_name: 'Pad' }], vInvoices, orphanPoLines: 0 });
   const flat = out.tree[0].categories[0].groups[0].items;
   const get = (id) => flat.find((x) => x.scope_item_id === id);
   const I1 = get('I1'), I2 = get('I2'), I3 = get('I3'), I4 = get('I4'), I5 = get('I5');
@@ -342,5 +384,14 @@ function runSelfTest() {
   check('PO quantity beyond commitment not counted, reported as excess', D.po_committed_cost.known === 20 && D.received_cost.known === 15 && D.po_excess_qty === 2 && out.unmatched_purchasing.po_quantity_beyond_commitment.some((x) => x.commitment_id === 'D' && x.excess_qty === 2), { D, ex: out.unmatched_purchasing.po_quantity_beyond_commitment });
   check('services reported unattributed', out.unattributed.services.length === 1);
   check('never billing enabled', out.billing_enabled === false && out.invoice_eligible === false);
+  const fa = out.funding_actuals;
+  check('deposit vs progress invoiced/received split; void + draft excluded', fa.by_type.deposit.received === 500 && fa.by_type.progress.invoiced === 200 && fa.by_type.progress.received === 0 && fa.by_type.progress.draft_total === 300, fa.by_type);
+  check('credit remaining excludes rounding residue', fa.credits.remaining === 370 && fa.credits.rounding_residue_rows === 1 && fa.credits.issued === 560 && fa.credits.used === 190, fa.credits);
+  check('credit sources classified (deposit / overpayment / reversal)', fa.credits.by_source.deposit?.remaining === 350 && fa.credits.by_source.overpayment?.rows === 1 && fa.credits.by_source.reversal?.remaining === 20, fa.credits.by_source);
+  check('applied (sent) vs proposed (draft) credit kept separate', fa.credit_applied_on_invoices === 150 && fa.credit_proposed_on_drafts === 100, fa);
+  check('purchasing gap not available when any cost unknown', out.purchasing_gap.available === false, out.purchasing_gap);
+  const gapKnown = purchasingGap({ planned_cost: { known: 300, unknown: 0 }, po_committed_cost: { known: 120, unknown: 0 } });
+  check('purchasing gap = planned − committed when fully known', gapKnown.available && gapKnown.not_on_po === 180, gapKnown);
+  check('cash available never computed', out.cash_available.available === false);
   return { self_test: true, passed: results.filter((r) => r.pass).length, total: results.length, results };
 }

@@ -57,6 +57,15 @@ function buildPlan(input, existing, ctx) {
   }
   if (input.confirm_agreed_budget === false) { confirmed = false; confirmedBy = null; confirmedAt = null; }
 
+  // Explicit admin target for client funds required before ordering. Null = not set (never treated as $0).
+  let target = existing?.funding_target_cents ?? null;
+  if ('funding_target_cents' in input) {
+    const t = input.funding_target_cents;
+    if (t === null) target = null;
+    else if (!isCents(t)) errors.push('Funding target must be a whole number of cents between $0 and $100,000,000.');
+    else target = t;
+  }
+
   const raw = Array.isArray(input.milestones) ? input.milestones : null;
   if (!raw) errors.push('milestones must be a list.');
   else if (raw.length > MAX_MILESTONES) errors.push(`At most ${MAX_MILESTONES} milestones.`);
@@ -96,6 +105,8 @@ function buildPlan(input, existing, ctx) {
       status: 'draft', agreed_client_budget_cents: budget, agreed_budget_confirmed: confirmed, agreed_budget_confirmed_by: confirmedBy, agreed_budget_confirmed_at: confirmedAt,
       agreed_budget_note: 'agreed_budget_note' in input ? str(input.agreed_budget_note, 1000) : existing?.agreed_budget_note || '',
       notes: 'notes' in input ? str(input.notes, 4000) : existing?.notes || '', milestones, total_planned_cents: total,
+      funding_target_cents: target,
+      funding_target_note: 'funding_target_note' in input ? str(input.funding_target_note, 1000) : existing?.funding_target_note || '',
     },
   };
 }
@@ -246,6 +257,17 @@ async function runSelfTest() {
   s = memStore({ raceCreate: true });
   r = await saveDraft(s, ctx, { expected_version: 0, milestones: [] });
   check('simultaneous create → loser removed, one plan remains', r.status === 409 && s.plans.length === 1 && s.plans[0].id === 'race' && s.versions.length === 0, { r, plans: s.plans.length });
+  s = memStore();
+  r = await saveDraft(s, ctx, { expected_version: 0, milestones: [] });
+  check('funding target defaults to null (not set), not 0', r.body.plan.funding_target_cents === null, r.body.plan);
+  r = await saveDraft(s, ctx, { expected_version: 1, funding_target_cents: 1500000, funding_target_note: 'Parts deposit before ordering', milestones: [] });
+  check('funding target saved as entered', r.status === 200 && r.body.plan.funding_target_cents === 1500000 && r.body.plan.funding_target_note === 'Parts deposit before ordering', r.body);
+  r = await saveDraft(s, ctx, { expected_version: 2, milestones: [] });
+  check('funding target kept when not sent', r.body.plan.funding_target_cents === 1500000);
+  r = await saveDraft(s, ctx, { expected_version: 3, funding_target_cents: -5, milestones: [] });
+  check('negative / fractional target rejected', r.status === 400 && (await saveDraft(s, ctx, { expected_version: 3, funding_target_cents: 1.5, milestones: [] })).status === 400);
+  r = await saveDraft(s, ctx, { expected_version: 3, funding_target_cents: null, milestones: [] });
+  check('funding target can be cleared', r.status === 200 && r.body.plan.funding_target_cents === null);
   const fresh = memStore();
   const many = Array.from({ length: 51 }, () => fixed(1));
   check('milestone count capped', (await saveDraft(fresh, ctx, { expected_version: 0, milestones: many })).status === 400 && fresh.plans.length === 0);
