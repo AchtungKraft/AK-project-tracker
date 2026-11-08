@@ -14,6 +14,8 @@ import { invalidateBaselineCaches } from "./scopeBaselineCache";
 import { errorText, reasonText } from "./baselineFormat";
 import BaselineResultsList from "./BaselineResultsList";
 import SingleTaskDraftFields from "./SingleTaskDraftFields";
+import BulkScopeSelectionList, { useBulkScopeTree } from "./BulkScopeSelectionList";
+import BulkSelectionSummary from "./BulkSelectionSummary";
 
 // Conversion runs server-side (scopeEstimateBaseline 'convert'): creates the Task + immutable
 // approved-estimate baseline and links the ScopeItem. No Task writes from the browser.
@@ -50,10 +52,7 @@ export default function ConvertScopeToTasksModal({ projectId, requestId, items, 
   });
   const { statuses = [] } = useTaskStatuses();
   const taskStatuses = statuses.filter(s => s.scope === "Task" && s.active !== false).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-  const catName = (id) => categories.find(c => c.id === id)?.name;
-  const grpName = (id) => groups.find(g => g.id === id)?.name;
-
-  const toggle = (id) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const tree = useBulkScopeTree(items, categories, groups);
 
   const single = !!onlyItemId;
   const singleBlocked = single && (previewLoading || !draft || preview?.eligible === false);
@@ -136,27 +135,19 @@ export default function ConvertScopeToTasksModal({ projectId, requestId, items, 
             ) : (
               <>
                 <div className="flex items-center justify-between text-xs text-gray-400 mt-2">
-                  <span>{selected.size} of {candidates.length} selected</span>
-                  <button className="text-blue-400 hover:text-blue-300" onClick={() => setSelected(selected.size === candidates.length ? new Set() : new Set(candidates.map(i => i.id)))}>
-                    {selected.size === candidates.length ? "Clear all" : "Select all"}
-                  </button>
+                  <span>{selected.size} of {candidates.length} available for conversion selected</span>
+                  <div className="flex gap-3">
+                    <button type="button" className="text-blue-400 hover:text-blue-300 disabled:opacity-40" disabled={selected.size === candidates.length} onClick={() => setSelected(new Set(candidates.map(i => i.id)))}>Select all</button>
+                    <button type="button" className="text-blue-400 hover:text-blue-300 disabled:opacity-40" disabled={!selected.size} onClick={() => setSelected(new Set())}>Clear</button>
+                  </div>
                 </div>
-                <div className="border border-gray-800 rounded-md divide-y divide-gray-800 max-h-[45vh] overflow-y-auto">
-                  {candidates.map(item => (
-                    <label key={item.id} className="flex items-start gap-3 px-3 py-2 cursor-pointer hover:bg-gray-800/50">
-                      <Checkbox checked={selected.has(item.id)} onCheckedChange={() => toggle(item.id)} className="mt-0.5" />
-                      <div className="min-w-0">
-                        <div className="text-sm text-white">{item.title}</div>
-                        <div className="text-xs text-gray-500">{[catName(item.category_id), grpName(item.group_id)].filter(Boolean).join(" / ")}</div>
-                      </div>
-                    </label>
-                  ))}
-                </div>
+                <BulkScopeSelectionList tree={tree} selected={selected} setSelected={setSelected} />
               </>
             )}
           </>
         )}
 
+        {!single && !results && candidates.length > 0 && <BulkSelectionSummary tree={tree} selected={selected} />}
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="outline" onClick={onClose} disabled={busy}>{results ? "Done" : "Cancel"}</Button>
           {!results && candidates.length > 0 && (
