@@ -100,6 +100,51 @@
       "type": "string",
       "description": "Idempotency key for payment processing"
     },
+    "credit_application_plan": {
+      "type": "array",
+      "description": "Server-only journal of ledger deductions made by markInvoiceSent (written before deducting) so a retry after a crash can reconcile instead of deducting twice.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "credit_id": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "before": {
+            "type": "number"
+          },
+          "after": {
+            "type": "number"
+          },
+          "prev_applied_to_invoice_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prev_credit_idempotency_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "credit_plan_state": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "pending",
+        "applied",
+        null
+      ],
+      "description": "pending = deductions may be partially applied (retry reconciles); applied = committed with the sent transition"
+    },
     "apply_credit_at_payment": {
       "type": "boolean",
       "default": false,
