@@ -1,0 +1,172 @@
+{
+  "name": "ScopeFundingPlan",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "One draft funding plan per project"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft"
+      ],
+      "enumColors": [
+        "gray"
+      ],
+      "default": "draft",
+      "description": "DRAFT ONLY. Locking/activation is not enabled. Never invoice eligible."
+    },
+    "version": {
+      "type": "integer",
+      "default": 1,
+      "description": "Incremented on every save (compare-and-set)"
+    },
+    "agreed_client_budget_cents": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Explicitly entered agreed client billable budget, integer cents. Never derived from cost ranges."
+    },
+    "agreed_budget_confirmed": {
+      "type": "boolean",
+      "default": false,
+      "description": "Admin explicitly confirmed the agreed client budget value"
+    },
+    "agreed_budget_confirmed_by": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "agreed_budget_confirmed_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "agreed_budget_note": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "milestones": {
+      "type": "array",
+      "description": "Draft milestones. Planned amounts only: not cash, not invoice eligible.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "FIXED_PARTS_FUNDING",
+              "PERCENT_OF_AGREED_CLIENT_BUDGET"
+            ]
+          },
+          "amount_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Manually entered amount (FIXED_PARTS_FUNDING)"
+          },
+          "percent_bps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Percent in basis points, 0-10000 (PERCENT_OF_AGREED_CLIENT_BUDGET)"
+          },
+          "calculated_amount_cents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Server-calculated planned amount"
+          },
+          "target_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "scope_category_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scope_group_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft"
+            ]
+          },
+          "sort_order": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "total_planned_cents": {
+      "type": "integer",
+      "default": 0
+    },
+    "created_by_email": {
+      "type": "string"
+    },
+    "updated_by_email": {
+      "type": "string"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "project_id",
+    "status",
+    "version"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "funding_plan_service_only"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "funding_plan_service_only"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "funding_plan_service_only"
+      }
+    }
+  }
+}

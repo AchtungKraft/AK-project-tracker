@@ -1,0 +1,60 @@
+{
+  "name": "ScopeFundingPlanVersion",
+  "type": "object",
+  "properties": {
+    "plan_id": {
+      "type": "string"
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "version": {
+      "type": "integer",
+      "description": "Plan version this snapshot records"
+    },
+    "snapshot": {
+      "type": "object",
+      "description": "Full plan content (budget, confirmation, milestones, totals) as saved"
+    },
+    "change_note": {
+      "type": "string"
+    },
+    "saved_by_email": {
+      "type": "string"
+    },
+    "saved_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "plan_id",
+    "project_id",
+    "version",
+    "snapshot",
+    "saved_by_email",
+    "saved_at"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "funding_plan_service_only"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "funding_plan_service_only"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "funding_plan_service_only"
+      }
+    }
+  }
+}
