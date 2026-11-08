@@ -295,7 +295,7 @@ export default function ForwardInvoiceDashboard({ projectId }) {
       refetch();
     } catch (error) {
       audit.trackError('record_payment', error);
-      toast.error(error.message || 'Failed to record payment');
+      toast.error(error.response?.data?.error || error.message || 'Failed to record payment');
     }
   };
 

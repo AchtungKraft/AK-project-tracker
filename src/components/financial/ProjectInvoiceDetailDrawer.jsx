@@ -233,7 +233,7 @@ export default function ProjectInvoiceDetailDrawer({
         toast.error(response.data?.error || "Failed to mark as sent");
       }
     } catch (error) {
-      toast.error(error.message || "Failed to mark as sent");
+      toast.error(error.response?.data?.error || error.message || "Failed to mark as sent");
     } finally {
       setIsSubmitting(false);
     }
@@ -277,7 +277,7 @@ export default function ProjectInvoiceDetailDrawer({
         toast.error(response.data?.error || "Failed to mark as paid");
       }
     } catch (error) {
-      toast.error(error.message || "Failed to mark as paid");
+      toast.error(error.response?.data?.error || error.message || "Failed to mark as paid");
     } finally {
       setIsSubmitting(false);
     }
