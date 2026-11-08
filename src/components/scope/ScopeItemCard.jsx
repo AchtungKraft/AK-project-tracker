@@ -23,6 +23,7 @@ export default function ScopeItemCard({
   isClientView = false,
   readOnly = false,
   onEdit,
+  onCreateTask,
   isMobile = false,
 }) {
   const [showComments, setShowComments] = useState(false);
@@ -83,7 +84,7 @@ export default function ScopeItemCard({
         </div>
 
         {/* Task conversion status — internal only, separate from approval */}
-        {isStaff && <ScopeTaskConversionBadge itemId={item.id} />}
+        {isStaff && <ScopeTaskConversionBadge itemId={item.id} onCreateTask={onCreateTask} />}
 
         {/* Reapproval warning */}
         {status === "reapproval_required" && (

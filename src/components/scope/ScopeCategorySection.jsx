@@ -19,6 +19,7 @@ export default function ScopeCategorySection({
   readOnly = false,
   onEditItem,
   onAddItem,
+  onCreateTask,
   isMobile = false,
   filter = "all",
 }) {
@@ -101,6 +102,7 @@ export default function ScopeCategorySection({
                   readOnly={readOnly}
                   onEditItem={onEditItem}
                   onAddItem={onAddItem}
+                  onCreateTask={isClientView ? undefined : onCreateTask}
                   isMobile={isMobile}
                   filter={filter}
                   suppressPricing={populatedGroupCount <= 1}

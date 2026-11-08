@@ -16,10 +16,14 @@ import BaselineResultsList from "./BaselineResultsList";
 
 // Conversion runs server-side (scopeEstimateBaseline 'convert'): creates the Task + immutable
 // approved-estimate baseline and links the ScopeItem. No Task writes from the browser.
-export default function ConvertScopeToTasksModal({ projectId, requestId, items, categories, groups, onClose }) {
+// onlyItemId: per-item "Create Task" — restricts eligibility to that single item (same server path).
+export default function ConvertScopeToTasksModal({ projectId, requestId, items, categories, groups, onClose, onlyItemId = null }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const candidates = useMemo(() => getConvertibleScopeItems(items), [items]);
+  const candidates = useMemo(() => {
+    const all = getConvertibleScopeItems(items);
+    return onlyItemId ? all.filter(i => i.id === onlyItemId) : all;
+  }, [items, onlyItemId]);
   const [selected, setSelected] = useState(() => new Set(candidates.map(i => i.id)));
   const [bucketId, setBucketId] = useState("");
   const [statusId, setStatusId] = useState("");
@@ -70,7 +74,7 @@ export default function ConvertScopeToTasksModal({ projectId, requestId, items, 
     <Dialog open onOpenChange={() => !busy && onClose()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-gray-900 border-gray-700 text-white">
         <DialogHeader>
-          <DialogTitle>Convert approved scope to tasks</DialogTitle>
+          <DialogTitle>{onlyItemId ? "Create task from approved scope item" : "Convert approved scope to tasks"}</DialogTitle>
           <DialogDescription className="text-gray-400">
             Each item becomes a project task and its approved estimate is locked as a reference baseline. Items already converted are skipped; items edited since approval are rejected until re-approved. Nothing is ordered or billed.
           </DialogDescription>
@@ -81,7 +85,7 @@ export default function ConvertScopeToTasksModal({ projectId, requestId, items, 
         {results ? (
           <BaselineResultsList results={results} titleFor={titleFor} />
         ) : candidates.length === 0 ? (
-          <p className="text-sm text-gray-400 py-6 text-center">No new approved items to convert.</p>
+          <p className="text-sm text-gray-400 py-6 text-center">{onlyItemId ? "This item is not eligible: it is already converted or no longer approved." : "No new approved items to convert."}</p>
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

@@ -48,6 +48,7 @@ export default function ScopeReviewDisplay({
 }) {
   const queryClient = useQueryClient();
   const [showConvert, setShowConvert] = useState(false);
+  const [convertOnlyId, setConvertOnlyId] = useState(null);
   const { user: authUser } = useAuth();
   const isAdmin = authUser?.role === 'admin';
   const { toast } = useToast();
@@ -437,6 +438,11 @@ export default function ScopeReviewDisplay({
   }, [items, laborEstimates, requestId, userId, userName, invalidate, toast]);
 
   // ─── Add Item with optional preselection ───
+  const handleCreateTask = useCallback((itemId) => {
+    setConvertOnlyId(itemId);
+    setShowConvert(true);
+  }, []);
+
   const handleAddItem = useCallback((preselection = {}) => {
     setEditingItem(null);
     setAddItemState(preselection);
@@ -490,7 +496,7 @@ export default function ScopeReviewDisplay({
             </Button>
           )}
           {projectId && (
-            <Button size="sm" onClick={() => setShowConvert(true)} className="bg-emerald-700 hover:bg-emerald-600 text-white gap-1">
+            <Button size="sm" onClick={() => { setConvertOnlyId(null); setShowConvert(true); }} className="bg-emerald-700 hover:bg-emerald-600 text-white gap-1">
               <ListPlus className="w-3.5 h-3.5" /> Convert Approved to Tasks
               {convertibleCount > 0 && <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[10px]">{convertibleCount}</span>}
             </Button>
@@ -506,7 +512,8 @@ export default function ScopeReviewDisplay({
           items={items}
           categories={categories}
           groups={groups}
-          onClose={() => setShowConvert(false)}
+          onlyItemId={convertOnlyId}
+          onClose={() => { setShowConvert(false); setConvertOnlyId(null); }}
         />
       )}
 
@@ -560,6 +567,7 @@ export default function ScopeReviewDisplay({
               readOnly={readOnly}
               onEditItem={canEdit ? setEditingItem : undefined}
               onAddItem={canEdit ? handleAddItem : undefined}
+              onCreateTask={canEdit && projectId ? handleCreateTask : undefined}
               isMobile={isMobile}
               filter={filter}
             />
