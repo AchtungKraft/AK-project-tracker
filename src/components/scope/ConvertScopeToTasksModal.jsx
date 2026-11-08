@@ -9,17 +9,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useTaskStatuses } from "@/components/tasks/useTaskDropdownData";
-import { invalidateProjectCaches } from "@/components/tasks/useTaskInteraction";
-import { getConvertibleScopeItems, buildTaskFromScopeItem } from "./scopeTaskConversion";
+import { getConvertibleScopeItems } from "./scopeTaskConversion";
+import { invalidateBaselineCaches } from "./scopeBaselineCache";
+import { errorText } from "./baselineFormat";
+import BaselineResultsList from "./BaselineResultsList";
 
-export default function ConvertScopeToTasksModal({ projectId, requestId, requestTitle, items, categories, groups, laborEstimates, onClose }) {
+// Conversion runs server-side (scopeEstimateBaseline 'convert'): creates the Task + immutable
+// approved-estimate baseline and links the ScopeItem. No Task writes from the browser.
+export default function ConvertScopeToTasksModal({ projectId, requestId, items, categories, groups, onClose }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const candidates = useMemo(() => getConvertibleScopeItems(items), [items]);
   const [selected, setSelected] = useState(() => new Set(candidates.map(i => i.id)));
   const [bucketId, setBucketId] = useState("");
   const [statusId, setStatusId] = useState("");
-  const [progress, setProgress] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [results, setResults] = useState(null);
+  const [error, setError] = useState(null);
 
   const { data: buckets = [] } = useQuery({
     queryKey: ["projectBuckets", projectId],
@@ -34,23 +40,30 @@ export default function ConvertScopeToTasksModal({ projectId, requestId, request
   const toggle = (id) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const handleConvert = async () => {
-    const chosen = candidates.filter(i => selected.has(i.id));
-    setProgress(0);
-    for (const item of chosen) {
-      const task = await base44.entities.Task.create(buildTaskFromScopeItem({
-        item, laborEstimates, categoryName: catName(item.category_id), groupName: grpName(item.group_id),
-        requestTitle, projectId, bucketId, statusId: statusId || taskStatuses[0]?.id,
-      }));
-      await base44.entities.ScopeItem.update(item.id, { linked_task_ids: [...(item.linked_task_ids || []), task.id] });
-      setProgress(p => p + 1);
+    const scopeItemIds = candidates.filter(i => selected.has(i.id)).map(i => i.id);
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await base44.functions.invoke("scopeEstimateBaseline", {
+        action: "convert", requestId, projectId, scopeItemIds,
+        bucketId: bucketId || undefined,
+        statusId: statusId || taskStatuses[0]?.id || undefined,
+      });
+      const list = res.data?.results || [];
+      setResults(list);
+      const created = res.data?.created || 0;
+      const notCreated = list.length - created;
+      toast({ title: `Created ${created} task${created === 1 ? "" : "s"}${notCreated ? ` · ${notCreated} not created` : ""}` });
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      // Refresh even on failure: earlier items in the batch may already have been created.
+      invalidateBaselineCaches(queryClient, requestId, projectId);
+      setBusy(false);
     }
-    queryClient.invalidateQueries({ queryKey: ["scopeReviewData", requestId] });
-    invalidateProjectCaches(queryClient, projectId);
-    toast({ title: `Created ${chosen.length} task${chosen.length === 1 ? "" : "s"}` });
-    onClose();
   };
 
-  const busy = progress !== null;
+  const titleFor = (id) => items.find(i => i.id === id)?.title || id;
   const sortedBuckets = [...buckets].sort((a, b) => (a.order || 0) - (b.order || 0));
 
   return (
@@ -59,11 +72,15 @@ export default function ConvertScopeToTasksModal({ projectId, requestId, request
         <DialogHeader>
           <DialogTitle>Convert approved scope to tasks</DialogTitle>
           <DialogDescription className="text-gray-400">
-            Each item becomes a project task with its description, hard cost, labor breakdown, notes and images carried over. Items already converted are skipped.
+            Each item becomes a project task and its approved estimate is locked as a reference baseline. Items already converted are skipped; items edited since approval are rejected until re-approved. Nothing is ordered or billed.
           </DialogDescription>
         </DialogHeader>
 
-        {candidates.length === 0 ? (
+        {error && <p className="text-sm text-red-400 border border-red-800/50 bg-red-950/30 rounded-md px-3 py-2">{error}</p>}
+
+        {results ? (
+          <BaselineResultsList results={results} titleFor={titleFor} />
+        ) : candidates.length === 0 ? (
           <p className="text-sm text-gray-400 py-6 text-center">No new approved items to convert.</p>
         ) : (
           <>
@@ -110,10 +127,10 @@ export default function ConvertScopeToTasksModal({ projectId, requestId, request
         )}
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
-          {candidates.length > 0 && (
+          <Button variant="outline" onClick={onClose} disabled={busy}>{results ? "Done" : "Cancel"}</Button>
+          {!results && candidates.length > 0 && (
             <Button onClick={handleConvert} disabled={busy || selected.size === 0} className="bg-red-600 hover:bg-red-700">
-              {busy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating {progress}/{selected.size}…</> : `Create ${selected.size} task${selected.size === 1 ? "" : "s"}`}
+              {busy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating {selected.size}…</> : `Create ${selected.size} task${selected.size === 1 ? "" : "s"}`}
             </Button>
           )}
         </div>

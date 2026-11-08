@@ -5,6 +5,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus, Loader2, ListPlus } from "lucide-react";
 import ConvertScopeToTasksModal from "./ConvertScopeToTasksModal";
+import ScopeBaselineBackfillPanel from "./ScopeBaselineBackfillPanel";
+import ScopeReconciliationSummary from "./ScopeReconciliationSummary";
+import { useAuth } from "@/lib/AuthContext";
 import { getConvertibleScopeItems } from "./scopeTaskConversion";
 import { useToast } from "@/components/ui/use-toast";
 import {
@@ -43,6 +46,8 @@ export default function ScopeReviewDisplay({
 }) {
   const queryClient = useQueryClient();
   const [showConvert, setShowConvert] = useState(false);
+  const { user: authUser } = useAuth();
+  const isAdmin = authUser?.role === 'admin';
   const { toast } = useToast();
   const [filter, setFilter] = useState("all");
   const [addItemState, setAddItemState] = useState(null); // null | { categoryId?, groupId? }
@@ -493,13 +498,19 @@ export default function ScopeReviewDisplay({
         <ConvertScopeToTasksModal
           projectId={projectId}
           requestId={requestId}
-          requestTitle={requestTitle}
           items={items}
           categories={categories}
           groups={groups}
-          laborEstimates={laborEstimates}
           onClose={() => setShowConvert(false)}
         />
+      )}
+
+      {/* Estimate baselines — internal only, read-only except admin backfill */}
+      {canEdit && projectId && (
+        <div className="space-y-2">
+          <ScopeReconciliationSummary requestId={requestId} projectId={projectId} />
+          {isAdmin && <ScopeBaselineBackfillPanel requestId={requestId} projectId={projectId} />}
+        </div>
       )}
 
       {/* Item Editor Drawer — add or edit (replaces inline editor) */}

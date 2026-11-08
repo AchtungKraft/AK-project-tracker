@@ -19,6 +19,7 @@ import { createPageUrl } from "@/utils";
 import TaskCommentsSection from "./TaskCommentsSection";
 import ExecutionChecklistSection from "./ExecutionChecklistSection";
 import TaskPartsSection from "./TaskPartsSection";
+import TaskScopeEstimatePanel from "./TaskScopeEstimatePanel";
 import TaskKnowledgeSection from "@/components/knowledge/TaskKnowledgeSection";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { getMobileInputClass, getMobileTextareaClass, getMobileSelectClass } from "@/components/mobile/MobileFormStyles";
@@ -599,8 +600,10 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
 
               <hr className="border-gray-700/50 mb-4" />
 
+              <TaskScopeEstimatePanel task={task} />
+
               {/* Parts */}
-              <section className="mb-3">
+              <section id="task-parts-section" className="mb-3">
                 <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">Parts</h3>
                 <TaskPartsSection task={task} project={project} />
               </section>
@@ -810,8 +813,10 @@ export default function TaskDetailDrawer({ task, onClose, projectId }) {
 
               <hr className="border-gray-700/50 mb-4" />
 
+              <TaskScopeEstimatePanel task={task} />
+
               {/* ── PARTS ── */}
-              <section className="mb-3">
+              <section id="task-parts-section" className="mb-3">
                 <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">Parts</h3>
                 <TaskPartsSection task={task} project={project} />
               </section>
