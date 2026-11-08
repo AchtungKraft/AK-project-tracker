@@ -1,4 +1,4 @@
-import { money } from "../finFormat";
+import { money } from "../finFormat.js";
 
 // Money in the funding plan is integer cents; reconciliation values are dollars.
 export const cents = (c) => (c == null ? "—" : money(c / 100));

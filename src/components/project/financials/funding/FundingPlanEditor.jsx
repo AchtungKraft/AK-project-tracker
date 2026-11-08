@@ -24,7 +24,7 @@ export default function FundingPlanEditor({ projectId, planData, approved }) {
     onSuccess: () => { setSaveError(null); qc.invalidateQueries({ queryKey: ["scopeFundingPlan", projectId] }); },
     onError: (e) => setSaveError({ message: e.response?.data?.errors?.join(" ") || e.response?.data?.error || e.message, conflict: e.response?.status === 409 }),
   });
-  const setRow = (i, row) => setDraft({ ...draft, milestones: draft.milestones.map((m, j) => (j === i ? row : m)) });
+  const setRow = (i, { calc, err, ...row }) => setDraft({ ...draft, milestones: draft.milestones.map((m, j) => (j === i ? row : m)) });
 
   return (
     <div className="space-y-3">

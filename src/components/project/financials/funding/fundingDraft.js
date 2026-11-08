@@ -1,4 +1,4 @@
-import { centsToInput, bpsToInput, parseMoneyToCents, parsePercentToBps, pctOf } from "./fundingFormat";
+import { centsToInput, bpsToInput, parseMoneyToCents, parsePercentToBps, pctOf } from "./fundingFormat.js";
 
 export const newMilestone = () => ({ id: crypto.randomUUID(), name: "", method: "FIXED_PARTS_FUNDING", amount: "", percent: "", target_date: "", scope_category_id: "", scope_group_id: "", notes: "" });
 
