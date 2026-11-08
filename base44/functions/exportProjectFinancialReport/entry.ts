@@ -15,7 +15,10 @@ const hrs = (n) => (n == null ? '—' : `${Number(n).toFixed(2)} h`);
 const TYPE = { BILLABLE: 'Billable', INCLUDED_IN_SERVICE: 'Included in service', NON_BILLABLE: 'Non-billable', UNCLASSIFIED: 'Unclassified' };
 const OTHER_LABEL = { INCLUDED_IN_SERVICE: 'Included in Service', NON_BILLABLE: 'No Charge', UNCLASSIFIED: 'Needs Classification', CANCELLED: 'Cancelled' };
 const OTHER_TITLE = 'Other Labor — Not Separately Billable';
-const SECTIONS = ['summary', 'parts', 'services', 'labor', 'invoices'];
+const SECTIONS = ['summary', 'parts', 'services', 'labor', 'invoices', 'scope_budget'];
+// Approved scope budget ranges — unknown stays "Not estimated", never $0.
+const scopeR = (r) => (!r || r.min == null ? 'Not estimated' : r.min === r.max ? usd(r.min) : `${usd(r.min)} - ${usd(r.max)}`);
+const scopeH = (r) => (!r || r.min == null ? 'Not estimated' : r.min === r.max ? hrs(r.min) : `${hrs(r.min)} - ${hrs(r.max)}`);
 
 const avail = (p) => Math.max(0, p.available_qty - p.allocated_qty);
 const partStatus = (p) => [p.invoiced_qty > 0 && `${p.invoiced_qty} finalized`, p.allocated_qty > 0 && `${p.allocated_qty} on draft`, avail(p) > 0 && `${avail(p)} available`].filter(Boolean).join(', ') || 'Nothing to bill';
@@ -374,6 +377,36 @@ function buildPdf(o, opts) {
   table(['Invoice position (Parts & Services only)', 'Amount'], [['Finalized invoiced', usd(s.finalized_invoiced)], ['Paid', usd(s.paid_amount)], ['Outstanding', usd(s.outstanding_balance)], ['Allocated to drafts', usd(s.allocated_to_drafts)], ...(client ? [] : [['Available to invoice', usd(s.available_to_invoice)]])], { right: [1], marks: client ? {} : { 4: 'sub' }, widths: { 1: 110 } });
   note(client ? 'Projected totals are estimates and are not amounts currently payable. Labor is valued but not yet invoiced.' : 'Invoice position covers Parts & Services only. Labor is valued but not yet supported by the invoicing workflow and is not included in available-to-invoice.');
 
+  // Internal only, appended after reconciliation so existing sections/page breaks are unchanged.
+  const sb = !client && S.includes('scope_budget') ? o.scope_budget : null;
+  if (sb) {
+    heading('Approved Scope Budget (planning, not invoice eligible)', 160);
+    note('Read-only planning view. Not included in current billable, projected value, profitability, invoice availability or purchasing above. Hard cost is an approved allowance (cost basis), not client retail. Labor is approved hours x rate snapshot, not logged or invoiced labor.');
+    const t = sb.totals;
+    const cnt = (n, w) => (n ? `${n} ${w}` : '');
+    table(['Measure', 'Range', 'Notes'], [
+      ['Hard-cost allowance (cost basis)', scopeR(t.hard_cost), [`${t.hard_cost.known_count} estimated`, cnt(t.hard_cost_tbd, 'TBD'), cnt(t.hard_cost_not_estimated, 'not estimated')].filter(Boolean).join(', ')],
+      ['Approved labor hours', scopeH(t.labor_hours), cnt(t.labor_not_estimated, 'items without labor estimate')],
+      ['Labor at rate snapshot', scopeR(t.labor_dollars), 'Estimate of labor value'],
+      ['Converted to tasks', `${t.converted} items`, `Hard cost ${scopeR(t.converted_hard_cost)} / labor ${scopeR(t.converted_labor_dollars)}`],
+      ['Not yet converted', `${t.not_converted} items`, `Hard cost ${scopeR(t.not_converted_hard_cost)} / labor ${scopeR(t.not_converted_labor_dollars)}`],
+      ['Allowance not yet linked to parts', scopeR(t.unlinked_hard_cost), 'Services cannot be attributed per item'],
+      ...(t.legacy_items ? [['Legacy unclassified budget', scopeR(t.legacy_budget), `${t.legacy_items} items, not split cost vs labor`]] : []),
+    ], { right: [1], widths: { 0: 200, 1: 150 } });
+    if (sb.rates.length) table(['Labor group', 'Rate snapshot', 'Hours', 'Labor value', 'Items'], sb.rates.map((r) => [pdfSafe(r.labor_group_name), `${usd(r.rate)}/h`, scopeH({ min: r.hours_min, max: r.hours_max }), scopeR({ min: r.dollars_min, max: r.dollars_max }), r.items]), { right: [1, 2, 3, 4] });
+    const body = [], marks = {};
+    for (const r of sb.reviews) for (const c of r.categories) {
+      marks[body.length] = 'phase';
+      body.push([pdfSafe((sb.reviews.length > 1 ? `${r.title} - ` : '') + c.name).toUpperCase(), `${c.totals.items} (${c.totals.not_converted} not conv.)`, scopeR(c.totals.hard_cost), scopeH(c.totals.labor_hours), scopeR(c.totals.labor_dollars)]);
+      for (const g of c.groups) body.push([`   ${pdfSafe(g.name)}`, `${g.totals.items} (${g.totals.not_converted} not conv.)`, scopeR(g.totals.hard_cost), scopeH(g.totals.labor_hours), scopeR(g.totals.labor_dollars)]);
+    }
+    marks[body.length] = 'grand';
+    body.push(['APPROVED SCOPE TOTAL (planning)', `${t.items} (${t.not_converted} not conv.)`, scopeR(t.hard_cost), scopeH(t.labor_hours), scopeR(t.labor_dollars)]);
+    if (sb.reviews.length) table(['Category / Group', 'Items', 'Hard-cost allowance', 'Labor hrs', 'Labor value'], body, { right: [2, 3, 4], marks, widths: { 0: 240 } });
+    if (sb.excluded.length) table(['Not counted — needs review', 'Reason'], sb.excluded.map((e) => [pdfSafe(e.title), e.reason.replace(/_/g, ' ')]), { widths: { 0: 300 } });
+    note('Provenance: converted items use the immutable scope baseline; not-yet-converted items use client-approved values, counted only when unchanged since approval. Funding and progress billing: not enabled yet.');
+  }
+
   const n = doc.getNumberOfPages();
   for (let i = 1; i <= n; i++) {
     doc.setPage(i); doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(120);
@@ -502,6 +535,26 @@ async function buildXlsx(o, opts) {
     [['Finalized invoiced', s.finalized_invoiced], ['Paid', s.paid_amount], ['Outstanding', s.outstanding_balance], ['Allocated to drafts', s.allocated_to_drafts]].forEach(([n, v]) => ws.addRow({ n, tot: v }));
     if (!client) styleRow(ws.addRow({ n: 'Available to invoice', tot: s.available_to_invoice }), 'sub');
   }
+  const sb = !client && S.includes('scope_budget') ? o.scope_budget : null;
+  if (sb) {
+    // One row per approved item; Row Type lets filtering avoid double counting. Blank = unknown (never 0).
+    const ws = wb.addWorksheet('Approved Scope Budget', { views: [{ state: 'frozen', ySplit: 3 }] });
+    const n = (r, k) => (r ? r[k] : null);
+    ws.columns = [{ key: 'rt', width: 14 }, { key: 'c', width: 24 }, { key: 'g', width: 22 }, { key: 'i', width: 44 }, { key: 'conv', width: 14 }, { key: 'hs', width: 14 },
+      { key: 'hmin', width: 14, style: { numFmt: MONEY } }, { key: 'hmax', width: 14, style: { numFmt: MONEY } }, { key: 'lhmin', width: 12, style: { numFmt: HRS } }, { key: 'lhmax', width: 12, style: { numFmt: HRS } },
+      { key: 'ldmin', width: 14, style: { numFmt: MONEY } }, { key: 'ldmax', width: 14, style: { numFmt: MONEY } }, { key: 'lp', width: 10 }, { key: 'src', width: 22 }];
+    const t0 = ws.addRow({ rt: 'Approved Scope Budget (planning, not invoice eligible) — read-only; not included in billable, projected, profitability, invoice availability or purchasing. Funding and progress billing: not enabled yet.' }); t0.font = { bold: true };
+    ws.addRow({ rt: 'Hard cost = approved allowance (cost basis), not client retail. Labor = approved hours x rate snapshot. Blank = not estimated / TBD.' }).font = { italic: true, color: { argb: 'FF6B7280' } };
+    const h = ws.addRow({ rt: 'Row Type', c: 'Category', g: 'Group', i: 'Item', conv: 'Converted', hs: 'Hard cost state', hmin: 'Hard cost min', hmax: 'Hard cost max', lhmin: 'Labor hrs min', lhmax: 'Labor hrs max', ldmin: 'Labor $ min', ldmax: 'Labor $ max', lp: 'Parts linked', src: 'Source' });
+    h.font = { bold: true, color: { argb: 'FFFFFFFF' } }; h.fill = fill('FF1F2937');
+    for (const r of sb.reviews) for (const c of r.categories) for (const g of c.groups) for (const i of g.items) {
+      ws.addRow({ rt: 'Item', c: c.name, g: g.name, i: i.title, conv: i.converted ? 'Yes' : 'No', hs: i.hard_cost_state, hmin: n(i.hard_cost, 'min'), hmax: n(i.hard_cost, 'max'), lhmin: n(i.labor_hours, 'min'), lhmax: n(i.labor_hours, 'max'), ldmin: n(i.labor_dollars, 'min'), ldmax: n(i.labor_dollars, 'max'), lp: i.converted ? i.linked_parts : null, src: i.provenance.source });
+    }
+    const t = sb.totals;
+    styleRow(ws.addRow({ rt: 'Total', i: `${t.items} approved (${t.converted} converted, ${t.not_converted} not)`, hs: `${t.hard_cost_tbd} TBD / ${t.hard_cost_not_estimated} n.e.`, hmin: t.hard_cost.min, hmax: t.hard_cost.max, lhmin: t.labor_hours.min, lhmax: t.labor_hours.max, ldmin: t.labor_dollars.min, ldmax: t.labor_dollars.max }), 'grand');
+    sb.rates.forEach((r) => ws.addRow({ rt: 'Rate snapshot', i: `${r.labor_group_name} @ $${r.rate}/h`, lhmin: r.hours_min, lhmax: r.hours_max, ldmin: r.dollars_min, ldmax: r.dollars_max }));
+    sb.excluded.forEach((e) => ws.addRow({ rt: 'Not counted', i: e.title, src: e.reason }));
+  }
   return new Uint8Array(await wb.xlsx.writeBuffer());
 }
 
@@ -528,6 +581,13 @@ Deno.serve(async (req) => {
     if (sections.includes('services') && o.lines.services.length) {
       const items = await base44.entities.ServiceLineItem.filter({ service_commitment_id: { $in: o.lines.services.map((s) => s.id) } }, 'sort_order', 1000);
       for (const li of items) (o.svc_components[li.service_commitment_id] ||= []).push(li);
+    }
+    // Internal only: approved scope budget (separate planning view; never merged into the totals above).
+    if (report_type === 'internal' && sections.includes('scope_budget')) {
+      const sbRes = await base44.functions.invoke('getApprovedScopeBudget', { project_id });
+      const sb = sbRes?.data ?? sbRes;
+      if (!sb?.success) return Response.json({ error: sb?.error || 'Could not load approved scope budget' }, { status: 502 });
+      o.scope_budget = sb;
     }
     // Read-only phase lookup (same source/order as Project Workload).
     const [buckets, ptasks] = await Promise.all([

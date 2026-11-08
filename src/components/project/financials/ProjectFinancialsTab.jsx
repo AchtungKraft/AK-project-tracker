@@ -11,6 +11,7 @@ import FinancialCategoryBreakdown from "./FinancialCategoryBreakdown";
 import FinancialInvoiceSummary from "./FinancialInvoiceSummary";
 import FinancialLaborBilling from "./FinancialLaborBilling";
 import FinancialLineItems from "./FinancialLineItems";
+import ApprovedScopeBudgetSection from "./ApprovedScopeBudgetSection";
 
 export default function ProjectFinancialsTab({ projectId }) {
   const queryClient = useQueryClient();
@@ -65,6 +66,7 @@ export default function ProjectFinancialsTab({ projectId }) {
       <FinancialCategoryBreakdown categories={data.categories} summary={data.summary} laborBilling={data.labor_billing} />
       <FinancialLaborBilling projectId={projectId} lb={data.labor_billing} labor={data.labor} />
       <FinancialInvoiceSummary invoices={data.invoices} summary={data.summary} />
+      <ApprovedScopeBudgetSection projectId={projectId} />
       <FinancialLineItems lines={data.lines} laborBilling={data.labor_billing} />
     </div>
   );

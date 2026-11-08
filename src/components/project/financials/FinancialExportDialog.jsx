@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2 } from "lucide-react";
 
-const SECTIONS = [["summary", "Financial summary"], ["parts", "Parts"], ["services", "Services"], ["labor", "Labor"], ["invoices", "Invoice summary"]];
+const SECTIONS = [["summary", "Financial summary"], ["parts", "Parts"], ["services", "Services"], ["labor", "Labor"], ["invoices", "Invoice summary"], ["scope_budget", "Approved scope budget (internal only)"]];
+const INTERNAL_ONLY = new Set(["scope_budget"]);
 const MIME = { pdf: "application/pdf", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" };
 
 export default function FinancialExportDialog({ projectId, format, onClose }) {
@@ -19,7 +20,8 @@ export default function FinancialExportDialog({ projectId, format, onClose }) {
   const run = async () => {
     setBusy(true); setError(null);
     try {
-      const { data } = await base44.functions.invoke("exportProjectFinancialReport", { project_id: projectId, format, report_type: type, sections, include_projected: projected });
+      const sent = type === "client" ? sections.filter((k) => !INTERNAL_ONLY.has(k)) : sections;
+      const { data } = await base44.functions.invoke("exportProjectFinancialReport", { project_id: projectId, format, report_type: type, sections: sent, include_projected: projected });
       if (!data?.success) throw new Error(data?.error || "Export failed");
       const bin = atob(data.file_base64); const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -44,7 +46,7 @@ export default function FinancialExportDialog({ projectId, format, onClose }) {
           </div>
           {type === "client" && <p className="text-xs text-gray-400">Excludes internal costs, margin and purchasing data. Marked "Billing Detail — Not an Invoice".</p>}
           <div className="space-y-2">
-            {SECTIONS.map(([k, l]) => (
+            {SECTIONS.filter(([k]) => type === "internal" || !INTERNAL_ONLY.has(k)).map(([k, l]) => (
               <label key={k} className="flex items-center gap-2 text-gray-200"><Checkbox checked={sections.includes(k)} onCheckedChange={() => toggle(k)} />{l}</label>
             ))}
             {type === "client" && <label className="flex items-center gap-2 text-gray-200"><Checkbox checked={projected} onCheckedChange={(v) => setProjected(!!v)} />Include projected future labor</label>}
