@@ -25,9 +25,10 @@ export function useScopeConversionData({ items, requestId, projectId, enabled })
     queryFn: async () => {
       const [tasks, baselines] = await Promise.all([
         linkedIds.length ? base44.entities.Task.filter({ id: { $in: linkedIds } }) : [],
-        base44.entities.ScopeEstimateBaseline.filter({ request_id: requestId }),
+        // Link fields only (no estimate amounts); the baseline entity itself is not browser-readable.
+        base44.functions.invoke("scopeEstimateBaseline", { action: "conversion_status", requestId, projectId }),
       ]);
-      return { tasks, baselines };
+      return { tasks, baselines: baselines.data?.baselines || [] };
     },
     enabled: enabled && !!requestId,
     staleTime: 15000,

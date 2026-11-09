@@ -4,16 +4,21 @@ import { base44 } from "@/api/base44Client";
 import { Loader2, ChevronDown, ChevronRight } from "lucide-react";
 import ReconciliationRow from "./ReconciliationRow";
 import { errorText } from "./baselineFormat";
+import useTaskEstimateAccess from "@/components/tasks/useTaskEstimateAccess";
 
 // Read-only: approved estimate vs task commitments/actuals. Does not feed any financial report.
+// Restricted to Bryan and Matt (server-enforced); hidden entirely for everyone else.
 export default function ScopeReconciliationSummary({ requestId, projectId }) {
+  const allowed = useTaskEstimateAccess();
   const [open, setOpen] = useState(false);
   const { data, isLoading, error } = useQuery({
     queryKey: ["scopeBaselineReconciliation", requestId],
     queryFn: async () => (await base44.functions.invoke("scopeEstimateBaseline", { action: "request_reconciliation", requestId, projectId })).data,
-    enabled: open,
+    enabled: open && allowed,
+    retry: false,
   });
   const c = data?.coverage;
+  if (!allowed) return null;
 
   return (
     <div className="rounded-md border border-gray-700 bg-black/30">

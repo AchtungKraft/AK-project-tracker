@@ -9,11 +9,65 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 //   convert            (staff) create Task + immutable baseline for approved, unconverted scope items
 //   backfill_preview   (admin) read-only classification of already-converted items
 //   backfill_apply     (admin) attach baselines to existing tasks; ambiguous rows need explicit confirm + note
-//   task_summary       (staff) baseline + estimated / committed / actual / billed for one task
-//   request_reconciliation (staff) read-only per-item estimate vs commitments for a scope review
+//   task_summary       (Bryan + Matt only) baseline + estimated / committed / actual / billed for one task
+//   request_reconciliation (Bryan + Matt only) read-only per-item estimate vs commitments for a scope review
+//   estimate_access    (staff) { can_view_task_estimate } for the current user
+//   conversion_status  (staff) baseline link fields only (no amounts) for conversion badges
 
 const err = (status, error, extra = {}) => Response.json({ error, ...extra }, { status });
 const STAFF = new Set(['admin', 'user']);
+
+// Task-level approved estimate / reconciliation reads are limited to these two people ONLY —
+// not all admins. Keyed by stable user id; the account email must also match (deny on any mismatch).
+const TASK_ESTIMATE_VIEWERS = Object.freeze({
+  '69148cb04f31d0d193adbd02': 'bryan@achtungkraft.com',
+  '6917410dacf84fea89fa8ab0': 'matt@achtungkraft.com',
+});
+const RESTRICTED_ACTIONS = new Set(['task_summary', 'request_reconciliation']);
+export function canViewTaskEstimates(user) {
+  if (!user || typeof user.id !== 'string' || typeof user.email !== 'string') return false;
+  if (!STAFF.has(user.role)) return false;
+  const expected = Object.prototype.hasOwnProperty.call(TASK_ESTIMATE_VIEWERS, user.id) ? TASK_ESTIMATE_VIEWERS[user.id] : null;
+  return !!expected && expected === user.email.trim().toLowerCase();
+}
+// Pure request gate: returns an HTTP status to reject with, or null to continue.
+export function gate(user, action) {
+  if (!user) return 401;
+  if (!STAFF.has(user.role)) return 403;
+  if (RESTRICTED_ACTIONS.has(action) && !canViewTaskEstimates(user)) return 403;
+  return null;
+}
+
+function selfTest() {
+  const bryan = { id: '69148cb04f31d0d193adbd02', email: 'bryan@achtungkraft.com', role: 'admin' };
+  const matt = { id: '6917410dacf84fea89fa8ab0', email: 'matt@achtungkraft.com', role: 'user' };
+  const otherAdmin = { id: '6913f39cea91db2169cc30c5', email: 'sales@achtungkraft.com', role: 'admin' };
+  const staff = { id: '691741b226ae615eb5aa9301', email: 'staff@example.com', role: 'user' };
+  const cases = [];
+  const t = (name, ok) => cases.push({ name, pass: !!ok });
+  for (const a of RESTRICTED_ACTIONS) {
+    t(`Bryan → ${a} allowed`, gate(bryan, a) === null);
+    t(`Matt → ${a} allowed`, gate(matt, a) === null);
+    t(`other admin → ${a} 403`, gate(otherAdmin, a) === 403);
+    t(`ordinary staff → ${a} 403`, gate(staff, a) === 403);
+    t(`signed-out → ${a} 401`, gate(null, a) === 401);
+    t(`client/unknown role → ${a} 403`, gate({ ...matt, role: 'client' }, a) === 403);
+    t(`Matt's id with another email → ${a} 403`, gate({ ...matt, email: 'mpolitowicz@me.com' }, a) === 403);
+    t(`Bryan's email on another id → ${a} 403`, gate({ ...otherAdmin, email: 'bryan@achtungkraft.com' }, a) === 403);
+  }
+  t('email case/whitespace normalised for Bryan', canViewTaskEstimates({ ...bryan, email: ' Bryan@AchtungKraft.com ' }));
+  t('prototype key cannot match', !canViewTaskEstimates({ id: '__proto__', email: '[object Object]', role: 'admin' }));
+  t('missing id/email denied', !canViewTaskEstimates({ role: 'admin' }));
+  for (const a of ['convert', 'convert_preview', 'conversion_status', 'estimate_access', 'backfill_preview', 'image_backfill_preview']) {
+    t(`other admin → ${a} not blocked by estimate gate`, gate(otherAdmin, a) === null);
+    t(`signed-out → ${a} 401`, gate(null, a) === 401);
+  }
+  t('ordinary staff → convert not blocked by estimate gate', gate(staff, 'convert') === null);
+  t('access flag: Bryan true, Matt true, other admin false, staff false',
+    canViewTaskEstimates(bryan) && canViewTaskEstimates(matt) && !canViewTaskEstimates(otherAdmin) && !canViewTaskEstimates(staff));
+  const passed = cases.filter((c) => c.pass).length;
+  return { pass: passed === cases.length, passed, total: cases.length, results: cases };
+}
 const r2 = (n) => Math.round(n * 100) / 100;
 const isId = (v) => typeof v === 'string' && /^[a-zA-Z0-9_-]{6,64}$/.test(v);
 const keyFor = (scopeItemId) => `scope-baseline:${scopeItemId}`;
@@ -243,12 +297,19 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me().catch((e) => (e.status === 401 ? null : Promise.reject(e)));
-    if (!user) return err(401, 'Unauthorized');
-    if (!STAFF.has(user.role)) return err(403, 'Internal staff only.');
-    const isAdmin = user.role === 'admin';
-    const db = base44.asServiceRole.entities;
     const body = await req.json().catch(() => ({}));
     const { action } = body;
+    const denied = gate(user, action);
+    if (denied === 401) return err(401, 'Unauthorized');
+    if (denied) return err(403, 'Not authorized.');
+    const isAdmin = user.role === 'admin';
+    const db = base44.asServiceRole.entities;
+
+    if (action === 'estimate_access') return Response.json({ can_view_task_estimate: canViewTaskEstimates(user) });
+    if (action === 'self_test') {
+      if (!isAdmin && !canViewTaskEstimates(user)) return err(403, 'Not authorized.');
+      return Response.json(selfTest());
+    }
     const one = async (E, id) => (isId(id) ? (await db[E].filter({ id }, { limit: 1 })).items[0] || null : null);
 
     const loadRequest = async () => {
@@ -395,6 +456,14 @@ Deno.serve(async (req) => {
       const { snap } = approvedSnapshot(item, labor);
       const v = buildBaselineValues({ item, snap, groupNames: ctx.groupNames, catName: ctx.catName.get(item.category_id), grpName: ctx.grpName.get(item.group_id), request });
       return Response.json({ eligible: !reason, reason, title: v.title, description: taskDescription(v), images: approvedImages(item, snap), limits: { description: MAX_DESC, checklist: MAX_CHECK, checklist_row: MAX_CHECK_LEN } });
+    }
+
+    // ── CONVERSION STATUS (staff, read-only): link fields only — never estimate amounts ──
+    if (action === 'conversion_status') {
+      const { request, error } = await loadRequest();
+      if (error) return error;
+      const rows = await listAll(db.ScopeEstimateBaseline, { request_id: request.id }, { fields: ['scope_item_id', 'task_id', 'project_id'] });
+      return Response.json({ baselines: rows.map((b) => ({ id: b.id, scope_item_id: b.scope_item_id, task_id: b.task_id, project_id: b.project_id })) });
     }
 
     // ── IMAGE BACKFILL (admin): attach approved ScopeItem images to already-converted tasks ──
