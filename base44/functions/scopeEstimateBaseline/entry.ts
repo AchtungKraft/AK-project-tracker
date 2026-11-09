@@ -108,9 +108,6 @@ function buildBaselineValues({ item, snap, groupNames, catName, grpName, request
   };
 }
 
-const money = (v) => '$' + Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 });
-const range = (a, b, unit = '') => (a == null && b == null ? null : a === b || b == null ? `${a}${unit}` : `${a}–${b}${unit}`);
-const mRange = (a, b) => (a == null && b == null ? null : a === b || b == null ? money(a) : `${money(a)}–${money(b)}`);
 
 // ── Task execution draft (single-item review) limits + sanitizers ──
 const MAX_DESC = 20000, MAX_CHECK = 100, MAX_CHECK_LEN = 500, MAX_IMAGES = 50;
@@ -129,22 +126,11 @@ const imageRefs = (urls, itemId, email) => {
   return urls.map((url) => ({ url, source_type: 'scope_item', source_id: itemId, added_by: email, added_at: at }));
 };
 
+// Task description = the approved ScopeItem narrative only. Provenance, cost, labor and estimate
+// values live in the immutable ScopeEstimateBaseline (shown in the Approved Scope Estimate panel);
+// images live on Task.reference_images.
 function taskDescription(v) {
-  const out = [];
-  if (v.description_snapshot) out.push(v.description_snapshot.trim(), '');
-  out.push(`From scope review: ${v.request_title || 'Scope Review'}`);
-  out.push(`Category / Group: ${[v.category_name, v.group_name].filter(Boolean).join(' / ')}`);
-  if (v.pricing_model === 'legacy_estimate') out.push(`Budget: ${v.legacy_budget_tbd ? 'TBD' : mRange(v.legacy_budget_min, v.legacy_budget_max) || '—'}`);
-  else out.push(`Hard cost / parts: ${v.hard_cost_tbd ? 'TBD' : mRange(v.hard_cost_min, v.hard_cost_max) || 'Not estimated'}`);
-  if (v.hard_cost_note) out.push(`Hard cost note: ${v.hard_cost_note}`);
-  if (v.labor_estimated) {
-    out.push(`AK labor: ${range(v.labor_hours_min, v.labor_hours_max, ' hrs')} (${mRange(v.labor_dollars_min, v.labor_dollars_max)})`);
-    for (const l of v.labor_lines) out.push(`  • ${l.labor_group_name}: ${range(l.hours_min, l.hours_max, ' hrs')} @ $${l.rate}/hr`);
-  }
-  if (v.total_estimate_min != null) out.push(`Total estimate: ${mRange(v.total_estimate_min, v.total_estimate_max)}`);
-  if (v.budget_note) out.push(`Note: ${v.budget_note}`);
-  // Reference images are stored structurally on Task.reference_images (rendered as thumbnails).
-  return out.join('\n');
+  return (v.description_snapshot || '').trim();
 }
 
 // Converge concurrent creates for the same scope item: oldest baseline wins.

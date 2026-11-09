@@ -1,0 +1,99 @@
+{
+  "name": "TaskDescriptionCleanupLog",
+  "type": "object",
+  "properties": {
+    "task_id": {
+      "type": "string"
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "scope_item_id": {
+      "type": "string"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "classification": {
+      "type": "string",
+      "enum": [
+        "ready",
+        "narrative_edited"
+      ],
+      "enumColors": [
+        "green",
+        "yellow"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "applied",
+        "failed"
+      ],
+      "enumColors": [
+        "gray",
+        "green",
+        "red"
+      ],
+      "default": "pending"
+    },
+    "description_before": {
+      "type": "string",
+      "description": "Exact task description before cleanup (preserved for audit/restore)"
+    },
+    "description_after": {
+      "type": "string"
+    },
+    "removed_block": {
+      "type": "string",
+      "description": "Exact generated block that was removed"
+    },
+    "before_hash": {
+      "type": "string"
+    },
+    "after_hash": {
+      "type": "string"
+    },
+    "applied_by_email": {
+      "type": "string"
+    },
+    "applied_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "error": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id",
+    "description_before",
+    "description_after",
+    "before_hash",
+    "applied_by_email"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "task_cleanup_service_only"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "task_cleanup_service_only"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "task_cleanup_service_only"
+      }
+    }
+  }
+}

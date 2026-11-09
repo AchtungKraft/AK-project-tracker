@@ -8,6 +8,7 @@ import ConvertScopeToTasksModal from "./ConvertScopeToTasksModal";
 import ScopeBaselineBackfillPanel from "./ScopeBaselineBackfillPanel";
 import ScopeReconciliationSummary from "./ScopeReconciliationSummary";
 import ScopeImageBackfillPanel from "./ScopeImageBackfillPanel";
+import TaskDescriptionCleanupPanel from "./TaskDescriptionCleanupPanel";
 import { useAuth } from "@/lib/AuthContext";
 import { ScopeConversionProvider, useScopeConversionData } from "./ScopeConversionContext";
 import ScopeConversionSummary from "./ScopeConversionSummary";
@@ -524,6 +525,7 @@ export default function ScopeReviewDisplay({
           <ScopeReconciliationSummary requestId={requestId} projectId={projectId} />
           {isAdmin && <ScopeBaselineBackfillPanel requestId={requestId} projectId={projectId} />}
           {isAdmin && <ScopeImageBackfillPanel requestId={requestId} projectId={projectId} />}
+          {isAdmin && <TaskDescriptionCleanupPanel requestId={requestId} projectId={projectId} />}
         </div>
       )}
 
