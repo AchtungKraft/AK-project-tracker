@@ -38,6 +38,67 @@ export function gate(user, action) {
   return null;
 }
 
+// ── Scheduling defaults for converted tasks (optional; default unassigned / no dates / not priority) ──
+const SCHEDULE_KEYS = new Set(['assignedTeamMemberId', 'startDate', 'dueDate', 'isPriority']);
+export function isValidDateOnly(s) {
+  if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const [y, m, d] = s.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return y >= 1900 && y <= 2200 && dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+export const isEligibleAssignee = (tm) => !!tm && tm.active !== false && tm.is_achtung_kraft_member === true;
+// Pure shape validation. Returns { error } or { value } with Task field names. Assignee existence is checked separately.
+export function validateSchedule(raw) {
+  if (raw == null) return { value: { assigned_team_member_id: null, start_date: null, due_date: null, is_priority: false } };
+  if (typeof raw !== 'object' || Array.isArray(raw)) return { error: 'Invalid task scheduling values.' };
+  if (Object.keys(raw).some((k) => !SCHEDULE_KEYS.has(k))) return { error: 'Unknown task scheduling field.' };
+  const blank = (v) => v == null || v === '';
+  const a = raw.assignedTeamMemberId, s = raw.startDate, d = raw.dueDate, p = raw.isPriority;
+  if (!blank(a) && !isId(a)) return { error: 'Invalid assignee.' };
+  if (!blank(s) && !isValidDateOnly(s)) return { error: 'Start date must be a valid YYYY-MM-DD date.' };
+  if (!blank(d) && !isValidDateOnly(d)) return { error: 'Due date must be a valid YYYY-MM-DD date.' };
+  if (!blank(s) && !blank(d) && d < s) return { error: 'Due date cannot be before the start date.' };
+  if (p != null && typeof p !== 'boolean') return { error: 'Priority must be true or false.' };
+  return { value: { assigned_team_member_id: blank(a) ? null : a, start_date: blank(s) ? null : s, due_date: blank(d) ? null : d, is_priority: p === true } };
+}
+// Scheduling fields added to each created Task. Only set fields are written; priority mirrors the task workflow.
+export function scheduleTaskFields(sched, nowIso) {
+  return {
+    ...(sched.assigned_team_member_id ? { assigned_team_member_id: sched.assigned_team_member_id } : {}),
+    ...(sched.start_date ? { start_date: sched.start_date } : {}),
+    ...(sched.due_date ? { due_date: sched.due_date } : {}),
+    ...(sched.is_priority ? { is_priority: true, priority_set_at: nowIso } : {}),
+  };
+}
+
+function scheduleSelfTest(t) {
+  const ok = (raw) => validateSchedule(raw).value;
+  const bad = (raw) => !!validateSchedule(raw).error;
+  const none = ok(undefined);
+  t('no scheduling → unassigned, no dates, not priority', none && !none.assigned_team_member_id && !none.start_date && !none.due_date && none.is_priority === false);
+  t('no scheduling → no Task fields added', Object.keys(scheduleTaskFields(none, 'x')).length === 0);
+  t('empty strings treated as unset', JSON.stringify(ok({ assignedTeamMemberId: '', startDate: '', dueDate: '', isPriority: false })) === JSON.stringify(none));
+  const full = ok({ assignedTeamMemberId: '6914974068d873ae2e061f1d', startDate: '2026-11-10', dueDate: '2026-11-20', isPriority: true });
+  const f = scheduleTaskFields(full, '2026-11-09T00:00:00.000Z');
+  t('full schedule → TeamMember id, date-only strings, priority + priority_set_at',
+    f.assigned_team_member_id === '6914974068d873ae2e061f1d' && f.start_date === '2026-11-10' && f.due_date === '2026-11-20' && f.is_priority === true && f.priority_set_at === '2026-11-09T00:00:00.000Z');
+  t('priority false → no priority fields', !('is_priority' in scheduleTaskFields(ok({ isPriority: false }), 'x')));
+  t('due equal to start allowed', !bad({ startDate: '2026-11-10', dueDate: '2026-11-10' }));
+  t('only due date allowed', !bad({ dueDate: '2026-12-01' }));
+  t('due before start rejected', bad({ startDate: '2026-11-10', dueDate: '2026-11-09' }));
+  for (const d of ['2026-02-30', '2026-13-01', '2026-1-05', '11/10/2026', '2026-11-10T00:00:00Z', 20261110, 'abc']) t(`invalid date ${JSON.stringify(d)} rejected`, bad({ startDate: d }) && bad({ dueDate: d }));
+  t('leap day accepted', !bad({ startDate: '2028-02-29' }));
+  for (const a of ['x', '../etc', { $ne: null }, 123, 'a b c d e f']) t(`forged assignee ${JSON.stringify(a)} rejected`, bad({ assignedTeamMemberId: a }));
+  for (const p of ['true', 1, 'yes']) t(`non-boolean priority ${JSON.stringify(p)} rejected`, bad({ isPriority: p }));
+  t('unknown key rejected (e.g. assigned_team_member_id / user id smuggling)', bad({ assigned_team_member_id: 'abcdef123' }) && bad({ userId: 'abcdef123' }));
+  t('array payload rejected', bad([]));
+  t('eligible: active internal member', isEligibleAssignee({ active: true, is_achtung_kraft_member: true }) && isEligibleAssignee({ is_achtung_kraft_member: true }));
+  t('ineligible: inactive / external / missing', !isEligibleAssignee({ active: false, is_achtung_kraft_member: true }) && !isEligibleAssignee({ active: true, is_achtung_kraft_member: false }) && !isEligibleAssignee({ active: true }) && !isEligibleAssignee(null));
+  // Bulk: one validated default set → separate, equal field objects per created task.
+  const a1 = scheduleTaskFields(full, 'n'), a2 = scheduleTaskFields(full, 'n');
+  t('bulk defaults copied per task (independent objects, same values)', a1 !== a2 && JSON.stringify(a1) === JSON.stringify(a2));
+}
+
 function selfTest() {
   const bryan = { id: '69148cb04f31d0d193adbd02', email: 'bryan@achtungkraft.com', role: 'admin' };
   const matt = { id: '6917410dacf84fea89fa8ab0', email: 'matt@achtungkraft.com', role: 'user' };
@@ -65,6 +126,9 @@ function selfTest() {
   t('ordinary staff → convert not blocked by estimate gate', gate(staff, 'convert') === null);
   t('access flag: Bryan true, Matt true, other admin false, staff false',
     canViewTaskEstimates(bryan) && canViewTaskEstimates(matt) && !canViewTaskEstimates(otherAdmin) && !canViewTaskEstimates(staff));
+  t('signed-out → assignee_options 401', gate(null, 'assignee_options') === 401);
+  t('client role → assignee_options / convert 403', gate({ ...staff, role: 'client' }, 'assignee_options') === 403 && gate({ ...staff, role: 'client' }, 'convert') === 403);
+  scheduleSelfTest(t);
   const passed = cases.filter((c) => c.pass).length;
   return { pass: passed === cases.length, passed, total: cases.length, results: cases };
 }
@@ -353,6 +417,13 @@ Deno.serve(async (req) => {
           imageUrls: o.imageUrls != null ? [...new Set(o.imageUrls)] : null,
         };
       }
+      // Optional scheduling defaults: applied to every task this call creates (single or bulk).
+      const sv = validateSchedule(body.taskDefaults);
+      if (sv.error) return err(400, sv.error);
+      const schedule = sv.value;
+      if (schedule.assigned_team_member_id && !isEligibleAssignee(await one('TeamMember', schedule.assigned_team_member_id))) {
+        return err(400, 'Assignee must be an active internal team member.');
+      }
       const ctx = await loadRequestContext(db, request);
       const itemMap = new Map(ctx.items.map((i) => [i.id, i]));
       const results = [];
@@ -405,6 +476,7 @@ Deno.serve(async (req) => {
             ...(body.bucketId ? { kanban_bucket_id: body.bucketId } : {}),
             ...(body.statusId ? { status_id: body.statusId } : {}),
             ...(hours ? { estimated_hours: hours } : {}),
+            ...scheduleTaskFields(schedule, new Date().toISOString()),
           });
           if (checklist.length) {
             await base44.entities.TaskChecklistItem.bulkCreate(checklist.map((title, i) => ({ task_id: task.id, title, sort_order: i, is_complete: false, visibility: 'internal' })));
@@ -456,6 +528,15 @@ Deno.serve(async (req) => {
       const { snap } = approvedSnapshot(item, labor);
       const v = buildBaselineValues({ item, snap, groupNames: ctx.groupNames, catName: ctx.catName.get(item.category_id), grpName: ctx.grpName.get(item.group_id), request });
       return Response.json({ eligible: !reason, reason, title: v.title, description: taskDescription(v), images: approvedImages(item, snap), limits: { description: MAX_DESC, checklist: MAX_CHECK, checklist_row: MAX_CHECK_LEN } });
+    }
+
+    // ── ASSIGNEE OPTIONS (staff, read-only): eligible internal team members, id + display fields only ──
+    if (action === 'assignee_options') {
+      const rows = await listAll(db.TeamMember, {}, { fields: ['full_name', 'team_role', 'active', 'is_achtung_kraft_member', 'sort_order'] });
+      const options = rows.filter(isEligibleAssignee)
+        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || String(a.full_name).localeCompare(String(b.full_name)))
+        .map((m) => ({ id: m.id, full_name: m.full_name || 'Unnamed', team_role: m.team_role || '' }));
+      return Response.json({ options });
     }
 
     // ── CONVERSION STATUS (staff, read-only): link fields only — never estimate amounts ──

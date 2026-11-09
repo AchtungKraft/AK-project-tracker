@@ -16,6 +16,8 @@ import BaselineResultsList from "./BaselineResultsList";
 import SingleTaskDraftFields from "./SingleTaskDraftFields";
 import BulkScopeSelectionList, { useBulkScopeTree } from "./BulkScopeSelectionList";
 import BulkSelectionSummary from "./BulkSelectionSummary";
+import TaskScheduleFields from "./TaskScheduleFields";
+import { emptySchedule, scheduleError, toTaskDefaults } from "./scheduleDraft";
 
 // Conversion runs server-side (scopeEstimateBaseline 'convert'): creates the Task + immutable
 // approved-estimate baseline and links the ScopeItem. No Task writes from the browser.
@@ -34,6 +36,7 @@ export default function ConvertScopeToTasksModal({ projectId, requestId, items, 
   const [results, setResults] = useState(null);
   const [error, setError] = useState(null);
   const [draft, setDraft] = useState(null);
+  const [schedule, setSchedule] = useState(emptySchedule);
 
   const { data: preview, isLoading: previewLoading, error: previewError } = useQuery({
     queryKey: ["scopeConvertPreview", requestId, onlyItemId],
@@ -66,6 +69,7 @@ export default function ConvertScopeToTasksModal({ projectId, requestId, items, 
         action: "convert", requestId, projectId, scopeItemIds,
         bucketId: bucketId || undefined,
         statusId: statusId || taskStatuses[0]?.id || undefined,
+        taskDefaults: toTaskDefaults(schedule),
         ...(single ? { taskOverrides: { description: draft.description, imageUrls: draft.imageUrls, checklist: draft.checklist.map(c => c.trim()).filter(Boolean) } } : {}),
       });
       const list = res.data?.results || [];
@@ -87,7 +91,7 @@ export default function ConvertScopeToTasksModal({ projectId, requestId, items, 
 
   return (
     <Dialog open onOpenChange={() => !busy && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-gray-900 border-gray-700 text-white">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden bg-gray-900 border-gray-700 text-white">
         <DialogHeader>
           <DialogTitle>{single ? `Create task: ${candidates[0]?.title || "scope item"}` : "Convert approved scope to tasks"}</DialogTitle>
           <DialogDescription className="text-gray-400">
@@ -127,6 +131,8 @@ export default function ConvertScopeToTasksModal({ projectId, requestId, items, 
               </div>
             </div>
 
+            <TaskScheduleFields value={schedule} onChange={setSchedule} bulk={!single} />
+
             {single ? (
               previewError ? <p className="text-sm text-red-400">{errorText(previewError)}</p>
               : preview?.eligible === false ? <p className="text-sm text-amber-400">Not eligible: {reasonText(preview.reason)}</p>
@@ -151,7 +157,7 @@ export default function ConvertScopeToTasksModal({ projectId, requestId, items, 
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="outline" onClick={onClose} disabled={busy}>{results ? "Done" : "Cancel"}</Button>
           {!results && candidates.length > 0 && (
-            <Button onClick={handleConvert} disabled={busy || selected.size === 0 || singleBlocked} className="bg-red-600 hover:bg-red-700">
+            <Button onClick={handleConvert} disabled={busy || selected.size === 0 || singleBlocked || !!scheduleError(schedule)} className="bg-red-600 hover:bg-red-700">
               {busy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating…</> : single ? "Create task" : `Create ${selected.size} task${selected.size === 1 ? "" : "s"}`}
             </Button>
           )}
