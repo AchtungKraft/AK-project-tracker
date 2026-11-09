@@ -9,6 +9,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Loader2, Calendar as CalendarIcon, Info } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import DescriptionWithEmbeds from "./embeds/DescriptionWithEmbeds";
+import { normalizeEmbeds } from "@/lib/excelEmbeds";
 
 export default function EditRequestModal({ 
   open, 
@@ -19,6 +21,7 @@ export default function EditRequestModal({
 }) {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [embeds, setEmbeds] = useState([]);
   const [dueDate, setDueDate] = useState(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
 
@@ -27,6 +30,7 @@ export default function EditRequestModal({
     if (request) {
       setTitle(request.title || '');
       setBody(request.body || '');
+      setEmbeds(Array.isArray(request.embeds) ? request.embeds : []);
       setDueDate(request.due_date ? new Date(request.due_date) : null);
     }
   }, [request]);
@@ -39,6 +43,7 @@ export default function EditRequestModal({
     onSave({
       title: title.trim(),
       body: body.trim(),
+      embeds: normalizeEmbeds(body.trim(), embeds),
       due_date: dueDate ? format(dueDate, 'yyyy-MM-dd') : null
     });
   };
@@ -50,7 +55,7 @@ export default function EditRequestModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-lg">
+      <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>Edit Request</DialogTitle>
           <DialogDescription className="text-gray-400">
@@ -72,10 +77,12 @@ export default function EditRequestModal({
 
           <div className="space-y-2">
             <Label htmlFor="body" className="text-gray-300">Description</Label>
-            <Textarea
+            <DescriptionWithEmbeds
               id="body"
               value={body}
-              onChange={(e) => setBody(e.target.value)}
+              onChange={setBody}
+              embeds={embeds}
+              onEmbedsChange={setEmbeds}
               placeholder="Request description..."
               className="bg-gray-800 border-gray-700 text-white min-h-[120px]"
             />

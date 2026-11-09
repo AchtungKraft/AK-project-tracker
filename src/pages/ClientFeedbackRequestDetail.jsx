@@ -22,6 +22,7 @@ import { isStructuredReview } from "@/components/clientportal/reviewBehavior";
 import ImageModal from "../components/ui/ImageModal";
 import ScopeReviewDisplay from "@/components/scope/ScopeReviewDisplay";
 import RetainerReviewClientPanel from "@/components/retainer/RetainerReviewClientPanel";
+import RequestBodyContent from "@/components/clientportal/embeds/RequestBodyContent";
 
 export default function ClientFeedbackRequestDetail() {
   const navigate = useNavigate();
@@ -401,7 +402,11 @@ export default function ClientFeedbackRequestDetail() {
         {request.body && (
           <Card className="bg-black/60 backdrop-blur-xl border border-gray-700">
             <CardContent className="p-4">
-              <p className="text-gray-300 whitespace-pre-wrap">{request.body}</p>
+              <RequestBodyContent
+                body={request.body}
+                embeds={request.embeds}
+                renderText={(text) => text ? <p className="text-gray-300 whitespace-pre-wrap">{text}</p> : null}
+              />
             </CardContent>
           </Card>
         )}

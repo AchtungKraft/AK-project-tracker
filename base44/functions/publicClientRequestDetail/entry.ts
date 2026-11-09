@@ -19,6 +19,25 @@ async function withRetry(fn, retries = 3, delayMs = 500) {
     throw lastError;
 }
 
+// Excel embed allow-list — keep in sync with src/lib/excelEmbeds.js
+function isAllowedEmbedUrl(raw) {
+    if (typeof raw !== 'string' || raw.length > 4000) return false;
+    let u; try { u = new URL(raw); } catch { return false; }
+    if (u.protocol !== 'https:' || u.username || u.password || u.port) return false;
+    const host = u.hostname.toLowerCase(), path = u.pathname.toLowerCase();
+    if (host === 'onedrive.live.com') return path.startsWith('/embed');
+    if (host === '1drv.ms') return path.startsWith('/x/');
+    if (/^[a-z0-9-]+(\.[a-z0-9-]+)*\.sharepoint\.com$/.test(host)) return path.includes('/_layouts/15/doc.aspx') || path.includes('/_layouts/15/embed.aspx') || path.startsWith('/:x:/');
+    if (host === 'excel.officeapps.live.com') return path.startsWith('/x/_layouts/');
+    if (host === 'view.officeapps.live.com') return path === '/op/embed.aspx' || path === '/op/view.aspx';
+    return false;
+}
+function clientEmbeds(body, embeds) {
+    const ids = new Set([...String(body || '').matchAll(/\[\[excel:([a-z0-9]{8,16})\]\]/g)].map(m => m[1]));
+    return safeArray(embeds).filter(e => e && ids.has(e.id) && isAllowedEmbedUrl(e.url)).slice(0, 10)
+        .map(e => ({ id: e.id, url: e.url, title: String(e.title || '').slice(0, 120), height: Math.min(1600, Math.max(200, Math.round(Number(e.height) || 600))) }));
+}
+
 function safeArray(val) {
     return Array.isArray(val) ? val : [];
 }
@@ -477,6 +496,7 @@ Deno.serve(async (req) => {
                 id: request.id,
                 title: request.title,
                 body: request.body,
+                embeds: clientEmbeds(request.body, request.embeds),
                 request_type: request.request_type || null,
                 request_type_label: typeInfo.label,
                 request_type_color: typeInfo.color,

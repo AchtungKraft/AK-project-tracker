@@ -13,6 +13,8 @@ import { CalendarIcon, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { CREATE_TYPE_OPTIONS, REQUEST_TYPE_UI } from "./utils";
+import DescriptionWithEmbeds from "./embeds/DescriptionWithEmbeds";
+import { normalizeEmbeds } from "@/lib/excelEmbeds";
 
 // Generate a unique submission token per attempt
 function generateSubmissionToken() {
@@ -28,7 +30,7 @@ const ERROR_MESSAGES = {
   UNKNOWN: 'Failed to create feedback request. Please try again.',
 };
 
-const INITIAL_FORM = { title: '', body: '', request_type: 'update', due_date: '' };
+const INITIAL_FORM = { title: '', body: '', request_type: 'update', due_date: '', embeds: [] };
 
 export default function CreateFeedbackRequestModal({ open, onClose, projectId, userId }) {
   const queryClient = useQueryClient();
@@ -133,6 +135,7 @@ export default function CreateFeedbackRequestModal({ open, onClose, projectId, u
 
     createMutation.mutate({
       ...formData,
+      embeds: normalizeEmbeds(formData.body, formData.embeds),
       project_id: projectId,
       submission_token: submissionTokenRef.current,
     });
@@ -149,7 +152,7 @@ export default function CreateFeedbackRequestModal({ open, onClose, projectId, u
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="bg-gray-900 text-white max-w-2xl">
+      <DialogContent className="bg-gray-900 text-white max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>New Feedback Request</DialogTitle>
           <DialogDescription>
@@ -186,9 +189,11 @@ export default function CreateFeedbackRequestModal({ open, onClose, projectId, u
 
           <div>
             <Label>Description</Label>
-            <Textarea
+            <DescriptionWithEmbeds
               value={formData.body}
-              onChange={(e) => setFormData({ ...formData, body: e.target.value })}
+              onChange={(body) => setFormData(f => ({ ...f, body }))}
+              embeds={formData.embeds}
+              onEmbedsChange={(embeds) => setFormData(f => ({ ...f, embeds }))}
               placeholder="Describe what you need from the client..."
               className="bg-gray-800 border-gray-700 text-white min-h-[120px]"
             />

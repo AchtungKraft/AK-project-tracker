@@ -12,7 +12,30 @@
     },
     "body": {
       "type": "string",
-      "description": "Request body/description"
+      "description": "Request body/description. May contain [[excel:<id>]] tokens marking where an embed renders."
+    },
+    "embeds": {
+      "type": "array",
+      "description": "Structured Microsoft Excel (OneDrive/SharePoint) embeds placed in body via [[excel:<id>]] tokens. URLs are re-validated against the Microsoft allow-list before rendering.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "description": "Validated https Microsoft embed URL (iframe src)"
+          },
+          "title": {
+            "type": "string"
+          },
+          "height": {
+            "type": "integer",
+            "description": "Display height in px (200-1600, default 600)"
+          }
+        }
+      }
     },
     "request_type": {
       "type": "string",

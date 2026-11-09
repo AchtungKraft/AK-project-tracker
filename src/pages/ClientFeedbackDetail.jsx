@@ -38,6 +38,7 @@ import { MetadataCardSkeleton, ThreadSkeleton, CommentFormSkeleton } from "../co
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import FeedbackCommentComposer from "../components/clientportal/FeedbackCommentComposer.jsx";
 import HtmlContent from "@/components/shared/HtmlContent";
+import RequestBodyContent from "@/components/clientportal/embeds/RequestBodyContent";
 import LinkPreviewGrid from "@/components/shared/LinkPreviewGrid";
 import { extractLinks } from "@/utils/extractLinks";
 import ScopeReviewDisplay from "@/components/scope/ScopeReviewDisplay";
@@ -694,11 +695,15 @@ export default function ClientFeedbackDetail() {
 
               {(request.body || request.content_html) && (
                 <div className={cn("bg-gray-800/50 rounded-lg", isMobile ? "p-2" : "p-3")}>
-                  <HtmlContent
-                    html={request.content_html}
-                    fallback={request.body}
-                    className={isMobile ? "text-sm" : ""}
-                  />
+                  {request.content_html ? (
+                    <HtmlContent html={request.content_html} fallback={request.body} className={isMobile ? "text-sm" : ""} />
+                  ) : (
+                    <RequestBodyContent
+                      body={request.body}
+                      embeds={request.embeds}
+                      renderText={(text) => <HtmlContent fallback={text} className={isMobile ? "text-sm" : ""} />}
+                    />
+                  )}
                   {requestLinks.length > 0 && (
                     <LinkPreviewGrid links={requestLinks} />
                   )}

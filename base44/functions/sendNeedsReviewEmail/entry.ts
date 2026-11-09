@@ -292,6 +292,8 @@ Deno.serve(async (req) => {
         const requests = await base44.asServiceRole.entities.ClientFeedbackRequest.filter({ id: requestId });
         const request = requests[0];
         if (!request) return Response.json({ error: 'Request not found' }, { status: 404 });
+        // Excel embed placeholders are portal-only; show a plain note in email.
+        if (request.body) request.body = request.body.replace(/\[\[excel:[a-z0-9]{8,16}\]\]/g, '[Excel workbook: view it in the portal]');
 
         if (request.status === 'archived') {
             return Response.json({ message: 'Request is archived - no email sent' });

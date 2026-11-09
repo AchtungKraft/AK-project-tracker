@@ -57,7 +57,7 @@ function getCommentSnippet(comment, request) {
       text = comment.content_fallback?.trim() || comment.body?.trim() || '';
     }
   }
-  if (!text) text = request.body?.trim() || '';
+  if (!text) text = (request.body || '').replace(/\[\[excel:[a-z0-9]{8,16}\]\]/g, '[Excel workbook]').trim();
   if (!text) text = 'Please review the materials and share your feedback.';
   // Limit to ~120 chars for per-item snippet
   if (text.length > 120) text = text.substring(0, 117).trim() + '…';

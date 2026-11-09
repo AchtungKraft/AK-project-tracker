@@ -58,6 +58,33 @@ function fail(type, message, status = 500) {
   );
 }
 
+// Excel embed allow-list — keep in sync with src/lib/excelEmbeds.js
+function isAllowedEmbedUrl(raw) {
+  if (typeof raw !== 'string' || raw.length > 4000) return false;
+  let u; try { u = new URL(raw); } catch { return false; }
+  if (u.protocol !== 'https:' || u.username || u.password || u.port) return false;
+  const host = u.hostname.toLowerCase(), path = u.pathname.toLowerCase();
+  if (host === 'onedrive.live.com') return path.startsWith('/embed');
+  if (host === '1drv.ms') return path.startsWith('/x/');
+  if (/^[a-z0-9-]+(\.[a-z0-9-]+)*\.sharepoint\.com$/.test(host)) return path.includes('/_layouts/15/doc.aspx') || path.includes('/_layouts/15/embed.aspx') || path.startsWith('/:x:/');
+  if (host === 'excel.officeapps.live.com') return path.startsWith('/x/_layouts/');
+  if (host === 'view.officeapps.live.com') return path === '/op/embed.aspx' || path === '/op/view.aspx';
+  return false;
+}
+// Returns { embeds } (only those referenced in body) or { error } if any submitted embed is invalid.
+function validateEmbeds(body, embeds) {
+  if (embeds == null) return { embeds: [] };
+  if (!Array.isArray(embeds) || embeds.length > 10) return { error: 'Invalid embeds (max 10).' };
+  const ids = new Set([...String(body || '').matchAll(/\[\[excel:([a-z0-9]{8,16})\]\]/g)].map(m => m[1]));
+  const out = [];
+  for (const e of embeds) {
+    if (!e || typeof e !== 'object' || typeof e.id !== 'string' || !/^[a-z0-9]{8,16}$/.test(e.id)) return { error: 'Invalid embed.' };
+    if (!isAllowedEmbedUrl(e.url)) return { error: 'Only Microsoft OneDrive, SharePoint, or Excel embed links are allowed.' };
+    if (ids.has(e.id) && !out.some(o => o.id === e.id)) out.push({ id: e.id, url: e.url, title: String(e.title || '').slice(0, 120), height: Math.min(1600, Math.max(200, Math.round(Number(e.height) || 600))) });
+  }
+  return { embeds: out };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -83,7 +110,12 @@ Deno.serve(async (req) => {
       due_date,
       project_id,
       submission_token,
+      embeds: rawEmbeds,
     } = payload;
+    const embedCheck = validateEmbeds(body, rawEmbeds);
+    if (embedCheck.error) {
+      return fail('VALIDATION', embedCheck.error, 400);
+    }
 
     projectId = project_id;
 
@@ -150,6 +182,7 @@ Deno.serve(async (req) => {
           base44.asServiceRole.entities.ClientFeedbackRequest.create({
             title: title.trim(),
             body: body || null,
+            ...(embedCheck.embeds.length ? { embeds: embedCheck.embeds } : {}),
             request_type,
             due_date: due_date || null,
             project_id,
