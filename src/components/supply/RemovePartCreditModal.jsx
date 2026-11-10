@@ -14,7 +14,7 @@ import {
   AlertTriangle, Package, Trash2, RotateCcw, Loader2,
   Wrench, Minus, Plus,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/use-toast";
 import { extractRefreshContext } from "@/components/supply/forceAppRefresh";
 import { refreshForGenericSupply } from "@/components/supply/tieredSupplyRefresh";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
@@ -45,16 +45,19 @@ export default function RemovePartCreditModal({
   const [disposition, setDisposition] = useState("no_inventory");
   const [successResult, setSuccessResult] = useState(null);
 
+  const [actionId] = useState(() => crypto.randomUUID());
   const requiredTotal = commitment?.required_total ?? 0;
   const existingRemoved = commitment?.qty_removed ?? 0;
-  const maxRemovable = requiredTotal - existingRemoved;
+  const installedQty = commitment?.qty_installed ?? 0;
+  const reservedFromStock = commitment?.reserved_from_stock ?? 0;
+  const coveredFromPO = commitment?.covered_from_po ?? 0;
+  const coveredExternal = commitment?.covered_from_external ?? 0;
+  // Mirrors server rule: installed and PO/external-covered units cannot be removed here
+  const maxRemovable = Math.max(0, requiredTotal - existingRemoved - installedQty - coveredFromPO - coveredExternal);
   const [qtyToRemove, setQtyToRemove] = useState(maxRemovable);
 
   const invoicedAmount = commitment?.invoiced_amount ?? 0;
   const isInvoiced = invoicedAmount > 0;
-  const installedQty = commitment?.qty_installed ?? 0;
-  const reservedFromStock = commitment?.reserved_from_stock ?? 0;
-  const coveredFromPO = commitment?.covered_from_po ?? 0;
   const unitCost = commitment?.unit_cost_snapshot ?? commitment?.unit_cost ?? 0;
   const unitRetail = commitment?.unit_retail_snapshot ?? commitment?.unit_retail ?? 0;
 
@@ -70,22 +73,31 @@ export default function RemovePartCreditModal({
     );
   }, [isInvoiced, invoicedAmount, requiredTotal, qtyToRemove]);
 
+  // Reserved units released back to available stock (physical count unchanged)
   const safeReturnQty = useMemo(() => {
-    return Math.max(0, Math.min(qtyToRemove, reservedFromStock - installedQty));
-  }, [qtyToRemove, reservedFromStock, installedQty]);
+    const remainingAfter = requiredTotal - existingRemoved - qtyToRemove;
+    return Math.max(0, reservedFromStock - Math.max(0, Math.min(reservedFromStock, remainingAfter)));
+  }, [qtyToRemove, reservedFromStock, requiredTotal, existingRemoved]);
 
   const costReduction = useMemo(() => Math.round(unitCost * qtyToRemove * 100) / 100, [unitCost, qtyToRemove]);
   const retailReduction = useMemo(() => Math.round(unitRetail * qtyToRemove * 100) / 100, [unitRetail, qtyToRemove]);
 
   const removeMutation = useMutation({
     mutationFn: async () => {
-      const response = await base44.functions.invoke("removeProjectPartWithCredit", {
-        project_id: commitment.project_id,
-        commitment_id: commitment.id,
-        disposition,
-        reason: reason || (isInvoiced ? "Part removed with credit" : "Part removed from project"),
-        quantity_to_remove: qtyToRemove,
-      });
+      let response;
+      try {
+        response = await base44.functions.invoke("removeProjectPartWithCredit", {
+          project_id: commitment.project_id,
+          commitment_id: commitment.id,
+          disposition,
+          reason: reason || (isInvoiced ? "Part removed with credit" : "Part removed from project"),
+          quantity_to_remove: qtyToRemove,
+          action_id: actionId,
+          expected_qty_removed: existingRemoved,
+        });
+      } catch (e) {
+        throw new Error(e?.response?.data?.error || e?.message || "Failed to remove part");
+      }
       if (!response.data?.success) {
         throw new Error(response.data?.error || "Failed to remove part");
       }
@@ -93,6 +105,11 @@ export default function RemovePartCreditModal({
     },
     onSuccess: async (data) => {
       setSuccessResult(data);
+      toast({
+        title: data.is_full_removal ? "Part removed from build" : `Removed ${data.qty_removed} unit${data.qty_removed > 1 ? "s" : ""}`,
+        description: data.credit_created ? `Credit of ${formatCurrencyUSD(data.credit_amount)} created.` : undefined,
+      });
+      queryClient.invalidateQueries({ queryKey: ["projectFinancialOverview", commitment.project_id] });
       // TIERED REFRESH: Part removal uses generic supply (T1+T4)
       const context = extractRefreshContext(data, {
         part_id: commitment.part_id,
@@ -103,11 +120,7 @@ export default function RemovePartCreditModal({
       onSuccess?.();
     },
     onError: (error) => {
-      if (error.message?.includes('drift')) {
-        toast.error("Cannot remove: financial drift detected. Run reconciliation first.");
-      } else {
-        toast.error(`Failed to remove: ${error.message}`);
-      }
+      toast({ variant: "destructive", title: "Part not removed", description: error.message });
     },
   });
 
@@ -116,8 +129,9 @@ export default function RemovePartCreditModal({
     return null;
   }
 
-  const hasInstallWarning = installedQty > 0;
-  const isValidQty = qtyToRemove > 0 && qtyToRemove <= maxRemovable;
+  const hasInstallWarning = installedQty > 0 || coveredFromPO > 0 || coveredExternal > 0;
+  const isValidQty = Number.isInteger(qtyToRemove) && qtyToRemove > 0 && qtyToRemove <= maxRemovable;
+  const handleClose = () => { if (!removeMutation.isPending) onClose(); };
 
   // ── Success Summary View ──
   if (successResult) {
@@ -132,7 +146,7 @@ export default function RemovePartCreditModal({
 
   // ── Main Form View ──
   return (
-    <Dialog open onOpenChange={onClose}>
+    <Dialog open onOpenChange={handleClose}>
       <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-white">
@@ -199,8 +213,11 @@ export default function RemovePartCreditModal({
               <p className="text-xs text-red-400">Must be between 1 and {maxRemovable}</p>
             )}
             <p className="text-xs text-gray-500">
-              {requiredTotal} total · {installedQty} installed · {existingRemoved} previously removed · {maxRemovable} removable
+              {requiredTotal} total · {installedQty} installed · {coveredFromPO + coveredExternal} on order · {existingRemoved} previously removed · {maxRemovable} removable
             </p>
+            {maxRemovable === 0 && (
+              <p className="text-xs text-amber-400">Nothing can be removed here. Reverse the install or reduce the purchase order first.</p>
+            )}
           </div>
 
           {/* PHASE 7: Financial Impact Preview */}
@@ -220,10 +237,9 @@ export default function RemovePartCreditModal({
             <div className="p-2.5 bg-amber-900/20 border border-amber-700/40 rounded-lg flex items-start gap-2">
               <Wrench className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
               <p className="text-xs text-gray-300">
-                {installedQty} unit{installedQty > 1 ? 's' : ''} already installed — won't be returned to stock automatically.
-                {disposition === 'return_to_inventory' && safeReturnQty < qtyToRemove && (
-                  <span className="text-amber-400"> Only {safeReturnQty} can be returned.</span>
-                )}
+                {installedQty > 0 && `${installedQty} installed. `}
+                {coveredFromPO + coveredExternal > 0 && `${coveredFromPO + coveredExternal} on order. `}
+                These units stay on the build and can't be removed here.
               </p>
             </div>
           )}
@@ -237,7 +253,7 @@ export default function RemovePartCreditModal({
                 <div>
                   <span className="text-sm text-white">Return to inventory</span>
                   <p className="text-[11px] text-gray-500">
-                    {safeReturnQty > 0 ? `${safeReturnQty} unit${safeReturnQty > 1 ? 's' : ''} back to stock` : "No units available to return"}
+                    {safeReturnQty > 0 ? `${safeReturnQty} reserved unit${safeReturnQty > 1 ? 's' : ''} released to available stock` : "No reserved units to release"}
                   </p>
                 </div>
               </label>
@@ -278,7 +294,7 @@ export default function RemovePartCreditModal({
         </div>
 
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose} className="border-gray-600">
+          <Button variant="outline" onClick={handleClose} disabled={removeMutation.isPending} className="border-gray-600">
             Cancel
           </Button>
           <Button
