@@ -13,10 +13,10 @@ export default function ShopReviewItem({ item, categoryName, groupName }) {
       <div className="sr-item-head">
         <div className="sr-crumb">{categoryName} › {groupName}</div>
         <div className="sr-title">{item.title}</div>
-        <div>
+        <div className="sr-status">
           <span className="sr-chip">{statusLabel(item.decision_status)}</span>
           <span className="sr-chip soft">{CONVERSION_LABELS[item.conversion]}{item.tasks.length ? `: ${item.tasks.join(", ")}` : ""}</span>
-          {item.decision_at && <span style={{ fontSize: "7.5pt", color: "#444" }}>Decided {fmtDate(item.decision_at)}</span>}
+          {item.decision_at && <span>Decided {fmtDate(item.decision_at)}</span>}
         </div>
         <div className="sr-label">Scope description</div>
         <div className="sr-text">{item.description || <span className="sr-muted">No description.</span>}</div>
@@ -31,15 +31,15 @@ export default function ShopReviewItem({ item, categoryName, groupName }) {
       <div className="sr-label">Labor — estimated hours</div>
       {item.labor.length === 0
         ? <div className="sr-muted">Hours TBD — no labor estimate.</div>
-        : <table className="sr-labor"><tbody>
-            {item.labor.map((l, i) => <tr key={i}><td>{l.activity}</td><td>{hoursText(l.hours_min, l.hours_max)}</td></tr>)}
-            <tr className="sr-total"><td>Total hours</td><td>{laborTotal(item.labor)}</td></tr>
-          </tbody></table>}
+        : <div className="sr-labor">
+            {item.labor.map((l, i) => <span key={i}>{l.activity} <b>{hoursText(l.hours_min, l.hours_max)}</b></span>)}
+            {item.labor.length > 1 && <span className="sr-total">Total hours <b>{laborTotal(item.labor)}</b></span>}
+          </div>}
 
       {item.comments.length > 0 && <>
         <div className="sr-label">Discussion notes</div>
         {item.comments.map((c, i) => (
-          <div key={i} style={{ marginBottom: 3 }}>
+          <div key={i} style={{ marginBottom: 2 }}>
             <strong>{c.author}</strong>{c.posted_at && <span style={{ color: "#555" }}> · {fmtDate(c.posted_at)}</span>}
             <div className="sr-text">{c.body}</div>
           </div>

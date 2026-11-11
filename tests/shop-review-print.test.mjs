@@ -28,7 +28,7 @@ const data = {
   groups: [{ id: 'g1', name: 'Engine', sort_order: 1 }],
   items: [
     item({ id: 'A-approved', decision_status: 'approved', conversion: 'converted', tasks: ['Rebuild carbs'], description: longNote, parts_notes: ['Use OEM gaskets'], labor: [{ activity: 'FABRICATION', hours_min: 2, hours_max: 4 }, { activity: 'PAINT', hours_min: null, hours_max: null }], images: ['https://example.com/a.png', 'https://example.com/b.png', 'https://example.com/c.png'], comments: [{ author: 'Client', body: 'Please keep the patina', posted_at: '2026-10-01' }] }),
-    item({ id: 'B-pending-noimg', category_id: 'c2', parts_tbd: true }),
+    item({ id: 'B-pending-noimg', category_id: 'c2', parts_tbd: true, parts_notes: ['Spacer kit', 'Extended stalks'] }),
     item({ id: 'C-orphan', category_id: 'gone', group_id: 'gone' }),
   ],
 };
@@ -51,7 +51,7 @@ test('rendered output: notes, images, hours, fields, and no money', () => {
   const text = html.replace(/<style>[\s\S]*?<\/style>/g, '');
   for (const s of ['A-approved', 'B-pending-noimg', 'C-orphan', 'Task created: Rebuild carbs', 'Parts/materials notes', 'Use OEM gaskets',
     'Parts/materials still to be determined', 'FABRICATION', '2–4 hrs', 'Hours TBD', 'Please keep the patina', 'No reference images',
-    'Confirmed hours', 'Revised hours', 'Parts required', 'Additional findings', 'Reviewed by', 'FIRST › Engine']) {
+    'Confirmed hrs', 'Revised hrs', 'Parts required', 'Spacer kit', 'Extended stalks', 'Additional findings', 'Reviewed by', 'FIRST › Engine']) {
     assert.ok(text.includes(s), `missing: ${s}`);
   }
   assert.ok(text.includes(longNote.trim().slice(0, 200)), 'long description rendered in full');
@@ -60,4 +60,23 @@ test('rendered output: notes, images, hours, fields, and no money', () => {
   const visible = text.replace(/<[^>]+>/g, ' ');
   const hit = visible.match(/hard cost|\brates?\b|labor \$|total est|retail|margin|budget|price|cost/i);
   assert.equal(hit, null, `financial wording found: ${hit}`);
+});
+
+// Optional: render a real projection snapshot (saved locally, not committed data) when present.
+const realPath = path.join(root, 'node_modules/.cache/shop-real.json');
+const fs = await import('node:fs');
+test('real projection renders every item, image and note once, no $', { skip: !fs.existsSync(realPath) }, () => {
+  const real = JSON.parse(fs.readFileSync(realPath, 'utf8'));
+  const html = renderToStaticMarkup(createElement(View, { data: real, onClose: () => {} })).replace(/<style>[\s\S]*?<\/style>/g, '')
+    .replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  assert.equal((html.match(/class="sr-item"/g) || []).length, real.items.length);
+  assert.equal((html.match(/<img /g) || []).length, real.items.reduce((a, i) => a + i.images.length, 0));
+  assert.ok(!html.includes('$'));
+  for (const i of real.items) {
+    assert.equal(new Set(i.parts_notes.map((n) => n.toLowerCase())).size, i.parts_notes.length, `dup note on ${i.title}`);
+    if (i.description) assert.ok(html.includes(i.description), `description missing: ${i.title}`);
+  }
+  const titles = real.items.map((i) => i.title);
+  const order = titles.map((t) => html.indexOf(t));
+  assert.ok(order.every((o) => o >= 0), 'every title rendered');
 });

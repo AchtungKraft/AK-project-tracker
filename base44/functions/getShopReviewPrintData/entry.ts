@@ -79,9 +79,17 @@ Deno.serve(async (req) => {
       const linked = (i.linked_task_ids || []).map((id) => taskById.get(id)).filter((t) => t && (!request.project_id || t.project_id === request.project_id));
       const decision = i.decision_status || 'needs_review';
       const conversion = linked.length ? 'converted' : decision === 'approved' ? 'approved_not_converted' : 'not_converted';
+      // Same note is often mirrored into both fields; keep each distinct note once (exact text after
+      // whitespace/case normalization). Distinct notes are all kept, in original field order.
       const partsNotes = [];
-      if (i.hard_cost_note && scrub(i.hard_cost_note)) partsNotes.push(scrub(i.hard_cost_note));
-      if (i.budget_note && scrub(i.budget_note)) partsNotes.push(scrub(i.budget_note));
+      const seenNotes = new Set();
+      for (const raw of [i.hard_cost_note, i.budget_note]) {
+        const note = scrub(raw);
+        const key = note.replace(/\s+/g, ' ').trim().toLowerCase();
+        if (!key || seenNotes.has(key)) continue;
+        seenNotes.add(key);
+        partsNotes.push(note);
+      }
       return {
         id: i.id,
         category_id: i.category_id,
