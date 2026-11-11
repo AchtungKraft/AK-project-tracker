@@ -44,6 +44,7 @@ import { extractLinks } from "@/utils/extractLinks";
 import ScopeReviewDisplay from "@/components/scope/ScopeReviewDisplay";
 import ScopeReviewPrintView from "@/components/scope/ScopeReviewPrintView";
 import ScopeListPrintView from "@/components/scope/ScopeListPrintView";
+import ShopReviewPrintLoader from "@/components/scope/shopReview/ShopReviewPrintLoader";
 
 export default function ClientFeedbackDetail() {
   const isMobile = useIsMobile();
@@ -678,6 +679,7 @@ export default function ClientFeedbackDetail() {
                 onDelete={handleDeleteRequest}
                 onPrintScopeReview={request?.request_type === 'client_scope_review' ? () => setShowScopePrint('detailed') : undefined}
                 onPrintScopeList={request?.request_type === 'client_scope_review' ? () => setShowScopePrint('list') : undefined}
+                onPrintShopReview={request?.request_type === 'client_scope_review' ? () => setShowScopePrint('shop') : undefined}
                 onStartReviewing={() => updateRequestMutation.mutate({
                   id: requestId,
                   data: { review_state: 'in_review', review_started_at: new Date().toISOString() }
@@ -985,7 +987,10 @@ export default function ClientFeedbackDetail() {
         />
       )}
 
-      {showScopePrint && (
+      {showScopePrint === 'shop' && (
+        <ShopReviewPrintLoader requestId={requestId} onClose={() => setShowScopePrint(false)} />
+      )}
+      {showScopePrint && showScopePrint !== 'shop' && (
         <ScopePrintLoader
           requestId={requestId}
           request={request}

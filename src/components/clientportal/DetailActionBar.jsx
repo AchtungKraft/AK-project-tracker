@@ -47,6 +47,7 @@ export default function DetailActionBar({
   onMoveToDraft,
   onPrintScopeReview,
   onPrintScopeList,
+  onPrintShopReview,
 }) {
   if (!canonicalState || !request) return null;
 
@@ -144,6 +145,21 @@ export default function DetailActionBar({
         >
           <Printer className="w-3.5 h-3.5 mr-1" />
           Print List
+        </Button>
+      )}
+      {onPrintShopReview && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onPrintShopReview}
+          title="Shop Review — Notes, Images & Hours (no pricing)"
+          className={cn(
+            "border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white",
+            isMobile ? "flex-1 h-10" : "h-8 text-xs"
+          )}
+        >
+          <Printer className="w-3.5 h-3.5 mr-1" />
+          Shop Review
         </Button>
       )}
       </>
