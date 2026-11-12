@@ -26,6 +26,7 @@ import { buildProjectDetailUrl, SOURCES } from "@/lib/workspaceConfig";
 import WorkloadDependencyEditor from "@/components/workload/WorkloadDependencyEditor";
 import WorkloadProjectPrintModal from "@/components/workload/WorkloadProjectPrintModal";
 import buildProjectWorkPacketHTML from "@/components/workload/buildProjectWorkPacketHTML";
+import buildWeeklyWorkPacketHTML from "@/components/workload/buildWeeklyWorkPacketHTML";
 import PhaseSelectorPopover from "@/components/workload/PhaseSelectorPopover";
 import { useToast } from "@/components/ui/use-toast";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
@@ -708,7 +709,8 @@ export default function WorkloadProjectGroup({
       ? tasks
       : (allProjectTasks || []).filter(t => t.status_id !== DONE_STATUS_ID);
 
-    const html = buildProjectWorkPacketHTML({
+    const weekly = opts.layout === "weekly";
+    const html = (weekly ? buildWeeklyWorkPacketHTML : buildProjectWorkPacketHTML)({
       project,
       tasks: printTasks,
       buckets: buckets || [],
@@ -722,6 +724,7 @@ export default function WorkloadProjectGroup({
         includeChecklists: opts.includeChecklists,
         includeCompletionMarks: opts.includeCompletionMarks,
         includeNotes: opts.includeNotes,
+        ...(weekly && { includeCompletedChecklists: opts.includeCompletedChecklists }),
       },
     });
 

@@ -18,6 +18,7 @@ export default function WorkloadProjectPrintModal({
   allOpenTaskCount = 0,
   onPrint,
 }) {
+  const [layout, setLayout] = useState("standard"); // "standard" or "weekly"
   const [scope, setScope] = useState("current"); // "current" or "all"
   const [includeChecklists, setIncludeChecklists] = useState(false);
   const [includeCompletedChecklists, setIncludeCompletedChecklists] = useState(false);
@@ -38,6 +39,24 @@ export default function WorkloadProjectPrintModal({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          <div>
+            <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Print Layout</p>
+            <div className="space-y-1.5">
+              {[["standard", "Standard Work Packet"], ["weekly", "By Due Date — Weekly / Phase Grouped"]].map(([value, label]) => (
+                <label key={value} className="flex items-center gap-2 cursor-pointer hover:bg-gray-800/40 rounded px-2 py-1.5">
+                  <input
+                    type="radio"
+                    name="layout"
+                    checked={layout === value}
+                    onChange={() => setLayout(value)}
+                    className="accent-red-600"
+                  />
+                  <span className="text-sm text-gray-200">{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
           <div>
             <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Print Scope</p>
             <div className="space-y-1.5">
@@ -117,7 +136,7 @@ export default function WorkloadProjectPrintModal({
           </Button>
           <Button
             onClick={() => {
-              onPrint({ scope, includeChecklists, includeCompletedChecklists, includeCompletionMarks, includeNotes });
+              onPrint({ layout, scope, includeChecklists, includeCompletedChecklists, includeCompletionMarks, includeNotes });
               onClose();
             }}
             disabled={count === 0}

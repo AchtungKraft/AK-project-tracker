@@ -21,6 +21,7 @@ import WorkloadDependencyEditor from "@/components/workload/WorkloadDependencyEd
 import PhaseSelectorPopover from "@/components/workload/PhaseSelectorPopover";
 import WorkloadProjectPrintModal from "@/components/workload/WorkloadProjectPrintModal";
 import buildProjectWorkPacketHTML from "@/components/workload/buildProjectWorkPacketHTML";
+import buildWeeklyWorkPacketHTML from "@/components/workload/buildWeeklyWorkPacketHTML";
 import WorkloadBulkActionBar from "@/components/priorities/WorkloadBulkActionBar";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 import ManageBucketsModal from "@/components/project/ManageBucketsModal";
@@ -663,11 +664,12 @@ export default function ProjectWorkloadView({
     const printWindow = window.open("", "_blank");
     if (!printWindow) { toast({ title: "Print window blocked", variant: "destructive" }); return; }
     const printTasks = opts.scope === "current" ? filteredTasks : (activeTasks || []);
-    const html = buildProjectWorkPacketHTML({
+    const weekly = opts.layout === "weekly";
+    const html = (weekly ? buildWeeklyWorkPacketHTML : buildProjectWorkPacketHTML)({
       project, tasks: printTasks, buckets: buckets || [], teamMemberMap, blockingLabels, blockedSet, successorMap,
       checklistsByTaskId: opts.includeChecklists ? checklistsByTaskId : {},
       weekLabel: "",
-      options: { includeChecklists: opts.includeChecklists, includeCompletionMarks: opts.includeCompletionMarks, includeNotes: opts.includeNotes },
+      options: { includeChecklists: opts.includeChecklists, includeCompletionMarks: opts.includeCompletionMarks, includeNotes: opts.includeNotes, ...(weekly && { includeCompletedChecklists: opts.includeCompletedChecklists }) },
     });
     printWindow.document.open();
     printWindow.document.write(html);
