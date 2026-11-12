@@ -22,6 +22,7 @@ import PhaseSelectorPopover from "@/components/workload/PhaseSelectorPopover";
 import WorkloadProjectPrintModal from "@/components/workload/WorkloadProjectPrintModal";
 import buildProjectWorkPacketHTML from "@/components/workload/buildProjectWorkPacketHTML";
 import buildWeeklyWorkPacketHTML from "@/components/workload/buildWeeklyWorkPacketHTML";
+import WeeklyDueTaskList from "@/components/workload/WeeklyDueTaskList";
 import WorkloadBulkActionBar from "@/components/priorities/WorkloadBulkActionBar";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 import ManageBucketsModal from "@/components/project/ManageBucketsModal";
@@ -152,7 +153,7 @@ function TaskRow({
   task, assignee, status, blocked, blockingLabel, teamMembers, statuses,
   onToggleComplete, onTaskClick, onUpdateDueDate, onTogglePriority, updateTaskMutation,
   isSelected, onToggleSelection, projectTasks, bucketMap, teamMemberMap,
-  checklistProgress, successorCount, successorNames, editMode,
+  checklistProgress, successorCount, successorNames, editMode, showOverdueBadge = false,
 }) {
   const due = parseLocalDate(task.due_date);
   const todayStart = startOfDay(new Date());
@@ -180,6 +181,9 @@ function TaskRow({
       >
         <Flame className="w-3 h-3" />
       </button>
+      {showOverdueBadge && isOverdue && (
+        <span className="shrink-0 text-[9px] font-bold uppercase tracking-wide text-red-300 bg-red-950/60 border border-red-800/70 rounded px-1 leading-tight">Overdue</span>
+      )}
       <button onClick={() => onTaskClick(task)} className="flex-1 min-w-0 text-left text-[13px] text-gray-200 hover:text-white truncate leading-tight -ml-0.5">
         {task.name}
       </button>
@@ -350,6 +354,7 @@ export default function ProjectWorkloadView({
   onTogglePriority,
   updateTask,
   onTaskClick: externalTaskClick,
+  layout = "workload", // "workload" | "weekly"
 }) {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
@@ -685,7 +690,7 @@ export default function ProjectWorkloadView({
   const taskStatuses = useMemo(() => (statuses || []).filter(s => s.scope === "Task" && s.active).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)), [statuses]);
 
   // Render task row helper
-  const renderTaskRow = (task) => {
+  const renderTaskRow = (task, extra) => {
     const succs = successorMap.get(task.id) || [];
     const clItems = toggles.showChecklists ? (checklistsByTaskId[task.id] || []) : [];
     return (
@@ -712,6 +717,7 @@ export default function ProjectWorkloadView({
           successorCount={succs.length}
           successorNames={succs.map(s => s.name)}
           editMode={toggles.editMode}
+          showOverdueBadge={extra?.overdueBadge === true}
         />
         {clItems.length > 0 && (
           <InlineChecklistItems items={clItems} onToggle={handleToggleChecklistItem} showCompleted={toggles.showCompletedChecklist} />
@@ -789,6 +795,12 @@ export default function ProjectWorkloadView({
         <div className="bg-black/40 backdrop-blur-xl border border-red-900/30 rounded-lg overflow-hidden">
           {filteredTasks.length === 0 ? (
             <div className="p-8 text-center text-gray-500 text-sm">No tasks match your filters.</div>
+          ) : layout === "weekly" ? (
+            <WeeklyDueTaskList
+              tasks={filteredTasks}
+              buckets={buckets || []}
+              renderTaskRow={(t) => renderTaskRow(t, { overdueBadge: true })}
+            />
           ) : (
             <>
               {sortedBuckets.map(bucket => {

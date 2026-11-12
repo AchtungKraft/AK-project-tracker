@@ -63,7 +63,9 @@ test('weekly grouping: Monday–Sunday weeks, no UTC shift', () => {
 
 test('weekly summary: missing estimates not counted as zero-hour', () => {
   const wk = weeklyMod.groupTasksByWeek(synth).weeks.find(w => w.key === '2026-11-16');
-  assert.deepEqual(weeklyMod.summarizeWeek(wk.tasks), { total: 4, estHours: 3.5, missing: 2 });
+  assert.deepEqual(weeklyMod.summarizeWeek(wk.tasks, today), { total: 4, estHours: 3.5, missing: 2, overdue: 0 });
+  const past = weeklyMod.groupTasksByWeek(synth).weeks.find(w => w.key === '2026-11-02');
+  assert.equal(weeklyMod.summarizeWeek(past.tasks, today).overdue, 1); // done task not overdue
 });
 
 test('weekly HTML: order, overdue, unscheduled last, each task once', () => {

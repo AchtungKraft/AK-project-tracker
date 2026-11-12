@@ -1,6 +1,6 @@
 import React from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LayoutGrid, Calendar, ClipboardCheck, Flame, ListChecks } from "lucide-react";
+import { LayoutGrid, Calendar, CalendarRange, ClipboardCheck, Flame, ListChecks } from "lucide-react";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +16,7 @@ export default function TaskViewSwitcher({
   showExecution = false,
   showShop = false,
   showWorkload = false,
+  showWeeklyDue = false,
 }) {
   const isMobile = useIsMobile();
 
@@ -35,6 +36,12 @@ export default function TaskViewSwitcher({
           <TabsTrigger value="workload" className={triggerClass}>
             <ListChecks className={iconClass} />
             {!isMobile && <span className="hidden sm:inline">Workload</span>}
+          </TabsTrigger>
+        )}
+        {showWeeklyDue && (
+          <TabsTrigger value="weekly" className={triggerClass}>
+            <CalendarRange className={iconClass} />
+            {!isMobile && <span className="hidden sm:inline">Weekly Due</span>}
           </TabsTrigger>
         )}
         <TabsTrigger value="card" className={triggerClass}>

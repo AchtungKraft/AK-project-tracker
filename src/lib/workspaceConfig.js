@@ -11,7 +11,7 @@
  */
 
 // ── Valid overview sub-views (inside ProjectDetail "Overview" tab) ──
-export const VALID_OVERVIEW_VIEWS = ['workload', 'card', 'calendar', 'execution', 'shop'];
+export const VALID_OVERVIEW_VIEWS = ['workload', 'weekly', 'card', 'calendar', 'execution', 'shop'];
 export const DEFAULT_OVERVIEW_VIEW = 'workload';
 
 // ── Valid PriorityDashboard tabs ──

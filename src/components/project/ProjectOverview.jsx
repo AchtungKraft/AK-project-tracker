@@ -438,13 +438,14 @@ export default function ProjectOverview({ project, projectId, sharedData = {}, o
               persistProjectOverviewView(projectId, mode);
             }}
             showWorkload
+            showWeeklyDue
             showExecution
             showShop
           />
         </div>
 
         {/* Shared Task Controls — visible for card/calendar/execution/shop, hidden for workload (it has its own) */}
-        {viewMode !== 'workload' && (
+        {viewMode !== 'workload' && viewMode !== 'weekly' && (
           <ProjectTaskControls
             groupBy={groupBy}
             setGroupBy={setGroupBy}
@@ -456,8 +457,9 @@ export default function ProjectOverview({ project, projectId, sharedData = {}, o
         )}
 
         {/* Task Views */}
-        {viewMode === 'workload' && (
+        {(viewMode === 'workload' || viewMode === 'weekly') && (
           <ProjectWorkloadView
+            layout={viewMode}
             projectId={projectId}
             project={project}
             activeTasks={activeTasks}
