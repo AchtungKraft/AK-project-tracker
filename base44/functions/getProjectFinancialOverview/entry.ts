@@ -8,7 +8,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.54';
  */
 
 const r2 = (n) => Math.round((n || 0) * 100) / 100;
-const FINAL = ['sent', 'paid'];
+const FINAL = ['sent', 'partial', 'paid'];
 
 Deno.serve(async (req) => {
   try {
@@ -158,7 +158,7 @@ Deno.serve(async (req) => {
     }
 
     // ── INVOICES (historical) ──
-    const inv = { draft: { count: 0, total: 0 }, sent: { count: 0, total: 0 }, paid: { count: 0, total: 0 }, cancelled: { count: 0, total: 0 } };
+    const inv = { draft: { count: 0, total: 0 }, sent: { count: 0, total: 0 }, partial: { count: 0, total: 0 }, paid: { count: 0, total: 0 }, cancelled: { count: 0, total: 0 } };
     let paidAmount = 0; let outstanding = 0;
     for (const i of invoices) {
       const t = i.total ?? i.subtotal ?? 0;
@@ -167,7 +167,7 @@ Deno.serve(async (req) => {
       inv[k].count++; inv[k].total += t;
       if (FINAL.includes(i.status)) {
         paidAmount += i.paid_amount ?? 0;
-        if (i.status === 'sent') outstanding += i.balance_due ?? Math.max(0, t - (i.paid_amount ?? 0));
+        if (i.status === 'sent' || i.status === 'partial') outstanding += i.balance_due ?? Math.max(0, t - (i.paid_amount ?? 0));
       }
     }
     const lineSplit = { final: { part: 0, service: 0, other: 0 }, draft: { part: 0, service: 0, other: 0 } };

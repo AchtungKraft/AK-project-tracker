@@ -1,0 +1,89 @@
+{
+  "name": "ProjectInvoicePayment",
+  "type": "object",
+  "properties": {
+    "invoice_id": {
+      "type": "string",
+      "description": "ProjectInvoice this payment was received against"
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "amount_cents": {
+      "type": "integer",
+      "description": "Payment amount in integer cents (> 0)"
+    },
+    "payment_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "method": {
+      "type": "string",
+      "enum": [
+        "check",
+        "ach",
+        "wire",
+        "card",
+        "cash",
+        "other"
+      ],
+      "enumColors": [
+        "blue",
+        "green",
+        "purple",
+        "pink",
+        "yellow",
+        "gray"
+      ]
+    },
+    "reference": {
+      "type": "string",
+      "description": "Check number, transaction reference, etc."
+    },
+    "note": {
+      "type": "string"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "description": "Client request key; one payment per key"
+    },
+    "recorded_by_email": {
+      "type": "string"
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "invoice_id",
+    "project_id",
+    "amount_cents",
+    "payment_date",
+    "idempotency_key",
+    "recorded_by_email",
+    "recorded_at"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "invoice_payment_service_only"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "invoice_payment_service_only"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "invoice_payment_service_only"
+      }
+    }
+  }
+}

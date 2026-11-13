@@ -181,7 +181,7 @@ Deno.serve(async (req) => {
       const invCreditApplied = inv.credit_applied ?? 0;
       const status = inv.status || 'draft';
 
-      if (status === 'sent' || status === 'paid') {
+      if (status === 'sent' || status === 'partial' || status === 'paid') {
         invoiceTotals.total += invTotal;
         invoiceTotals.paid_amount += invPaid;
         invoiceTotals.balance_due += invBalance;

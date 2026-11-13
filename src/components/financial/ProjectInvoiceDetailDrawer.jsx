@@ -50,6 +50,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
+import RecordPaymentDialog from "@/components/financial/payments/RecordPaymentDialog";
+import InvoicePaymentHistory from "@/components/financial/payments/InvoicePaymentHistory";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import { invoiceKeys } from "@/components/financial/queryKeyFactories";
 import { guardInvoiceMutation } from "@/components/dev/CanonicalArchitectureGuards";
@@ -176,6 +178,7 @@ export default function ProjectInvoiceDetailDrawer({
     const config = {
       draft: { label: "Draft", icon: FileText, className: "bg-gray-600 text-white" },
       sent: { label: "Sent", icon: Clock, className: "bg-purple-600 text-white" },
+      partial: { label: "Partially Paid", icon: DollarSign, className: "bg-amber-600 text-white" },
       paid: { label: "Paid", icon: CheckCircle2, className: "bg-green-600 text-white" },
     };
     const c = config[status] || config.draft;
@@ -239,48 +242,17 @@ export default function ProjectInvoiceDetailDrawer({
     }
   };
 
-  const handleMarkPaid = async () => {
-    if (!paymentDate) {
-      toast.error("Please enter payment date");
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      // DEV GUARDRAIL: Track canonical mutation call
-      if (import.meta.env.DEV) {
-        guardInvoiceMutation('markInvoicePaid', 'ProjectInvoiceDetailDrawer');
-      }
-
-      const response = await base44.functions.invoke("markInvoicePaid", {
-        invoice_id: invoiceId,
-        payment_date: paymentDate,
-        paid_amount: paidAmount ? parseFloat(paidAmount) : undefined,
-      });
-
-      if (response.data?.success) {
-        toast.success(
-          response.data.credit_created
-            ? `Invoice paid. ${formatCurrencyUSD(response.data.credit_created.amount)} credit created.`
-            : "Invoice marked as paid"
-        );
-        setShowMarkPaidModal(false);
-        
-        // Use forceAppRefresh for complete cache sync
-        const projectIdForRefresh = invoice?.project_id || null;
-        await forceAppRefresh(queryClient, {
-          projectIds: projectIdForRefresh ? [projectIdForRefresh] : [],
-        });
-        
-        onUpdated?.();
-      } else {
-        toast.error(response.data?.error || "Failed to mark as paid");
-      }
-    } catch (error) {
-      toast.error(error.response?.data?.error || error.message || "Failed to mark as paid");
-    } finally {
-      setIsSubmitting(false);
-    }
+  // Payments go through recordInvoicePayment (one record per payment; invoice becomes partial or paid).
+  const handlePaymentRecorded = async (result) => {
+    toast.success(
+      result.status === "paid"
+        ? (result.credit_created ? `Invoice paid in full. ${formatCurrencyUSD(result.credit_created.amount)} credit created.` : "Invoice paid in full")
+        : `Payment recorded. ${formatCurrencyUSD(result.balance_due)} still due.`
+    );
+    const projectIdForRefresh = invoice?.project_id || null;
+    queryClient.invalidateQueries({ queryKey: ["invoicePayments", invoiceId] });
+    await forceAppRefresh(queryClient, { projectIds: projectIdForRefresh ? [projectIdForRefresh] : [] });
+    onUpdated?.();
   };
 
   const [isExporting, setIsExporting] = useState(false);
@@ -556,15 +528,25 @@ export default function ProjectInvoiceDetailDrawer({
                     {formatCurrencyUSD(invoice.total || 0)}
                   </span>
                 </div>
-                {invoice.status === "paid" && (
+                {(invoice.status === "paid" || invoice.status === "partial") && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-400">Paid Amount</span>
                     <span className="font-mono text-green-400">
-                      {formatCurrencyUSD(invoice.paid_amount || invoice.total || 0)}
+                      {formatCurrencyUSD(invoice.paid_amount || (invoice.status === "paid" ? invoice.total : 0) || 0)}
+                    </span>
+                  </div>
+                )}
+                {(invoice.status === "sent" || invoice.status === "partial") && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Remaining Due</span>
+                    <span className="font-mono text-amber-300">
+                      {formatCurrencyUSD(invoice.balance_due ?? 0)}
                     </span>
                   </div>
                 )}
               </div>
+
+              <InvoicePaymentHistory invoiceId={invoiceId} />
 
               {/* Notes */}
               {invoice.notes && (
@@ -585,13 +567,13 @@ export default function ProjectInvoiceDetailDrawer({
                     Mark as Sent
                   </Button>
                 )}
-                {invoice.status === "sent" && (
+                {(invoice.status === "sent" || invoice.status === "partial") && (
                   <Button
                     onClick={() => setShowMarkPaidModal(true)}
                     className="gap-2 bg-green-600 hover:bg-green-700"
                   >
                     <DollarSign className="w-4 h-4" />
-                    Mark as Paid
+                    Record Payment
                   </Button>
                 )}
                 <DropdownMenu>
@@ -675,61 +657,12 @@ export default function ProjectInvoiceDetailDrawer({
         </DialogContent>
       </Dialog>
 
-      {/* Mark Paid Modal */}
-      <Dialog open={showMarkPaidModal} onOpenChange={setShowMarkPaidModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Mark Invoice as Paid</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="p-3 bg-gray-800/50 rounded-lg">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Invoice Total</span>
-                <span className="font-mono text-white">
-                  {formatCurrencyUSD(invoice?.total || 0)}
-                </span>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Payment Date *</Label>
-              <Input
-                type="date"
-                value={paymentDate}
-                onChange={(e) => setPaymentDate(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>
-                Paid Amount{" "}
-                <span className="text-gray-400">(leave blank for full amount)</span>
-              </Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={paidAmount}
-                onChange={(e) => setPaidAmount(e.target.value)}
-                placeholder={invoice?.total?.toString() || "0.00"}
-              />
-              <p className="text-xs text-gray-400">
-                If paid amount exceeds invoice total, credit will be created.
-              </p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowMarkPaidModal(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleMarkPaid}
-              disabled={isSubmitting}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Confirm Payment
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <RecordPaymentDialog
+        open={showMarkPaidModal}
+        onOpenChange={setShowMarkPaidModal}
+        invoice={invoice}
+        onRecorded={handlePaymentRecorded}
+      />
     </>
   );
 }

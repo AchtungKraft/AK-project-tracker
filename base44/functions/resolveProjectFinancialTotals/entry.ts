@@ -112,7 +112,7 @@ export async function resolveFinancials(base44, project_id) {
   // INVOICE-LEVEL TOTALS (for reconciliation)
   // ══════════════════════════════════════════════
   // PHASE 2 FIX: Only sent/paid invoices contribute to financial totals
-  const VALID_INVOICE_STATUSES = ['sent', 'paid'];
+  const VALID_INVOICE_STATUSES = ['sent', 'partial', 'paid'];
   const activeInvoices = invoices.filter(inv =>
     VALID_INVOICE_STATUSES.includes(inv.status)
   );

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { money } from "./finFormat";
 
-const LABELS = { draft: "Draft", sent: "Sent", paid: "Paid", cancelled: "Cancelled" };
+const LABELS = { draft: "Draft", sent: "Sent", partial: "Partially paid", paid: "Paid", cancelled: "Cancelled" };
 
 // Compact historical invoice summary; line split behind a toggle.
 export default function FinancialInvoiceSummary({ invoices, summary }) {
