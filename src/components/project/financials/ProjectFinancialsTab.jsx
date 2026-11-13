@@ -13,6 +13,8 @@ import FinancialLaborBilling from "./FinancialLaborBilling";
 import FinancialLineItems from "./FinancialLineItems";
 import ApprovedScopeBudgetSection from "./ApprovedScopeBudgetSection";
 import ScopeFundingSection from "./funding/ScopeFundingSection";
+import ProjectInvoicesPanel from "./invoices/ProjectInvoicesPanel";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function ProjectFinancialsTab({ projectId }) {
   const queryClient = useQueryClient();
@@ -53,23 +55,48 @@ export default function ProjectFinancialsTab({ projectId }) {
           Current scope uses today's quantities and prices. Invoice figures are historical and never recalculated.
         </p>
         <div className="flex items-center gap-1 shrink-0">
-          <Button size="sm" variant="outline" onClick={() => setExportFormat("pdf")} className="h-8"><FileText className="w-4 h-4 mr-1" />Export PDF</Button>
-          <Button size="sm" variant="outline" onClick={() => setExportFormat("xlsx")} className="h-8"><FileSpreadsheet className="w-4 h-4 mr-1" />Export Excel</Button>
           <Button size="sm" variant="ghost" onClick={() => refetch()} className="text-gray-400">
             <RefreshCw className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`} />
           </Button>
         </div>
       </div>
       {exportFormat && <FinancialExportDialog projectId={projectId} format={exportFormat} onClose={() => setExportFormat(null)} />}
-      <FinancialWarnings warnings={data.warnings} lines={data.lines} />
-      <DataQualityIndicator dataQuality={data.data_quality} lines={data.lines} />
-      <FinancialSummaryCards summary={data.summary} />
-      <FinancialCategoryBreakdown categories={data.categories} summary={data.summary} laborBilling={data.labor_billing} />
-      <FinancialLaborBilling projectId={projectId} lb={data.labor_billing} labor={data.labor} />
-      <FinancialInvoiceSummary invoices={data.invoices} summary={data.summary} />
-      <ApprovedScopeBudgetSection projectId={projectId} />
-      <ScopeFundingSection projectId={projectId} />
-      <FinancialLineItems lines={data.lines} laborBilling={data.labor_billing} />
+      <Tabs defaultValue="overview">
+        <TabsList className="bg-gray-900 border border-gray-800 h-auto flex-wrap justify-start">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="invoices">Invoices &amp; Payments</TabsTrigger>
+          <TabsTrigger value="funding">Funding &amp; Deposits</TabsTrigger>
+          <TabsTrigger value="costs">Cost Reconciliation</TabsTrigger>
+          <TabsTrigger value="reports">Reports</TabsTrigger>
+        </TabsList>
+        <TabsContent value="overview" className="space-y-4 mt-4">
+          <FinancialWarnings warnings={data.warnings} lines={data.lines} />
+          <DataQualityIndicator dataQuality={data.data_quality} lines={data.lines} />
+          <FinancialSummaryCards summary={data.summary} />
+          <FinancialCategoryBreakdown categories={data.categories} summary={data.summary} laborBilling={data.labor_billing} />
+          <FinancialLaborBilling projectId={projectId} lb={data.labor_billing} labor={data.labor} />
+        </TabsContent>
+        <TabsContent value="invoices" className="space-y-4 mt-4">
+          <ProjectInvoicesPanel projectId={projectId} />
+          <FinancialInvoiceSummary invoices={data.invoices} summary={data.summary} />
+        </TabsContent>
+        <TabsContent value="funding" className="space-y-4 mt-4">
+          <ApprovedScopeBudgetSection projectId={projectId} />
+          <ScopeFundingSection projectId={projectId} />
+        </TabsContent>
+        <TabsContent value="costs" className="space-y-4 mt-4">
+          <FinancialLineItems lines={data.lines} laborBilling={data.labor_billing} />
+        </TabsContent>
+        <TabsContent value="reports" className="mt-4">
+          <div className="rounded-lg border border-red-900/30 bg-black/40 p-4 space-y-3">
+            <p className="text-sm text-gray-300">Internal financial report and client billing detail.</p>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={() => setExportFormat("pdf")} className="h-8"><FileText className="w-4 h-4 mr-1" />Export PDF</Button>
+              <Button size="sm" variant="outline" onClick={() => setExportFormat("xlsx")} className="h-8"><FileSpreadsheet className="w-4 h-4 mr-1" />Export Excel</Button>
+            </div>
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
