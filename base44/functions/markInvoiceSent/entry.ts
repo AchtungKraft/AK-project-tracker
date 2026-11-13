@@ -447,6 +447,7 @@ Deno.serve(async (req) => {
     // SDK 0.8.25 rejects signed-out callers without a status code, only a message.
     const user = await base44.auth.me().catch((e) => ([401, 403].includes(e.status ?? e.response?.status) || /authentication required/i.test(e.message) ? null : Promise.reject(e)));
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    if (user.role !== 'admin') return Response.json({ error: 'Forbidden: admin only' }, { status: 403 });
 
     const body = await req.json().catch(() => ({}));
     if (body.self_test) {
