@@ -247,8 +247,8 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
     base44.entities.Vendor.list(),
     base44.entities.PartCategory.list(),
     filters.project_id
-      ? base44.entities.ProjectCreditLedger.filter({ project_id: filters.project_id })
-      : base44.entities.ProjectCreditLedger.list(),
+      ? base44.asServiceRole.entities.ProjectCreditLedger.filter({ project_id: filters.project_id })
+      : base44.asServiceRole.entities.ProjectCreditLedger.list(),
     filters.project_id
       ? base44.entities.CreditAllocation.filter({ project_id: filters.project_id, is_reversed: false })
       : base44.entities.CreditAllocation.filter({ is_reversed: false }),
@@ -263,7 +263,7 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
       ? base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } })
       : [],
     commitmentIds.length > 0
-      ? base44.entities.ProjectInvoiceLine.filter({ part_commitment_id: { $in: commitmentIds } })
+      ? base44.asServiceRole.entities.ProjectInvoiceLine.filter({ part_commitment_id: { $in: commitmentIds } })
       : [],
     projectIds.length > 0
       ? base44.entities.InstalledPart.filter({ project_id: { $in: projectIds } })

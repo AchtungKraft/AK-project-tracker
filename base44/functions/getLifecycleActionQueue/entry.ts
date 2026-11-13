@@ -181,7 +181,7 @@ async function getLifecycleActionQueue(base44, filters = {}) {
       ? base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } })
       : [],
     commitmentIds.length > 0
-      ? base44.entities.ProjectInvoiceLine.filter({ part_commitment_id: { $in: commitmentIds } })
+      ? base44.asServiceRole.entities.ProjectInvoiceLine.filter({ part_commitment_id: { $in: commitmentIds } })
       : [],
   ]);
 

@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
         ? fetchWithRetry(() => base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } }))
         : [],
       commitmentProjectIds.length > 0
-        ? fetchWithRetry(() => base44.entities.ProjectInvoice.filter({ project_id: { $in: commitmentProjectIds } }))
+        ? fetchWithRetry(() => base44.asServiceRole.entities.ProjectInvoice.filter({ project_id: { $in: commitmentProjectIds } }))
         : [],
     ]);
 
@@ -134,7 +134,7 @@ Deno.serve(async (req) => {
         ? fetchWithRetry(() => base44.entities.Order.filter({ id: { $in: orderIds } }))
         : [],
       invoiceIds.length > 0
-        ? fetchWithRetry(() => base44.entities.ProjectInvoiceLine.filter({ invoice_id: { $in: invoiceIds } }))
+        ? fetchWithRetry(() => base44.asServiceRole.entities.ProjectInvoiceLine.filter({ invoice_id: { $in: invoiceIds } }))
         : [],
     ]);
 

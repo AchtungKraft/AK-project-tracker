@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
     const [projectArr, commitments, projectInvoices] = await Promise.all([
       fetchWithRetry(() => base44.entities.Project.filter({ id: project_id })),
       fetchWithRetry(() => base44.entities.PartCommitment.filter({ project_id })),
-      fetchWithRetry(() => base44.entities.ProjectInvoice.filter({ project_id })),
+      fetchWithRetry(() => base44.asServiceRole.entities.ProjectInvoice.filter({ project_id })),
     ]);
     const project = projectArr[0];
 
@@ -151,7 +151,7 @@ Deno.serve(async (req) => {
         ? fetchWithRetry(() => base44.entities.PartPurchaseLineItem.filter({ commitment_id: { $in: commitmentIds } }))
         : [],
       invoiceIdsForLines.length > 0
-        ? fetchWithRetry(() => base44.entities.ProjectInvoiceLine.filter({ invoice_id: { $in: invoiceIdsForLines } }))
+        ? fetchWithRetry(() => base44.asServiceRole.entities.ProjectInvoiceLine.filter({ invoice_id: { $in: invoiceIdsForLines } }))
         : [],
       partIdsFromCommitments.length > 0
         ? fetchWithRetry(() => base44.entities.PartCommitment.filter({
