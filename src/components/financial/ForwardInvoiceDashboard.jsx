@@ -47,7 +47,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { differenceInDays, parseISO, format } from "date-fns";
 import { useWiringAudit } from "@/components/dev/wiringAudit";
 import InvoiceWorkbench from "./InvoiceWorkbench";

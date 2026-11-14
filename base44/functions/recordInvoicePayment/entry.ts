@@ -72,6 +72,21 @@ async function creditBlock(db, credit, expC) {
     + `Cancel the invoice or credit application that used it first (that returns the credit), then reverse this payment.`;
 }
 
+// Drafts don't hold ledger credit; they only store credit_proposed. Refuse a reversal whose credit take-back
+// would leave the project's unused credit below what its drafts propose (send would silently apply less).
+async function draftCreditBlock(db, inv, credit, expC) {
+  const takeC = cents(credit?.credit_amount) - expC;
+  if (!credit || takeC <= 0) return null;
+  const drafts = (await db.findInvoices({ project_id: inv.project_id, status: 'draft' })).filter((d) => cents(d.credit_proposed) > 0);
+  if (!drafts.length) return null;
+  const proposedC = drafts.reduce((s, d) => s + cents(d.credit_proposed), 0);
+  const availC = (await db.findCredits({ project_id: inv.project_id })).reduce((s, c) => s + Math.max(0, cents(c.remaining_amount)), 0);
+  if (availC - takeC >= proposedC) return null;
+  return `Reversing this payment would take back ${usd(takeC)} of unused client credit, leaving ${usd(Math.max(0, availC - takeC))} available. `
+    + `Draft invoice${drafts.length > 1 ? 's' : ''} ${drafts.map(invLabel).join(', ')} propose${drafts.length > 1 ? '' : 's'} ${usd(proposedC)} of credit. `
+    + `Reduce the credit on ${drafts.length > 1 ? 'those drafts' : 'that draft'} first, then reverse this payment.`;
+}
+
 // Brings the invoice's credit to expC. Caller has already checked creditBlock.
 async function syncCredit(db, inv, credit, expC, reason) {
   if (!credit) {
@@ -216,6 +231,8 @@ async function reversePayment(db, args) {
     const expC = expectedCreditC(fresh, paidC, isPaid);
     const block = await creditBlock(db, credit, expC);
     if (block) return [409, { success: false, code: 'CREDIT_IN_USE', error: block }];
+    const draftBlock = await draftCreditBlock(db, fresh, credit, expC);
+    if (draftBlock) return [409, { success: false, code: 'CREDIT_PROPOSED_ON_DRAFT', error: draftBlock }];
 
     if (!alreadyReversed) {
       const won = await db.paymentCas({ id: p.id, reversed_at: null }, {
@@ -249,6 +266,7 @@ function realDb(base44) {
   const first = async (E, id) => (await E.filter({ id }).catch((e) => (/not a valid record id/i.test(e.message) ? [] : Promise.reject(e))))[0] || null;
   return {
     getInvoice: (id) => first(sr.ProjectInvoice, id),
+    findInvoices: (q) => sr.ProjectInvoice.filter(q),
     listLines: (invoice_id) => sr.ProjectInvoiceLine.filter({ invoice_id }),
     findLinesBySource: async (id) => {
       const [a, b] = await Promise.all([sr.ProjectInvoiceLine.filter({ source_id: id }), sr.ProjectInvoiceLine.filter({ part_commitment_id: id })]);
@@ -288,6 +306,7 @@ function mockDb(seed, faults = {}) {
   return {
     T,
     getInvoice: async (id) => (await find('getInvoice', T.invoices, { id }))[0] || null,
+    findInvoices: (q) => find('findInvoices', T.invoices, q),
     listLines: (invoice_id) => find('listLines', T.lines, { invoice_id }),
     findLinesBySource: async (id) => { await hit('findLinesBySource'); return [...T.lines.values()].filter((l) => l.source_id === id || l.part_commitment_id === id).map((l) => structuredClone(l)); },
     getCommitment: async (id) => (await find('getCommitment', T.commitments, { id }))[0] || null,
@@ -411,6 +430,19 @@ async function runSelfTest() {
     const c = credits(db)[0]; db.T.credits.get(c.id).remaining_amount = 0;
     const [s, r] = await rev(db, b.payment_id);
     return { pass: s === 409 && r.code === 'CREDIT_IN_USE' && inv(db).status === 'paid' && !db.T.payments.get(b.payment_id).reversed_at };
+  });
+  await test('draft proposes the overpayment credit: reversal blocked, nothing changes', async () => {
+    const db = seed({}, { invoices: [{ id: 'invD', project_id: 'p1', status: 'draft', qb_invoice_number: 'DRAFT-1', credit_proposed: 150 }] });
+    await pay(db, 50000); const [, b] = await pay(db, 70000); // 200 credit, unused
+    const before = credits(db)[0].remaining_amount;
+    const [s, r] = await rev(db, b.payment_id);
+    return { pass: before === 200 && s === 409 && r.code === 'CREDIT_PROPOSED_ON_DRAFT' && /DRAFT-1/.test(r.error) && credits(db)[0].remaining_amount === 200 && inv(db).status === 'paid' && !db.T.payments.get(b.payment_id).reversed_at && unlocked(db) };
+  });
+  await test('draft proposes less than what stays available: reversal allowed', async () => {
+    const db = seed({}, { invoices: [{ id: 'invD', project_id: 'p1', status: 'draft', credit_proposed: 50 }], credits: [{ id: 'cOld', project_id: 'p1', credit_amount: 80, remaining_amount: 80 }] });
+    await pay(db, 50000); const [, b] = await pay(db, 70000); // +200 credit; total unused 280
+    const [s, r] = await rev(db, b.payment_id); // takes back 200 → 80 left ≥ 50 proposed
+    return { pass: s === 200 && r.status === 'partial' && credits(db).find((c) => c.id !== 'cOld').remaining_amount === 0 };
   });
   await test('part also billed on another PAID invoice stays paid after reversal', async () => {
     const db = seed({}, { invoices: [{ id: 'inv9', project_id: 'p1', status: 'paid' }], lines: [{ id: 'l9', invoice_id: 'inv9', type: 'part', source_id: 'pc1' }] });
