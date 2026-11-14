@@ -297,9 +297,9 @@ export default function ProjectInvoices() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <Clock className="w-4 h-4 text-purple-400" />
-              <span className="text-xs text-gray-400 uppercase">Sent</span>
+              <span className="text-xs text-gray-400 uppercase">Open</span>
             </div>
-            <p className="text-2xl font-bold text-purple-300">{summary.sent_count || 0}</p>
+            <p className="text-2xl font-bold text-purple-300">{(summary.sent_count || 0) + (summary.partial_count || 0)}</p>
             <p className="text-xs text-gray-500">
               {formatCurrencyUSD(summary.total_balance_due || 0)} unpaid
             </p>
@@ -371,6 +371,13 @@ export default function ProjectInvoices() {
               {summary.sent_count || 0}
             </Badge>
           </TabsTrigger>
+          <TabsTrigger value="partial" className="gap-2">
+            <Wallet className="w-4 h-4" />
+            Partially Paid
+            <Badge variant="secondary" className="ml-1">
+              {summary.partial_count || 0}
+            </Badge>
+          </TabsTrigger>
           <TabsTrigger value="paid" className="gap-2">
             <CheckCircle2 className="w-4 h-4" />
             Paid
@@ -390,6 +397,7 @@ export default function ProjectInvoices() {
                   <TableHead className="text-gray-400">QB #</TableHead>
                   <TableHead className="text-gray-400 text-right">Subtotal</TableHead>
                   <TableHead className="text-gray-400 text-right">Credit</TableHead>
+                  <TableHead className="text-gray-400 text-right">Paid</TableHead>
                   <TableHead className="text-gray-400 text-right">Balance Due</TableHead>
                   <TableHead className="text-gray-400">Due Date</TableHead>
                   <TableHead className="text-gray-400">Flags</TableHead>
@@ -399,7 +407,7 @@ export default function ProjectInvoices() {
               <TableBody>
                 {filteredInvoices.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={10} className="text-center py-8 text-gray-500">
                       No invoices in this tab
                     </TableCell>
                   </TableRow>
@@ -433,6 +441,9 @@ export default function ProjectInvoices() {
                         ) : (
                           <span className="text-gray-600">—</span>
                         )}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-green-400">
+                        {inv.paid_amount > 0 ? formatCurrencyUSD(inv.paid_amount) : <span className="text-gray-600">—</span>}
                       </TableCell>
                       <TableCell className="text-right font-mono text-white font-medium">
                         {formatCurrencyUSD(inv.balance_due || 0)}

@@ -151,7 +151,7 @@ Deno.serve(async (req) => {
       
       // Check overdue: sent + due_date < today
       let isOverdue = false;
-      if (inv.status === 'sent' && inv.due_date) {
+      if ((inv.status === 'sent' || inv.status === 'partial') && inv.due_date) {
         const dueDate = new Date(inv.due_date);
         dueDate.setHours(0, 0, 0, 0);
         isOverdue = dueDate < today;
@@ -159,7 +159,7 @@ Deno.serve(async (req) => {
 
       // Check missing QB fields: sent but missing qb_invoice_number/issue_date/due_date
       let missingQbFields = false;
-      if (inv.status === 'sent') {
+      if (inv.status === 'sent' || inv.status === 'partial') {
         if (!inv.qb_invoice_number || !inv.issue_date || !inv.due_date) {
           missingQbFields = true;
         }
@@ -208,12 +208,14 @@ Deno.serve(async (req) => {
       total_invoices: invoices.length,
       draft_count: invoices.filter(i => i.status === 'draft').length,
       sent_count: invoices.filter(i => i.status === 'sent').length,
+      partial_count: invoices.filter(i => i.status === 'partial').length,
       paid_count: invoices.filter(i => i.status === 'paid').length,
       overdue_count: invoicesWithFlags.filter(i => i.flags.overdue).length,
-      // CANONICAL: Compute balance from total - paid. Entity balance_due may be stale.
+      // Same rule as getProjectFinancialOverview: balance_due is maintained by the canonical payment handler
+      // (amount due after send-time credit, minus active payments).
       total_balance_due: invoices
         .filter(i => i.status === 'sent' || i.status === 'partial')
-        .reduce((sum, i) => sum + Math.max(0, (i.total ?? i.subtotal ?? 0) - (i.paid_amount ?? 0)), 0),
+        .reduce((sum, i) => sum + (i.balance_due ?? Math.max(0, (i.total ?? i.subtotal ?? 0) - (i.paid_amount ?? 0))), 0),
     };
 
     // PERF: Timing log (dev only)

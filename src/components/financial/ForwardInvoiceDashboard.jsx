@@ -63,6 +63,7 @@ import { billingKeys, invoiceKeys, creditKeys } from "./queryKeyFactories";
 import CreditSummaryStrip from "./CreditSummaryStrip";
 import ApplyCreditModal from "./ApplyCreditModal";
 import CreateProjectInvoiceModal from "./CreateProjectInvoiceModal";
+import ProjectInvoiceDetailDrawer from "./ProjectInvoiceDetailDrawer";
 import { Checkbox } from "@/components/ui/checkbox";
 
 /**
@@ -80,8 +81,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 export default function ForwardInvoiceDashboard({ projectId }) {
   const queryClient = useQueryClient();
   const audit = useWiringAudit('ForwardInvoiceDashboard');
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentBatch, setPaymentBatch] = useState(null);
+  const [openInvoiceId, setOpenInvoiceId] = useState(null);
   const [showInvoiceWorkbench, setShowInvoiceWorkbench] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   // Credit allocation modal
@@ -153,13 +153,14 @@ export default function ForwardInvoiceDashboard({ projectId }) {
   const batchKpis = useMemo(() => {
     const nonVoided = invoices.filter(b => b.status !== 'voided');
     const drafts = nonVoided.filter(b => b.status === 'draft');
-    const sent = nonVoided.filter(b => ['sent', 'invoiced'].includes(b.status));
+    const sent = nonVoided.filter(b => ['sent', 'invoiced', 'partial'].includes(b.status));
     const paid = nonVoided.filter(b => b.status === 'paid');
     const needsExport = nonVoided.filter(b => !b.qb_exported && b.status !== 'draft');
 
     const totalInvoiced = nonVoided.reduce((sum, b) => sum + (b.total_amount || b.total || 0), 0);
-    const totalPaid = paid.reduce((sum, b) => sum + (b.paid_amount || b.total_amount || b.total || 0), 0);
-    const totalOutstanding = sent.reduce((sum, b) => sum + (b.total_amount || b.total || 0), 0);
+    // Same rules as Project Financials overview: paid = recorded paid_amount; outstanding = balance_due.
+    const totalPaid = [...sent, ...paid].reduce((sum, b) => sum + (b.paid_amount ?? 0), 0);
+    const totalOutstanding = sent.reduce((sum, b) => sum + (b.balance_due ?? Math.max(0, (b.total_amount || b.total || 0) - (b.paid_amount ?? 0))), 0);
 
     // Aging buckets
     const today = new Date();
@@ -252,51 +253,19 @@ export default function ForwardInvoiceDashboard({ projectId }) {
   };
 
   // Update status handler - PHASE 1: Uses ProjectInvoice
-  const handleStatusUpdate = async (invoiceId, status) => {
-    try {
-      await base44.entities.ProjectInvoice.update(invoiceId, { status });
-      toast.success('Status updated');
-      refetch();
-    } catch (error) {
-      toast.error(error.message || 'Update failed');
-    }
+  // PHASE 2U.3A: send and payment both go through the shared invoice drawer (canonical backend actions).
+  const openInvoice = (inv) => {
+    audit.trackClick('open_invoice_drawer', { invoiceId: inv.id });
+    setOpenInvoiceId(inv.id);
   };
 
-  // Record payment handler
-  const handleRecordPayment = (batch) => {
-    audit.trackClick('open_payment_modal', { batchId: batch.id });
-    setPaymentBatch(batch);
-    setShowPaymentModal(true);
-  };
-
-  // PHASE 1: Payment uses markInvoicePaid function for ProjectInvoice
-  const handlePaymentSubmit = async (paymentData) => {
-    try {
-      const invoiceId = paymentData.batchId || paymentData.invoiceId;
-      audit.trackClick('record_payment', { invoiceId });
-      
-      // Use markInvoicePaid backend function
-      await base44.functions.invoke('markInvoicePaid', {
-        invoice_id: invoiceId,
-        payment_date: paymentData.paid_date,
-        paid_amount: paymentData.amount_paid,
-      });
-      
-      audit.trackSuccess('record_payment', { invoiceId });
-      toast.success('Payment recorded');
-      setShowPaymentModal(false);
-      setPaymentBatch(null);
-      // DETERMINISTIC: Invalidate specific keys only using factories
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: billingKeys.states(normalizedProjectId) }),
-        queryClient.invalidateQueries({ queryKey: invoiceKeys.view(normalizedProjectId) }),
-        queryClient.invalidateQueries({ queryKey: creditKeys.allocations(normalizedProjectId) }),
-      ]);
-      refetch();
-    } catch (error) {
-      audit.trackError('record_payment', error);
-      toast.error(error.response?.data?.error || error.message || 'Failed to record payment');
-    }
+  const refreshInvoices = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: billingKeys.states(normalizedProjectId) }),
+      queryClient.invalidateQueries({ queryKey: invoiceKeys.view(normalizedProjectId) }),
+      queryClient.invalidateQueries({ queryKey: creditKeys.allocations(normalizedProjectId) }),
+    ]);
+    refetch();
   };
 
   // PHASE 1 UNIFIED: Use same modal as ProjectInvoices page
@@ -321,6 +290,9 @@ export default function ForwardInvoiceDashboard({ projectId }) {
     // Map batch.status to canonical billing status colors
     if (batch.status === 'paid') {
       return <Badge className="bg-green-600 text-white text-xs">Paid</Badge>;
+    }
+    if (batch.status === 'partial') {
+      return <Badge className="bg-amber-600 text-white text-xs">Partially Paid</Badge>;
     }
     if (['sent', 'invoiced'].includes(batch.status)) {
       return <Badge className="bg-purple-600 text-white text-xs">Invoiced</Badge>;
@@ -520,16 +492,16 @@ export default function ForwardInvoiceDashboard({ projectId }) {
                         <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
                           {inv.status === 'draft' && (
                             <DropdownMenuItem
-                              onClick={() => handleStatusUpdate(inv.id, 'sent')}
+                              onClick={() => openInvoice(inv)}
                               className="text-purple-400"
                             >
                               <Send className="w-4 h-4 mr-2" />
-                              Mark Sent
+                              Open to Send
                             </DropdownMenuItem>
                           )}
-                          {['sent', 'invoiced'].includes(inv.status) && (
+                          {['sent', 'invoiced', 'partial'].includes(inv.status) && (
                             <DropdownMenuItem
-                              onClick={() => handleRecordPayment(inv)}
+                              onClick={() => openInvoice(inv)}
                               className="text-green-400"
                             >
                               <CreditCard className="w-4 h-4 mr-2" />
@@ -616,16 +588,15 @@ export default function ForwardInvoiceDashboard({ projectId }) {
         </CardContent>
       </Card>
 
-      {/* Record Payment Modal */}
-      <RecordPaymentModal
-        isOpen={showPaymentModal}
-        onClose={() => {
-          setShowPaymentModal(false);
-          setPaymentBatch(null);
-        }}
-        batch={paymentBatch}
-        onSubmit={handlePaymentSubmit}
-      />
+      {/* Shared invoice drawer: canonical send + Record Payment / reversal */}
+      {openInvoiceId && (
+        <ProjectInvoiceDetailDrawer
+          invoiceId={openInvoiceId}
+          open={!!openInvoiceId}
+          onClose={() => setOpenInvoiceId(null)}
+          onUpdated={refreshInvoices}
+        />
+      )}
 
       {/* PHASE 1 UNIFIED: Use same CreateProjectInvoiceModal as ProjectInvoices */}
       {showCreateInvoiceModal && (
@@ -686,126 +657,5 @@ function AgingBucket({ label, amount, status }) {
   );
 }
 
-// ============================================
-// RECORD PAYMENT MODAL
-// ============================================
-
-function RecordPaymentModal({ isOpen, onClose, batch, onSubmit }) {
-  const [paidDate, setPaidDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [paymentMethod, setPaymentMethod] = useState('');
-  const [paymentReference, setPaymentReference] = useState('');
-  const [amountPaid, setAmountPaid] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  React.useEffect(() => {
-    if (batch) {
-      setAmountPaid(batch.total_amount?.toString() || '');
-    }
-  }, [batch]);
-
-  if (!batch) return null;
-
-  const handleSubmit = async () => {
-    setIsSubmitting(true);
-    try {
-      await onSubmit({
-        batchId: batch.id,
-        paid_date: paidDate,
-        payment_method: paymentMethod,
-        payment_reference: paymentReference,
-        amount_paid: parseFloat(amountPaid) || batch.total_amount,
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-gray-900 border-gray-700 max-w-md">
-        <DialogHeader>
-          <DialogTitle className="text-white flex items-center gap-2">
-            <CreditCard className="w-5 h-5 text-green-400" />
-            Record Payment
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4 py-4">
-          <div className="p-3 bg-gray-800/50 rounded-lg">
-            <p className="text-sm text-gray-400">Invoice</p>
-            <p className="text-white font-medium">{batch.invoice_number || batch.batch_name}</p>
-            <p className="text-green-400 font-bold">{formatCurrencyUSD(batch.total_amount || 0)}</p>
-          </div>
-
-          <div className="space-y-3">
-            <div>
-              <Label className="text-gray-300">Payment Date</Label>
-              <Input
-                type="date"
-                value={paidDate}
-                onChange={(e) => setPaidDate(e.target.value)}
-                className="bg-gray-800 border-gray-600 text-white mt-1"
-              />
-            </div>
-
-            <div>
-              <Label className="text-gray-300">Payment Method</Label>
-              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                <SelectTrigger className="bg-gray-800 border-gray-600 text-white mt-1">
-                  <SelectValue placeholder="Select method..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="check">Check</SelectItem>
-                  <SelectItem value="wire">Wire Transfer</SelectItem>
-                  <SelectItem value="ach">ACH</SelectItem>
-                  <SelectItem value="credit_card">Credit Card</SelectItem>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label className="text-gray-300">Reference # (Check #, Transaction ID)</Label>
-              <Input
-                value={paymentReference}
-                onChange={(e) => setPaymentReference(e.target.value)}
-                placeholder="e.g. Check #1234"
-                className="bg-gray-800 border-gray-600 text-white mt-1"
-              />
-            </div>
-
-            <div>
-              <Label className="text-gray-300">Amount Paid</Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={amountPaid}
-                onChange={(e) => setAmountPaid(e.target.value)}
-                className="bg-gray-800 border-gray-600 text-white mt-1"
-              />
-            </div>
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} className="border-gray-600">
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={isSubmitting || !paidDate}
-            className="bg-green-600 hover:bg-green-700"
-          >
-            {isSubmitting ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <CheckCircle2 className="w-4 h-4 mr-2" />
-            )}
-            Record Payment
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+// PHASE 2U.3A: the legacy one-step Record Payment modal (markInvoicePaid) was removed.
+// Sending and payments open the shared ProjectInvoiceDetailDrawer (canonical markInvoiceSent / recordInvoicePayment).

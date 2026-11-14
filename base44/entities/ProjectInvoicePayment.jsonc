@@ -53,6 +53,33 @@
     "recorded_at": {
       "type": "string",
       "format": "date-time"
+    },
+    "reversed_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time",
+      "description": "Set when the payment was reversed. Reversed payments are kept for audit and excluded from paid totals."
+    },
+    "reversed_by_email": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reversal_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reversal_idempotency_key": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Request key of the reversal (one reversal per payment)"
     }
   },
   "required": [

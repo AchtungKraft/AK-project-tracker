@@ -320,12 +320,12 @@ Deno.serve(async (req) => {
       return Response.json(await runSelfTest());
     }
 
-    const { invoice_id, payment_date, paid_amount } = body;
-    if (!invoice_id) return Response.json({ error: 'invoice_id required' }, { status: 400 });
-    if (!payment_date) return Response.json({ error: 'payment_date required' }, { status: 400 });
-
-    const [status, payload] = await markPaid(realDb(base44), { invoice_id, payment_date, paid_amount });
-    return Response.json(payload, { status });
+    // PHASE 2U.3A: retired. One-step "mark paid" left no payment records and bypassed partial payments.
+    // All payments now go through recordInvoicePayment (record / reverse). Self-test kept for reference.
+    return Response.json({
+      success: false, code: 'RETIRED',
+      error: 'Mark Paid has been replaced. Open the invoice and use Record Payment.',
+    }, { status: 410 });
   } catch (error) {
     console.error('markInvoicePaid error:', error);
     return Response.json({ error: error.message }, { status: 500 });

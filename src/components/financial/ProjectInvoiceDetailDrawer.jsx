@@ -51,6 +51,7 @@ import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import RecordPaymentDialog from "@/components/financial/payments/RecordPaymentDialog";
+import { toast as uiToast } from "@/components/ui/use-toast";
 import InvoicePaymentHistory from "@/components/financial/payments/InvoicePaymentHistory";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import { invoiceKeys } from "@/components/financial/queryKeyFactories";
@@ -243,16 +244,27 @@ export default function ProjectInvoiceDetailDrawer({
   };
 
   // Payments go through recordInvoicePayment (one record per payment; invoice becomes partial or paid).
-  const handlePaymentRecorded = async (result) => {
-    toast.success(
-      result.status === "paid"
-        ? (result.credit_created ? `Invoice paid in full. ${formatCurrencyUSD(result.credit_created.amount)} credit created.` : "Invoice paid in full")
-        : `Payment recorded. ${formatCurrencyUSD(result.balance_due)} still due.`
-    );
+  // Refresh this drawer + every invoice/financial view after a payment or reversal.
+  const refreshAfterPaymentChange = async () => {
     const projectIdForRefresh = invoice?.project_id || null;
-    queryClient.invalidateQueries({ queryKey: ["invoicePayments", invoiceId] });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: invoiceKeys.detail(normalizedInvoiceId) }),
+      queryClient.invalidateQueries({ queryKey: ["invoicePayments", invoiceId] }),
+      queryClient.invalidateQueries({ queryKey: ["invoiceCredits", invoiceId] }),
+      queryClient.invalidateQueries({ queryKey: ["projectFinancialOverview"] }),
+      queryClient.invalidateQueries({ queryKey: ["billingSummary"] }),
+    ]);
     await forceAppRefresh(queryClient, { projectIds: projectIdForRefresh ? [projectIdForRefresh] : [] });
     onUpdated?.();
+  };
+
+  const handlePaymentRecorded = async (result) => {
+    uiToast({
+      title: result.status === "paid"
+        ? (result.credit_created ? `Invoice paid in full. ${formatCurrencyUSD(result.credit_created.amount)} credit created.` : "Invoice paid in full")
+        : `Payment recorded. ${formatCurrencyUSD(result.balance_due)} still due.`,
+    });
+    await refreshAfterPaymentChange();
   };
 
   const [isExporting, setIsExporting] = useState(false);
@@ -546,7 +558,7 @@ export default function ProjectInvoiceDetailDrawer({
                 )}
               </div>
 
-              <InvoicePaymentHistory invoiceId={invoiceId} />
+              <InvoicePaymentHistory invoice={invoice} onChanged={refreshAfterPaymentChange} />
 
               {/* Notes */}
               {invoice.notes && (
