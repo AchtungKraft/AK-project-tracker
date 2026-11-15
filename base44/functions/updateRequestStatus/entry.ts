@@ -27,6 +27,7 @@ Deno.serve(async (req) => {
 
         // Custom-parts reviews must have explicit, current, submitted revision links before posting.
         if(status==='posted' && request.request_type==='custom_parts_review'){
+          if(user.role!=='admin')return Response.json({error:'Administrator required'},{status:403});
           const db=base44.asServiceRole.entities;
           const rows=await db.CustomPartReviewRequestItem.filter({request_id:requestId});
           const links=Array.isArray(rows)?rows:rows.items||[];
