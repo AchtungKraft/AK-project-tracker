@@ -45,6 +45,7 @@ import ScopeReviewDisplay from "@/components/scope/ScopeReviewDisplay";
 import ScopeReviewPrintView from "@/components/scope/ScopeReviewPrintView";
 import ScopeListPrintView from "@/components/scope/ScopeListPrintView";
 import ShopReviewPrintLoader from "@/components/scope/shopReview/ShopReviewPrintLoader";
+import CustomPartsReviewSelection from "@/components/clientportal/CustomPartsReviewSelection";
 
 export default function ClientFeedbackDetail() {
   const isMobile = useIsMobile();
@@ -270,7 +271,8 @@ export default function ClientFeedbackDetail() {
   const handlePostToClient = async () => {
     if (confirm('Post this request to the client? They will be notified.')) {
       try {
-        await base44.functions.invoke('updateRequestStatus', { requestId, status: 'posted' });
+        const postResponse=await base44.functions.invoke('updateRequestStatus', { requestId, status: 'posted' });
+        if(postResponse?.data?.success!==true)throw new Error(postResponse?.data?.error||'Unable to post request');
         queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
         
         // Send the review email - fire and forget
@@ -285,7 +287,8 @@ export default function ClientFeedbackDetail() {
   const handleResendForApproval = async () => {
     if (confirm('Resend this request for approval? This will bump it to Needs Review for the client.')) {
       try {
-        await base44.functions.invoke('updateRequestStatus', { requestId, status: 'posted' });
+        const postResponse=await base44.functions.invoke('updateRequestStatus', { requestId, status: 'posted' });
+        if(postResponse?.data?.success!==true)throw new Error(postResponse?.data?.error||'Unable to post request');
         queryClient.invalidateQueries({ queryKey: ['internalFeedbackDetail', requestId, projectId] });
         
         // Send email - fire and forget
@@ -666,6 +669,8 @@ export default function ClientFeedbackDetail() {
               {isMobile && canAct && isStructuredReview(request?.request_type) && (
                 <p className="text-xs text-gray-400 italic">Select images below to review</p>
               )}
+
+              {request?.request_type==='custom_parts_review'&&<CustomPartsReviewSelection requestId={requestId}/>}
 
               {/* Hierarchical action bar */}
               <DetailActionBar
