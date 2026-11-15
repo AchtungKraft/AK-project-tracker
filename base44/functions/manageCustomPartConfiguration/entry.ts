@@ -35,7 +35,7 @@ Deno.serve(async req => {
   const items=await list('ProjectCustomPart',{id:itemId});
   const item=items[0];
   if(!item||item.project_id!==projectId)return Response.json({error:'Assignment not found in project'},{status:404});
-  if(item.selection_status==='APPROVED')return Response.json({error:'Approved configurations cannot be edited. Revision workflow required.'},{status:409});
+  if(['APPROVED','SUBMITTED','CHANGES_REQUESTED'].includes(item.selection_status))return Response.json({error:'Submitted or decided configurations are locked until a verified revision workflow is available.'},{status:409});
   const definitions=await list('CustomPartDefinition',{id:item.custom_part_id});
   const part=definitions[0];
   if(!part)return Response.json({error:'Part definition unavailable'},{status:404});
@@ -60,7 +60,7 @@ Deno.serve(async req => {
   }
   const missing=groups.filter(g=>g.required&&!selections[g.id]).map(g=>g.name);
   if(missing.length)return Response.json({error:'Required selections missing',missing},{status:400});
-  if(item.selection_status==='SUBMITTED')return Response.json({error:'Already submitted; review workflow not yet enabled'},{status:409});
+  if(item.selection_status==='SUBMITTED')return Response.json({error:'Already submitted'},{status:409});
   const revisions=await list('ProjectPartSelectionRevision',{project_custom_part_id:itemId});
   if(revisions.length)return Response.json({error:'Existing submission requires revision workflow'},{status:409});
   const snapshot={part:{id:part.id,name:part.name,category:part.category,description:part.description,reference_images:part.reference_images||[]},options:groups.map(g=>({group_id:g.id,name:g.name,required:!!g.required,choice_id:selections[g.id]||null,choice:(g.choices||[]).find(c=>c.id===selections[g.id])||null}))};
