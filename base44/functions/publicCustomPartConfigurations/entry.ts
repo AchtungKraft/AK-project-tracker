@@ -19,7 +19,7 @@ Deno.serve(async req=>{
    linked=await list('CustomPartReviewRequestItem',{request_id:requestId});
   }
   const assigned=await list('ProjectCustomPart',{project_id:projectId});
-  const submitted=assigned.filter(x=>['SUBMITTED','APPROVED','CHANGES_REQUESTED'].includes(x.selection_status));
+  const submitted=assigned.filter(x=>linked?linked.some(l=>l.project_custom_part_id===x.id):['SUBMITTED','APPROVED','CHANGES_REQUESTED'].includes(x.selection_status));
   const result=[];
   for(const item of submitted){
    const revisions=await list('ProjectPartSelectionRevision',{project_custom_part_id:item.id});
