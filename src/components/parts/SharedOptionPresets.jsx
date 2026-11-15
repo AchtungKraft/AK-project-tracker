@@ -12,7 +12,7 @@ export default function SharedOptionPresets({partId=null,admin=false}){
  const {data:presets=[]}=useQuery({queryKey:['custom-option-presets'],queryFn:()=>base44.entities.CustomPartOptionPreset.list(),enabled:admin});
  const preset=presets.find(p=>p.id===chosen);
  const active=(preset?.choices||[]).filter(c=>c.active!==false);
- const selectPreset=id=>{setChosen(id);const p=presets.find(x=>x.id===id);setEnabled((p?.choices||[]).filter(c=>c.active!==false).map(c=>c.id))};
+ const selectPreset=id=>{setChosen(id);const p=presets.find(x=>x.id===id);setEnabled((p?.choices||[]).filter(c=>c.active!==false).map(c=>c.id));setLines((p?.choices||[]).filter(c=>c.active!==false).map(c=>c.label).join('\n'))};
  const run=async fn=>{setBusy(true);try{await fn();await Promise.all([qc.invalidateQueries({queryKey:['custom-option-presets']}),qc.invalidateQueries({queryKey:['config-options']})]);toast.success('Shared options saved')}catch(e){toast.error(e?.message||'Unable to save options')}finally{setBusy(false)}};
  if(!admin)return null;
  return <section className="rounded-lg border border-gray-700 p-3 space-y-3"><h3 className="font-semibold">{partId?'Add options from shared library':'Shared option libraries'}</h3><p className="text-xs text-gray-400">Maintain reusable choices such as surface finish, color, and material. Each part receives its own selected subset; editing a shared library never silently changes submitted configurations.</p>
