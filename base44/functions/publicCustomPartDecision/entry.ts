@@ -6,7 +6,7 @@ Deno.serve(async req=>{
   if(req.method!=='POST')return Response.json({error:'POST required'},{status:405});
   const b=await req.json().catch(()=>null);
   if(!b||!['APPROVED','CHANGES_REQUESTED'].includes(b.decision))return Response.json({error:'Invalid decision'},{status:400});
-  const {projectId,token,assignmentId,revisionId}=b;
+  const {projectId,token,assignmentId,revisionId,requestId}=b;
   if([projectId,assignmentId,revisionId].some(x=>typeof x!=='string'||!x)||typeof token!=='string'||token.length<12)return Response.json({error:'Valid project access token required'},{status:403});
   const api=createClientFromRequest(req),db=api.asServiceRole.entities;
   const list=async(name,q)=>{const r=await db[name].filter(q);return Array.isArray(r)?r:r.items||[]};
@@ -18,6 +18,12 @@ Deno.serve(async req=>{
   if(!item||item.project_id!==projectId||item.selection_status!=='SUBMITTED')return Response.json({error:'Configuration is not awaiting review'},{status:409});
   const [revision]=await list('ProjectPartSelectionRevision',{id:revisionId});
   if(!revision||revision.project_id!==projectId||revision.project_custom_part_id!==item.id||revision.custom_part_id!==item.custom_part_id||Number(revision.revision_number)!==Number(item.current_revision))return Response.json({error:'Revision changed; reload before deciding'},{status:409});
+  if(requestId){
+   const [request]=await list('ClientFeedbackRequest',{id:requestId});
+   if(!request||request.project_id!==projectId||request.request_type!=='custom_parts_review'||!request.posted_at)return Response.json({error:'Review request unavailable'},{status:403});
+   const links=await list('CustomPartReviewRequestItem',{request_id:requestId,project_custom_part_id:assignmentId,revision_id:revisionId});
+   if(links.length!==1)return Response.json({error:'Configuration not included in this request'},{status:403});
+  }
   const decisions=await list('ProjectPartDecisionEvent',{revision_id:revisionId});
   if(decisions.length)return Response.json({error:'Revision already decided'},{status:409});
   const note=typeof b.note==='string'?b.note.trim().slice(0,4000):'';
