@@ -670,7 +670,7 @@ export default function ClientFeedbackDetail() {
                 <p className="text-xs text-gray-400 italic">Select images below to review</p>
               )}
 
-              {request?.request_type==='custom_parts_review'&&<CustomPartsReviewSelection requestId={requestId}/>}
+              {request?.request_type==='custom_parts_review'&&<CustomPartsReviewSelection requestId={requestId} projectId={request?.project_id}/>}
 
               {/* Hierarchical action bar */}
               <DetailActionBar
