@@ -187,6 +187,7 @@ export default function CreateFeedbackRequestModal({ open, onClose, projectId, u
             </Select>
           </div>
 
+          {formData.request_type === 'custom_parts_review' && <p className="text-xs text-amber-300">This request displays configurations already submitted for review from Custom Parts Configuration. Creating the request does not submit or attach draft configurations. Submit the configurations separately before posting this request to the client.</p>}
           <div>
             <Label>Description</Label>
             <DescriptionWithEmbeds
