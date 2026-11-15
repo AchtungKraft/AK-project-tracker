@@ -25,6 +25,22 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Request not found' }, { status: 404 });
         }
 
+        // Custom-parts reviews must have explicit, current, submitted revision links before posting.
+        if(status==='posted' && request.request_type==='custom_parts_review'){
+          const db=base44.asServiceRole.entities;
+          const rows=await db.CustomPartReviewRequestItem.filter({request_id:requestId});
+          const links=Array.isArray(rows)?rows:rows.items||[];
+          if(!links.length)return Response.json({error:'Select at least one submitted configuration before posting'},{status:409});
+          for(const link of links){
+            const items=await db.ProjectCustomPart.filter({id:link.project_custom_part_id});
+            const item=(Array.isArray(items)?items:items.items||[])[0];
+            if(!item||item.project_id!==request.project_id||item.selection_status!=='SUBMITTED'||Number(item.current_revision)!==Number(link.revision_number))return Response.json({error:'Configuration selection changed; review and save again'},{status:409});
+            const revs=await db.ProjectPartSelectionRevision.filter({id:link.revision_id});
+            const rev=(Array.isArray(revs)?revs:revs.items||[])[0];
+            if(!rev||rev.project_id!==request.project_id||rev.project_custom_part_id!==item.id)return Response.json({error:'Linked revision unavailable'},{status:409});
+          }
+        }
+
         // Update the request with server-side timestamp
         const updateData = { status };
         
