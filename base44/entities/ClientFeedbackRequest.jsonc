@@ -49,6 +49,7 @@
         "budget_review",
         "deliverable_review",
         "client_scope_review",
+        "custom_parts_review",
         "retainer_review"
       ],
       "description": "Type of feedback request"
