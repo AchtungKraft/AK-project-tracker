@@ -4,7 +4,7 @@ import {createClientFromRequest} from 'npm:@base44/sdk@0.8.52';
 Deno.serve(async req=>{
  try{
   if(req.method!=='POST')return Response.json({error:'POST required'},{status:405});
-  const {projectId,token}=await req.json().catch(()=>({}));
+  const {projectId,token,requestId}=await req.json().catch(()=>({}));
   if(typeof projectId!=='string'||!projectId||typeof token!=='string'||token.length<12)return Response.json({error:'Project access token required'},{status:403});
   const api=createClientFromRequest(req),db=api.asServiceRole.entities;
   const list=async(name,q)=>{const r=await db[name].filter(q);return Array.isArray(r)?r:r.items||[]};
@@ -12,12 +12,20 @@ Deno.serve(async req=>{
   if(accesses.length!==1)return Response.json({error:'Access denied'},{status:403});
   const [project]=await list('Project',{id:projectId});
   if(!project||project.is_system_project)return Response.json({error:'Project not found'},{status:404});
+  let linked=null;
+  if(requestId){
+   const [request]=await list('ClientFeedbackRequest',{id:requestId});
+   if(!request||request.project_id!==projectId||request.request_type!=='custom_parts_review'||!request.posted_at)return Response.json({error:'Review request unavailable'},{status:403});
+   linked=await list('CustomPartReviewRequestItem',{request_id:requestId});
+  }
   const assigned=await list('ProjectCustomPart',{project_id:projectId});
   const submitted=assigned.filter(x=>['SUBMITTED','APPROVED','CHANGES_REQUESTED'].includes(x.selection_status));
   const result=[];
   for(const item of submitted){
    const revisions=await list('ProjectPartSelectionRevision',{project_custom_part_id:item.id});
-   const latest=revisions.find(r=>Number(r.revision_number)===Number(item.current_revision));
+   const match=linked?.find(x=>x.project_custom_part_id===item.id);
+   if(linked&&!match)continue;
+   const latest=linked?revisions.find(r=>r.id===match.revision_id):revisions.find(r=>Number(r.revision_number)===Number(item.current_revision));
    if(!latest||latest.project_id!==projectId)continue;
    const events=await list('ProjectPartDecisionEvent',{revision_id:latest.id});
    const decision=events[0]||null;
