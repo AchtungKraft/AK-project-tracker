@@ -39,6 +39,10 @@ export const REQUEST_TYPE_UI = {
     label: "Deliverable Review",
     color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/50 border"
   },
+  custom_parts_review: {
+    label: "Custom Parts Review",
+    color: "bg-sky-500/20 text-sky-400 border-sky-500/50 border"
+  },
   client_scope_review: {
     label: "Scope Review",
     color: "bg-cyan-500/20 text-cyan-400 border-cyan-500/50 border"
@@ -65,6 +69,7 @@ export const REQUEST_TYPE_BEHAVIOR = {
   update: "decision",
   budget_review: "image_review",      // Structured review - same as design_review
   deliverable_review: "image_review",  // Structured review - same as design_review
+  custom_parts_review: "custom_parts_review", // Dedicated configuration decisions, not generic approval
   client_scope_review: "scope_review",  // Item-level approval workflow
   retainer_review: "retainer_review"  // Revision + content-hash checked approval
 };
@@ -80,7 +85,8 @@ export const CREATE_TYPE_OPTIONS = [
   "budget_review",
   "deliverable_review",
   "todo_list",
-  "client_scope_review"
+  "client_scope_review",
+  "custom_parts_review"
 ];
 
 export const getRequestTypeInfo = (type) => {
