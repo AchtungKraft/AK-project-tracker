@@ -1,0 +1,14 @@
+import React,{useState} from 'react';
+import {useQuery,useQueryClient} from '@tanstack/react-query';
+import {base44} from '@/api/base44Client';
+import {Button} from '@/components/ui/button';
+import {toast} from 'sonner';
+export default function CustomPartsReviewSelection({requestId}){
+ const qc=useQueryClient(),[selected,setSelected]=useState(null),[busy,setBusy]=useState(false);
+ const key=['custom-parts-request-selection',requestId];
+ const {data,isLoading,error}=useQuery({queryKey:key,enabled:!!requestId,queryFn:async()=>{const r=await base44.functions.invoke('manageCustomPartsReviewRequest',{action:'list',requestId});const v=r?.data||r;if(!v.success)throw Error(v.error||'Cannot load configurations');return v}});
+ const items=data?.items||[];
+ const chosen=selected??items.filter(x=>x.linked_revision_id).map(x=>x.id);
+ const save=async()=>{setBusy(true);try{const r=await base44.functions.invoke('manageCustomPartsReviewRequest',{action:'select',requestId,assignmentIds:chosen});const v=r?.data||r;if(!v.success)throw Error(v.error||'Could not save selection');await qc.invalidateQueries({queryKey:key});setSelected(null);toast.success('Review configurations saved')}catch(e){toast.error(e.message)}finally{setBusy(false)}};
+ return <section className="rounded-lg border border-sky-800/60 bg-gray-900/60 p-3 space-y-3"><h3 className="font-semibold">Custom Parts Review — included configurations</h3><p className="text-xs text-gray-400">Select only submitted configurations. The exact revision is recorded for this request. Draft and incomplete configurations cannot be sent.</p>{isLoading?<p>Loading configurations…</p>:error?<p role="alert">{error.message}</p>:items.length===0?<p className="text-sm text-amber-300">No custom parts assigned to this project.</p>:<div className="space-y-2">{items.map(item=><label key={item.id} className="flex items-start gap-3 border border-gray-700 rounded p-2"><input type="checkbox" className="mt-1" disabled={data.posted||item.status!=='SUBMITTED'} checked={chosen.includes(item.id)} onChange={e=>setSelected(s=>{const a=s??chosen;return e.target.checked?[...a,item.id]:a.filter(x=>x!==item.id)})}/><span className="flex-1 min-w-0"><span className="font-medium text-sm">{item.name}</span><span className="block text-xs text-gray-400">{item.status.replaceAll('_',' ')}{item.revision_number? ' · Revision '+item.revision_number:''}</span>{(item.snapshot?.options||[]).map(o=><span key={o.group_id} className="block text-xs text-gray-300">{o.name}: {o.choice?.label||'Not selected'}</span>)}</span></label>)}</div>}{!data?.posted&&<Button disabled={busy||isLoading||!!error} onClick={save}>Save included configurations ({chosen.length})</Button>}{data?.posted&&<p className="text-xs text-gray-400">Selection locked after posting.</p>}</section>;
+}
