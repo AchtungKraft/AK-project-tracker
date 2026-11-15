@@ -9,7 +9,7 @@ Deno.serve(async req => {
   if(!actor)return Response.json({error:'Authentication required'},{status:401});
   if(actor.role!=='admin')return Response.json({error:'Administrator required'},{status:403});
   const body=await req.json().catch(()=>null);
-  if(!body||!['assign','save_draft','submit_internal'].includes(body.action))return Response.json({error:'Invalid action'},{status:400});
+  if(!body||!['assign','save_draft','submit_internal','start_revision'].includes(body.action))return Response.json({error:'Invalid action'},{status:400});
   const db=api.asServiceRole.entities;
   const projectId=body.project_id;
   if(typeof projectId!=='string'||!projectId)return Response.json({error:'Project required'},{status:400});
@@ -35,7 +35,17 @@ Deno.serve(async req => {
   const items=await list('ProjectCustomPart',{id:itemId});
   const item=items[0];
   if(!item||item.project_id!==projectId)return Response.json({error:'Assignment not found in project'},{status:404});
-  if(['APPROVED','SUBMITTED','CHANGES_REQUESTED'].includes(item.selection_status))return Response.json({error:'Submitted or decided configurations are locked until a verified revision workflow is available.'},{status:409});
+  if(body.action==='start_revision'){
+   if(item.selection_status!=='CHANGES_REQUESTED')return Response.json({error:'Only changes-requested configurations can start a revision.'},{status:409});
+   const previous=await list('ProjectPartSelectionRevision',{project_custom_part_id:itemId});
+   const latest=previous.find(r=>r.revision_number===item.current_revision);
+   if(!latest)return Response.json({error:'Current revision not found'},{status:409});
+   const decisions=await list('ProjectPartDecisionEvent',{revision_id:latest.id});
+   if(decisions.length!==1||decisions[0].decision!=='CHANGES_REQUESTED')return Response.json({error:'A verified change request is required'},{status:409});
+   await db.ProjectCustomPart.update(itemId,{selection_status:'DRAFT'});
+   return Response.json({success:true,status:'DRAFT',previous_revision:item.current_revision});
+  }
+  if(['APPROVED','SUBMITTED','CHANGES_REQUESTED'].includes(item.selection_status))return Response.json({error:'Submitted or decided configurations are locked.'},{status:409});
   const definitions=await list('CustomPartDefinition',{id:item.custom_part_id});
   const part=definitions[0];
   if(!part)return Response.json({error:'Part definition unavailable'},{status:404});
@@ -62,11 +72,16 @@ Deno.serve(async req => {
   if(missing.length)return Response.json({error:'Required selections missing',missing},{status:400});
   if(item.selection_status==='SUBMITTED')return Response.json({error:'Already submitted'},{status:409});
   const revisions=await list('ProjectPartSelectionRevision',{project_custom_part_id:itemId});
-  if(revisions.length)return Response.json({error:'Existing submission requires revision workflow'},{status:409});
+  const latestNumber=Math.max(0,...revisions.map(r=>Number(r.revision_number)||0));
+  if(latestNumber){
+   const latest=revisions.find(r=>r.revision_number===latestNumber);
+   const decisions=await list('ProjectPartDecisionEvent',{revision_id:latest.id});
+   if(decisions.length!==1||decisions[0].decision!=='CHANGES_REQUESTED')return Response.json({error:'Previous revision must have a recorded change request'},{status:409});
+  }
   const snapshot={part:{id:part.id,name:part.name,category:part.category,description:part.description,reference_images:part.reference_images||[]},options:groups.map(g=>({group_id:g.id,name:g.name,required:!!g.required,choice_id:selections[g.id]||null,choice:(g.choices||[]).find(c=>c.id===selections[g.id])||null}))};
   const now=new Date().toISOString();
-  const revision=await db.ProjectPartSelectionRevision.create({project_id:projectId,project_custom_part_id:itemId,custom_part_id:item.custom_part_id,revision_number:1,snapshot,state:'SUBMITTED',submitted_at:now,submitted_by:actor.id});
-  await db.ProjectCustomPart.update(itemId,{selected_options:selections,selection_status:'SUBMITTED',current_revision:1});
+  const revision=await db.ProjectPartSelectionRevision.create({project_id:projectId,project_custom_part_id:itemId,custom_part_id:item.custom_part_id,revision_number:latestNumber+1,snapshot,state:'SUBMITTED',submitted_at:now,submitted_by:actor.id});
+  await db.ProjectCustomPart.update(itemId,{selected_options:selections,selection_status:'SUBMITTED',current_revision:latestNumber+1});
   return Response.json({success:true,status:'SUBMITTED',revision_id:revision.id});
  }catch(error){console.error('[manageCustomPartConfiguration]',error);return Response.json({error:'Configuration operation failed'},{status:500})}
 });
