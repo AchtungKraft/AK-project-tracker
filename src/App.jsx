@@ -21,6 +21,7 @@ import TechnicianQueue from './pages/TechnicianQueue';
 import Clients from './pages/Clients';
 import ClientAccountDetail from './pages/ClientAccountDetail';
 import RetainerDetail from './pages/RetainerDetail';
+import CustomPartsConfiguration from './pages/CustomPartsConfiguration';
 
 // VendorPOBuilder page removed — vendor PO creation is now inline in GlobalNeedToOrder
 
@@ -120,6 +121,7 @@ const AuthenticatedApp = () => {
         </LayoutWrapper>
       } />
 
+      <Route path="/custompartsconfiguration" element={<LayoutWrapper currentPageName="CustomPartsConfiguration"><CustomPartsConfiguration /></LayoutWrapper>} />
       <Route path="/retainer" element={
         <LayoutWrapper currentPageName="RetainerDetail">
           <RetainerDetail />
