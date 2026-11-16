@@ -1,0 +1,77 @@
+{
+  "name": "ProjectPartSelectionRevision",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "project_custom_part_id": {
+      "type": "string"
+    },
+    "custom_part_id": {
+      "type": "string"
+    },
+    "revision_number": {
+      "type": "integer"
+    },
+    "snapshot": {
+      "type": "object",
+      "description": "Immutable captured part and option definitions with selected labels/images"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "SUBMITTED",
+        "APPROVED",
+        "CHANGES_REQUESTED"
+      ]
+    },
+    "submitted_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "submitted_by": {
+      "type": "string"
+    },
+    "decision_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "decision_by": {
+      "type": "string"
+    },
+    "decision_note": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "project_custom_part_id",
+    "custom_part_id",
+    "revision_number",
+    "snapshot",
+    "state"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

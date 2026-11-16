@@ -230,6 +230,15 @@ Deno.serve(async (req) => {
                 previousStatus: request.status,
                 newStatus: updatedRequest?.status || request.status,
             }).catch(err => console.error('[NOTIFICATION] Failed:', err.message));
+
+            // ── CLIENT CONTACT NOTIFICATIONS — canonical service, never affects the result ──
+            if (decisions[0]) {
+                await Promise.race([
+                    base44.asServiceRole.functions.invoke('notifyClientFeedbackContacts', { action: 'dispatch', sourceType: 'decision', sourceId: decisions[0].id })
+                        .catch(err => console.error('[CLIENT_NOTIFY] Failed:', err.message)),
+                    new Promise(r => setTimeout(r, 4000)),
+                ]);
+            }
         }
 
         return Response.json({

@@ -252,6 +252,15 @@ Deno.serve(async (req) => {
             warnings.push({ type: 'AUTO_REOPEN_FAILED', message: reopenErr?.message });
         }
 
+        // ── CLIENT CONTACT NOTIFICATIONS — client-visible comments only, never affects the result ──
+        if (comment.visibility === 'client_visible') {
+            await Promise.race([
+                base44.asServiceRole.functions.invoke('notifyClientFeedbackContacts', { action: 'dispatch', sourceType: 'comment', sourceId: comment.id })
+                    .catch(err => console.warn('CLIENT_NOTIFY_FAILED', { commentId: comment.id, error: err?.message })),
+                new Promise(r => setTimeout(r, 4000)),
+            ]);
+        }
+
         const response = { success: true, comment, attachments };
         if (warnings.length > 0) response.warnings = warnings;
         return Response.json(response);

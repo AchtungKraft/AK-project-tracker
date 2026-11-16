@@ -1,0 +1,74 @@
+{
+  "name": "ProjectPartDecisionEvent",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "project_custom_part_id": {
+      "type": "string"
+    },
+    "revision_id": {
+      "type": "string"
+    },
+    "revision_number": {
+      "type": "integer"
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "APPROVED",
+        "CHANGES_REQUESTED"
+      ]
+    },
+    "actor_type": {
+      "type": "string",
+      "enum": [
+        "internal_admin",
+        "client_contact"
+      ]
+    },
+    "actor_id": {
+      "type": "string"
+    },
+    "decided_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "note": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "project_custom_part_id",
+    "revision_id",
+    "revision_number",
+    "decision",
+    "actor_type",
+    "actor_id",
+    "decided_at"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

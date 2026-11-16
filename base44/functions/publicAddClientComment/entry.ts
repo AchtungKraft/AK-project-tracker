@@ -239,6 +239,13 @@ Deno.serve(async (req) => {
             }).catch(err => console.error('[NOTIFICATION] Failed:', err.message));
         }
 
+        // ── CLIENT CONTACT NOTIFICATIONS — canonical service, never affects the result ──
+        await Promise.race([
+            base44.asServiceRole.functions.invoke('notifyClientFeedbackContacts', { action: 'dispatch', sourceType: 'comment', sourceId: newComment.id })
+                .catch(err => console.error('[CLIENT_NOTIFY] Failed:', err.message)),
+            new Promise(r => setTimeout(r, 4000)),
+        ]);
+
         return Response.json({
             success: true,
             comment: newComment,

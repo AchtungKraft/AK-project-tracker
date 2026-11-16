@@ -341,6 +341,13 @@ Deno.serve(async (req) => {
         comment: `Scope confirmed — revision ${latestRevision + 1}: ${approved.length} approved, total estimate $${aRollup.total_estimate_min.toLocaleString()}–$${aRollup.total_estimate_max.toLocaleString()}`,
       });
 
+      // Client contact notifications (no financial details) — never affects the result
+      await Promise.race([
+        base44.asServiceRole.functions.invoke('notifyClientFeedbackContacts', { action: 'dispatch', sourceType: 'scope_confirmation', sourceId: confirmation.id })
+          .catch((e) => console.error('[CLIENT_NOTIFY] Failed:', e.message)),
+        new Promise((r) => setTimeout(r, 4000)),
+      ]);
+
       return Response.json({ success: true, confirmation }, { headers: CORS });
     }
 

@@ -1,0 +1,126 @@
+{
+  "name": "ClientFeedbackNotification",
+  "type": "object",
+  "properties": {
+    "dedupe_key": {
+      "type": "string",
+      "description": "event_key + recipient email. One delivery record per recipient per event."
+    },
+    "event_key": {
+      "type": "string",
+      "description": "Idempotency key for the source event, e.g. comment:<id>"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "CLIENT_COMMENT",
+        "TEAM_COMMENT",
+        "APPROVED",
+        "CHANGES_REQUESTED"
+      ],
+      "enumColors": [
+        "blue",
+        "purple",
+        "green",
+        "yellow"
+      ]
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "comment",
+        "decision",
+        "scope_confirmation"
+      ]
+    },
+    "source_id": {
+      "type": "string"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "actor_type": {
+      "type": "string",
+      "enum": [
+        "client_contact",
+        "internal_user"
+      ]
+    },
+    "actor_id": {
+      "type": "string"
+    },
+    "actor_name": {
+      "type": "string"
+    },
+    "recipient_contact_id": {
+      "type": "string"
+    },
+    "recipient_email": {
+      "type": "string"
+    },
+    "recipient_name": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "sent",
+        "failed"
+      ],
+      "enumColors": [
+        "gray",
+        "green",
+        "red"
+      ],
+      "default": "pending"
+    },
+    "attempts": {
+      "type": "integer",
+      "default": 0
+    },
+    "provider_message_id": {
+      "type": "string"
+    },
+    "error": {
+      "type": "string"
+    },
+    "sent_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "dedupe_key",
+    "event_key",
+    "event_type",
+    "request_id",
+    "recipient_email",
+    "status"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "client_notification_service_only"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "client_notification_service_only"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "client_notification_service_only"
+      }
+    }
+  }
+}

@@ -46,6 +46,7 @@ import ScopeReviewPrintView from "@/components/scope/ScopeReviewPrintView";
 import ScopeListPrintView from "@/components/scope/ScopeListPrintView";
 import ShopReviewPrintLoader from "@/components/scope/shopReview/ShopReviewPrintLoader";
 import CustomPartsReviewSelection from "@/components/clientportal/CustomPartsReviewSelection";
+import ClientNotificationsPanel from "@/components/clientportal/notifications/ClientNotificationsPanel";
 
 export default function ClientFeedbackDetail() {
   const isMobile = useIsMobile();
@@ -755,6 +756,8 @@ export default function ClientFeedbackDetail() {
 
           {/* Review Cycle — how has this review progressed? */}
           <ReviewCycleSummary request={enrichedRequest} isMobile={isMobile} />
+
+          {user?.role === 'admin' && <ClientNotificationsPanel requestId={requestId} />}
 
           {/* Comment Composer — positioned above thread */}
           <FeedbackCommentComposer

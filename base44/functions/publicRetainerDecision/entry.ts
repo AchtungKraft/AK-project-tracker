@@ -72,6 +72,11 @@ Deno.serve(async (req) => {
       actionType: decision === 'approved' ? 'APPROVED' : 'REVISION_REQUESTED', comment: cleanNote || null,
       previousStatus: request.status, newStatus: decision,
     }).catch((e) => console.error('[NOTIFICATION] Failed:', e.message));
+    await Promise.race([
+      base44.asServiceRole.functions.invoke('notifyClientFeedbackContacts', { action: 'dispatch', sourceType: 'decision', sourceId: dec.id })
+        .catch((e) => console.error('[CLIENT_NOTIFY] Failed:', e.message)),
+      new Promise((r) => setTimeout(r, 4000)),
+    ]);
 
     return Response.json({ success: true, decision, snapshot_id: snap.id }, { headers: H });
   } catch (error) {
