@@ -21,13 +21,6 @@ const MAX_EVENT_AGE_MS = 24 * 60 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
 const EMAIL_RE = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]{2,}$/;
 
-const LABELS = {
-  CLIENT_COMMENT: { subject: 'NEW COMMENT', banner: 'New Comment', color: '#2563eb' },
-  TEAM_COMMENT: { subject: 'NEW COMMENT', banner: 'New Comment from Ächtung Kraft', color: '#2563eb' },
-  APPROVED: { subject: 'FEEDBACK APPROVED', banner: 'Feedback Approved', color: '#16a34a' },
-  CHANGES_REQUESTED: { subject: 'CHANGES REQUESTED', banner: 'Changes Requested', color: '#ea580c' },
-};
-
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
 function htmlToText(html) {
@@ -114,7 +107,7 @@ async function buildEvent(db, sourceType, sourceId) {
       source_type: 'decision', source_id: d.id, request_id: d.request_id, created: d.created_date,
       actor_type: 'client_contact', actor_id: d.decided_by_id, occurred_at: d.decided_at || d.created_date,
       comment_text: String(d.note || '').trim().slice(0, 3000),
-      summary: type === 'APPROVED' ? `Approved ${what}.` : `Changes requested on ${what}.`,
+      summary: !images ? null : type === 'APPROVED' ? `Approved ${what}.` : `Changes requested on ${what}.`,
     };
   }
   if (sourceType === 'scope_confirmation') {
@@ -126,7 +119,7 @@ async function buildEvent(db, sourceType, sourceId) {
       event_key: `scope_confirmation:${s.id}`, event_type: 'APPROVED',
       source_type: 'scope_confirmation', source_id: s.id, request_id: s.request_id, created: s.created_date,
       actor_type: 'client_contact', actor_id: s.confirmed_by_id, occurred_at: s.confirmed_at || s.created_date,
-      comment_text: '', summary: `Scope confirmed${s.revision ? ` (revision ${s.revision})` : ''}: ${n} of ${s.total_items || n} items approved.`,
+      comment_text: '', summary: `Project scope confirmed: ${n} of ${s.total_items || n} items approved.`,
     };
   }
   return { skip: 'Unknown source type' };
@@ -144,43 +137,80 @@ async function loadContext(db, ev) {
     clientLabel = acct?.name || '';
   }
   let actorName = 'Client';
+  let actorDisplay = 'Client';
   if (ev.actor_type === 'client_contact') {
-    actorName = (await nf(db.ClientContact.get(ev.actor_id)))?.name || 'Client';
+    actorName = actorDisplay = (await nf(db.ClientContact.get(ev.actor_id)))?.name || 'Client';
   } else {
     const u = ev.actor_id ? await nf(db.User.get(ev.actor_id)) : null;
     actorName = `${u?.full_name || 'Team'} (Ächtung Kraft)`;
+    actorDisplay = u?.full_name || 'The Ächtung Kraft team';
   }
-  return { request, project, clientLabel, actorName };
+  return { request, project, clientLabel, actorName, actorDisplay };
+}
+
+// ── CLIENT-FACING EMAIL TEMPLATE (portal recipients only) ──
+// Internal activity-monitor emails live in sendClientActivityNotification and are untouched.
+const CLIENT_COPY = {
+  CLIENT_COMMENT: { subject: 'New comment', heading: 'A new comment on your project', verb: 'commented on', cta: 'View Project Feedback', quote: 'Comment', by: 'Comment from' },
+  TEAM_COMMENT: { subject: 'Project update', heading: 'A new update from Ächtung Kraft', verb: 'commented on', cta: 'View Project Feedback', quote: 'Update', by: 'Update from' },
+  APPROVED: { subject: 'Feedback approved', heading: 'Project feedback approved', verb: 'approved', cta: 'View Approved Feedback', quote: 'Approval note', by: 'Approved by' },
+  CHANGES_REQUESTED: { subject: 'Changes requested', heading: 'Changes requested on project feedback', verb: 'requested changes to', cta: 'Review Requested Changes', quote: 'Requested changes', by: 'Changes requested by' },
+};
+const FONT = "Arial,Helvetica,sans-serif";
+
+function renderClientEmail({ copy, actor, project, request, when, summary, quote, link }) {
+  const sentence = `${esc(actor)} ${copy.verb} <strong style="color:#111827;">${esc(request)}</strong>.`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="x-apple-disable-message-reformatting"><meta name="color-scheme" content="light"><title>${esc(copy.subject)} — ${esc(project)}</title></head>
+<body style="margin:0;padding:0;background:#ffffff;-webkit-text-size-adjust:100%;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${esc(actor)} ${esc(copy.verb)} ${esc(request)}.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;"><tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border:1px solid #e5e7eb;border-radius:6px;">
+<tr><td bgcolor="#dc2626" style="background:#dc2626;padding:18px 28px;border-radius:6px 6px 0 0;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+<td style="vertical-align:middle;"><img src="${LOGO}" alt="Ächtung Kraft" height="30" style="display:block;height:30px;width:auto;border:0;"></td>
+<td style="vertical-align:middle;padding-left:10px;font-family:${FONT};font-size:15px;font-weight:bold;color:#ffffff;letter-spacing:0.5px;">ÄCHTUNG KRAFT</td>
+</tr></table></td></tr>
+<tr><td style="padding:32px 28px 0;font-family:${FONT};">
+<h1 style="margin:0 0 10px;font-size:22px;line-height:1.3;font-weight:bold;color:#111827;">${esc(copy.heading)}</h1>
+<p style="margin:0;font-size:15px;line-height:1.6;color:#374151;">${sentence}</p></td></tr>
+<tr><td style="padding:20px 28px 0;font-family:${FONT};">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#fafafa;border:1px solid #e5e7eb;border-radius:6px;"><tr><td style="padding:14px 16px;">
+<div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#6b7280;">Project</div>
+<div style="font-size:15px;color:#111827;font-weight:bold;margin:2px 0 10px;">${esc(project)}</div>
+<div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#6b7280;">Feedback</div>
+<div style="font-size:15px;color:#111827;margin-top:2px;">${esc(request)}</div>
+</td></tr></table></td></tr>
+${quote || summary ? `<tr><td style="padding:16px 28px 0;font-family:${FONT};">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-left:4px solid #dc2626;padding:4px 0 4px 16px;">
+${quote ? `<div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#6b7280;margin-bottom:6px;">${esc(copy.quote)}</div><div style="font-size:15px;line-height:1.6;color:#111827;white-space:pre-wrap;">${esc(quote)}</div>` : ''}
+${summary ? `<div style="font-size:14px;line-height:1.5;color:#374151;${quote ? 'margin-top:10px;' : ''}">${esc(summary)}</div>` : ''}
+</td></tr></table></td></tr>` : ''}
+<tr><td style="padding:12px 28px 0;font-family:${FONT};font-size:13px;color:#6b7280;">${esc(copy.by)} ${esc(actor)} · ${esc(when)}</td></tr>
+<tr><td style="padding:28px 28px 8px;" align="left">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="#dc2626" style="background:#dc2626;border-radius:6px;">
+<a href="${esc(link)}" target="_blank" style="display:inline-block;padding:14px 28px;font-family:${FONT};font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:6px;">${esc(copy.cta)}</a>
+</td></tr></table></td></tr>
+<tr><td style="padding:4px 28px 28px;font-family:${FONT};font-size:12px;line-height:1.5;color:#9ca3af;">Button not working? Open <a href="${esc(link)}" style="color:#6b7280;word-break:break-all;">${esc(link)}</a></td></tr>
+<tr><td style="padding:18px 28px;border-top:1px solid #e5e7eb;font-family:${FONT};font-size:12px;line-height:1.6;color:#6b7280;">
+<strong style="color:#111827;">Ächtung Kraft</strong> · Built. Not Bought.<br>You're receiving this because you have access to this project in the Ächtung Kraft Client Portal. Please reply in the portal so the whole team sees your response.</td></tr>
+</table></td></tr></table></body></html>`;
+  const text = [
+    copy.heading, '', `${actor} ${copy.verb} ${request}.`, '', `Project: ${project}`, `Feedback: ${request}`,
+    quote ? `\n${copy.quote}:\n${quote}` : '', summary ? `\n${summary}` : '', `\n${copy.by} ${actor} · ${when}`,
+    `\n${copy.cta}: ${link}`, '\n— Ächtung Kraft · Built. Not Bought.',
+  ].filter(Boolean).join('\n');
+  return { html, text };
 }
 
 function buildEmail(ev, ctx, r) {
-  const L = LABELS[ev.event_type];
-  const subject = `${L.subject} — ${ctx.clientLabel ? `${ctx.clientLabel} // ` : ''}${ctx.project.name}`;
+  const copy = CLIENT_COPY[ev.event_type];
   const link = r.link.replace('__RID__', encodeURIComponent(ctx.request.id));
-  const when = fmtTime(ev.occurred_at);
-  const row = (k, v) => `<tr><td style="padding:6px 0;width:130px;font-size:13px;color:#6b7280;vertical-align:top;">${k}</td><td style="padding:6px 0;font-size:14px;color:#111827;">${esc(v)}</td></tr>`;
-  const quoteLabel = ev.event_type.endsWith('COMMENT') ? 'Comment' : 'Note';
-  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#fafafa;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;"><tr><td align="center" style="padding:24px 12px;">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border:1px solid #e5e7eb;border-radius:6px;font-family:Arial,Helvetica,sans-serif;">
-<tr><td style="background:#dc2626;padding:16px 24px;border-radius:6px 6px 0 0;"><img src="${LOGO}" alt="Ächtung Kraft" height="28" style="height:28px;vertical-align:middle;" /> <span style="color:#ffffff;font-size:15px;font-weight:bold;vertical-align:middle;margin-left:8px;">Ächtung Kraft Projects</span></td></tr>
-<tr><td style="padding:28px 24px 4px;"><div style="font-size:12px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;color:${L.color};">${esc(L.banner)}</div>
-<h1 style="margin:6px 0 4px;font-size:22px;color:#111827;">${esc(ctx.request.title || 'Feedback Request')}</h1>
-<p style="margin:0;font-size:14px;color:#6b7280;">${esc(ctx.actorName)} ${ev.event_type.endsWith('COMMENT') ? 'added a comment' : ev.event_type === 'APPROVED' ? 'approved feedback' : 'requested changes'} on ${esc(ctx.project.name)}.</p></td></tr>
-<tr><td style="padding:16px 24px 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-${row('Project', ctx.project.name)}${row('Feedback request', ctx.request.title || '—')}${row('Activity', L.banner)}${row('By', ctx.actorName)}${row('Date', when)}
-</table></td></tr>
-${ev.summary ? `<tr><td style="padding:12px 24px 0;font-size:14px;color:#111827;"><strong>${esc(ev.summary)}</strong></td></tr>` : ''}
-${ev.comment_text ? `<tr><td style="padding:12px 24px 0;"><div style="background:#f3f4f6;border-left:4px solid ${L.color};border-radius:4px;padding:12px 14px;"><div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#6b7280;margin-bottom:6px;">${quoteLabel}</div><div style="font-size:14px;line-height:1.55;color:#111827;white-space:pre-wrap;">${esc(ev.comment_text)}</div></div></td></tr>` : ''}
-<tr><td style="padding:24px 24px 8px;"><a href="${esc(link)}" style="display:inline-block;background:#dc2626;color:#ffffff;padding:13px 26px;border-radius:6px;font-size:14px;font-weight:bold;text-decoration:none;letter-spacing:0.5px;">OPEN FEEDBACK REQUEST</a></td></tr>
-<tr><td style="padding:0 24px 20px;font-size:12px;color:#6b7280;">Or open: <a href="${esc(link)}" style="color:#6b7280;word-break:break-all;">${esc(link)}</a></td></tr>
-<tr><td style="padding:16px 24px;border-top:1px solid #e5e7eb;font-size:12px;color:#6b7280;">You're receiving this because you have access to this project's feedback in the Ächtung Kraft client portal. Please respond in the portal; replies to this email are not monitored.</td></tr>
-</table></td></tr></table></body></html>`;
-  const text = [
-    `${L.banner.toUpperCase()}`, '', `Project: ${ctx.project.name}`, `Feedback request: ${ctx.request.title || '—'}`,
-    `By: ${ctx.actorName}`, `Date: ${when}`, ev.summary ? `\n${ev.summary}` : '', ev.comment_text ? `\n${quoteLabel}:\n${ev.comment_text}` : '',
-    `\nOpen feedback request: ${link}`, '\n— Ächtung Kraft Projects',
-  ].filter(Boolean).join('\n');
+  const actor = ctx.actorDisplay || ctx.actorName;
+  const subject = `${copy.subject} — ${ctx.project.name}`;
+  const { html, text } = renderClientEmail({
+    copy, actor, project: ctx.project.name, request: ctx.request.title || 'Project feedback',
+    when: fmtTime(ev.occurred_at), summary: ev.summary, quote: ev.comment_text, link,
+  });
   return { subject, html, text };
 }
 
