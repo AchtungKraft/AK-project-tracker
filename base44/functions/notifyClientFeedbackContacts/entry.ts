@@ -68,7 +68,7 @@ async function resolveRecipients(db, projectId, excludeContactId) {
     const link = slug
       ? `${PORTAL_URL}/ClientFeedbackRequestDetail?id=__RID__&slug=${encodeURIComponent(slug)}`
       : a.share_token ? `${PORTAL_URL}/ClientFeedbackRequestDetail?id=__RID__&token=${encodeURIComponent(a.share_token)}` : PORTAL_URL;
-    recipients.push({ ...base, link });
+    recipients.push({ ...base, link, slug });
   }
   // A recipient excluded by self-action must also not receive via a second email match
   return { recipients, excluded };
@@ -149,55 +149,44 @@ async function loadContext(db, ev) {
 }
 
 // ── CLIENT-FACING EMAIL TEMPLATE (portal recipients only) ──
+// Mirrors the canonical "Review Requested" layout in sendNeedsReviewEmail (buildReviewEmailHtml):
+// same container, greeting, PROJECT label, title, section break, red CTA, direct link, portal code and sign-off.
+// Backend functions deploy independently, so the shared styles are mirrored here rather than imported.
 // Internal activity-monitor emails live in sendClientActivityNotification and are untouched.
 const CLIENT_COPY = {
-  CLIENT_COMMENT: { subject: 'New comment', heading: 'A new comment on your project', verb: 'commented on', cta: 'View Project Feedback', quote: 'Comment', by: 'Comment from' },
-  TEAM_COMMENT: { subject: 'Project update', heading: 'A new update from Ächtung Kraft', verb: 'commented on', cta: 'View Project Feedback', quote: 'Update', by: 'Update from' },
-  APPROVED: { subject: 'Feedback approved', heading: 'Project feedback approved', verb: 'approved', cta: 'View Approved Feedback', quote: 'Approval note', by: 'Approved by' },
-  CHANGES_REQUESTED: { subject: 'Changes requested', heading: 'Changes requested on project feedback', verb: 'requested changes to', cta: 'Review Requested Changes', quote: 'Requested changes', by: 'Changes requested by' },
+  CLIENT_COMMENT: { subject: 'New comment', intro: () => 'A new comment has been added to a feedback request for your project.', lead: (a) => `${a} commented:`, cta: 'View Project Feedback' },
+  TEAM_COMMENT: { subject: 'Project update', intro: () => "We've added an update to a feedback request for your project.", lead: (a) => `${a} commented:`, cta: 'View Project Feedback' },
+  APPROVED: { subject: 'Feedback approved', intro: (a) => `${a} has approved the following feedback request for your project.`, lead: () => 'Approval comment:', cta: 'View Approved Feedback' },
+  CHANGES_REQUESTED: { subject: 'Changes requested', intro: (a) => `${a} has requested changes to the following feedback request.`, lead: () => 'Requested changes:', cta: 'Review Requested Changes' },
 };
-const FONT = "Arial,Helvetica,sans-serif";
+const CTA_STYLE = 'display:inline-block;background:#cc0000;color:#fff;padding:12px 20px;border-radius:6px;font-weight:600;font-size:15px;text-decoration:none;';
 
-function renderClientEmail({ copy, actor, project, request, when, summary, quote, link }) {
-  const sentence = `${esc(actor)} ${copy.verb} <strong style="color:#111827;">${esc(request)}</strong>.`;
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="x-apple-disable-message-reformatting"><meta name="color-scheme" content="light"><title>${esc(copy.subject)} — ${esc(project)}</title></head>
-<body style="margin:0;padding:0;background:#ffffff;-webkit-text-size-adjust:100%;">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${esc(actor)} ${esc(copy.verb)} ${esc(request)}.</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;"><tr><td align="center" style="padding:24px 12px;">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border:1px solid #e5e7eb;border-radius:6px;">
-<tr><td bgcolor="#dc2626" style="background:#dc2626;padding:18px 28px;border-radius:6px 6px 0 0;">
-<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-<td style="vertical-align:middle;"><img src="${LOGO}" alt="Ächtung Kraft" height="30" style="display:block;height:30px;width:auto;border:0;"></td>
-<td style="vertical-align:middle;padding-left:10px;font-family:${FONT};font-size:15px;font-weight:bold;color:#ffffff;letter-spacing:0.5px;">ÄCHTUNG KRAFT</td>
-</tr></table></td></tr>
-<tr><td style="padding:32px 28px 0;font-family:${FONT};">
-<h1 style="margin:0 0 10px;font-size:22px;line-height:1.3;font-weight:bold;color:#111827;">${esc(copy.heading)}</h1>
-<p style="margin:0;font-size:15px;line-height:1.6;color:#374151;">${sentence}</p></td></tr>
-<tr><td style="padding:20px 28px 0;font-family:${FONT};">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#fafafa;border:1px solid #e5e7eb;border-radius:6px;"><tr><td style="padding:14px 16px;">
-<div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#6b7280;">Project</div>
-<div style="font-size:15px;color:#111827;font-weight:bold;margin:2px 0 10px;">${esc(project)}</div>
-<div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#6b7280;">Feedback</div>
-<div style="font-size:15px;color:#111827;margin-top:2px;">${esc(request)}</div>
-</td></tr></table></td></tr>
-${quote || summary ? `<tr><td style="padding:16px 28px 0;font-family:${FONT};">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-left:4px solid #dc2626;padding:4px 0 4px 16px;">
-${quote ? `<div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#6b7280;margin-bottom:6px;">${esc(copy.quote)}</div><div style="font-size:15px;line-height:1.6;color:#111827;white-space:pre-wrap;">${esc(quote)}</div>` : ''}
-${summary ? `<div style="font-size:14px;line-height:1.5;color:#374151;${quote ? 'margin-top:10px;' : ''}">${esc(summary)}</div>` : ''}
-</td></tr></table></td></tr>` : ''}
-<tr><td style="padding:12px 28px 0;font-family:${FONT};font-size:13px;color:#6b7280;">${esc(copy.by)} ${esc(actor)} · ${esc(when)}</td></tr>
-<tr><td style="padding:28px 28px 8px;" align="left">
-<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="#dc2626" style="background:#dc2626;border-radius:6px;">
-<a href="${esc(link)}" target="_blank" style="display:inline-block;padding:14px 28px;font-family:${FONT};font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:6px;">${esc(copy.cta)}</a>
-</td></tr></table></td></tr>
-<tr><td style="padding:4px 28px 28px;font-family:${FONT};font-size:12px;line-height:1.5;color:#9ca3af;">Button not working? Open <a href="${esc(link)}" style="color:#6b7280;word-break:break-all;">${esc(link)}</a></td></tr>
-<tr><td style="padding:18px 28px;border-top:1px solid #e5e7eb;font-family:${FONT};font-size:12px;line-height:1.6;color:#6b7280;">
-<strong style="color:#111827;">Ächtung Kraft</strong> · Built. Not Bought.<br>You're receiving this because you have access to this project in the Ächtung Kraft Client Portal. Please reply in the portal so the whole team sees your response.</td></tr>
-</table></td></tr></table></body></html>`;
+function renderClientEmail({ copy, greeting, actor, project, request, summary, quote, link, slug }) {
+  const intro = copy.intro(actor);
+  const body = quote || summary
+    ? `<div style="margin-top:28px;border-top:1px solid #e5e5e5;padding-top:20px;">
+    ${quote ? `<div style="font-size:18px;font-weight:600;color:#cc0000;margin-bottom:10px;">${esc(copy.lead(actor))}</div>
+    <div style="border-top:1px solid #e5e5e5;margin-bottom:14px;"></div>
+    <div style="font-size:16px;line-height:1.6;color:#111;"><p style="margin:0;line-height:1.6;white-space:pre-wrap;">${esc(quote)}</p></div>` : ''}
+    ${summary ? `<div style="font-size:15px;color:#555;line-height:1.5;${quote ? 'margin-top:12px;' : ''}">${esc(summary)}</div>` : ''}
+  </div>`
+    : '';
+  const html = `<div style="max-width:580px;margin:0 auto;padding:36px 24px;background:#ffffff;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111;">
+  <div style="font-size:15px;color:#333;line-height:1.5;">${esc(greeting)} ${esc(intro)}</div>
+  <div style="margin-top:20px;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#999;">Project</div>
+  <div style="font-size:16px;font-weight:600;color:#111;margin-top:4px;">${esc(project)}</div>
+  <div style="font-size:24px;font-weight:700;color:#111;margin-top:16px;line-height:1.3;">${esc(request)}</div>
+  ${body}
+  <div style="margin-top:28px;"><a href="${esc(link)}" style="${CTA_STYLE}">${esc(copy.cta)}</a></div>
+  <div style="font-size:13px;color:#666;margin-top:16px;">Direct link: <a href="${esc(link)}" style="color:#666;text-decoration:underline;word-break:break-all;">${esc(link)}</a></div>
+  ${slug ? `<div style="font-size:13px;color:#666;margin-top:12px;">Your portal code: <strong>${esc(slug)}</strong></div>` : ''}
+  <div style="margin-top:32px;font-size:13px;color:#666;">— Achtung Kraft Projects<br/>Precision builds. Clear communication.</div>
+</div>`;
   const text = [
-    copy.heading, '', `${actor} ${copy.verb} ${request}.`, '', `Project: ${project}`, `Feedback: ${request}`,
-    quote ? `\n${copy.quote}:\n${quote}` : '', summary ? `\n${summary}` : '', `\n${copy.by} ${actor} · ${when}`,
-    `\n${copy.cta}: ${link}`, '\n— Ächtung Kraft · Built. Not Bought.',
+    `${greeting} ${intro}`, '', `Project: ${project}`, request, '',
+    quote ? `${copy.lead(actor)}\n\n${quote}\n` : '', summary ? `${summary}\n` : '',
+    `${copy.cta}:`, link, '', slug ? `Your portal code: ${slug}` : '', '',
+    '— Achtung Kraft Projects', 'Precision builds. Clear communication.',
   ].filter(Boolean).join('\n');
   return { html, text };
 }
@@ -205,13 +194,13 @@ ${summary ? `<div style="font-size:14px;line-height:1.5;color:#374151;${quote ? 
 function buildEmail(ev, ctx, r) {
   const copy = CLIENT_COPY[ev.event_type];
   const link = r.link.replace('__RID__', encodeURIComponent(ctx.request.id));
-  const actor = ctx.actorDisplay || ctx.actorName;
-  const subject = `${copy.subject} — ${ctx.project.name}`;
+  const first = String(r.name || '').trim().split(/\s+/)[0];
   const { html, text } = renderClientEmail({
-    copy, actor, project: ctx.project.name, request: ctx.request.title || 'Project feedback',
-    when: fmtTime(ev.occurred_at), summary: ev.summary, quote: ev.comment_text, link,
+    copy, greeting: first ? `Hi ${first},` : 'Hi,', actor: ctx.actorDisplay || ctx.actorName,
+    project: ctx.project.name, request: ctx.request.title || 'Project feedback',
+    summary: ev.summary, quote: ev.comment_text, link, slug: r.slug,
   });
-  return { subject, html, text };
+  return { subject: `${copy.subject} — ${ctx.project.name}`, html, text };
 }
 
 // Resend batch send. One idempotency key per batch payload → retries of the same batch never double-send.
