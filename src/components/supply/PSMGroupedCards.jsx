@@ -282,6 +282,8 @@ export function PSMItemRow({
   const cost = commitment.actual_cost_total ?? commitment.planned_cost_total ?? 0;
   const revenue = commitment.planned_retail_total ?? 0;
   const margin = revenue - cost;
+  // Internal stock demand is never billed: retail/profit/unbilled figures don't apply
+  const isNotBillable = commitment.billing_status === 'not_billable';
   const toOrder = commitment.to_order_qty ?? 0;
 
   // Resolve display names
@@ -347,10 +349,16 @@ export function PSMItemRow({
           <span className="text-gray-500">Cost</span>
           <span className="text-gray-300">{formatCurrencyUSD(cost)}</span>
           <span className="text-gray-600 mx-0.5">·</span>
-          <span className="text-gray-500">Total</span>
-          <span className="text-white">{formatCurrencyUSD(revenue)}</span>
-          <span className="text-gray-600 mx-0.5">·</span>
-          <span className={margin >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(margin)}</span>
+          {isNotBillable ? (
+            <span className="text-gray-500">Internal · not billed</span>
+          ) : (
+            <>
+              <span className="text-gray-500">Total</span>
+              <span className="text-white">{formatCurrencyUSD(revenue)}</span>
+              <span className="text-gray-600 mx-0.5">·</span>
+              <span className={margin >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(margin)}</span>
+            </>
+          )}
         </div>
 
         {/* Primary Action */}
@@ -464,11 +472,11 @@ export function PSMItemRow({
           <div className="flex flex-wrap gap-4 text-xs font-mono text-gray-400">
             <span>Unit Cost: <span className="text-gray-300">{formatCurrencyUSD(commitment.unit_cost_snapshot ?? 0)}</span></span>
             <span>Unit Retail: <span className="text-gray-300">{formatCurrencyUSD(commitment.unit_retail_snapshot ?? 0)}</span></span>
-            <span>Expected Profit: <span className={margin >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(margin)}</span></span>
-            {(commitment.actual_margin ?? 0) !== 0 && Math.abs((commitment.actual_margin ?? 0) - margin) > 0.01 && (
+            {!isNotBillable && <span>Expected Profit: <span className={margin >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(margin)}</span></span>}
+            {!isNotBillable && (commitment.actual_margin ?? 0) !== 0 && Math.abs((commitment.actual_margin ?? 0) - margin) > 0.01 && (
               <span>Current Profit: <span className={(commitment.actual_margin ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}>{formatCurrencyUSD(commitment.actual_margin ?? 0)}</span></span>
             )}
-            {(commitment.cost_at_risk ?? 0) > 0 && (
+            {!isNotBillable && (commitment.cost_at_risk ?? 0) > 0 && (
               <span>Not Yet Billed: <span className="text-amber-400">{formatCurrencyUSD(commitment.cost_at_risk)}</span></span>
             )}
             <CostSourceBadge commitment={commitment} />

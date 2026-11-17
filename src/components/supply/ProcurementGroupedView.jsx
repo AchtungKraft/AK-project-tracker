@@ -38,9 +38,9 @@ function resolveVendorKey(item, vendorSourcesByPart) {
 
 function resolveProjectKey(item) {
   const ds = item.demand_source || 'PROJECT';
-  if (ds === 'STOCK_REPLENISHMENT' || ds === 'STOCK_MANUAL') {
-    return { id: '__STOCK__', name: '📦 STOCK REPLENISHMENT' };
-  }
+  // Presentation only: buyer-initiated vs automatic stock demand get separate buckets
+  if (ds === 'STOCK_MANUAL') return { id: '__STOCK_PURCHASES__', name: '📦 STOCK PURCHASES' };
+  if (ds === 'STOCK_REPLENISHMENT') return { id: '__STOCK__', name: '📦 STOCK REPLENISHMENT' };
   return {
     id: item.project_id || '__UNKNOWN__',
     name: item.project_name || 'Unknown Project',
@@ -86,9 +86,9 @@ function buildProjectVendorGroups(items, vendorSourcesByPart) {
     .map(p => ({ ...p, subgroups: Array.from(p.subgroups.values()) }))
     .sort((a, b) => {
       // Stock always last
-      if (a.id === '__STOCK__') return 1;
-      if (b.id === '__STOCK__') return -1;
-      return a.name.localeCompare(b.name);
+      // Stock buckets always last: purchases, then replenishment
+      const rank = (id) => id === '__STOCK__' ? 2 : id === '__STOCK_PURCHASES__' ? 1 : 0;
+      return rank(a.id) - rank(b.id) || a.name.localeCompare(b.name);
     });
 }
 
@@ -212,7 +212,7 @@ function PrimaryGroupCard({
   const Icon = isProject ? FolderKanban : Building2;
   const iconColor = isProject ? 'text-blue-400' : 'text-purple-400';
   const borderColor = isProject ? '#3B82F6' : '#8B5CF6';
-  const isStock = group.id === '__STOCK__';
+  const isStock = group.id === '__STOCK__' || group.id === '__STOCK_PURCHASES__';
 
   return (
     <Card className="bg-black/40 border-gray-800 overflow-hidden">
