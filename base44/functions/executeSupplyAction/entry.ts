@@ -241,10 +241,19 @@ async function inlineRecompute(ctx, part_id, isDry) {
 // ── ACTIONS ──
 
 async function adjustRequired(ctx, commitment_ids, payload) {
-  const { required_total_delta, required_total_set, new_required_total, source_type='SHOP_PURCHASED', project_id, part_id, reopen_if_closed=false, demand_source, stock_reason, notes: payloadNotes } = payload;
+  const { required_total_delta, required_total_set, new_required_total, source_type='SHOP_PURCHASED', project_id, part_id, reopen_if_closed=false, stock_reason, notes: payloadNotes } = payload;
+  let { demand_source } = payload;
   const effSet = required_total_set ?? new_required_total;
   if (effSet === undefined && required_total_delta === undefined) throw new Error('required_total_delta or required_total_set required');
   let cid = commitment_ids?.[0], commitment=null, part=null, isNew=false, wasReopened=false;
+
+  // AK STOCK: a part added without an explicit demand source is a buyer stock order.
+  // PROJECT-demand on AK STOCK is treated as a legacy holding record (zero demand) by the
+  // read models, so classifying it as PROJECT would silently hide it from Need to Order.
+  if (!cid && !demand_source && project_id) {
+    const [proj] = await ctx.base44.asServiceRole.entities.Project.filter({ id: project_id });
+    if (proj?.is_system_project === true && proj?.system_project_type === 'AK_STOCK') demand_source = 'STOCK_MANUAL';
+  }
 
   if (cid) { const [c]=await ctx.base44.entities.PartCommitment.filter({id:cid}); commitment=c; if(!c) throw new Error('Commitment not found'); if(reopen_if_closed&&['closed','cancelled'].includes(c.commitment_status)) wasReopened=true; }
 
