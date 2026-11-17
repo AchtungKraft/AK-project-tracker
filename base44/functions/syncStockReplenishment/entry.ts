@@ -141,8 +141,9 @@ Deno.serve(async (req) => {
     // 5. Build per-part reservation totals (excluding AK_STOCK replenishment commitments)
     const reservedByPart = new Map();
     for (const c of allCommitments) {
-      // Skip AK_STOCK replenishment commitments — they don't consume from stock availability
-      if (c.project_id === stockProjectId && c.demand_source === 'STOCK_REPLENISHMENT') continue;
+      // Skip ALL AK_STOCK records (replenishment, buyer orders, legacy holding records) and closed
+      // records — they hold inventory, they don't consume it, so they never reduce availability.
+      if (c.project_id === stockProjectId || c.commitment_status === 'closed') continue;
       reservedByPart.set(c.part_id, (reservedByPart.get(c.part_id) || 0) + (c.reserved_from_stock || 0));
     }
 
@@ -245,8 +246,15 @@ Deno.serve(async (req) => {
               required_total: 0,
               qty_committed: 0,
               qty_to_order: 0,
+              reserved_from_stock: 0,
+              qty_reserved: 0,
               last_recomputed_at: timestamp,
             });
+            // Released units return to general stock: run the canonical rebalance for this part
+            if ((existing.reserved_from_stock || 0) > 0) {
+              await base44.functions.invoke('executeSupplyAction', { action_type: 'AUTO_RESERVE', commitment_ids: [existing.id] })
+                .catch(e => console.error(`[syncStockReplenishment] rebalance after close failed ${part.id}: ${e.message}`));
+            }
           }
           results.closed++;
           results.details.push({ part_id: part.id, part_name: part.part_name, action: 'CLOSE', effective_gap: 0, effective_available: gapResult.effective_available });

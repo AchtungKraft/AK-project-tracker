@@ -141,8 +141,12 @@ Deno.serve(async (req) => {
       // - AK_STOCK legacy PROJECT commitments: ALWAYS zero (never earns general stock)
       // - Unfulfilled replenishment: zero (still needs purchasing)
       // - Fulfilled replenishment: preserve earned reservation (treat normally)
-      const skipAutoAllocation = isAkStockLegacyProjectCommitment || isReplenishmentStillUnfulfilled;
-      const need_from_stock = skipAutoAllocation ? 0 : Math.max(0, remaining_required - covered_from_po);
+      // AK STOCK holding rule (same as executeSupplyAction inlineRebalance): stock purchasing demand
+      // and legacy AK STOCK holding records never newly reserve general stock; they may only keep
+      // a reservation they already hold (no silent release, no growth).
+      const isHolding = isReplenishment || isAkStockProject;
+      const full_need = Math.max(0, remaining_required - covered_from_po);
+      const need_from_stock = isHolding ? Math.min(current_reserved, full_need) : full_need;
       
       // Allocate from remaining stock
       const new_reserved = Math.min(remaining_stock, need_from_stock);

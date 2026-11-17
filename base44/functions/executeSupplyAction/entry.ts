@@ -214,6 +214,7 @@ async function inlineRebalance(ctx, part_id, isDry) {
 
   const all = await ctx.base44.asServiceRole.entities.PartCommitment.filter({ part_id });
   const open = all.filter(c => c.commitment_status !== 'cancelled' && c.commitment_status !== 'closed');
+  const akStockIds = new Set((await ctx.base44.asServiceRole.entities.Project.filter({ is_system_project: true, system_project_type: 'AK_STOCK' })).map(p => p.id));
   const prio = { Critical:4, High:3, Normal:2, Low:1 };
   open.sort((a,b) => { const ap=prio[a.priority]||2, bp=prio[b.priority]||2; if(bp!==ap) return bp-ap; const ad=new Date(a.created_date), bd=new Date(b.created_date); if(ad.getTime()!==bd.getTime()) return ad-bd; return (a.id||'').localeCompare(b.id||''); });
 
@@ -227,9 +228,11 @@ async function inlineRebalance(ctx, part_id, isDry) {
     // RESTRICTED: If this commitment has restricted inventory, guarantee it gets that qty
     const restrictedQty = restrictedByCommitment.get(c.id) || 0;
     // General allocation from the shared pool on top of restricted qty
-    // Stock purchasing demand (buyer orders / auto replenishment) acquires inventory; it never
-    // newly reserves the shared pool. It may only keep a reservation it already holds.
-    const stockCap = isStockDemand(c) ? Math.max(0, cn.reserved_from_stock - restrictedQty) : Infinity;
+    // AK STOCK holding rule (shared with rebalancePartReservations): stock purchasing demand
+    // (buyer orders / auto replenishment) and legacy AK STOCK holding records never newly reserve
+    // the shared pool. They may only keep a reservation they already hold.
+    const isHolding = isStockDemand(c) || akStockIds.has(c.project_id);
+    const stockCap = isHolding ? Math.max(0, cn.reserved_from_stock - restrictedQty) : Infinity;
     const needFromGeneral = Math.min(stockCap, Math.max(0, need - restrictedQty));
     const generalAlloc = Math.min(rem, needFromGeneral);
     let newRes = restrictedQty + generalAlloc;
