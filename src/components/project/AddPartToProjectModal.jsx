@@ -12,9 +12,11 @@ import { Search, Plus, Package, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import UnifiedAddPartModal from "../parts/UnifiedAddPartModal";
 import { refreshForGenericSupply } from "@/components/supply/tieredSupplyRefresh";
+import { pickAddPartMergeTarget, useIsAkStockProject } from "@/lib/addPartMergeTarget";
 
 export default function AddPartToProjectModal({ projectId, onClose, onSuccess, onError }) {
   const queryClient = useQueryClient();
+  const isAkStock = useIsAkStockProject(projectId);
   const [activeTab, setActiveTab] = useState("existing");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPartId, setSelectedPartId] = useState("");
@@ -58,7 +60,7 @@ export default function AddPartToProjectModal({ projectId, onClose, onSuccess, o
       }
 
       // Check if commitment already exists for this part
-      const existingCommitment = existingCommitments.find(c => c.part_id === selectedPartId);
+      const existingCommitment = pickAddPartMergeTarget(existingCommitments, selectedPartId, isAkStock);
       
       if (existingCommitment) {
         // INCREMENT: Add qtyNeeded to existing required_total

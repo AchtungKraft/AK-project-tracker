@@ -30,6 +30,7 @@ function deriveEffectiveReplenishmentGap(partContext) {
     reserved_by_projects = 0,   // stock reserved by project commitments (excluding replenishment)
     existing_replenishment_covered = 0, // covered_from_po on existing replenishment commitment
     installed_total = 0,        // qty_installed across all project commitments for this part
+    planned_stock_purchases = 0, // buyer stock orders (STOCK_MANUAL) not yet placed on a PO — incoming, NOT on-hand
   } = partContext;
 
   if (reorder_point <= 0) return { effective_gap: 0, order_qty: 0, effective_available: 0, detail: 'no_reorder_point' };
@@ -39,7 +40,7 @@ function deriveEffectiveReplenishmentGap(partContext) {
   // incoming_po_qty = on PO but not yet received (will become physical_stock)
   // reserved_by_projects = already claimed by project commitments
   // existing_replenishment_covered = already on PO for replenishment (don't double-count)
-  const effective_available = physical_stock + incoming_po_qty - reserved_by_projects;
+  const effective_available = physical_stock + incoming_po_qty + planned_stock_purchases - reserved_by_projects;
 
   // Gap = how far below reorder_point we are
   const effective_gap = Math.max(0, reorder_point - effective_available);
@@ -60,6 +61,7 @@ function deriveEffectiveReplenishmentGap(partContext) {
       incoming_po_qty,
       reserved_by_projects,
       existing_replenishment_covered,
+      planned_stock_purchases,
     },
   };
 }
@@ -145,9 +147,30 @@ Deno.serve(async (req) => {
     }
 
     // 6. Find existing replenishment commitments — DETECT AND FIX DUPLICATES
+    // Only OPEN replenishment records are the upsert target. A closed one (fully received, or closed
+    // by an earlier sync) is history and must not block a new reorder for the same part.
     const existingReplenishments = allCommitments.filter(
-      c => c.project_id === stockProjectId && c.demand_source === 'STOCK_REPLENISHMENT'
+      c => c.project_id === stockProjectId && c.demand_source === 'STOCK_REPLENISHMENT' && c.commitment_status !== 'closed'
     );
+
+    // 6b. Outstanding buyer stock orders NOT yet on a PO. Once ordered, their quantity is already in
+    // incoming_po_qty (unreceived PO lines); once received, it is in physical_stock — so only the
+    // unplaced remainder is counted here, never twice.
+    const receivedByCommitment = new Map();
+    for (const li of poLines) {
+      if (li.status === 'Cancelled') continue;
+      receivedByCommitment.set(li.commitment_id, (receivedByCommitment.get(li.commitment_id) || 0) + (li.qty_received || 0));
+    }
+    const plannedStockByPart = new Map();
+    for (const c of allCommitments) {
+      if (c.project_id !== stockProjectId || c.demand_source !== 'STOCK_MANUAL') continue;
+      if (c.commitment_status === 'closed') continue;
+      const eff = Math.max(0, (c.required_total || 0) - (c.qty_removed || 0));
+      const reserved = c.reserved_from_stock || 0;
+      const satisfied = Math.max(reserved, receivedByCommitment.get(c.id) || 0) + (c.covered_from_po || 0) + (c.covered_from_external || 0) + (c.qty_installed || 0);
+      const unplaced = Math.max(0, eff - satisfied);
+      if (unplaced > 0) plannedStockByPart.set(c.part_id, (plannedStockByPart.get(c.part_id) || 0) + unplaced);
+    }
     
     // DEDUPLICATION: Group by part_id, keep the most progressed one
     const replenishmentByPart = new Map();
@@ -202,6 +225,7 @@ Deno.serve(async (req) => {
         incoming_po_qty: incoming,
         reserved_by_projects: reserved,
         existing_replenishment_covered: existingCoveredPO,
+        planned_stock_purchases: plannedStockByPart.get(part.id) || 0,
       });
 
       const orderQty = gapResult.order_qty;

@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { Loader2, Plus, Wrench } from "lucide-react";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import ProjectSelect from "@/components/shared/ProjectSelect";
+import { pickAddPartMergeTarget, useIsAkStockProject } from "@/lib/addPartMergeTarget";
 
 /**
  * CANONICAL SUPPLY FLOW ENFORCED - PHASE 2B
@@ -38,6 +39,7 @@ export default function AddToBuildModal({ part, onClose }) {
     priority: 'Normal',
     notes: '',
   });
+  const isAkStock = useIsAkStockProject(formData.project_id);
   
   // ADJUST_REQUIRED already runs the canonical rebalance for the affected part.
   // This checkbox controls intent/UI only; do not issue a second AUTO_RESERVE round trip.
@@ -77,7 +79,7 @@ export default function AddToBuildModal({ part, onClose }) {
 
       // SINGLE COMMITMENT RULE: One PartCommitment per (part_id + project_id)
       // Find ANY existing commitment for this part+project (including archived/closed)
-      const existing = selectedProjectCommitments[0];
+      const existing = pickAddPartMergeTarget(selectedProjectCommitments, part.id, isAkStock);
 
       // DEV GUARDRAIL: Check for duplicates - should never happen
       if (import.meta.env.DEV) {

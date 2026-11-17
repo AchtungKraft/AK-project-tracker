@@ -28,6 +28,16 @@ function setCache(_key, _data) { /* no-op */ }
  * - Same response shape, faster execution
  */
 
+// Stock purchasing demand (STOCK_MANUAL / STOCK_REPLENISHMENT) is satisfied by units received on its
+// own PO lines. Credit only what is not already reflected as a (legacy) reservation, capped at the gap.
+function stockReceiptCredit(c, lines) {
+  const eff = Math.max(0, (c.required_total ?? 0) - (c.qty_removed ?? 0));
+  const reserved = c.reserved_from_stock ?? 0;
+  const received = lines.reduce((s, li) => s + (li.qty_received || 0), 0);
+  const gap = Math.max(0, eff - reserved - (c.covered_from_po ?? 0) - (c.qty_installed ?? 0));
+  return Math.min(gap, Math.max(0, received - reserved));
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -221,7 +231,8 @@ Deno.serve(async (req) => {
       const isLegacyHolding = akStockProjectIdSet.has(c.project_id) && !isReplenish;
       if (!isLegacyHolding) {
         const eff_req = Math.max(0, required - (c.qty_removed ?? 0));
-        inv.to_order_global += Math.max(0, eff_req - reserved - covered - (c.qty_installed ?? 0));
+        const credit = isReplenish ? stockReceiptCredit(c, lineItemsByCommitment.get(c.id) || []) : 0;
+        inv.to_order_global += Math.max(0, eff_req - reserved - covered - (c.qty_installed ?? 0) - credit);
       }
     }
     
@@ -257,7 +268,8 @@ Deno.serve(async (req) => {
       const isAkStockLegacy = isAkStockProject && !isReplenishment;
       const currentPersistedCoverage = (c.reserved_from_stock ?? 0) + (c.covered_from_po ?? 0) + qty_installed;
       const isReplenishmentUnfulfilled = isReplenishment && currentPersistedCoverage < effective_required;
-      const skipAutoAlloc = isAkStockLegacy || isReplenishmentUnfulfilled;
+      // Stock purchasing demand never auto-reserves; it is satisfied by PO receipts instead.
+      const skipAutoAlloc = isAkStockLegacy || isReplenishment || isReplenishmentUnfulfilled;
       const partInvForAlloc = partInventoryMap.get(c.part_id);
       if (!skipAutoAlloc) {
         const gap = Math.max(0, effective_required - reserved_from_stock - covered_from_po - qty_installed);
@@ -269,7 +281,9 @@ Deno.serve(async (req) => {
         }
       }
 
-      const totalCoverage = reserved_from_stock + covered_from_po + qty_installed;
+      // Stock purchasing demand: units received on its own PO lines satisfy it (not held as a reservation)
+      const stockReceivedCredit = isReplenishment ? stockReceiptCredit(c, commitmentLineItems) : 0;
+      const totalCoverage = reserved_from_stock + covered_from_po + qty_installed + stockReceivedCredit;
       // AK STOCK legacy PROJECT holding records: ZERO demand — historical metadata only
       const to_order = isAkStockLegacy ? 0 : Math.max(0, effective_required - totalCoverage);
       const available_to_install = isAkStockLegacy ? 0 : Math.max(0, Math.min(reserved_from_stock + covered_from_po - qty_installed, effective_required - qty_installed));
@@ -284,7 +298,7 @@ Deno.serve(async (req) => {
 
       const received_qty = commitmentLineItems.reduce((sum, li) => sum + (li.qty_received || 0), 0);
 
-      const total_covered = reserved_from_stock + covered_from_po + qty_installed;
+      const total_covered = totalCoverage;
       let coverage_status;
       if (total_covered >= effective_required && effective_required > 0) coverage_status = 'FULL';
       else if (total_covered > effective_required) coverage_status = 'OVER';

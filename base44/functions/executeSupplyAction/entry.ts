@@ -166,6 +166,33 @@ function mapSrc(s) { return ({ SHOP_PURCHASED:'VENDOR', VENDOR:'VENDOR', CLIENT_
 
 // ── INLINED REBALANCE ──
 
+function isStockDemand(c) { return c?.demand_source === 'STOCK_MANUAL' || c?.demand_source === 'STOCK_REPLENISHMENT'; }
+
+// Receiving against stock purchasing demand: the received units become general stock (physical
+// inventory is already increased by the caller). The requirement is satisfied by the PO line's
+// qty_received — it is NOT converted into a reservation. Closes when fully received.
+async function applyStockDemandReceipt(ctx, c, part, qty_received) {
+  const lines = await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.filter({ commitment_id: c.id });
+  const received = lines.reduce((s, l) => s + (l.qty_received ?? 0), 0);
+  const eff = Math.max(0, (c.required_total ?? 0) - (c.qty_removed ?? 0));
+  const reserved = c.reserved_from_stock ?? 0, installed = c.qty_installed ?? 0, oldCov = c.covered_from_po ?? 0;
+  const newCov = Math.max(0, oldCov - qty_received);
+  const satisfied = Math.max(reserved, received) + installed;
+  const newStatus = eff > 0 && satisfied >= eff ? 'closed' : 'partially_received';
+  await ctx.base44.asServiceRole.entities.PartCommitment.update(c.id, {
+    covered_from_po: newCov, commitment_status: newStatus,
+    commitment_version: (c.commitment_version ?? 0) + 1, last_recomputed_at: ctx.timestamp,
+  });
+  ctx.mutations.push({ entity: 'PartCommitment', id: c.id, action: 'RECEIVE_STOCK_DEMAND' });
+  ctx.lifecycle_events.push({
+    commitment_id: c.id, event_type: 'PO_RECEIVED_CONVERT', trigger_source: 'UNIFIED_ENGINE',
+    triggered_by: ctx.user.email, actor_email: ctx.user.email,
+    old_values: JSON.stringify({ covered_from_po: oldCov, commitment_status: c.commitment_status }),
+    new_values: JSON.stringify({ covered_from_po: newCov, commitment_status: newStatus, qty_received, total_received: received, stock_demand: c.demand_source }),
+    part_id: part.id, project_id: c.project_id, event_date: ctx.timestamp,
+  });
+}
+
 async function inlineRebalance(ctx, part_id, isDry) {
   const [part] = await ctx.base44.asServiceRole.entities.Part.filter({ id: part_id });
   if (!part) throw new Error(`REBALANCE_PART_NOT_FOUND: ${part_id}`);
@@ -200,7 +227,10 @@ async function inlineRebalance(ctx, part_id, isDry) {
     // RESTRICTED: If this commitment has restricted inventory, guarantee it gets that qty
     const restrictedQty = restrictedByCommitment.get(c.id) || 0;
     // General allocation from the shared pool on top of restricted qty
-    const needFromGeneral = Math.max(0, need - restrictedQty);
+    // Stock purchasing demand (buyer orders / auto replenishment) acquires inventory; it never
+    // newly reserves the shared pool. It may only keep a reservation it already holds.
+    const stockCap = isStockDemand(c) ? Math.max(0, cn.reserved_from_stock - restrictedQty) : Infinity;
+    const needFromGeneral = Math.min(stockCap, Math.max(0, need - restrictedQty));
     const generalAlloc = Math.min(rem, needFromGeneral);
     let newRes = restrictedQty + generalAlloc;
 
@@ -266,7 +296,9 @@ async function adjustRequired(ctx, commitment_ids, payload) {
     const matchesDemand = demand_source
       ? ex.filter(c => (c.demand_source || 'PROJECT') === demand_source)
       : ex;
-    const active = matchesDemand.find(c=>!['cancelled','closed'].includes(c.commitment_status));
+    const openMatches = matchesDemand.filter(c=>!['cancelled','closed'].includes(c.commitment_status));
+    // Repeated stock orders merge into the one not yet ordered, when there is one
+    const active = (demand_source === 'STOCK_MANUAL' && openMatches.find(c=>!(c.covered_from_po>0) && !(c.qty_installed>0) && c.commitment_status==='planned')) || openMatches[0];
     const closed = matchesDemand.find(c=>['cancelled','closed'].includes(c.commitment_status));
     if (active) { commitment=active; cid=commitment.id; }
     else if (reopen_if_closed && closed) { commitment=closed; cid=commitment.id; wasReopened=true; }
@@ -319,7 +351,8 @@ async function adjustRequired(ctx, commitment_ids, payload) {
       const ucs=part.cost||0, pm=part.pricing_mode||'matrix', urs=pm==='manual'?(part.retail_override||0):(part.retail_matrix_price||0);
       const sc = await ctx.base44.asServiceRole.entities.PartCommitment.create({
         project_id:commitment.project_id, part_id:part.id, required_total:delta, reserved_from_stock:0, covered_from_po:0, qty_installed:0,
-        invoiced_qty:0, invoiced_amount:0, billing_status:'unbilled', commitment_status:'planned', coverage_status:'NOT_COVERED',
+        invoiced_qty:0, invoiced_amount:0, billing_status:isStockDemand(commitment)?'not_billable':'unbilled', commitment_status:'planned', coverage_status:'NOT_COVERED',
+        ...(isStockDemand(commitment) ? { demand_source: commitment.demand_source, ...(commitment.stock_reason ? { stock_reason: commitment.stock_reason } : {}) } : {}),
         source_type:'scope_addition', parent_commitment_id:cid, allocation_source:'manual_commitment',
         unit_cost_snapshot:ucs, unit_retail_snapshot:urs, planned_cost_total:ucs*delta, planned_retail_total:urs*delta,
         supply_source_type:'VENDOR', order_line_item_ids:[], commitment_version:1, state_version:0, last_recomputed_at:ctx.timestamp, requires_prepay:false
@@ -662,7 +695,8 @@ async function receiveSingleLineForBatch(ctx,line_item_id,qty_received,location_
   // CANONICAL RECEIVE: Update commitment coverage using effective_required
   if(li.commitment_id){
     const [c]=await ctx.base44.entities.PartCommitment.filter({id:li.commitment_id});
-    if(c){
+    if(c && isStockDemand(c)){ await applyStockDemandReceipt(ctx,c,part,qty_received); }
+    else if(c){
       const oldCoveredPO = c.covered_from_po ?? 0;
       const oldReserved = c.reserved_from_stock ?? 0;
       const oldQtyReceived = c.qty_received ?? 0;
@@ -751,7 +785,8 @@ async function receiveSingleLine(ctx,line_item_id,qty_received,location_id) {
   // CANONICAL RECEIVE: Update commitment coverage using effective_required
   if(li.commitment_id){
     const [c]=await ctx.base44.entities.PartCommitment.filter({id:li.commitment_id});
-    if(c){
+    if(c && isStockDemand(c)){ await applyStockDemandReceipt(ctx,c,part,qty_received); }
+    else if(c){
       const oldCoveredPO = c.covered_from_po ?? 0;
       const oldReserved = c.reserved_from_stock ?? 0;
       const installed = c.qty_installed ?? 0;
