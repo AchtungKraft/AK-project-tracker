@@ -165,7 +165,7 @@ function StatusChip({ commitment, tab, isAkStock }) {
   } else if (commitment.billing_state === 'INVOICED') {
     label = "Invoiced"; color = "bg-blue-900/50 text-blue-400 border-blue-700/50";
   } else if (commitment.block_reason_code) {
-    label = "Blocked"; color = "bg-red-900/50 text-red-400 border-red-700/50";
+    label = BLOCK_CHIP_LABELS[commitment.block_reason_code] || "Blocked"; color = "bg-red-900/50 text-red-400 border-red-700/50";
   } else if (commitment.needs_order === true) {
     label = "Needs Order"; color = "bg-yellow-900/50 text-yellow-400 border-yellow-700/50";
   } else if ((commitment.covered_from_po ?? 0) > 0 && !commitment.commitment_fulfilled) {
@@ -179,11 +179,24 @@ function StatusChip({ commitment, tab, isAkStock }) {
   }
 
   return (
-    <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full border whitespace-nowrap", color)}>
+    <span
+      title={commitment.block_reason_code ? `${commitment.block_reason_message || label}${BLOCK_RESOLUTIONS[commitment.block_reason_code] ? ` — ${BLOCK_RESOLUTIONS[commitment.block_reason_code]}` : ''}` : undefined}
+      className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full border whitespace-nowrap", color)}
+    >
       {label}
     </span>
   );
 }
+
+// A blocked row names its actual restriction and how to clear it.
+const BLOCK_CHIP_LABELS = {
+  NO_VENDOR: "Blocked: No Vendor",
+  REQUIRES_PREPAY: "Blocked: Awaiting Prepay",
+};
+const BLOCK_RESOLUTIONS = {
+  NO_VENDOR: "set a default vendor or vendor source on the part to create a PO",
+  REQUIRES_PREPAY: "invoice and collect prepayment before ordering",
+};
 
 // ── PRIMARY ACTION BUTTON ───────────────────────────────────────
 // Single most-relevant action per row. All others go in overflow.

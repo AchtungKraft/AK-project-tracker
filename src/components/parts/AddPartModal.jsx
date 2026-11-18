@@ -15,7 +15,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Loader2, Upload, X } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
+import { resolvePartPricingForSave } from "@/lib/partPricingSave";
 import PartPricingFields from "./PartPricingFields";
 import RecursiveCategorySelect from "./RecursiveCategorySelect";
 
@@ -29,7 +30,6 @@ const buildPartPayload = (formData) => ({
   cost: Number(formData.default_cost) || 0,
   photos: formData.photos || [],
   featured_photo: formData.photos?.[0] || null,
-  ...(formData.pricing_mode === 'manual' ? { retail_override: Number(formData.default_retail) || 0 } : {}),
 });
 
 export default function AddPartModal({ onClose }) {
@@ -88,9 +88,10 @@ export default function AddPartModal({ onClose }) {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data) => {
-      const payload = buildPartPayload(data);
-      return base44.entities.Part.create(payload);
+    mutationFn: async (data) => {
+      const pricing = await resolvePartPricingForSave({ pricing_mode: data.pricing_mode, cost: data.default_cost, retail_override: data.default_retail });
+      if (pricing.error) throw new Error(pricing.error);
+      return base44.entities.Part.create({ ...buildPartPayload(data), ...pricing });
     },
     onSuccess: async () => {
       // Targeted invalidation — just refresh the parts list

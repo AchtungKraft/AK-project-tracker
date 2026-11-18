@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Loader2, Upload, X, Wand2, Plus, Trash2, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
+import { retailForMode, applyPricingModeChange, resolvePartPricingForSave } from "@/lib/partPricingSave";
 import CreateInlineModal from "../common/CreateInlineModal";
 import PartTypeSelector from "./PartTypeSelector";
 import PartPricingFields from "./PartPricingFields";
@@ -375,8 +376,13 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    const pricing = await resolvePartPricingForSave(formData);
+    if (pricing.error) {
+      toast.error(pricing.error);
+      return;
+    }
     
     const behaviorDefaults = getPartTypeBehavior(formData.part_type);
     
@@ -392,9 +398,9 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
       // Canonical pricing fields
       pricing_mode: formData.pricing_mode,
       cost: formData.cost || 0,
-      retail_override: formData.pricing_mode === 'manual' ? formData.retail_override : null,
-      retail_matrix_price: formData.pricing_mode === 'matrix' ? formData.retail_matrix_price : null,
-      applied_markup_pct: formData.applied_markup_pct,
+      retail_override: pricing.retail_override,
+      retail_matrix_price: pricing.retail_matrix_price,
+      applied_markup_pct: pricing.applied_markup_pct,
       // Part type + behavior
       part_type: formData.part_type,
       ...behaviorDefaults,
@@ -718,12 +724,12 @@ export default function UnifiedAddPartModal({ onClose, projectId = null }) {
             {/* Canonical Pricing Section — same component as Edit Part */}
             <PartPricingFields
               defaultCost={formData.cost}
-              defaultRetail={formData.retail_override || formData.retail_matrix_price}
+              defaultRetail={retailForMode(formData)}
               pricingMode={formData.pricing_mode || 'matrix'}
               appliedMarkupPct={formData.applied_markup_pct}
               onCostChange={(cost) => setFormData({ ...formData, cost })}
               onRetailChange={(retail) => setFormData({ ...formData, retail_override: retail })}
-              onModeChange={(mode) => setFormData({ ...formData, pricing_mode: mode })}
+              onModeChange={(mode) => setFormData(prev => applyPricingModeChange(prev, mode))}
             />
 
             {/* Dynamic Part-Type-Specific Fields */}

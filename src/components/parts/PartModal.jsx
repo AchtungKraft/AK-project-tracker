@@ -19,7 +19,8 @@ import {
   Loader2, Edit2, Trash2, X, Upload, Star, ChevronDown, ChevronRight, 
   Camera, ExternalLink, Package, Plus, Wrench, MapPin, ChevronLeft
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
+import { retailForMode, applyPricingModeChange, resolvePartPricingForSave } from "@/lib/partPricingSave";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import MobileModalWrapper from "@/components/mobile/MobileModalWrapper";
 import MobilePrimaryActionStack from "@/components/mobile/MobilePrimaryActionStack";
@@ -200,7 +201,7 @@ export default function PartModal({ part, partId, onClose }) {
       // EXPLICITLY OMIT: physical_stock, allocated_stock, on_order (derived/canonical)
     });
     setEditing(false);
-  }, [activePart?.id]);
+  }, [activePart?.id, activePart?.updated_date]);
   
   // Reset initialization ref when partId changes to a different part
   useEffect(() => {
@@ -324,6 +325,8 @@ export default function PartModal({ part, partId, onClose }) {
   const updateMutation = useMutation({
     mutationFn: (data) => base44.entities.Part.update(activePart.id, data),
     onSuccess: async () => {
+      // Allow formData to re-initialize from the persisted record once the refetch lands
+      initializedPartIdRef.current = null;
       // Targeted invalidation — only this part + the parts list
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['part', activePart.id] }),
@@ -334,15 +337,13 @@ export default function PartModal({ part, partId, onClose }) {
       // Refetch only what's active
       await queryClient.refetchQueries({ queryKey: ['parts'], type: 'active' });
       
-      // Reset initialized ref so formData picks up new data
-      initializedPartIdRef.current = null;
-      
       if (import.meta.env.DEV) {
         console.log('[PartsPerf] UpdatePart (PartModal) | Requests: 1 | Invalidations: 4 | Refetches: 1');
       }
       toast.success('Part updated');
       setEditing(false);
     },
+    onError: (err) => toast.error(err?.message || 'Failed to save part'),
   });
 
   const deleteMutation = useMutation({
@@ -585,6 +586,12 @@ export default function PartModal({ part, partId, onClose }) {
       toast.error('Part name is required');
       return;
     }
+
+    const pricing = await resolvePartPricingForSave(formData);
+    if (pricing.error) {
+      toast.error(pricing.error);
+      return;
+    }
     
     // PHASE 1: Build safe update payload - ONLY editable fields
     // EXPLICITLY OMIT: physical_stock, allocated_stock, on_order, reserved_global, reserved_project
@@ -600,9 +607,9 @@ export default function PartModal({ part, partId, onClose }) {
       // Pricing fields (safe to update)
       pricing_mode: formData.pricing_mode,
       cost: formData.cost,
-      retail_override: formData.pricing_mode === 'manual' ? formData.retail_override : null,
-      retail_matrix_price: formData.pricing_mode === 'matrix' ? formData.retail_matrix_price : null,
-      applied_markup_pct: formData.applied_markup_pct,
+      retail_override: pricing.retail_override,
+      retail_matrix_price: pricing.retail_matrix_price,
+      applied_markup_pct: pricing.applied_markup_pct,
       // Part type and flags
       part_type: formData.part_type,
       is_active: formData.is_active,
@@ -796,7 +803,7 @@ export default function PartModal({ part, partId, onClose }) {
           <div>
             <p className="text-xs text-gray-400 mb-1">Retail</p>
             <p className="text-white font-semibold">
-              ${(formData.retail_override || formData.retail_matrix_price || 0).toFixed(2)}
+              ${(retailForMode(formData) || 0).toFixed(2)}
             </p>
           </div>
           {formData.applied_markup_pct != null && (
@@ -1218,12 +1225,12 @@ export default function PartModal({ part, partId, onClose }) {
       {/* Canonical Pricing Section */}
       <PartPricingFields
         defaultCost={formData.cost}
-        defaultRetail={formData.retail_override || formData.retail_matrix_price}
+        defaultRetail={retailForMode(formData)}
         pricingMode={formData.pricing_mode || 'matrix'}
         appliedMarkupPct={formData.applied_markup_pct}
         onCostChange={(cost) => setFormData({ ...formData, cost })}
         onRetailChange={(retail) => setFormData({ ...formData, retail_override: retail })}
-        onModeChange={(mode) => setFormData({ ...formData, pricing_mode: mode })}
+        onModeChange={(mode) => setFormData(prev => applyPricingModeChange(prev, mode))}
       />
 
       {/* Notes */}

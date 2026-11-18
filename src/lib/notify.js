@@ -4,4 +4,6 @@ import { toast as uiToast } from "@/components/ui/use-toast";
 export const toast = {
   success: (title) => uiToast({ title }),
   error: (title) => uiToast({ title, variant: "destructive" }),
+  warning: (title) => uiToast({ title }),
+  info: (title) => uiToast({ title }),
 };
