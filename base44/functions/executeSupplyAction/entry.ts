@@ -655,7 +655,9 @@ async function getOrCreateDefaultLocation(ctx) {
 }
 
 async function upsertInventoryItem(ctx,part_id,location_id,qty) {
-  const ex=await ctx.base44.asServiceRole.entities.InventoryItem.filter({part_id,location_id});
+  // Only general (unrestricted) stock merges here. Project-restricted batches (client-supplied / non-PO receipts)
+  // share the location but must never absorb, or block, general receipts.
+  const ex=(await ctx.base44.asServiceRole.entities.InventoryItem.filter({part_id,location_id})).filter(i=>!i.restricted_commitment_id);
   if(ex.length>1) throw new Error('INVENTORY_LOCATION_DUPLICATE');
   if(ex.length===1){await ctx.base44.asServiceRole.entities.InventoryItem.update(ex[0].id,{quantity_on_hand:(ex[0].quantity_on_hand??0)+qty});ctx.mutations.push({entity:'InventoryItem',id:ex[0].id,action:'RECEIVE_UPDATE'});}
   else{const inv=await ctx.base44.asServiceRole.entities.InventoryItem.create({part_id,location_id,quantity_on_hand:qty,quantity_reserved:0,received_date:new Date().toISOString().split('T')[0]});ctx.mutations.push({entity:'InventoryItem',id:inv.id,action:'RECEIVE_CREATE'});}
@@ -693,8 +695,9 @@ async function receiveSingleLineForBatch(ctx,line_item_id,qty_received,location_
   const eloc=location_id||await getOrCreateDefaultLocation(ctx);
   if(ctx.dry_run) return {preview:{line_item_id,part_name:part.part_name,qty_receiving:qty_received}};
   const newLR=(li.qty_received??0)+qty_received;
-  await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.update(line_item_id,{qty_received:newLR,status:newLR>=(li.qty_ordered??0)?'Received':'Partial'});
+  // Stock first: if it fails, the PO line must not be marked received (prevents "received but not in stock").
   await upsertInventoryItem(ctx,part.id,eloc,qty_received);
+  await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.update(line_item_id,{qty_received:newLR,status:newLR>=(li.qty_ordered??0)?'Received':'Partial'});
   // CANONICAL RECEIVE: Update commitment coverage using effective_required
   if(li.commitment_id){
     const [c]=await ctx.base44.entities.PartCommitment.filter({id:li.commitment_id});
@@ -782,8 +785,8 @@ async function receiveSingleLine(ctx,line_item_id,qty_received,location_id) {
   const eloc=location_id||await getOrCreateDefaultLocation(ctx);
   if(ctx.dry_run) return {preview:{line_item_id,part_name:part.part_name,qty_receiving:qty_received,remaining_after:rem-qty_received}};
   const newLR=(li.qty_received??0)+qty_received, ls=newLR>=(li.qty_ordered??0)?'Received':'Partial';
-  await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.update(line_item_id,{qty_received:newLR,status:ls});
   await upsertInventoryItem(ctx,part.id,eloc,qty_received);
+  await ctx.base44.asServiceRole.entities.PartPurchaseLineItem.update(line_item_id,{qty_received:newLR,status:ls});
   const rr=await inlineRecompute(ctx,part.id,false);
   // CANONICAL RECEIVE: Update commitment coverage using effective_required
   if(li.commitment_id){
