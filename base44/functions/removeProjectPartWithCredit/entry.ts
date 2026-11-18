@@ -133,7 +133,9 @@ Deno.serve(async (req) => {
     const costReduction = round2(unitCost * qtyToRemove);
     const retailReduction = round2(unitRetail * qtyToRemove);
     const effectiveRemaining = requiredTotal - newQtyRemoved;
-    const newReserved = isFullRemoval ? 0 : Math.min(reservedFromStock, effectiveRemaining);
+    // Keep only the reservation the remaining, not-yet-installed, not-otherwise-covered qty still needs.
+    const stillNeedsStock = Math.max(0, effectiveRemaining - installedQty - coveredFromPO - coveredExternal);
+    const newReserved = isFullRemoval ? 0 : Math.min(reservedFromStock, stillNeedsStock);
     const releasedStock = reservedFromStock - newReserved;
 
     const set = isFullRemoval
@@ -163,13 +165,9 @@ Deno.serve(async (req) => {
       return fail('This requirement was changed by another action. Refresh and try again.', 409);
     }
 
-    // ── Release reservation (no physical stock change) ──
-    if (releasedStock > 0 && commitment.part_id) {
-      const part = (await sr.Part.filter({ id: commitment.part_id }))[0];
-      if (part && (part.allocated_stock ?? 0) > 0) {
-        await sr.Part.update(part.id, { allocated_stock: Math.max(0, part.allocated_stock - releasedStock) });
-      }
-    }
+    // ── Release reservation ──
+    // The reservation lives on this commitment's reserved_from_stock (updated above). Physical stock and
+    // other projects' commitments are never touched. The legacy Part.allocated_stock field is no longer written.
 
     // ── Credit for invoiced quantities (existing protection) ──
     let creditCreated = false, creditAmount = 0, creditLedgerEntry = null, creditAllocation = null;

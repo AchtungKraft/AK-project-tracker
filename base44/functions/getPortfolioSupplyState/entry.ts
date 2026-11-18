@@ -244,6 +244,16 @@ Deno.serve(async (req) => {
     const partIds = [...new Set(commitments.map(c => c.part_id).filter(Boolean))];
     const parts = partIds.length > 0 ? await base44.entities.Part.filter({ id: { $in: partIds.slice(0, 200) } }) : [];
     const partMap = new Map(parts.map(p => [p.id, p]));
+    // Canonical reservations: SUM(reserved_from_stock) over active commitments of each part, across ALL projects
+    // (replaces the stale Part.allocated_stock field).
+    const reservedByPart = new Map();
+    if (parts.length > 0) {
+      const partComms = await base44.entities.PartCommitment.filter({ part_id: { $in: parts.map(p => p.id) } });
+      for (const pc of partComms) {
+        if (pc.commitment_status === 'cancelled' || pc.commitment_status === 'closed') continue;
+        reservedByPart.set(pc.part_id, (reservedByPart.get(pc.part_id) || 0) + (pc.reserved_from_stock ?? 0));
+      }
+    }
     const allCommitments = commitments.filter(c => c.commitment_status !== 'cancelled').map(c => {
       const part = partMap.get(c.part_id);
       const proj = projectMap.get(c.project_id);
@@ -254,7 +264,7 @@ Deno.serve(async (req) => {
         covered_from_po: c.covered_from_po ?? 0, qty_installed: c.qty_installed ?? 0,
         planned_retail_total: c.planned_retail_total ?? 0, planned_cost_total: c.planned_cost_total ?? 0,
         part: part ? { id: part.id, part_name: part.part_name, vendor_part_number: part.vendor_part_number, featured_photo: part.featured_photo } : { part_name: 'Unknown' },
-        inventory_snapshot: { available_global_active: part ? Math.max(0, (part.physical_stock ?? 0) - (part.allocated_stock ?? 0)) : 0 },
+        inventory_snapshot: { available_global_active: part ? Math.max(0, (part.physical_stock ?? 0) - (reservedByPart.get(part.id) || 0)) : 0 },
       };
     });
 
