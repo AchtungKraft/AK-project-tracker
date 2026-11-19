@@ -57,7 +57,7 @@ function computeAuthorization({ plan, versions = [], invoices = [], credits = []
       credit_remaining: sum(depCredits, (c) => c.remaining_amount),
     },
     credit_balance: sum(credits, (c) => c.remaining_amount),
-    receivables_outstanding: sum(final.filter((i) => i.status !== 'paid'), (i) => Math.max(0, (i.balance_due ?? 0) - (i.paid_amount ?? 0))),
+    receivables_outstanding: sum(final.filter((i) => i.status !== 'paid'), (i) => Math.max(0, i.balance_due ?? 0)), // balance_due is already net of payments (recordInvoicePayment)
   };
 }
 
@@ -74,7 +74,7 @@ function runVectors() {
   // Deposit $3,000 paid → credit; progress $5,000 applies the $3,000 credit. Consumed = 3,000 + 2,000 = 5,000, not 8,000.
   const inv = [
     { id: 'dep', invoice_type: 'deposit', status: 'paid', subtotal: 3000, credit_applied: 0, balance_due: 3000, paid_amount: 3000 },
-    { id: 'p1', invoice_type: 'progress', status: 'sent', subtotal: 5000, credit_applied: 3000, balance_due: 2000, paid_amount: 500 },
+    { id: 'p1', invoice_type: 'progress', status: 'partial', subtotal: 5000, credit_applied: 3000, balance_due: 1500, paid_amount: 500 },
     { id: 'x', invoice_type: 'progress', status: 'cancelled', subtotal: 9999 },
     { id: 'd1', invoice_type: 'final', status: 'draft', subtotal: 1500, credit_proposed: 0 },
   ];
