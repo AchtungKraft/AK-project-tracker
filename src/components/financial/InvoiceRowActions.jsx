@@ -1,33 +1,29 @@
 import React, { useState } from "react";
-import { MoreHorizontal, ExternalLink, Trash2 } from "lucide-react";
+import { Eye, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/lib/AuthContext";
 import DeleteDraftInvoiceDialog from "@/components/financial/DeleteDraftInvoiceDialog";
+import EditDraftLinesDialog from "@/components/financial/EditDraftLinesDialog";
 
-// Row menu for the Project Invoices table. Delete Draft only for drafts (server re-checks everything).
+// Visible row actions. Drafts: Review, plus Edit and Delete for admins (the server re-checks everything).
 export default function InvoiceRowActions({ invoice, onOpen, onDeleted }) {
+  const { user } = useAuth();
   const [confirm, setConfirm] = useState(false);
+  const [edit, setEdit] = useState(false);
+  const isDraft = invoice.status === "draft";
+  const canManage = isDraft && user?.role === "admin";
   return (
-    <div onClick={(e) => e.stopPropagation()}>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" aria-label="Invoice actions"><MoreHorizontal className="w-4 h-4" /></Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={onOpen}><ExternalLink className="w-4 h-4 mr-2" />Open invoice</DropdownMenuItem>
-          {invoice.status === "draft" && (
-            <DropdownMenuItem onClick={() => setConfirm(true)} className="text-red-400"><Trash2 className="w-4 h-4 mr-2" />Delete Draft</DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <DeleteDraftInvoiceDialog
-        invoice={invoice}
-        projectName={invoice.project_name}
-        clientName={invoice.client_name}
-        open={confirm}
-        onOpenChange={setConfirm}
-        onDeleted={onDeleted}
-      />
+    <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-end gap-1">
+      <Button variant="ghost" size="sm" onClick={onOpen} className="h-8 gap-1 text-gray-200"><Eye className="w-4 h-4" />{isDraft ? "Review" : "Open"}</Button>
+      {canManage && (
+        <>
+          <Button variant="ghost" size="sm" onClick={() => setEdit(true)} className="h-8 gap-1 text-gray-200"><Pencil className="w-4 h-4" />Edit</Button>
+          <Button variant="ghost" size="sm" onClick={() => setConfirm(true)} className="h-8 gap-1 text-red-400 hover:text-red-300"><Trash2 className="w-4 h-4" />Delete</Button>
+          <EditDraftLinesDialog invoice={invoice} open={edit} onOpenChange={setEdit} onSaved={onDeleted} />
+          <DeleteDraftInvoiceDialog invoice={invoice} projectName={invoice.project_name} clientName={invoice.client_name}
+            open={confirm} onOpenChange={setConfirm} onDeleted={onDeleted} />
+        </>
+      )}
     </div>
   );
 }

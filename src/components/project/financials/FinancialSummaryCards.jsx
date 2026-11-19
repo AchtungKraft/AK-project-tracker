@@ -26,7 +26,7 @@ export default function FinancialSummaryCards({ summary: s }) {
         <Stat label="Est. gross profit (P&S)" value={money(s.estimated_gross_profit)} sub={`${pct(s.estimated_gross_margin_pct)} margin${s.cost_complete ? "" : " · incomplete cost"}`}
           tone={s.estimated_gross_profit < 0 ? "text-red-400" : "text-green-400"} />
       </div>
-      <p className="text-[11px] text-gray-500">Labor billing is included in project financial estimates but is not yet available through the invoice workflow.</p>
+      <p className="text-[11px] text-gray-500">Earned billable labor is invoiced separately: {money(s.labor_available_to_invoice)} available, {money(s.labor_allocated_to_drafts)} on drafts, {money(s.labor_invoiced)} invoiced.</p>
       <button onClick={() => setMore((m) => !m)} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300">
         {more ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />} All metrics
       </button>

@@ -26,7 +26,7 @@ const partEst = (p) => (p.cost_state === 'missing' ? null : p.est_cost);
 const partAct = (p) => (p.actual_unit_cost == null ? null : r2(p.actual_unit_cost * p.qty));
 const svcStatus = (s) => (s.invoiced ? 'Finalized' : s.allocated ? `On ${s.draft_count} draft(s)` : 'Available');
 const isBill = (t) => t.billing_type === 'BILLABLE' && !t.cancelled;
-const laborStatus = (t) => (t.cancelled ? 'Cancelled' : TYPE[t.billing_type] || 'Unclassified') + (isBill(t) ? ' (valued, not invoiced)' : '');
+const laborStatus = (t) => (t.cancelled ? 'Cancelled' : TYPE[t.billing_type] || 'Unclassified') + (isBill(t) ? ' (invoiceable)' : '');
 const sum = (a, f) => r2(a.reduce((x, r) => x + (f(r) || 0), 0));
 const COMP_TYPE = { vendor_cost: 'Vendor', internal_labor: 'AK labor' };
 // Explanatory component rows for one service; never added to totals. diff = parent − components.
@@ -115,7 +115,7 @@ function summaryGroups(o, client, proj) {
   const g = [{ title: 'Current Project Value', rows: [
     ['Parts billable', o.categories.parts.billable],
     ['Services billable', o.categories.services.billable],
-    ['Separately billable labor to date (valued, not yet invoiced)', s.labor_billable_to_date],
+    ['Separately billable labor earned to date', s.labor_billable_to_date],
     ['Total current billable', s.total_current_billable, true],
   ] }];
   if (proj) g.push({ title: client ? 'Projected Value (estimate, not currently payable)' : 'Projected Value (estimate)', rows: [
@@ -128,6 +128,7 @@ function summaryGroups(o, client, proj) {
     ['Outstanding', s.outstanding_balance],
     ['Allocated to drafts', s.allocated_to_drafts],
     ...(client ? [] : [['Parts & Services available to invoice', s.available_to_invoice, true]]),
+    ...(client ? [] : [['Labor invoiced', s.labor_invoiced], ['Labor allocated to drafts', s.labor_allocated_to_drafts], ['Labor available to invoice', s.labor_available_to_invoice, true]]),
   ] });
   if (!client) g.push({ title: 'Parts & Services Profitability (internal)', rows: [
     ['Estimated Parts & Services cost' + (s.cost_complete ? '' : ' (incomplete)'), s.estimated_cost],
@@ -269,7 +270,7 @@ function buildPdf(o, opts) {
       g.rows.forEach(([k, v, strong]) => { if (strong) marks[body.length] = 'sub'; body.push([k, typeof v === 'number' ? usd(v) : v]); });
     });
     table(['Measure', 'Amount'], body, { right: [1], marks, widths: { 1: 110 } });
-    note('Current project value is not the amount currently invoice-eligible. Separately billable labor is valued but not yet supported by the invoicing workflow. Projected labor is an estimate of future work, not completed work.');
+    note('Current project value is not the amount currently invoice-eligible. Earned billable labor is invoiced separately from Parts & Services through the project invoice workflow. Projected labor is an estimate of future work, not completed work.');
   }
 
   if (S.includes('parts')) {
@@ -358,7 +359,7 @@ function buildPdf(o, opts) {
       body.push(['PROJECT LABOR GRAND TOTAL', `${hrs(T.laborHours)} billable`, ...(client ? [] : ['']), usd(T.laborToDate), ...(proj ? [hrs(T.laborRemHours), usd(T.laborProjected)] : []), proj ? `Proj. total ${usd(r2(T.laborToDate + T.laborProjected))}` : '']);
       const R = client ? (proj ? [1, 2, 3, 4] : [1, 2]) : (proj ? [1, 2, 3, 4, 5] : [1, 2, 3]);
       table(head, body, { right: R, marks, widths: { 0: client ? 230 : 280, [nc - 1]: client ? 150 : 170 } });
-      note('Only Billable labor is valued (not yet invoiced). No Charge, Included in Service' + (client ? '' : ', unclassified') + ' hours carry no additional billing. Projected amounts are estimates.' + (client ? '' : ' Internal labor cost not configured.'));
+      note('Only Billable labor is charged and can be invoiced from logged hours. No Charge, Included in Service' + (client ? '' : ', unclassified') + ' hours carry no additional billing. Projected amounts are estimates.' + (client ? '' : ' Internal labor cost not configured.'));
     }
   }
 
@@ -375,7 +376,7 @@ function buildPdf(o, opts) {
   table(proj ? ['Category', 'Current billable', 'Projected additional', 'Projected total'] : ['Category', 'Current billable'], rr, { right: proj ? [1, 2, 3] : [1], marks: { 3: 'grand' } });
   const s = o.summary;
   table(['Invoice position (Parts & Services only)', 'Amount'], [['Finalized invoiced', usd(s.finalized_invoiced)], ['Paid', usd(s.paid_amount)], ['Outstanding', usd(s.outstanding_balance)], ['Allocated to drafts', usd(s.allocated_to_drafts)], ...(client ? [] : [['Available to invoice', usd(s.available_to_invoice)]])], { right: [1], marks: client ? {} : { 4: 'sub' }, widths: { 1: 110 } });
-  note(client ? 'Projected totals are estimates and are not amounts currently payable. Labor is valued but not yet invoiced.' : 'Invoice position covers Parts & Services only. Labor is valued but not yet supported by the invoicing workflow and is not included in available-to-invoice.');
+  note(client ? 'Projected totals are estimates and are not amounts currently payable.' : 'This invoice position table covers Parts & Services only. Earned billable labor is invoiced separately; labor invoiced, on drafts and available to invoice are shown in the Financial Summary.');
 
   // Internal only, appended after reconciliation so existing sections/page breaks are unchanged.
   const sb = !client && S.includes('scope_budget') ? o.scope_budget : null;

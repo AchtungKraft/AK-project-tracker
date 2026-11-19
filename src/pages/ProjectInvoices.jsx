@@ -42,6 +42,7 @@ import CreateProjectInvoiceModal from "@/components/financial/CreateProjectInvoi
 import ProjectInvoiceDetailDrawer from "@/components/financial/ProjectInvoiceDetailDrawer";
 import ReadyToInvoiceSection from "@/components/financial/ReadyToInvoiceSection";
 import InvoiceRowActions from "@/components/financial/InvoiceRowActions";
+import MobileInvoiceList from "@/components/financial/MobileInvoiceList";
 import OpenDollarsSection from "@/components/financial/openDollars/OpenDollarsSection";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import CreditSummaryStrip from "@/components/financial/CreditSummaryStrip";
@@ -394,7 +395,10 @@ export default function ProjectInvoices() {
         </TabsList>
 
         <TabsContent value={activeTab} className="mt-4">
-          <Card className="bg-gray-900/50 border-gray-800">
+          <div className="md:hidden">
+            <MobileInvoiceList invoices={filteredInvoices} onOpen={setSelectedInvoiceId} onChanged={handleRefresh} />
+          </div>
+          <Card className="hidden md:block bg-gray-900/50 border-gray-800">
             <Table>
               <TableHeader>
                 <TableRow className="border-gray-800 hover:bg-transparent">

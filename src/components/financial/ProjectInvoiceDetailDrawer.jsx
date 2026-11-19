@@ -42,6 +42,7 @@ import {
   Trash2,
 } from "lucide-react";
 import DeleteDraftInvoiceDialog from "@/components/financial/DeleteDraftInvoiceDialog";
+import EditDraftLinesDialog from "@/components/financial/EditDraftLinesDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -71,6 +72,7 @@ export default function ProjectInvoiceDetailDrawer({
   const [showMarkPaidModal, setShowMarkPaidModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteDraft, setShowDeleteDraft] = useState(false);
+  const [showEditDraft, setShowEditDraft] = useState(false);
   const { data: currentUser } = useQuery({ queryKey: ["currentUser"], queryFn: () => base44.auth.me(), staleTime: 300000 });
 
   // DETERMINISTIC: Normalize invoice ID
@@ -620,6 +622,12 @@ export default function ProjectInvoiceDetailDrawer({
                   </DropdownMenuContent>
                 </DropdownMenu>
                 {invoice.status === "draft" && currentUser?.role === "admin" && (
+                  <Button variant="outline" onClick={() => setShowEditDraft(true)} className="gap-2">
+                    <Pencil className="w-4 h-4" />
+                    Edit Draft
+                  </Button>
+                )}
+                {invoice.status === "draft" && currentUser?.role === "admin" && (
                   <Button variant="outline" onClick={() => setShowDeleteDraft(true)} className="gap-2 text-red-400 hover:text-red-300">
                     <Trash2 className="w-4 h-4" />
                     Delete Draft
@@ -678,6 +686,13 @@ export default function ProjectInvoiceDetailDrawer({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <EditDraftLinesDialog
+        invoice={invoice}
+        open={showEditDraft}
+        onOpenChange={setShowEditDraft}
+        onSaved={() => { queryClient.invalidateQueries(); onUpdated?.(); }}
+      />
 
       <DeleteDraftInvoiceDialog
         invoice={invoice}
