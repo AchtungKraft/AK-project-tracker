@@ -252,6 +252,23 @@ async function loadProjectLabor(base44, project_id) {
   });
 }
 
+// Quantities already placed on ACTIVE drafts (status=draft) for a project, keyed by source id.
+// Parts/labor: summed qty/hours. Services: 1 per draft that carries the service (child lines collapse to one).
+async function loadDraftAllocations(db, project_id, excludeInvoiceId = null) {
+  const drafts = (await db.ProjectInvoice.filter({ project_id, status: 'draft' })).filter((d) => d.id !== excludeInvoiceId);
+  const lines = drafts.length ? await db.ProjectInvoiceLine.filter({ invoice_id: { $in: drafts.map((d) => d.id) } }, 'sort_order', 5000) : [];
+  const qtyBySource = new Map(); const draftsBySource = new Map(); const svcSeen = new Set();
+  for (const l of lines) {
+    const sid = l.source_id || l.part_commitment_id;
+    if (!sid || !['part', 'service', 'labor'].includes(l.type)) continue;
+    if (!draftsBySource.has(sid)) draftsBySource.set(sid, new Set());
+    draftsBySource.get(sid).add(l.invoice_id);
+    if (l.type === 'service') { const k = `${l.invoice_id}:${sid}`; if (svcSeen.has(k)) continue; svcSeen.add(k); qtyBySource.set(sid, (qtyBySource.get(sid) || 0) + 1); }
+    else qtyBySource.set(sid, (qtyBySource.get(sid) || 0) + (Number(l.qty) || 0));
+  }
+  return { qtyBySource, draftsBySource };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -359,9 +376,51 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── Draft allocation split ── An item already on an active draft is "allocated", not available for a new draft.
+    // Parts/labor: min(uninvoiced qty, qty on drafts). Services: whole service if on any draft. Prices are unchanged.
+    const { qtyBySource, draftsBySource } = await loadDraftAllocations(base44.asServiceRole.entities, project_id);
+    const allocatedItems = [];
+    const availableItems = [];
+    for (const it of items) {
+      const onDrafts = it.type === 'labor' ? (it.metadata?.draft_hours || 0) : (qtyBySource.get(it.source_id) || 0);
+      const allocQty = it.type === 'service' ? (onDrafts > 0 ? 1 : 0) : lh(Math.min(it.qty_available_to_bill, onDrafts));
+      const remaining = lh(it.qty_available_to_bill - allocQty);
+      if (allocQty > 0) {
+        allocatedItems.push({ ...it, qty_allocated: allocQty, allocated_amount: lr2(allocQty * it.unit_price), draft_invoice_ids: [...(draftsBySource.get(it.source_id) || [])] });
+      }
+      if (remaining > 1e-9) {
+        availableItems.push(allocQty > 0 ? { ...it, qty_uninvoiced: it.qty_available_to_bill, qty_allocated: allocQty, qty_available_to_bill: remaining,
+          line_total: lr2(remaining * it.unit_price), cost_total: lr2(remaining * (it.unit_cost || 0)), children: it.type === 'service' ? it.children : undefined } : it);
+      }
+    }
+
+    // ── Excluded / blocked (never selectable) ──
+    const excludedItems = [];
+    for (const sc of serviceCommitments) {
+      const flagged = sc.is_billed === true || sc.status === 'billed';
+      if (flagged && !sc.invoice_id && (sc.total_billable ?? 0) > 0) excludedItems.push({ type: 'service', source_id: sc.id, description: sc.description || 'Service', amount: lr2(sc.total_billable), reason: 'BILLED_WITHOUT_INVOICE', message: 'Marked billed but not linked to any AK invoice' });
+      else if (!flagged && !sc.invoice_id && !((sc.total_billable ?? 0) > 0)) excludedItems.push({ type: 'service', source_id: sc.id, description: sc.description || 'Service', amount: 0, reason: 'ZERO_BILLABLE', message: 'Service has no billable amount' });
+    }
+    let needsClassificationHours = 0;
+    if (user.role === 'admin') {
+      if (laborTotals?.unpriced_hours > 0) excludedItems.push({ type: 'labor', source_id: null, description: 'Billable labor without a rate', amount: null, hours: laborTotals.unpriced_hours, reason: 'RATE_NOT_SET', message: 'Set a labor billing rate to invoice these hours' });
+      const [allTasks, entries] = await Promise.all([
+        base44.asServiceRole.entities.Task.filter({ project_id }, '-created_date', 5000),
+        base44.asServiceRole.entities.TaskTimeEntry.filter({ project_id }, '-created_date', 5000),
+      ]);
+      const unclassified = new Set(allTasks.filter((t) => !t.labor_billing_type || t.labor_billing_type === 'UNCLASSIFIED').map((t) => t.id));
+      needsClassificationHours = lh(entries.reduce((s, e) => s + (unclassified.has(e.task_id) ? (Number(e.hours) || 0) : 0), 0));
+      if (needsClassificationHours > 0) excludedItems.push({ type: 'labor', source_id: null, description: 'Logged hours on unclassified tasks', amount: null, hours: needsClassificationHours, reason: 'NEEDS_CLASSIFICATION', message: 'Classify these tasks before their hours can be invoiced' });
+    }
+    items.length = 0;
+    items.push(...availableItems);
+
     const partItems = items.filter(i => i.type === 'part');
     const serviceItems = items.filter(i => i.type === 'service');
     const laborItems = items.filter(i => i.type === 'labor');
+    const allocatedTotal = lr2(allocatedItems.reduce((s, i) => s + i.allocated_amount, 0));
+    const availableTotal = lr2(items.reduce((s, i) => s + i.line_total, 0));
+    const excludedTotal = lr2(excludedItems.reduce((s, i) => s + (i.amount || 0), 0));
 
     return Response.json({
       success: true,
@@ -378,9 +437,18 @@ Deno.serve(async (req) => {
         labor_count: laborItems.length,
         labor_total: lr2(laborItems.reduce((s, i) => s + i.line_total, 0)),
         labor_unpriced_hours: laborTotals?.unpriced_hours ?? 0,
-        grand_total: items.reduce((s, i) => s + i.line_total, 0),
+        grand_total: availableTotal,
         items_needing_review: items.filter(i => i.needs_review).length,
+        // Eligibility breakdown: available now + on active drafts = uninvoiced; excluded is never selectable.
+        available_total: availableTotal,
+        allocated_to_drafts_total: allocatedTotal,
+        uninvoiced_total: lr2(availableTotal + allocatedTotal),
+        excluded_total: excludedTotal,
+        total_unbilled: lr2(availableTotal + allocatedTotal + excludedTotal),
+        needs_classification_hours: needsClassificationHours,
       },
+      allocated_items: allocatedItems,
+      excluded_items: excludedItems,
       warnings: warnings.length > 0 ? warnings : null,
     });
   } catch (error) {
