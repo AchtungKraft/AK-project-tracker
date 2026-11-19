@@ -28,7 +28,7 @@ import {
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { cn } from "@/lib/utils";
-import FinancialDetailDrawer from "@/components/financial/FinancialDetailDrawer";
+import FinancialDetailDrawer from "@/components/financial/partDetail/PartFinancialDetailDrawer";
 import { useFinancialStatusBatch } from "@/components/financial/useFinancialStatus";
 import InvoiceWorkbench from "@/components/financial/InvoiceWorkbench";
 import DriftReconciliationPanel from "@/components/financial/DriftReconciliationPanel";
