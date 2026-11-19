@@ -192,9 +192,9 @@ function computeItems({ partCommitments, serviceCommitments, partMap, lookups })
 }
 // └──────────────────────────────────────────────────────────────┘
 
-// ┌─ CANONICAL LABOR BILLING — calculated only in laborBillingCore (regression vectors run on every call).
+// ┌─ CANONICAL LABOR BILLING — calculated only in laborBillingCore (regression vectors run via its self_test).
 // │  This file pins the logic version and fails closed if the core is unavailable or has changed.
-const LABOR_LOGIC_VERSION = 'labor-v1';
+const LABOR_LOGIC_VERSION = 'labor-v2';
 async function laborCore(base44, payload) {
   const d = (await base44.functions.invoke('laborBillingCore', payload)).data;
   if (!d?.success || d.logic_version !== LABOR_LOGIC_VERSION) throw new Error('Labor billing calculation unavailable or version mismatch');
@@ -265,8 +265,11 @@ Deno.serve(async (req) => {
 
     const results = [];
 
+    const nonBillableProjects = [];
     for (const project of allProjects) {
       if (project.is_system_project) continue;
+      // Non-billable projects never appear in Ready to Invoice (their costs and history are untouched).
+      if (project.billing_designation === 'NON_BILLABLE') { nonBillableProjects.push({ project_id: project.id, project_name: project.name }); continue; }
 
       const projectCommitments = commitmentsByProject[project.id] || [];
       const projectServices = servicesByProject[project.id] || [];
@@ -352,6 +355,7 @@ Deno.serve(async (req) => {
         failures: _test_vector_validation.ok ? [] : [{ source: 'test_vector', errors: _test_vector_validation.errors }],
       },
       projects: results,
+      non_billable_projects: nonBillableProjects,
       total_unbilled_projects: results.length,
       total_unbilled_amount: totalUnbilledAmount,
       _debug: {

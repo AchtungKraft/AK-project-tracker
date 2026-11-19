@@ -10,9 +10,9 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.54';
 const r2 = (n) => Math.round((n || 0) * 100) / 100;
 const FINAL = ['sent', 'partial', 'paid'];
 
-// ┌─ CANONICAL LABOR BILLING — calculated only in laborBillingCore (regression vectors run on every call).
+// ┌─ CANONICAL LABOR BILLING — calculated only in laborBillingCore (regression vectors run via its self_test).
 // │  This file pins the logic version and fails closed if the core is unavailable or has changed.
-const LABOR_LOGIC_VERSION = 'labor-v1';
+const LABOR_LOGIC_VERSION = 'labor-v2';
 async function laborCore(base44, payload) {
   const d = (await base44.functions.invoke('laborBillingCore', payload)).data;
   if (!d?.success || d.logic_version !== LABOR_LOGIC_VERSION) throw new Error('Labor billing calculation unavailable or version mismatch');
@@ -304,6 +304,9 @@ Deno.serve(async (req) => {
       },
       labor_billing: {
         project_rate: projectRate, rate_set_by: project.labor_rate_set_by || null, rate_set_at: project.labor_rate_set_at || null,
+        billing_designation: project.billing_designation === 'NON_BILLABLE' ? 'NON_BILLABLE' : 'BILLABLE',
+        designation_set_by: project.billing_designation_set_by || null, designation_set_at: project.billing_designation_set_at || null,
+        projected_available_hours: laborInvoicing.projected.totals.available_hours, projected_available_amount: laborInvoicing.projected.totals.available_amount,
         hours: { logged: r2(hoursLogged), billable: r2(LB.billable), included_in_service: r2(LB.included), non_billable: r2(LB.nonbill), unclassified: r2(LB.unclass), cancelled_tasks: r2(LB.cancelled), billable_unpriced: r2(LB.unpricedHrs) },
         billable_to_date: r2(LB.toDate), remaining_billable_hours: r2(LB.remHrs), projected_remaining: r2(LB.remAmt), projected_total: r2(LB.toDate + LB.remAmt),
         unclassified_tasks: LB.unclassTasks, invalid_service_links: LB.invalidLinks, unpriced_tasks: LB.unpricedTasks,

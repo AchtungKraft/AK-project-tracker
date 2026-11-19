@@ -55,7 +55,7 @@ export default function EditDraftLinesDialog({ invoice, open, onOpenChange, onSa
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>Edit draft lines</DialogTitle>
-          <DialogDescription>Select lines to remove. Remaining lines keep their draft prices. To add items, delete the draft and create a new one.</DialogDescription>
+          <DialogDescription>Select lines to remove. Remaining lines keep their draft prices. To add items, use Add on the draft.</DialogDescription>
         </DialogHeader>
         {!lines ? <div className="py-6 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div> : (
           <div className="max-h-[45vh] overflow-y-auto divide-y divide-gray-800 rounded-lg border border-gray-800">

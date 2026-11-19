@@ -161,17 +161,36 @@ async function markSent(db, { invoice_id, qb_invoice_number, issue_date, due_dat
       const sc = await db.getService(sid);
       if (sc?.invoice_id && sc.invoice_id !== invoice_id) ineligible.push({ source_id: sid, type: 'service', reason: 'ALREADY_BILLED', billed_on_invoice_id: sc.invoice_id });
     }
-    // Labor: hours on this draft must still be earned and uninvoiced (checked under the project billing lock).
-    const laborHoursByTask = new Map();
-    for (const line of lines) if (line.type === 'labor' && line.source_id) laborHoursByTask.set(line.source_id, (laborHoursByTask.get(line.source_id) ?? 0) + (Number(line.qty) || 0));
-    if (laborHoursByTask.size) {
+    // Project must still be billable.
+    const project = await db.getProject(invoice.project_id);
+    if (project?.billing_designation === 'NON_BILLABLE') ineligible.push({ source_id: invoice.project_id, type: 'project', reason: 'PROJECT_NON_BILLABLE' });
+    // Labor (checked under the project billing lock): earned hours must still be logged and uninvoiced; earned + projected
+    // hours on this draft must fit the task's cap (estimate, or logged once done) minus hours already invoiced.
+    const laborByTask = new Map();
+    let hasProjected = false;
+    for (const line of lines) {
+      if (line.type !== 'labor' || !line.source_id) continue;
+      const a = laborByTask.get(line.source_id) || { earned: 0, total: 0 };
+      const h = Number(line.qty) || 0;
+      if (line.metadata?.labor_basis === 'projected') hasProjected = true; else a.earned += h;
+      a.total += h;
+      laborByTask.set(line.source_id, a);
+    }
+    if (laborByTask.size) {
       const labor = new Map((await db.laborItems(invoice.project_id)).map((l) => [l.task_id, l]));
-      for (const [tid, hours] of laborHoursByTask) {
+      for (const [tid, h] of laborByTask) {
         const l = labor.get(tid);
+        const cap = l?.sendable_hours ?? l?.uninvoiced_hours;
         if (!l) ineligible.push({ source_id: tid, type: 'labor', reason: 'NOT_BILLABLE_LABOR' });
         else if (l.rate == null) ineligible.push({ source_id: tid, type: 'labor', reason: 'RATE_NOT_SET' });
-        else if (hours > l.uninvoiced_hours + 1e-6) ineligible.push({ source_id: tid, type: 'labor', reason: 'EXCEEDS_UNINVOICED_HOURS', line_hours: hours, available_hours: l.uninvoiced_hours });
+        else if (h.earned > l.uninvoiced_hours + 1e-6) ineligible.push({ source_id: tid, type: 'labor', reason: 'EXCEEDS_UNINVOICED_HOURS', line_hours: h.earned, available_hours: l.uninvoiced_hours });
+        else if (h.total > cap + 1e-6) ineligible.push({ source_id: tid, type: 'labor', reason: 'EXCEEDS_BILLABLE_HOURS', line_hours: h.total, available_hours: cap });
       }
+    }
+    if (hasProjected) {
+      const b = await db.budgetState(invoice.project_id);
+      if (b.budget == null) ineligible.push({ source_id: invoice.project_id, type: 'budget', reason: 'BUDGET_NOT_CONFIRMED' });
+      else if (b.billed_final + (fresh.subtotal ?? 0) > b.budget + 0.005) ineligible.push({ source_id: invoice.project_id, type: 'budget', reason: 'BUDGET_EXCEEDED', agreed_budget: b.budget, already_invoiced: b.billed_final, invoice_total: fresh.subtotal ?? 0 });
     }
     if (ineligible.length) {
       return [409, { success: false, error: 'Invoice contains items that are already invoiced or no longer billable. Edit or cancel this draft before sending.', ineligible }];
@@ -269,12 +288,19 @@ function realDb(base44) {
     getProject: (id) => sr.Project.get(id).catch((e) => (e.status === 404 ? null : Promise.reject(e))),
     projectCas: async (q, set) => (await sr.Project.updateMany(q, { $set: set })).updated,
     laborItems: async (project_id) => (await loadProjectLabor(base44, project_id)).items,
+    budgetState: async (project_id) => {
+      const [plans, invoices] = await Promise.all([sr.ScopeFundingPlan.filter({ project_id }), sr.ProjectInvoice.filter({ project_id })]);
+      const p = plans[0];
+      const budget = p?.agreed_budget_confirmed && p.agreed_client_budget_cents != null ? p.agreed_client_budget_cents / 100 : null;
+      const billed_final = invoices.filter((i) => ['sent', 'partial', 'paid', 'overdue'].includes(i.status)).reduce((s, i) => s + (i.total ?? i.subtotal ?? 0), 0);
+      return { budget, billed_final: lr2(billed_final) };
+    },
   };
 }
 
-// ┌─ CANONICAL LABOR BILLING — calculated only in laborBillingCore (regression vectors run on every call).
+// ┌─ CANONICAL LABOR BILLING — calculated only in laborBillingCore (regression vectors run via its self_test).
 // │  This file pins the logic version and fails closed if the core is unavailable or has changed.
-const LABOR_LOGIC_VERSION = 'labor-v1';
+const LABOR_LOGIC_VERSION = 'labor-v2';
 const lr2 = (n) => Math.round((n || 0) * 100) / 100;
 const lh = (n) => Math.round((n || 0) * 10000) / 10000;
 async function laborCore(base44, payload) {
@@ -327,6 +353,7 @@ function mockDb(seed, faults = {}) {
     getProject: async (id) => (await find('getProject', T.projects, { id }))[0] || null,
     projectCas: (q, set) => cas('projectCas', T.projects, q, set),
     laborItems: async () => structuredClone(seed.labor || []),
+    budgetState: async () => structuredClone(seed.budget || { budget: null, billed_final: 0 }),
   };
 }
 
@@ -478,6 +505,46 @@ async function runSelfTest() {
     const db = laborSeed(2, 2, null);
     const [s, b] = await run(db);
     return { pass: s === 409 && b.ineligible?.[0]?.reason === 'RATE_NOT_SET' && inv(db).status === 'draft' };
+  });
+
+  // Projected (advance) labor: earned 3h + projected 2h on a task estimated at 5h with 3h logged.
+  const projSeed = ({ sendable = 5, budget = { budget: 10000, billed_final: 0 }, designation = null, earned = 3, projected = 2 } = {}) => mockDb({
+    invoices: [{ id: 'inv1', project_id: 'p1', status: 'draft', subtotal: (earned + projected) * 100, credit_proposed: 0 }],
+    lines: [{ id: 'l1', invoice_id: 'inv1', type: 'labor', source_id: 't1', qty: earned, line_total: earned * 100 },
+      { id: 'l2', invoice_id: 'inv1', type: 'labor', source_id: 't1', qty: projected, line_total: projected * 100, metadata: { labor_basis: 'projected' } }],
+    projects: [{ id: 'p1', billing_lock_token: null, billing_designation: designation }],
+    labor: [{ task_id: 't1', rate: 100, uninvoiced_hours: 3, sendable_hours: sendable }],
+    budget,
+  });
+  await test('projected labor within estimate and budget: sends', async () => {
+    const db = projSeed();
+    const [s] = await run(db);
+    return { pass: s === 200 && inv(db).status === 'sent' };
+  });
+  await test('projected labor beyond task cap (task finished or estimate cut): blocked', async () => {
+    const db = projSeed({ sendable: 3 });
+    const [s, b] = await run(db);
+    return { pass: s === 409 && b.ineligible?.some((x) => x.reason === 'EXCEEDS_BILLABLE_HOURS' && x.line_hours === 5 && x.available_hours === 3) && inv(db).status === 'draft' && unlocked(db) };
+  });
+  await test('projected labor without a confirmed budget: blocked', async () => {
+    const db = projSeed({ budget: { budget: null, billed_final: 0 } });
+    const [s, b] = await run(db);
+    return { pass: s === 409 && b.ineligible?.some((x) => x.reason === 'BUDGET_NOT_CONFIRMED') && inv(db).status === 'draft' };
+  });
+  await test('projected labor exceeding remaining budget: blocked', async () => {
+    const db = projSeed({ budget: { budget: 1000, billed_final: 600 } });
+    const [s, b] = await run(db);
+    return { pass: s === 409 && b.ineligible?.some((x) => x.reason === 'BUDGET_EXCEEDED') && inv(db).status === 'draft' };
+  });
+  await test('earned hours above logged hours stay blocked even when the estimate is higher', async () => {
+    const db = projSeed({ earned: 4, projected: 0 });
+    const [s, b] = await run(db);
+    return { pass: s === 409 && b.ineligible?.some((x) => x.reason === 'EXCEEDS_UNINVOICED_HOURS') };
+  });
+  await test('non-billable project: send blocked, nothing changed', async () => {
+    const db = projSeed({ designation: 'NON_BILLABLE' });
+    const [s, b] = await run(db);
+    return { pass: s === 409 && b.ineligible?.some((x) => x.reason === 'PROJECT_NON_BILLABLE') && inv(db).status === 'draft' && unlocked(db) };
   });
 
   return { function: 'markInvoiceSent', mock_only: true, passed: results.filter((r) => r.pass).length, total: results.length, results };

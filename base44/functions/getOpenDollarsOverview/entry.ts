@@ -14,9 +14,9 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.54';
  * Never writes.
  */
 
-// ┌─ CANONICAL LABOR BILLING — calculated only in laborBillingCore (regression vectors run on every call).
+// ┌─ CANONICAL LABOR BILLING — calculated only in laborBillingCore (regression vectors run via its self_test).
 // │  This file pins the logic version and fails closed if the core is unavailable or has changed.
-const LABOR_LOGIC_VERSION = 'labor-v1';
+const LABOR_LOGIC_VERSION = 'labor-v2';
 const lr2 = (n) => Math.round((n || 0) * 100) / 100;
 const lh = (n) => Math.round((n || 0) * 10000) / 10000;
 async function laborCore(base44, payload) {
@@ -68,9 +68,11 @@ Deno.serve(async (req) => {
       const labor = laborData.projects[project.id] || laborData.empty;
       const L = labor.totals;
 
+      // Non-billable: nothing is counted as unbilled (Ready to Invoice skips it too); outstanding sent invoices still count.
+      const nonBillable = project.billing_designation === 'NON_BILLABLE';
       const parts = ps?.breakdown?.parts_total ?? 0;
       const services = ps?.breakdown?.services_total ?? 0;
-      const unbilled = lr2(parts + services + L.uninvoiced);
+      const unbilled = nonBillable ? 0 : lr2(parts + services + L.uninvoiced);
       const onDrafts = lr2((ps?.allocated_to_drafts ?? 0) + L.allocated_to_drafts);
       const drafts = pInvoices.filter((i) => i.status === 'draft');
       const draftFace = lr2(drafts.reduce((a, i) => a + (i.subtotal ?? i.total ?? 0), 0));
@@ -84,7 +86,8 @@ Deno.serve(async (req) => {
 
       const flags = [];
       if (L.unpriced_hours > 0) flags.push({ code: 'LABOR_RATE_NOT_SET', message: `${L.unpriced_hours}h of billable labor on ${L.unpriced_tasks} task(s) have no billing rate and are not counted.` });
-      if (L.over_invoiced_tasks > 0) flags.push({ code: 'LABOR_OVER_INVOICED', message: `${L.over_invoiced_tasks} task(s) have more hours invoiced than logged.` });
+      if (L.over_invoiced_tasks > 0) flags.push({ code: 'LABOR_OVER_INVOICED', message: `${L.over_invoiced_tasks} task(s) have more hours invoiced than logged or estimated.` });
+      if (nonBillable) flags.push({ code: 'PROJECT_NON_BILLABLE', message: 'Project is marked Non-Billable: excluded from unbilled totals and new invoicing.' });
       if (drafts.length && Math.abs(draftFace - onDrafts) > 0.01) flags.push({ code: 'DRAFTS_DIFFER_FROM_CURRENT', message: `Draft invoices total $${draftFace.toFixed(2)}; the current uninvoiced value of the items on them is $${onDrafts.toFixed(2)}. Review the drafts before sending.` });
 
       const total = lr2(unbilled + outstanding);
@@ -92,7 +95,9 @@ Deno.serve(async (req) => {
       rows.push({
         project_id: project.id, project_name: project.name, client_name: project.client_name || null,
         labor_rate: project.labor_billing_rate ?? null, labor_unpriced_hours: L.unpriced_hours,
-        unbilled: { parts: lr2(parts), services: lr2(services), labor: L.uninvoiced, labor_hours: L.uninvoiced_hours, total: unbilled },
+        billing_designation: nonBillable ? 'NON_BILLABLE' : 'BILLABLE',
+        projected_labor_available: nonBillable ? 0 : labor.projected.totals.available_amount,
+        unbilled: nonBillable ? { parts: 0, services: 0, labor: 0, labor_hours: 0, total: 0 } : { parts: lr2(parts), services: lr2(services), labor: L.uninvoiced, labor_hours: L.uninvoiced_hours, total: unbilled },
         on_drafts: onDrafts, draft_count: drafts.length, draft_face_value: draftFace,
         outstanding, outstanding_count: outstandingInv.length,
         total_open: total,

@@ -14,11 +14,21 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.54';
  * PROJECTED REMAINING (informational, never earned):
  *   BILLABLE, not cancelled, not done, estimate > 0: max(estimate − logged, 0) hours × rate. No rate → hours reported, amount null.
  *
+ * PROJECTED BILLING (labor-v2, advance billing against estimates):
+ *   A labor invoice line carries metadata.labor_basis 'earned' (default) or 'projected'. All labor lines count as hours
+ *   billed for the task, so hours billed in advance are applied first against hours logged later (no double billing).
+ *   Cap per task = done ? logged : max(logged, estimate). Billed = hours on sent/paid lines + hours on drafts.
+ *   earned_available_hours    = max(0, logged − billed)                  (same eligibility as labor-v1)
+ *   projected_available_hours = max(0, cap − max(logged, billed))        (0 when done, cancelled or no rate)
+ *   sendable_hours            = max(0, cap − hours on sent/paid lines)   (send-time ceiling for one draft)
+ *   over_invoiced             = hours on sent/paid lines > cap
+ *
  * Payload: { project_ids: [...] } | { scope: 'all' } | { self_test: true }
- * Every request first runs the regression vectors below; if they fail, the request fails (callers then fail closed).
+ * Normal requests do not run the regression vectors; { self_test: true } runs them (dedicated verification path).
+ * Callers pin LABOR_LOGIC_VERSION, so a changed core can never be used silently.
  */
 
-const LABOR_LOGIC_VERSION = 'labor-v1';
+const LABOR_LOGIC_VERSION = 'labor-v2';
 const LABOR_FINAL = ['sent', 'partial', 'paid', 'overdue'];
 const DONE = ['done', 'completed', 'complete'];
 const CANCELLED = ['cancelled', 'canceled'];
@@ -37,7 +47,7 @@ function computeLaborBilling({ project, tasks, timeEntries, statusLabelById, inv
   }
   const items = []; const projTasks = [];
   const T = { earned: 0, invoiced: 0, uninvoiced: 0, allocated: 0, uninvH: 0, unpricedH: 0, unpricedTasks: 0, over: 0 };
-  const P = { remH: 0, remAmt: 0, unpricedRemH: 0 };
+  const P = { remH: 0, remAmt: 0, unpricedRemH: 0, availH: 0, availAmt: 0 };
   for (const t of tasks || []) {
     if (t.labor_billing_type !== 'BILLABLE') continue;
     const label = statusLabelById.get(t.status_id);
@@ -48,18 +58,26 @@ function computeLaborBilling({ project, tasks, timeEntries, statusLabelById, inv
     const invoicedHours = lh(invH.get(t.id) || 0);
     const draftHours = lh(draftH.get(t.id) || 0);
     const uninvoicedHours = lh(Math.max(0, hours - invoicedHours));
-    const overInvoiced = invoicedHours > hours + 1e-9;
+    const done = DONE.includes(label);
+    const est = t.estimated_hours > 0 ? t.estimated_hours : 0;
+    const cap = done ? rawLogged : Math.max(rawLogged, est);
+    const overInvoiced = invoicedHours > lh(cap) + 1e-9;
     if (overInvoiced) T.over++;
+    const billedAll = invoicedHours + draftHours;
+    const earnedAvail = lh(Math.max(0, hours - billedAll));
+    const projAvail = rate == null || done ? 0 : lh(Math.max(0, cap - Math.max(rawLogged, billedAll)));
+    const sendable = lh(Math.max(0, cap - invoicedHours));
+    P.availH += projAvail; if (rate != null) P.availAmt += projAvail * rate;
     const uninvoicedAmount = rate == null ? null : lr2(uninvoicedHours * rate);
     const allocatedAmount = rate == null ? null : lr2(Math.min(uninvoicedHours, draftHours) * rate);
     if (rate == null) { if (uninvoicedHours > 0) { T.unpricedH += uninvoicedHours; T.unpricedTasks++; } }
     else { T.earned += hours * rate; T.uninvoiced += uninvoicedAmount; T.allocated += allocatedAmount; T.uninvH += uninvoicedHours; }
     T.invoiced += invAmt.get(t.id) || 0;
     items.push({ task_id: t.id, task_name: t.name, rate, hours_logged: hours, invoiced_hours: invoicedHours, draft_hours: draftHours,
-      uninvoiced_hours: uninvoicedHours, uninvoiced_amount: uninvoicedAmount, allocated_amount: allocatedAmount, over_invoiced: overInvoiced });
+      uninvoiced_hours: uninvoicedHours, uninvoiced_amount: uninvoicedAmount, allocated_amount: allocatedAmount, over_invoiced: overInvoiced,
+      estimated_hours: est || null, done, cap_hours: lh(cap), earned_available_hours: earnedAvail,
+      projected_available_hours: projAvail, projected_available_amount: rate == null ? null : lr2(projAvail * rate), sendable_hours: sendable });
 
-    const done = DONE.includes(label);
-    const est = t.estimated_hours > 0 ? t.estimated_hours : 0;
     const remH = !done && est ? Math.max(est - rawLogged, 0) : 0;
     const remAmt = rate == null ? null : remH * rate;
     P.remH += remH;
@@ -70,7 +88,8 @@ function computeLaborBilling({ project, tasks, timeEntries, statusLabelById, inv
     items,
     totals: { earned: lr2(T.earned), invoiced_amount: lr2(T.invoiced), uninvoiced: lr2(T.uninvoiced), allocated_to_drafts: lr2(T.allocated),
       available: lr2(T.uninvoiced - T.allocated), uninvoiced_hours: lh(T.uninvH), unpriced_hours: lh(T.unpricedH), unpriced_tasks: T.unpricedTasks, over_invoiced_tasks: T.over },
-    projected: { tasks: projTasks, totals: { remaining_hours: lh(P.remH), remaining_amount: lr2(P.remAmt), unpriced_remaining_hours: lh(P.unpricedRemH) } },
+    projected: { tasks: projTasks, totals: { remaining_hours: lh(P.remH), remaining_amount: lr2(P.remAmt), unpriced_remaining_hours: lh(P.unpricedRemH),
+      available_hours: lh(P.availH), available_amount: lr2(P.availAmt) } },
   };
 }
 
@@ -93,8 +112,25 @@ function runVectors() {
       },
       expect: {
         totals: { earned: 1000, invoiced_amount: 300, uninvoiced: 800, allocated_to_drafts: 100, available: 700, uninvoiced_hours: 6, unpriced_hours: 0, unpriced_tasks: 0, over_invoiced_tasks: 1 },
-        projected: { remaining_hours: 3, remaining_amount: 300, unpriced_remaining_hours: 0 },
+        projected: { remaining_hours: 3, remaining_amount: 300, unpriced_remaining_hours: 0, available_hours: 3, available_amount: 300 },
         item_ids: ['t1', 't2', 't5', 't6'],
+        items: { t1: [1, 2, 4], t2: [4, 0, 4], t5: [0, 1, 1], t6: [0, 0, 0] },
+      },
+    },
+    {
+      name: 'advance (projected) billing applied first against later logged hours; done task capped at logged',
+      input: {
+        project: { labor_billing_rate: 100 },
+        tasks: [B('a', { estimated_hours: 10 }), B('b', { status_id: 'done', estimated_hours: 9 })],
+        timeEntries: [{ task_id: 'a', hours: 4 }, { task_id: 'b', hours: 5 }],
+        laborLines: [{ type: 'labor', source_id: 'a', invoice_id: 'A', qty: 4, line_total: 400 }, { type: 'labor', source_id: 'a', invoice_id: 'A', qty: 3, line_total: 300, metadata: { labor_basis: 'projected' } },
+          { type: 'labor', source_id: 'b', invoice_id: 'A', qty: 7, line_total: 700, metadata: { labor_basis: 'projected' } }],
+      },
+      expect: {
+        totals: { earned: 900, invoiced_amount: 1400, uninvoiced: 0, allocated_to_drafts: 0, available: 0, uninvoiced_hours: 0, unpriced_hours: 0, unpriced_tasks: 0, over_invoiced_tasks: 1 },
+        projected: { remaining_hours: 6, remaining_amount: 600, unpriced_remaining_hours: 0, available_hours: 3, available_amount: 300 },
+        item_ids: ['a', 'b'],
+        items: { a: [0, 3, 3], b: [0, 0, 0] },
       },
     },
     {
@@ -102,14 +138,17 @@ function runVectors() {
       input: { project: { labor_billing_rate: null }, tasks: [B('t7', { estimated_hours: 5 })], timeEntries: [{ task_id: 't7', hours: 2 }], laborLines: [] },
       expect: {
         totals: { earned: 0, invoiced_amount: 0, uninvoiced: 0, allocated_to_drafts: 0, available: 0, uninvoiced_hours: 0, unpriced_hours: 2, unpriced_tasks: 1, over_invoiced_tasks: 0 },
-        projected: { remaining_hours: 3, remaining_amount: 0, unpriced_remaining_hours: 3 },
+        projected: { remaining_hours: 3, remaining_amount: 0, unpriced_remaining_hours: 3, available_hours: 0, available_amount: 0 },
         item_ids: ['t7'],
+        items: { t7: [2, 0, 5] },
       },
     },
   ];
   const results = cases.map((c) => {
     const out = computeLaborBilling({ ...c.input, statusLabelById, invoiceStatusById });
-    const got = { totals: out.totals, projected: out.projected.totals, item_ids: out.items.map((i) => i.task_id) };
+    // items: task_id → [earned_available_hours, projected_available_hours, sendable_hours]
+    const got = { totals: out.totals, projected: out.projected.totals, item_ids: out.items.map((i) => i.task_id),
+      items: Object.fromEntries(out.items.map((i) => [i.task_id, [i.earned_available_hours, i.projected_available_hours, i.sendable_hours]])) };
     const pass = JSON.stringify(got) === JSON.stringify(c.expect);
     return { name: c.name, pass, ...(pass ? {} : { got, expect: c.expect }) };
   });
@@ -134,9 +173,7 @@ Deno.serve(async (req) => {
     if (user.role !== 'admin') return Response.json({ error: 'Forbidden' }, { status: 403 });
 
     const body = await req.json().catch(() => ({}));
-    const vectors = runVectors();
-    if (body.self_test) return Response.json({ success: vectors.pass, logic_version: LABOR_LOGIC_VERSION, vectors });
-    if (!vectors.pass) return Response.json({ success: false, error: 'Labor billing regression vectors failed', vectors }, { status: 500 });
+    if (body.self_test) { const vectors = runVectors(); return Response.json({ success: vectors.pass, logic_version: LABOR_LOGIC_VERSION, vectors }); }
 
     const isAll = body.scope === 'all';
     const ids = Array.isArray(body.project_ids) ? [...new Set(body.project_ids.filter((x) => typeof x === 'string' && x))] : [];

@@ -266,6 +266,74 @@
           }
         }
       }
+    },
+    "billing_designation": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "BILLABLE",
+        "NON_BILLABLE",
+        null
+      ],
+      "enumColors": [
+        "green",
+        "gray",
+        "gray"
+      ],
+      "description": "Client billing designation. Missing/null = BILLABLE. NON_BILLABLE projects are excluded from Ready to Invoice and new invoicing; costs, workload, inventory, purchasing and history are unaffected. Admin-only via laborBillingAction.",
+      "rls": {
+        "create": {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        "update": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      }
+    },
+    "billing_designation_set_by": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Admin email who last set the billing designation",
+      "rls": {
+        "create": {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        "update": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      }
+    },
+    "billing_designation_set_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time",
+      "description": "When the billing designation was last set",
+      "rls": {
+        "create": {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        "update": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      }
     }
   },
   "required": [

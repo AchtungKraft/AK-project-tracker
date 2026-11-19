@@ -16,13 +16,20 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  * - project_id (required)
  * - invoice_type: deposit|progress|final (required)
  * - credit_to_apply: number (proposed credit, not deducted yet)
- * - lines: [{ type, source_id?, source_entity?, description, qty, unit_price }]
+ * - lines: [{ type, source_id?, source_entity?, description, qty, unit_price, labor_basis? }]
+ *     labor lines: labor_basis 'earned' (default, logged hours) or 'projected' (advance billing against the task estimate)
  * - notes: string
+ * - append_to_invoice_id: add the lines to this existing DRAFT instead of creating a new one (same validation, same lock)
+ * - check_only: run every validation under the lock and return what would be written; writes nothing
+ *
+ * Labor hours are never capped silently: a line asking for more hours than are available (earned or projected) rejects
+ * the whole request with requested vs available hours. NON_BILLABLE projects are rejected. Projected lines need a
+ * confirmed agreed client budget, and all non-cancelled invoices (drafts included) plus the new lines must fit it.
  */
 
-// ┌─ CANONICAL LABOR BILLING — calculated only in laborBillingCore (regression vectors run on every call).
+// ┌─ CANONICAL LABOR BILLING — calculated only in laborBillingCore (regression vectors run via its self_test).
 // │  This file pins the logic version and fails closed if the core is unavailable or has changed.
-const LABOR_LOGIC_VERSION = 'labor-v1';
+const LABOR_LOGIC_VERSION = 'labor-v2';
 const lr2 = (n) => Math.round((n || 0) * 100) / 100;
 const lh = (n) => Math.round((n || 0) * 10000) / 10000;
 async function laborCore(base44, payload) {
@@ -67,6 +74,44 @@ async function loadDraftAllocations(db, project_id) {
   return { qtyBySource };
 }
 
+const LINE_FIELDS = ['type', 'source_entity', 'source_id', 'part_commitment_id', 'part_id', 'part_name', 'part_number', 'description', 'qty', 'unit_price',
+  'line_total', 'unit_cost', 'cost_total', 'vendor_id', 'vendor_name', 'category_id', 'category_name', 'needs_review', 'review_reason'];
+
+// Add validated lines to an existing draft (runs under the caller's billing lock). Header is updated with a
+// compare-and-set on its current subtotal; if that fails the new lines are removed again. Source records untouched.
+async function appendLines({ base44, user, target, validatedLines, subtotal, blockedLines, warnings, budgetCheck, summarize }) {
+  const sr = base44.asServiceRole.entities;
+  const existing = await sr.ProjectInvoiceLine.filter({ invoice_id: target.id });
+  const base = existing.reduce((m, l) => Math.max(m, l.sort_order ?? 0), 0) + 1;
+  const created = [];
+  try {
+    for (const [k, l] of validatedLines.entries()) {
+      created.push(await sr.ProjectInvoiceLine.create({ invoice_id: target.id, ...Object.fromEntries(LINE_FIELDS.map((f) => [f, l[f] ?? null])), sort_order: base + k, metadata: l.metadata || null }));
+    }
+    const newSubtotal = lr2((target.subtotal ?? 0) + subtotal);
+    const won = (await sr.ProjectInvoice.updateMany({ id: target.id, status: 'draft', subtotal: target.subtotal ?? 0 }, { $set: {
+      subtotal: newSubtotal, total: newSubtotal, balance_due: lr2(Math.max(0, newSubtotal - (target.credit_proposed ?? 0))),
+    } })).updated === 1;
+    if (!won) throw Object.assign(new Error('Draft changed while adding lines. Refresh and try again.'), { code: 'INVOICE_CHANGED' });
+    await sr.ActivityLog.create({ action: 'Draft Invoice Lines Added', related_project_id: target.project_id, user_email: user.email,
+      notes: JSON.stringify({ invoice_id: target.id, at: new Date().toISOString(), before_subtotal: lr2(target.subtotal ?? 0), after_subtotal: newSubtotal, added: validatedLines.map(summarize), budget: budgetCheck }).slice(0, 8000) });
+    return Response.json({ success: true, mode: 'append', invoice_id: target.id, lines_added: created.length, added_subtotal: lr2(subtotal), subtotal: newSubtotal,
+      blocked_lines: blockedLines.length ? blockedLines : null, warnings: warnings.length ? warnings : null, budget: budgetCheck, source_records_mutated: false, credit_ledger_mutated: false });
+  } catch (e) {
+    for (const c of created) await sr.ProjectInvoiceLine.delete(c.id).catch((x) => console.error('[appendLines] cleanup failed', c.id, x.message));
+    return Response.json({ success: false, code: e.code || 'APPEND_FAILED', error: e.message }, { status: e.code ? 409 : 500 });
+  }
+}
+
+// Confirmed agreed client budget (null = not confirmed) and everything already billed or drafted against it.
+async function loadBudget(db, project_id) {
+  const [plans, invoices] = await Promise.all([db.ScopeFundingPlan.filter({ project_id }), db.ProjectInvoice.filter({ project_id })]);
+  const plan = plans[0];
+  const budget = plan?.agreed_budget_confirmed && plan.agreed_client_budget_cents != null ? plan.agreed_client_budget_cents / 100 : null;
+  const billed = invoices.filter((i) => !['cancelled', 'void'].includes(i.status)).reduce((s, i) => s + (i.total ?? i.subtotal ?? 0), 0);
+  return { budget, billed: lr2(billed) };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -93,12 +138,15 @@ Deno.serve(async (req) => {
       credit_to_apply = 0,
       lines = [],
       notes,
+      append_to_invoice_id = null,
+      check_only = false,
     } = payload;
+    const appending = typeof append_to_invoice_id === 'string' && !!append_to_invoice_id;
 
     if (!project_id) {
       return Response.json({ error: 'project_id required' }, { status: 400 });
     }
-    if (!invoice_type || !['deposit', 'progress', 'final'].includes(invoice_type)) {
+    if (!appending && (!invoice_type || !['deposit', 'progress', 'final'].includes(invoice_type))) {
       return Response.json({ error: 'invoice_type must be deposit|progress|final' }, { status: 400 });
     }
     if (!lines || lines.length === 0) {
@@ -117,9 +165,26 @@ Deno.serve(async (req) => {
     if (!release) return Response.json({ success: false, code: 'BILLING_LOCKED', error: 'Another billing action is in progress for this project. Try again in a moment.' }, { status: 409 });
     try {
 
+    // ── PROJECT DESIGNATION ── Non-billable projects never get new invoice lines.
+    const lockedProject = (await base44.asServiceRole.entities.Project.filter({ id: project_id }))[0];
+    if (lockedProject?.billing_designation === 'NON_BILLABLE') {
+      return Response.json({ success: false, code: 'PROJECT_NON_BILLABLE', error: 'This project is marked Non-Billable. Change it to Billable before invoicing.' }, { status: 409 });
+    }
+
+    // ── APPEND TARGET ── must be an untouched draft on this project (re-read under the billing lock).
+    let target = null;
+    if (appending) {
+      target = (await base44.asServiceRole.entities.ProjectInvoice.filter({ id: append_to_invoice_id }))[0] || null;
+      const why = !target ? 'Draft not found.' : target.project_id !== project_id ? 'Draft belongs to another project.'
+        : target.status !== 'draft' ? `Invoice is ${target.status}. Lines can only be added to drafts.`
+        : ((target.credit_application_plan || []).length || target.credit_plan_state) ? 'A send is in progress for this draft.'
+        : (target.paid_amount ?? 0) > 0 || (target.credit_applied ?? 0) > 0 ? 'This draft already has payments or applied credit.' : null;
+      if (why) return Response.json({ success: false, code: 'APPEND_BLOCKED', error: why }, { status: 409 });
+    }
+
     // ── DUPLICATE DRAFT PROTECTION ──
     // Canonical uniqueness boundary: project_id + invoice_type + status=draft
-    const existingDrafts = await base44.entities.ProjectInvoice.filter({
+    const existingDrafts = appending ? [] : await base44.entities.ProjectInvoice.filter({
       project_id,
       invoice_type,
       status: 'draft',
@@ -181,7 +246,10 @@ Deno.serve(async (req) => {
     const laborByTask = lines.some(l => l.type === 'labor')
       ? new Map((await loadProjectLabor(base44, project_id)).items.map(l => [l.task_id, l]))
       : new Map();
-    const laborHoursUsed = new Map();
+    // Disjoint per-task pools (earned vs projected), so the result never depends on line order.
+    const laborUsed = { earned: new Map(), projected: new Map() };
+    const laborRejections = [];
+    let hasProjected = false;
     // Allocation to other ACTIVE drafts (read under the billing lock). Prevents the same source on two drafts.
     const { qtyBySource: draftQty } = await loadDraftAllocations(base44.asServiceRole.entities, project_id);
     const partQtyUsed = new Map();
@@ -414,24 +482,32 @@ Deno.serve(async (req) => {
           blockedLines.push({ line: i, source_id: line.source_id, reason: 'RATE_NOT_SET', message: 'No billing rate is set for this task or project' });
           continue;
         }
-        const avail = lh(lab.uninvoiced_hours - lab.draft_hours - (laborHoursUsed.get(line.source_id) || 0));
-        if (avail <= 0) {
-          const allocated = lab.uninvoiced_hours > 0 && lab.draft_hours > 0;
-          blockedLines.push({ line: i, source_id: line.source_id, reason: allocated ? 'ALLOCATED_TO_OTHER_DRAFT' : 'NO_OUTSTANDING',
-            message: allocated ? `Hours already on an active draft (${lab.draft_hours}h of ${lab.uninvoiced_hours}h uninvoiced)` : `No uninvoiced hours (logged ${lab.hours_logged}, invoiced ${lab.invoiced_hours})` });
+        const basis = line.labor_basis === 'projected' ? 'projected' : 'earned';
+        const pool = basis === 'projected' ? lab.projected_available_hours : lab.earned_available_hours;
+        const used = laborUsed[basis].get(line.source_id) || 0;
+        const available = lh(Math.max(0, pool - used));
+        const requested = line.qty == null ? available : lh(Number(line.qty));
+        if (!(requested > 0)) {
+          return Response.json({ error: `Line ${i}: labor hours must be greater than 0` }, { status: 400 });
+        }
+        if (requested > available + 1e-6) {
+          laborRejections.push({ line: i, task_id: line.source_id, task_name: lab.task_name, basis, requested_hours: requested, available_hours: available,
+            hours_logged: lab.hours_logged, invoiced_hours: lab.invoiced_hours, draft_hours: lab.draft_hours, estimated_hours: lab.estimated_hours,
+            message: `${lab.task_name || 'Task'}: requested ${requested}h ${basis} labor, ${available}h available` });
           continue;
         }
-        const hours = lh(Math.min(Number(line.qty ?? avail) || 0, avail));
-        if (hours <= 0) continue;
-        laborHoursUsed.set(line.source_id, (laborHoursUsed.get(line.source_id) || 0) + hours);
+        const hours = requested;
+        laborUsed[basis].set(line.source_id, used + hours);
+        if (basis === 'projected') hasProjected = true;
         validatedLines.push({
           type: 'labor', source_entity: 'Task', source_id: line.source_id,
           part_commitment_id: null, part_id: null, part_name: null, part_number: null,
-          description: line.description || `Labor: ${lab.task_name || 'Task'}`,
+          description: line.description || `${basis === 'projected' ? 'Projected labor' : 'Labor'}: ${lab.task_name || 'Task'}`,
           qty: hours, unit_price: lab.rate, line_total: lr2(hours * lab.rate),
           unit_cost: null, cost_total: null, vendor_id: null, vendor_name: null,
           category_id: null, category_name: 'Labor', needs_review: false, review_reason: null, sort_order: i,
-          metadata: { task_id: line.source_id, hours_logged_at_draft: lab.hours_logged, invoiced_hours_at_draft: lab.invoiced_hours },
+          metadata: { task_id: line.source_id, labor_basis: basis, hours_logged_at_draft: lab.hours_logged, invoiced_hours_at_draft: lab.invoiced_hours,
+            ...(basis === 'projected' ? { estimated_hours_at_draft: lab.estimated_hours } : {}) },
         });
       }
 
@@ -482,6 +558,11 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Labor hours are never capped: any over-request rejects the whole request.
+    if (laborRejections.length) {
+      return Response.json({ success: false, code: 'LABOR_HOURS_EXCEEDED', error: laborRejections.map((r) => r.message).join('; '), labor_rejections: laborRejections }, { status: 409 });
+    }
+
     // All blocked?
     if (validatedLines.length === 0 && blockedLines.length > 0) {
       return Response.json({
@@ -492,12 +573,27 @@ Deno.serve(async (req) => {
       }, { status: 400 });
     }
 
-    // ── Compute totals ──
+    // ── Compute totals ── (when appending, subtotal = the added lines only)
     const subtotal = validatedLines.reduce((s, l) => s + (l.line_total || 0), 0);
 
-    // ── Validate proposed credit ──
-    const proposedCredit = Math.max(0, parseFloat(credit_to_apply) || 0);
-    if (proposedCredit > 0) {
+    // ── Approved client budget ── projected (advance) labor must fit the confirmed agreed budget.
+    let budgetCheck = null;
+    if (hasProjected) {
+      const { budget, billed } = await loadBudget(base44.asServiceRole.entities, project_id);
+      if (budget == null) {
+        return Response.json({ success: false, code: 'BUDGET_NOT_CONFIRMED', error: 'Projected labor needs a confirmed agreed client budget on this project.' }, { status: 409 });
+      }
+      const after = lr2(billed + subtotal);
+      budgetCheck = { agreed_budget: lr2(budget), billed_and_drafted: billed, adding: lr2(subtotal), after, remaining_after: lr2(budget - after) };
+      if (after > budget + 0.005) {
+        return Response.json({ success: false, code: 'BUDGET_EXCEEDED', budget: budgetCheck,
+          error: `Agreed client budget is $${budget.toFixed(2)}; $${billed.toFixed(2)} is already invoiced or on drafts, so $${lr2(budget - billed).toFixed(2)} remains. This adds $${lr2(subtotal).toFixed(2)}.` }, { status: 409 });
+      }
+    }
+
+    // ── Validate proposed credit ── (append keeps the draft's existing proposed credit)
+    const proposedCredit = appending ? (target.credit_proposed ?? 0) : Math.max(0, parseFloat(credit_to_apply) || 0);
+    if (proposedCredit > 0 && !appending) {
       const credits = await base44.entities.ProjectCreditLedger.filter({ project_id });
       const totalAvailable = credits.reduce((s, c) => s + (c.remaining_amount ?? 0), 0);
       if (proposedCredit > totalAvailable) {
@@ -507,6 +603,14 @@ Deno.serve(async (req) => {
         return Response.json({ error: `Proposed credit (${proposedCredit}) exceeds subtotal (${subtotal})` }, { status: 400 });
       }
     }
+
+    const summarize = (l) => ({ type: l.type, source_id: l.source_id, labor_basis: l.metadata?.labor_basis, description: l.description, qty: l.qty, unit_price: l.unit_price, line_total: lr2(l.line_total) });
+    if (check_only) {
+      return Response.json({ success: true, check_only: true, mode: appending ? 'append' : 'create', would_add: validatedLines.map(summarize),
+        adding_subtotal: lr2(subtotal), blocked_lines: blockedLines.length ? blockedLines : null, budget: budgetCheck, warnings: warnings.length ? warnings : null });
+    }
+
+    if (appending) return await appendLines({ base44, user, target, validatedLines, subtotal, blockedLines, warnings, budgetCheck, summarize });
 
     const balanceDue = Math.max(0, subtotal - proposedCredit);
 

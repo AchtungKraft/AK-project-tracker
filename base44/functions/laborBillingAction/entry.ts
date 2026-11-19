@@ -15,7 +15,8 @@ Deno.serve(async (req) => {
     if (!user) return err(401, 'Unauthorized');
     if (user.role !== 'admin') return err(403, 'Only admins can change labor billing.');
     const db = base44.asServiceRole.entities;
-    const { action, project_id, rate, task_ids, billing_type, service_commitment_id, rate_override } = await req.json().catch(() => ({}));
+    const body = await req.json().catch(() => ({}));
+    const { action, project_id, rate, task_ids, billing_type, service_commitment_id, rate_override } = body;
     if (typeof project_id !== 'string' || !project_id) return err(400, 'project_id is required');
     const project = (await db.Project.filter({ id: project_id }))[0];
     if (!project) return err(404, 'Project not found');
@@ -25,6 +26,17 @@ Deno.serve(async (req) => {
       if (!validRate(rate)) return err(400, 'Rate must be a non-negative number (or null to clear).');
       await db.Project.update(project_id, { labor_billing_rate: round2(rate), labor_rate_set_by: user.email, labor_rate_set_at: now });
       return Response.json({ success: true, labor_billing_rate: round2(rate) });
+    }
+
+    if (action === 'set_billing_designation') {
+      const { designation, reason } = body;
+      if (!['BILLABLE', 'NON_BILLABLE'].includes(designation)) return err(400, 'designation must be BILLABLE or NON_BILLABLE');
+      if (typeof reason !== 'string' || !reason.trim()) return err(400, 'A reason is required.');
+      const before = project.billing_designation || 'BILLABLE';
+      await db.Project.update(project_id, { billing_designation: designation, billing_designation_set_by: user.email, billing_designation_set_at: now });
+      await db.ActivityLog.create({ action: 'Project Billing Designation Changed', related_project_id: project_id, user_email: user.email,
+        notes: JSON.stringify({ at: now, before, after: designation, reason: reason.trim().slice(0, 500) }) });
+      return Response.json({ success: true, billing_designation: designation });
     }
 
     if (action === 'classify_tasks') {

@@ -237,6 +237,7 @@ export default function CreateProjectInvoiceModal({
           qty: item.qty ?? 1,
           unit_price: item.unit_price ?? 0,
         };
+        if (item.type === 'labor') linePayload.labor_basis = item.labor_basis || 'earned';
         // Phase 1: Pass service children for expanded invoice lines
         if (item.type === 'service' && item.children?.length > 0) {
           linePayload.expanded_lines = item.children;
@@ -301,7 +302,7 @@ export default function CreateProjectInvoiceModal({
       }
     } catch (error) {
       console.error("Invoice creation error:", error);
-      toast({ title: error.message || "Failed to create invoice", variant: "destructive" });
+      toast({ title: error.response?.data?.error || error.message || "Failed to create invoice", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }

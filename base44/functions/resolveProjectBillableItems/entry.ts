@@ -192,9 +192,9 @@ function computeItems({ partCommitments, serviceCommitments, partMap, lookups })
 }
 // └──────────────────────────────────────────────────────────────┘
 
-// ┌─ CANONICAL LABOR BILLING — calculated only in laborBillingCore (regression vectors run on every call).
+// ┌─ CANONICAL LABOR BILLING — calculated only in laborBillingCore (regression vectors run via its self_test).
 // │  This file pins the logic version and fails closed if the core is unavailable or has changed.
-const LABOR_LOGIC_VERSION = 'labor-v1';
+const LABOR_LOGIC_VERSION = 'labor-v2';
 const lr2 = (n) => Math.round((n || 0) * 100) / 100;
 const lh = (n) => Math.round((n || 0) * 10000) / 10000;
 async function laborCore(base44, payload) {
@@ -313,9 +313,11 @@ Deno.serve(async (req) => {
 
     // Earned, uninvoiced billable labor (admin only — invoicing is admin only). Unpriced hours are reported, never priced.
     let laborTotals = null;
+    let laborItemsAll = [];
     if (user.role === 'admin') {
       const labor = await loadProjectLabor(base44, project_id);
       laborTotals = labor.totals;
+      laborItemsAll = labor.items;
       for (const l of labor.items) {
         if (l.rate == null || l.uninvoiced_hours <= 0) continue;
         items.push({
@@ -327,10 +329,33 @@ Deno.serve(async (req) => {
           qty_available_to_bill: l.uninvoiced_hours, unit_price: l.rate, unit_cost: 0,
           line_total: l.uninvoiced_amount, cost_total: 0, already_billed_amount: 0, billing_locked: false,
           needs_review: false, review_reason: null,
-          metadata: { draft_hours: l.draft_hours, hours_logged: l.hours_logged },
+          metadata: { draft_hours: l.draft_hours, hours_logged: l.hours_logged, labor_basis: 'earned' },
         });
       }
     }
+
+    // Projected (advance) labor against task estimates. Already net of invoiced and draft hours, so it skips the
+    // draft split below. Offered only with a confirmed agreed client budget; the server re-checks the budget on save.
+    const sr = base44.asServiceRole.entities;
+    const [plans, projInvoices, projectRows] = await Promise.all([sr.ScopeFundingPlan.filter({ project_id }), sr.ProjectInvoice.filter({ project_id }), sr.Project.filter({ id: project_id })]);
+    const plan = plans[0];
+    const agreedBudget = plan?.agreed_budget_confirmed && plan.agreed_client_budget_cents != null ? lr2(plan.agreed_client_budget_cents / 100) : null;
+    const billedAndDrafted = lr2(projInvoices.filter((i) => !['cancelled', 'void'].includes(i.status)).reduce((s, i) => s + (i.total ?? i.subtotal ?? 0), 0));
+    const nonBillable = projectRows[0]?.billing_designation === 'NON_BILLABLE';
+    const projectedItems = [];
+    for (const l of laborItemsAll) {
+      if (l.rate == null || !(l.projected_available_hours > 0)) continue;
+      projectedItems.push({
+        id: `projected:${l.task_id}`, selection_key: `projected:${l.task_id}`, source_entity: 'Task', source_id: l.task_id, type: 'labor',
+        description: `Projected labor: ${l.task_name || 'Task'}`, task_name: l.task_name,
+        part_id: null, part_name: null, part_number: null, vendor_id: null, vendor_name: null, category_id: null, category_name: 'Labor',
+        qty_available_to_bill: l.projected_available_hours, unit_price: l.rate, unit_cost: 0,
+        line_total: l.projected_available_amount, cost_total: 0, already_billed_amount: 0, billing_locked: false, needs_review: false, review_reason: null,
+        metadata: { labor_basis: 'projected', estimated_hours: l.estimated_hours, hours_logged: l.hours_logged, invoiced_hours: l.invoiced_hours, draft_hours: l.draft_hours },
+      });
+    }
+    const projectedTotal = lr2(projectedItems.reduce((s, i) => s + i.line_total, 0));
+    const projectedHours = lh(projectedItems.reduce((s, i) => s + i.qty_available_to_bill, 0));
 
     // ── Draft allocation split ── An item already on an active draft is "allocated", not available for a new draft.
     // Parts/labor: min(uninvoiced qty, qty on drafts). Services: whole service if on any draft. Prices are unchanged.
@@ -368,14 +393,25 @@ Deno.serve(async (req) => {
       needsClassificationHours = lh(entries.reduce((s, e) => s + (unclassified.has(e.task_id) ? (Number(e.hours) || 0) : 0), 0));
       if (needsClassificationHours > 0) excludedItems.push({ type: 'labor', source_id: null, description: 'Logged hours on unclassified tasks', amount: null, hours: needsClassificationHours, reason: 'NEEDS_CLASSIFICATION', message: 'Classify these tasks before their hours can be invoiced' });
     }
+    if (projectedItems.length) {
+      if (agreedBudget == null) excludedItems.push({ type: 'labor', source_id: null, description: 'Projected labor (advance billing)', amount: null, projected_amount: projectedTotal, hours: projectedHours, reason: 'BUDGET_NOT_CONFIRMED', message: 'Confirm the agreed client budget to bill projected labor' });
+      else availableItems.push(...projectedItems);
+    }
+    // Non-billable project: nothing is selectable; everything is reported as excluded. Existing drafts stay listed.
+    if (nonBillable) {
+      for (const it of availableItems) excludedItems.push({ type: it.type, source_id: it.source_id, description: it.description, amount: lr2(it.line_total || 0), hours: it.type === 'labor' ? it.qty_available_to_bill : undefined, reason: 'PROJECT_NON_BILLABLE', message: 'Project is marked Non-Billable' });
+      availableItems.length = 0;
+    }
     items.length = 0;
     items.push(...availableItems);
 
     const partItems = items.filter(i => i.type === 'part');
     const serviceItems = items.filter(i => i.type === 'service');
-    const laborItems = items.filter(i => i.type === 'labor');
+    const laborItems = items.filter(i => i.type === 'labor' && i.metadata?.labor_basis !== 'projected');
+    const projectedAvailable = items.filter(i => i.metadata?.labor_basis === 'projected');
     const allocatedTotal = lr2(allocatedItems.reduce((s, i) => s + i.allocated_amount, 0));
-    const availableTotal = lr2(items.reduce((s, i) => s + i.line_total, 0));
+    // Earned scope only; projected (advance) labor is optional and reported separately.
+    const availableTotal = lr2(items.reduce((s, i) => s + (i.metadata?.labor_basis === 'projected' ? 0 : i.line_total), 0));
     const excludedTotal = lr2(excludedItems.reduce((s, i) => s + (i.amount || 0), 0));
 
     return Response.json({
@@ -402,7 +438,11 @@ Deno.serve(async (req) => {
         excluded_total: excludedTotal,
         total_unbilled: lr2(availableTotal + allocatedTotal + excludedTotal),
         needs_classification_hours: needsClassificationHours,
+        projected_labor_count: projectedAvailable.length,
+        projected_labor_total: lr2(projectedAvailable.reduce((s, i) => s + i.line_total, 0)),
       },
+      billing_designation: nonBillable ? 'NON_BILLABLE' : 'BILLABLE',
+      budget: { agreed_budget: agreedBudget, billed_and_drafted: billedAndDrafted, remaining: agreedBudget == null ? null : lr2(agreedBudget - billedAndDrafted) },
       allocated_items: allocatedItems,
       excluded_items: excludedItems,
       warnings: warnings.length > 0 ? warnings : null,

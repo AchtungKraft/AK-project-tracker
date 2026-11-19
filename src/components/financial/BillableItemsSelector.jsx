@@ -46,10 +46,15 @@ function useProjectBillableItems(projectId) {
   });
 }
 
+// Earned and projected labor share a task id, so selection is keyed by selection_key when present.
+const keyOf = (i) => i.selection_key || i.source_id;
+const isProjected = (i) => i.metadata?.labor_basis === 'projected' || i.labor_basis === 'projected';
+
 function groupItems(items) {
   const parts = items.filter(i => i.type === 'part');
   const services = items.filter(i => i.type === 'service');
-  const labor = items.filter(i => i.type === 'labor');
+  const labor = items.filter(i => i.type === 'labor' && !isProjected(i));
+  const projected = items.filter(i => i.type === 'labor' && isProjected(i));
 
   const vendorGroups = {};
   for (const item of parts) {
@@ -69,6 +74,7 @@ function groupItems(items) {
     }),
     services,
     labor,
+    projected,
   };
 }
 
@@ -77,6 +83,7 @@ export default function BillableItemsSelector({
   selectedItems,
   onSelectionChange,
   className,
+  autoSelect = true,
 }) {
   const [expandedGroups, setExpandedGroups] = useState({});
   const [expandedServices, setExpandedServices] = useState({});
@@ -86,18 +93,22 @@ export default function BillableItemsSelector({
   const { data, isLoading, error } = useProjectBillableItems(projectId);
 
   // Filter + group (memoized)
-  const { partGroups, services, labor, allItems } = useMemo(() => {
-    if (!data?.items) return { partGroups: [], services: [], labor: [], allItems: [] };
+  const { partGroups, services, labor, projected, allItems, defaultItems } = useMemo(() => {
+    if (!data?.items) return { partGroups: [], services: [], labor: [], projected: [], allItems: [], defaultItems: [] };
     const items = data.items.filter(i => i.line_total > 0 && i.qty_available_to_bill > 0);
     const grouped = groupItems(items);
-    return { ...grouped, allItems: items };
+    // Projected (advance) labor is never auto- or bulk-selected; it must be chosen deliberately.
+    return { ...grouped, allItems: items, defaultItems: items.filter(i => !isProjected(i)) };
   }, [data]);
 
   // O(1) selection lookup
-  const selectedSet = useMemo(() => new Set(selectedItems.map(s => s.source_id)), [selectedItems]);
+  const selectedSet = useMemo(() => new Set(selectedItems.map(keyOf)), [selectedItems]);
+  const selectedByKey = useMemo(() => new Map(selectedItems.map(s => [keyOf(s), s])), [selectedItems]);
 
   // Build selection payload for an item
   const buildPayload = useCallback((item) => ({
+    selection_key: item.selection_key || null,
+    labor_basis: item.type === 'labor' ? (isProjected(item) ? 'projected' : 'earned') : undefined,
     source_entity: item.source_entity,
     source_id: item.source_id,
     type: item.type,
@@ -123,13 +134,13 @@ export default function BillableItemsSelector({
 
   // Auto-select: only for small datasets (<50), once per project
   useEffect(() => {
-    if (allItems.length > 0 && selectedItems.length === 0 && !hasAutoSelected) {
-      if (allItems.length < 50) {
+    if (defaultItems.length > 0 && selectedItems.length === 0 && !hasAutoSelected) {
+      if (autoSelect && defaultItems.length < 50) {
         const seen = new Set();
         const initial = [];
-        for (const item of allItems) {
-          if (!seen.has(item.source_id)) {
-            seen.add(item.source_id);
+        for (const item of defaultItems) {
+          if (!seen.has(keyOf(item))) {
+            seen.add(keyOf(item));
             initial.push(buildPayload(item));
           }
         }
@@ -137,7 +148,7 @@ export default function BillableItemsSelector({
       }
       setHasAutoSelected(true);
     }
-  }, [allItems, hasAutoSelected, selectedItems.length, buildPayload, onSelectionChange]);
+  }, [defaultItems, autoSelect, hasAutoSelected, selectedItems.length, buildPayload, onSelectionChange]);
 
   // Reset when project changes
   useEffect(() => {
@@ -166,35 +177,43 @@ export default function BillableItemsSelector({
     if (checked) {
       onSelectionChange([...selectedItems, buildPayload(item)]);
     } else {
-      onSelectionChange(selectedItems.filter(s => s.source_id !== item.source_id));
+      onSelectionChange(selectedItems.filter(s => keyOf(s) !== keyOf(item)));
     }
   }, [selectedItems, onSelectionChange, buildPayload]);
 
+  // Partial labor allocation: bill fewer hours than available. Over-entry is shown as an error, never capped.
+  const handleQtyChange = useCallback((item, hours) => {
+    onSelectionChange(selectedItems.map(s => keyOf(s) === keyOf(item)
+      ? { ...s, qty: hours, line_total: Math.round((hours || 0) * item.unit_price * 100) / 100, net_exposure: (hours || 0) * item.unit_price, gross_exposure: (hours || 0) * item.unit_price }
+      : s));
+  }, [selectedItems, onSelectionChange]);
+  const selectedQty = useCallback((item) => selectedByKey.get(keyOf(item))?.qty, [selectedByKey]);
+
   const handleSelectAll = useCallback(() => {
-    const seen = new Set(selectedItems.map(s => s.source_id));
-    const newItems = allItems.filter(i => !seen.has(i.source_id)).map(buildPayload);
+    const seen = new Set(selectedItems.map(keyOf));
+    const newItems = defaultItems.filter(i => !seen.has(keyOf(i))).map(buildPayload);
     onSelectionChange([...selectedItems, ...newItems]);
-  }, [allItems, selectedItems, onSelectionChange, buildPayload]);
+  }, [defaultItems, selectedItems, onSelectionChange, buildPayload]);
 
   const handleDeselectAll = useCallback(() => {
     onSelectionChange([]);
   }, [onSelectionChange]);
 
   const handleSelectGroup = useCallback((items) => {
-    const currentIds = new Set(selectedItems.map(s => s.source_id));
-    const newItems = items.filter(i => !currentIds.has(i.source_id)).map(buildPayload);
+    const currentIds = new Set(selectedItems.map(keyOf));
+    const newItems = items.filter(i => !currentIds.has(keyOf(i))).map(buildPayload);
     onSelectionChange([...selectedItems, ...newItems]);
   }, [selectedItems, onSelectionChange, buildPayload]);
 
   const handleDeselectGroup = useCallback((items) => {
-    const ids = new Set(items.map(i => i.source_id));
-    onSelectionChange(selectedItems.filter(s => !ids.has(s.source_id)));
+    const ids = new Set(items.map(keyOf));
+    onSelectionChange(selectedItems.filter(s => !ids.has(keyOf(s))));
   }, [selectedItems, onSelectionChange]);
 
   const isGroupFullySelected = (items) =>
-    items.length > 0 && items.every(i => selectedSet.has(i.source_id));
+    items.length > 0 && items.every(i => selectedSet.has(keyOf(i)));
   const isGroupPartiallySelected = (items) => {
-    const count = items.filter(i => selectedSet.has(i.source_id)).length;
+    const count = items.filter(i => selectedSet.has(keyOf(i))).length;
     return count > 0 && count < items.length;
   };
 
@@ -219,6 +238,12 @@ export default function BillableItemsSelector({
     return labor.filter(i => i.description?.toLowerCase().includes(s));
   }, [labor, searchTerm]);
 
+  const filteredProjected = useMemo(() => {
+    if (!searchTerm) return projected;
+    const s = searchTerm.toLowerCase();
+    return projected.filter(i => i.description?.toLowerCase().includes(s));
+  }, [projected, searchTerm]);
+
   // ── RENDER STATES ──
   if (!projectId) {
     return <div className="flex items-center justify-center h-40 text-gray-500">Select a project</div>;
@@ -232,13 +257,20 @@ export default function BillableItemsSelector({
   if (allItems.length === 0) {
     return (
       <div className="space-y-3">
-        <div className="flex flex-col items-center justify-center h-32 text-gray-500"><Package className="w-8 h-8 mb-2 text-gray-600" /><p>No items available for a new invoice</p></div>
+        <div className="flex flex-col items-center justify-center h-32 text-gray-500"><Package className="w-8 h-8 mb-2 text-gray-600" />
+          <p>{data?.billing_designation === "NON_BILLABLE" ? "This project is marked Non-Billable, so nothing can be invoiced" : "No items available for a new invoice"}</p></div>
         <BillableEligibilityPanel summary={data?.summary} allocated={data?.allocated_items} excluded={data?.excluded_items} />
       </div>
     );
   }
 
-  const allSelected = allItems.length > 0 && allItems.every(i => selectedSet.has(i.source_id));
+  const allSelected = defaultItems.length > 0 && defaultItems.every(i => selectedSet.has(keyOf(i)));
+  const laborGroupProps = (items, key) => ({
+    items, expanded: !!expandedGroups[key], onToggleExpand: () => toggleGroup(key),
+    isSelected: (item) => selectedSet.has(keyOf(item)), selectedQty, onQtyChange: handleQtyChange, onToggle: handleToggle,
+    allSelected: isGroupFullySelected(items), someSelected: isGroupPartiallySelected(items),
+    onSelectAll: () => handleSelectGroup(items), onDeselectAll: () => handleDeselectGroup(items),
+  });
 
   return (
     <div className={cn("space-y-3", className)}>
@@ -340,18 +372,17 @@ export default function BillableItemsSelector({
         )}
 
         {/* ── EARNED LABOR (collapsed by default) ── */}
-        <BillableLaborGroup
-          items={filteredLabor}
-          expanded={!!expandedGroups['__labor__']}
-          onToggleExpand={() => toggleGroup('__labor__')}
-          isSelected={(item) => selectedSet.has(item.source_id)}
-          onToggle={handleToggle}
-          allSelected={isGroupFullySelected(filteredLabor)}
-          someSelected={isGroupPartiallySelected(filteredLabor)}
-          onSelectAll={() => handleSelectGroup(filteredLabor)}
-          onDeselectAll={() => handleDeselectGroup(filteredLabor)}
-        />
+        <BillableLaborGroup {...laborGroupProps(filteredLabor, '__labor__')} />
+
+        {/* ── PROJECTED LABOR (advance billing; needs a confirmed agreed budget) ── */}
+        <BillableLaborGroup projected {...laborGroupProps(filteredProjected, '__projected__')} />
       </div>
+
+      {projected.length > 0 && data?.budget?.agreed_budget != null && (
+        <p className="px-3 text-xs text-gray-500">
+          Agreed client budget {formatCurrencyUSD(data.budget.agreed_budget)} · {formatCurrencyUSD(data.budget.billed_and_drafted)} invoiced or on drafts · {formatCurrencyUSD(data.budget.remaining)} remaining
+        </p>
+      )}
 
       <BillableEligibilityPanel summary={data?.summary} allocated={data?.allocated_items} excluded={data?.excluded_items} />
 
