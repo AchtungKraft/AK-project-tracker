@@ -55,6 +55,8 @@ function ReconRow({ label, value, color = "text-gray-300", bold = false, border 
 export default function FinancialDetailDrawer({ fin, warnings, costLedger }) {
   const [showDetails, setShowDetails] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  // Only renders when given a project cost summary (fin); other callers pass none.
+  if (!fin) return null;
   const hasServices = fin.services.plannedCost > 0;
   const projColor = fin.totals.projectedMargin >= 0 ? "text-emerald-400" : "text-red-400";
 
