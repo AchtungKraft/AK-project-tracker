@@ -69,7 +69,8 @@ Deno.serve(async (req) => {
       const remainingTotal = r2(remaining.reduce((a, l) => a + (l.line_total || 0), 0));
       // Resume after an interrupted run: header already reflects the removal and only target lines are left over.
       const resuming = missing.length > 0 && r2(inv.subtotal) === remainingTotal;
-      if (missing.length && !resuming) out.push({ code: 'LINES_NOT_ON_INVOICE', message: `Line(s) not on this invoice: ${missing.join(', ')}` });
+      if (!targets.length) out.push({ code: 'NO_MATCHING_LINES', message: 'None of the requested lines are on this draft; nothing would be removed.' });
+      else if (missing.length && !resuming) out.push({ code: 'LINES_NOT_ON_INVOICE', message: `Line(s) not on this invoice: ${missing.join(', ')}` });
       for (const t of targets) {
         if (expected_line_totals[t.id] !== undefined && r2(expected_line_totals[t.id]) !== r2(t.line_total)) {
           out.push({ code: 'LINE_AMOUNT_MISMATCH', message: `Line ${t.id} is ${r2(t.line_total)}, expected ${r2(expected_line_totals[t.id])}.` });
