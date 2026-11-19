@@ -41,6 +41,7 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import CreateProjectInvoiceModal from "@/components/financial/CreateProjectInvoiceModal";
 import ProjectInvoiceDetailDrawer from "@/components/financial/ProjectInvoiceDetailDrawer";
 import ReadyToInvoiceSection from "@/components/financial/ReadyToInvoiceSection";
+import InvoiceRowActions from "@/components/financial/InvoiceRowActions";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import CreditSummaryStrip from "@/components/financial/CreditSummaryStrip";
 import ApplyCreditModal from "@/components/financial/ApplyCreditModal";
@@ -466,9 +467,7 @@ export default function ProjectInvoices() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="sm">
-                          <ExternalLink className="w-4 h-4" />
-                        </Button>
+                        <InvoiceRowActions invoice={inv} onOpen={() => setSelectedInvoiceId(inv.id)} onDeleted={handleRefresh} />
                       </TableCell>
                     </TableRow>
                   ))

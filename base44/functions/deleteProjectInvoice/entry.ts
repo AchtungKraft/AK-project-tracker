@@ -39,6 +39,13 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // RETIRED: this path could hard-delete sent/partial invoices and zero invoiced_qty on shared commitments.
+    // Drafts: deleteDraftInvoice. Issued invoices: cancelProjectInvoice (reverses billing + credits).
+    return Response.json({
+      error: 'deleteProjectInvoice is retired. Use deleteDraftInvoice for drafts or cancelProjectInvoice for sent invoices.',
+      action_taken: 'blocked', reason: 'RETIRED',
+    }, { status: 410 });
+
     const payload = await req.json();
     const { invoice_id, force_cancel = false } = payload;
 
