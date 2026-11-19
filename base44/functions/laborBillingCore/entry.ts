@@ -35,15 +35,17 @@ const CANCELLED = ['cancelled', 'canceled'];
 const lr2 = (n) => Math.round((n || 0) * 100) / 100;
 const lh = (n) => Math.round((n || 0) * 10000) / 10000;
 
-function computeLaborBilling({ project, tasks, timeEntries, statusLabelById, invoiceStatusById, laborLines }) {
+function computeLaborBilling({ project, tasks, timeEntries, statusLabelById, invoiceStatusById, laborLines, baselineByTask = new Map() }) {
   const logged = new Map();
   for (const e of timeEntries || []) if (e.task_id) logged.set(e.task_id, (logged.get(e.task_id) || 0) + (Number(e.hours) || 0));
-  const invH = new Map(); const draftH = new Map(); const invAmt = new Map();
+  const invH = new Map(); const draftH = new Map(); const invAmt = new Map(); const projH = new Map();
   for (const l of laborLines || []) {
     if (l.type !== 'labor' || !l.source_id) continue;
     const st = invoiceStatusById.get(l.invoice_id); const q = Number(l.qty) || 0;
     if (LABOR_FINAL.includes(st)) { invH.set(l.source_id, (invH.get(l.source_id) || 0) + q); invAmt.set(l.source_id, (invAmt.get(l.source_id) || 0) + (l.line_total ?? 0)); }
     else if (st === 'draft') draftH.set(l.source_id, (draftH.get(l.source_id) || 0) + q);
+    else continue;
+    if (l.metadata?.labor_basis === 'projected') projH.set(l.source_id, (projH.get(l.source_id) || 0) + q);
   }
   const items = []; const projTasks = [];
   const T = { earned: 0, invoiced: 0, uninvoiced: 0, allocated: 0, uninvH: 0, unpricedH: 0, unpricedTasks: 0, over: 0 };
@@ -76,7 +78,9 @@ function computeLaborBilling({ project, tasks, timeEntries, statusLabelById, inv
     items.push({ task_id: t.id, task_name: t.name, rate, hours_logged: hours, invoiced_hours: invoicedHours, draft_hours: draftHours,
       uninvoiced_hours: uninvoicedHours, uninvoiced_amount: uninvoicedAmount, allocated_amount: allocatedAmount, over_invoiced: overInvoiced,
       estimated_hours: est || null, done, cap_hours: lh(cap), earned_available_hours: earnedAvail,
-      projected_available_hours: projAvail, projected_available_amount: rate == null ? null : lr2(projAvail * rate), sendable_hours: sendable });
+      projected_available_hours: projAvail, projected_available_amount: rate == null ? null : lr2(projAvail * rate), sendable_hours: sendable,
+      // Reconciliation (tracking only; eligibility above is unchanged). Earned hours above the estimate stay earned.
+      ...reconcile({ rawLogged, billedAll, projBilled: projH.get(t.id) || 0, est, baseline: baselineByTask.get(t.id) }) });
 
     const remH = !done && est ? Math.max(est - rawLogged, 0) : 0;
     const remAmt = rate == null ? null : remH * rate;
@@ -90,6 +94,21 @@ function computeLaborBilling({ project, tasks, timeEntries, statusLabelById, inv
       available: lr2(T.uninvoiced - T.allocated), uninvoiced_hours: lh(T.uninvH), unpriced_hours: lh(T.unpricedH), unpriced_tasks: T.unpricedTasks, over_invoiced_tasks: T.over },
     projected: { tasks: projTasks, totals: { remaining_hours: lh(P.remH), remaining_amount: lr2(P.remAmt), unpriced_remaining_hours: lh(P.unpricedRemH),
       available_hours: lh(P.availH), available_amount: lr2(P.availAmt) } },
+  };
+}
+
+// Projected (advance) hours are applied first against hours logged later. Applied = the part of projected billing
+// already covered by logged hours; unapplied = still ahead of logged work. Nothing here changes time entries or tasks.
+function reconcile({ rawLogged, billedAll, projBilled, est, baseline }) {
+  const earnedBilled = Math.max(0, billedAll - projBilled);
+  const applied = Math.min(projBilled, Math.max(0, rawLogged - earnedBilled));
+  return {
+    original_estimate_hours: baseline ? { min: baseline.labor_hours_min ?? null, max: baseline.labor_hours_max ?? null } : null,
+    revised_estimate_hours: est || null,
+    earned_billed_hours: lh(earnedBilled), projected_billed_hours: lh(projBilled),
+    projected_applied_hours: lh(applied), projected_unapplied_hours: lh(projBilled - applied),
+    overrun_hours: est ? lh(Math.max(0, rawLogged - est)) : 0,
+    variance_hours: est ? lh(rawLogged - est) : null,
   };
 }
 
@@ -152,6 +171,19 @@ function runVectors() {
     const pass = JSON.stringify(got) === JSON.stringify(c.expect);
     return { name: c.name, pass, ...(pass ? {} : { got, expect: c.expect }) };
   });
+  // Reconciliation: r1 billed 4h in advance (estimate 5), then 7h logged → 4h applied, 3h overrun stays earned and billable.
+  // r2 billed 4h in advance, only 2h logged → 2h applied, 2h still ahead of work, nothing earned available.
+  const rec = computeLaborBilling({ project: { labor_billing_rate: 100 }, statusLabelById, invoiceStatusById,
+    tasks: [B('r1', { estimated_hours: 5 }), B('r2', { estimated_hours: 5 })],
+    timeEntries: [{ task_id: 'r1', hours: 7 }, { task_id: 'r2', hours: 2 }],
+    baselineByTask: new Map([['r1', { labor_hours_min: 3, labor_hours_max: 4 }]]),
+    laborLines: [{ type: 'labor', source_id: 'r1', invoice_id: 'A', qty: 4, line_total: 400, metadata: { labor_basis: 'projected' } },
+      { type: 'labor', source_id: 'r2', invoice_id: 'P', qty: 4, line_total: 400, metadata: { labor_basis: 'projected' } }] });
+  const pickR = (i) => [i.earned_available_hours, i.projected_available_hours, i.projected_billed_hours, i.projected_applied_hours, i.projected_unapplied_hours, i.overrun_hours, i.variance_hours, i.revised_estimate_hours, i.original_estimate_hours?.max ?? null];
+  const gotR = Object.fromEntries(rec.items.map((i) => [i.task_id, pickR(i)]));
+  const expR = { r1: [3, 0, 4, 4, 0, 2, 2, 5, 4], r2: [0, 1, 4, 2, 2, 0, -3, 5, null] };
+  const recPass = JSON.stringify(gotR) === JSON.stringify(expR) && rec.totals.available === 300;
+  results.push({ name: 'projected billing reconciles against later hours; overrun above estimate stays earned and billable', pass: recPass, ...(recPass ? {} : { got: gotR, expect: expR, available: rec.totals.available }) });
   return { pass: results.every((r) => r.pass), results };
 }
 
@@ -191,7 +223,11 @@ Deno.serve(async (req) => {
       all(db.TaskTimeEntry, { project_id: { $in: pids } }),
       all(db.ProjectInvoice, { project_id: { $in: pids } }),
     ]) : [[], [], []];
-    const laborLines = invoices.length ? await all(db.ProjectInvoiceLine, { invoice_id: { $in: invoices.map((i) => i.id) }, type: 'labor' }) : [];
+    const [laborLines, baselines] = await Promise.all([
+      invoices.length ? all(db.ProjectInvoiceLine, { invoice_id: { $in: invoices.map((i) => i.id) }, type: 'labor' }) : [],
+      tasks.length ? all(db.ScopeEstimateBaseline, { task_id: { $in: tasks.map((t) => t.id) } }) : [],
+    ]);
+    const baselineByTask = new Map(baselines.map((b) => [b.task_id, b]));
 
     const statusLabelById = new Map(statuses.map((s) => [s.id, (s.label || '').toLowerCase().trim()]));
     const invoiceStatusById = new Map(invoices.map((i) => [i.id, i.status]));
@@ -199,7 +235,7 @@ Deno.serve(async (req) => {
     const projectById = new Map(projects.map((p) => [p.id, p]));
     const out = {};
     for (const id of pids) {
-      out[id] = computeLaborBilling({ project: projectById.get(id), tasks: tasksBy.get(id) || [], timeEntries: entriesBy.get(id) || [], statusLabelById, invoiceStatusById, laborLines });
+      out[id] = computeLaborBilling({ project: projectById.get(id), tasks: tasksBy.get(id) || [], timeEntries: entriesBy.get(id) || [], statusLabelById, invoiceStatusById, laborLines, baselineByTask });
     }
     const empty = computeLaborBilling({ project: null, tasks: [], timeEntries: [], statusLabelById, invoiceStatusById, laborLines: [] });
     return Response.json({ success: true, logic_version: LABOR_LOGIC_VERSION, projects: out, empty });
