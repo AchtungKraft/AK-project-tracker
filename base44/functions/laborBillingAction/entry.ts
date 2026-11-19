@@ -39,6 +39,13 @@ Deno.serve(async (req) => {
       return Response.json({ success: true, billing_designation: designation });
     }
 
+    if (action === 'designation_history') {
+      const logs = await db.ActivityLog.filter({ related_project_id: project_id, action: 'Project Billing Designation Changed' }, '-created_date', 100);
+      const history = logs.map((l) => { let n = {}; try { n = JSON.parse(l.notes || '{}'); } catch { /* legacy note */ }
+        return { at: n.at || l.created_date, by: l.user_email, before: n.before || null, after: n.after || null, reason: n.reason || '' }; });
+      return Response.json({ success: true, history });
+    }
+
     if (action === 'classify_tasks') {
       if (!Array.isArray(task_ids) || !task_ids.length || task_ids.length > 500) return err(400, 'task_ids must be 1–500 ids');
       if (!TYPES.includes(billing_type)) return err(400, 'Invalid billing_type');

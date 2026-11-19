@@ -26,6 +26,7 @@ export default function AddDraftLinesDialog({ invoice, open, onOpenChange, onSav
       type: i.type, source_entity: i.source_entity, source_id: i.source_id, description: i.description || i.part_name || "Item",
       qty: i.qty ?? 1, unit_price: i.unit_price ?? 0,
       ...(i.type === "labor" ? { labor_basis: i.labor_basis || "earned" } : {}),
+      ...(i.type === "part" && i.part_basis ? { part_basis: i.part_basis } : {}),
       ...(i.type === "service" && i.children?.length ? { expanded_lines: i.children } : {}),
     }));
     const res = await base44.functions.invoke("createProjectInvoiceDraft", { project_id: invoice.project_id, append_to_invoice_id: invoice.id, lines })

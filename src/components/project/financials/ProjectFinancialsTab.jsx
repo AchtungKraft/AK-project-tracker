@@ -14,11 +14,13 @@ import FinancialLineItems from "./FinancialLineItems";
 import ApprovedScopeBudgetSection from "./ApprovedScopeBudgetSection";
 import ScopeFundingSection from "./funding/ScopeFundingSection";
 import ProjectInvoicesPanel from "./invoices/ProjectInvoicesPanel";
+import BillingSetupTab from "./billing/BillingSetupTab";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function ProjectFinancialsTab({ projectId }) {
   const queryClient = useQueryClient();
   const [exportFormat, setExportFormat] = useState(null);
+  const [tab, setTab] = useState("overview");
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["projectFinancialOverview", projectId],
     queryFn: async () => (await base44.functions.invoke("getProjectFinancialOverview", { project_id: projectId })).data,
@@ -61,9 +63,10 @@ export default function ProjectFinancialsTab({ projectId }) {
         </div>
       </div>
       {exportFormat && <FinancialExportDialog projectId={projectId} format={exportFormat} onClose={() => setExportFormat(null)} />}
-      <Tabs defaultValue="overview">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="bg-gray-900 border border-gray-800 h-auto flex-wrap justify-start">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="billing">Billing Setup</TabsTrigger>
           <TabsTrigger value="invoices">Invoices &amp; Payments</TabsTrigger>
           <TabsTrigger value="funding">Funding &amp; Deposits</TabsTrigger>
           <TabsTrigger value="costs">Cost Reconciliation</TabsTrigger>
@@ -75,6 +78,9 @@ export default function ProjectFinancialsTab({ projectId }) {
           <FinancialSummaryCards summary={data.summary} />
           <FinancialCategoryBreakdown categories={data.categories} summary={data.summary} laborBilling={data.labor_billing} />
           <FinancialLaborBilling projectId={projectId} lb={data.labor_billing} labor={data.labor} />
+        </TabsContent>
+        <TabsContent value="billing" className="mt-4">
+          <BillingSetupTab projectId={projectId} lb={data.labor_billing} onGoToFunding={() => setTab("funding")} />
         </TabsContent>
         <TabsContent value="invoices" className="space-y-4 mt-4">
           <ProjectInvoicesPanel projectId={projectId} />

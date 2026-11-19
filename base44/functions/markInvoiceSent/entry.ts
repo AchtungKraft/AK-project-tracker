@@ -143,8 +143,10 @@ async function markSent(db, { invoice_id, qb_invoice_number, issue_date, due_dat
     // PHASE 0: eligibility re-check (unchanged)
     const partQtyBySource = new Map();
     const serviceSources = new Set();
+    let hasProjectedParts = false;
     for (const line of lines) {
       if (line.type === 'part') {
+        if (line.metadata?.part_basis === 'projected') hasProjectedParts = true;
         const sid = line.source_id || line.part_commitment_id;
         if (sid) partQtyBySource.set(sid, (partQtyBySource.get(sid) ?? 0) + (line.qty ?? 0));
       } else if (line.type === 'service' && line.source_id) serviceSources.add(line.source_id);
@@ -187,10 +189,14 @@ async function markSent(db, { invoice_id, qb_invoice_number, issue_date, due_dat
         else if (h.total > cap + 1e-6) ineligible.push({ source_id: tid, type: 'labor', reason: 'EXCEEDS_BILLABLE_HOURS', line_hours: h.total, available_hours: cap });
       }
     }
-    if (hasProjected) {
+    // Authorization: projected labor needs a confirmed agreed budget; projected labor or parts must fit it when one exists.
+    // Consumption is net of credit (issued invoices net of applied credit + this invoice net of the credit it will apply),
+    // so a paid deposit applied here is not counted against the budget a second time.
+    if (hasProjected || hasProjectedParts) {
       const b = await db.budgetState(invoice.project_id);
-      if (b.budget == null) ineligible.push({ source_id: invoice.project_id, type: 'budget', reason: 'BUDGET_NOT_CONFIRMED' });
-      else if (b.billed_final + (fresh.subtotal ?? 0) > b.budget + 0.005) ineligible.push({ source_id: invoice.project_id, type: 'budget', reason: 'BUDGET_EXCEEDED', agreed_budget: b.budget, already_invoiced: b.billed_final, invoice_total: fresh.subtotal ?? 0 });
+      const net = lr2((fresh.subtotal ?? 0) - Math.min(fresh.credit_proposed ?? 0, b.credit_balance ?? Infinity));
+      if (hasProjected && b.budget == null) ineligible.push({ source_id: invoice.project_id, type: 'budget', reason: 'BUDGET_NOT_CONFIRMED' });
+      else if (b.budget != null && b.billed_final + net > b.budget + 0.005) ineligible.push({ source_id: invoice.project_id, type: 'budget', reason: 'BUDGET_EXCEEDED', agreed_budget: b.budget, already_invoiced: b.billed_final, invoice_total: fresh.subtotal ?? 0, invoice_net: net });
     }
     if (ineligible.length) {
       return [409, { success: false, error: 'Invoice contains items that are already invoiced or no longer billable. Edit or cancel this draft before sending.', ineligible }];
@@ -289,11 +295,9 @@ function realDb(base44) {
     projectCas: async (q, set) => (await sr.Project.updateMany(q, { $set: set })).updated,
     laborItems: async (project_id) => (await loadProjectLabor(base44, project_id)).items,
     budgetState: async (project_id) => {
-      const [plans, invoices] = await Promise.all([sr.ScopeFundingPlan.filter({ project_id }), sr.ProjectInvoice.filter({ project_id })]);
-      const p = plans[0];
-      const budget = p?.agreed_budget_confirmed && p.agreed_client_budget_cents != null ? p.agreed_client_budget_cents / 100 : null;
-      const billed_final = invoices.filter((i) => ['sent', 'partial', 'paid', 'overdue'].includes(i.status)).reduce((s, i) => s + (i.total ?? i.subtotal ?? 0), 0);
-      return { budget, billed_final: lr2(billed_final) };
+      const d = (await base44.functions.invoke('billingAuthorizationCore', { project_id })).data;
+      if (!d?.success || d.logic_version !== 'auth-v1') throw new Error('Billing authorization unavailable or version mismatch');
+      return { budget: d.authorization.authorized, billed_final: d.authorization.invoiced_net, credit_balance: d.authorization.credit_balance };
     },
   };
 }
@@ -545,6 +549,43 @@ async function runSelfTest() {
     const db = projSeed({ designation: 'NON_BILLABLE' });
     const [s, b] = await run(db);
     return { pass: s === 409 && b.ineligible?.some((x) => x.reason === 'PROJECT_NON_BILLABLE') && inv(db).status === 'draft' && unlocked(db) };
+  });
+
+  // Projected (not yet received) parts and deposit credits against the authorization.
+  const partSeed = ({ budget = { budget: 1000, billed_final: 0 }, subtotal = 600, credit = 0, invoiced = 0, required = 2, qty = 2, basis = 'projected' } = {}) => mockDb({
+    invoices: [{ id: 'inv1', project_id: 'p1', status: 'draft', subtotal, credit_proposed: credit, credit_applied: 0 }],
+    lines: [{ id: 'l1', invoice_id: 'inv1', type: 'part', source_id: 'pc1', qty, line_total: subtotal, metadata: { part_basis: basis } }],
+    commitments: [{ id: 'pc1', required_total: required, invoiced_qty: invoiced, invoiced_amount: invoiced * 300, billing_status: invoiced ? 'invoiced' : 'unbilled', reserved_from_stock: 0, covered_from_po: 0, qty_installed: 0 }],
+    credits: credit ? [{ id: 'cd', project_id: 'p1', credit_amount: credit, remaining_amount: credit, created_date: '2026-01-01T00:00:00Z' }] : [],
+    projects: [{ id: 'p1', billing_lock_token: null }],
+    budget,
+  });
+  await test('projected (unpurchased) part within authorization: sends; purchasing/inventory fields untouched', async () => {
+    const db = partSeed();
+    const [s] = await run(db);
+    const c = pc(db);
+    return { pass: s === 200 && c.invoiced_qty === 2 && c.reserved_from_stock === 0 && c.covered_from_po === 0 && c.qty_installed === 0 };
+  });
+  await test('projected part exceeding remaining authorization: blocked', async () => {
+    const db = partSeed({ budget: { budget: 1000, billed_final: 700 } });
+    const [s, b] = await run(db);
+    return { pass: s === 409 && b.ineligible?.some((x) => x.reason === 'BUDGET_EXCEEDED') && inv(db).status === 'draft' && unlocked(db) };
+  });
+  await test('projected part without authorization: allowed (parts were always billable before purchase)', async () => {
+    const db = partSeed({ budget: { budget: null, billed_final: 0 } });
+    const [s] = await run(db);
+    return { pass: s === 200 };
+  });
+  await test('part received after projected billing: a second invoice for the same qty is blocked', async () => {
+    const db = partSeed({ invoiced: 2, basis: 'current' });
+    db.T.commitments.get('pc1').reserved_from_stock = 2; // now received
+    const [s, b] = await run(db);
+    return { pass: s === 409 && b.ineligible?.some((x) => x.reason === 'EXCEEDS_UNINVOICED_QTY') && pc(db).invoiced_qty === 2 };
+  });
+  await test('deposit credit applied: counted once against authorization (300 deposit issued, 1000 invoice with 300 credit fits 1000)', async () => {
+    const db = partSeed({ budget: { budget: 1000, billed_final: 300, credit_balance: 300 }, subtotal: 1000, credit: 300 });
+    const [s, b] = await run(db);
+    return { pass: s === 200 && inv(db).credit_applied === 300 && inv(db).balance_due === 700, status: s, body: s === 200 ? undefined : b };
   });
 
   return { function: 'markInvoiceSent', mock_only: true, passed: results.filter((r) => r.pass).length, total: results.length, results };

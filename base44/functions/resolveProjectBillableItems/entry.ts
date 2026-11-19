@@ -208,6 +208,14 @@ async function loadProjectLabor(base44, project_id) {
 }
 // └─────────────────────────────────────────────────────────────────────────
 
+// Billing authorization (confirmed agreed budget and net consumption) — calculated only in billingAuthorizationCore.
+const AUTH_LOGIC_VERSION = 'auth-v1';
+async function loadAuthorization(base44, project_id) {
+  const d = (await base44.functions.invoke('billingAuthorizationCore', { project_id })).data;
+  if (!d?.success || d.logic_version !== AUTH_LOGIC_VERSION) throw new Error('Billing authorization unavailable or version mismatch');
+  return d.authorization;
+}
+
 // Quantities already placed on ACTIVE drafts (status=draft) for a project, keyed by source id.
 // Parts/labor: summed qty/hours. Services: 1 per draft that carries the service (child lines collapse to one).
 async function loadDraftAllocations(db, project_id, excludeInvoiceId = null) {
@@ -337,10 +345,8 @@ Deno.serve(async (req) => {
     // Projected (advance) labor against task estimates. Already net of invoiced and draft hours, so it skips the
     // draft split below. Offered only with a confirmed agreed client budget; the server re-checks the budget on save.
     const sr = base44.asServiceRole.entities;
-    const [plans, projInvoices, projectRows] = await Promise.all([sr.ScopeFundingPlan.filter({ project_id }), sr.ProjectInvoice.filter({ project_id }), sr.Project.filter({ id: project_id })]);
-    const plan = plans[0];
-    const agreedBudget = plan?.agreed_budget_confirmed && plan.agreed_client_budget_cents != null ? lr2(plan.agreed_client_budget_cents / 100) : null;
-    const billedAndDrafted = lr2(projInvoices.filter((i) => !['cancelled', 'void'].includes(i.status)).reduce((s, i) => s + (i.total ?? i.subtotal ?? 0), 0));
+    const [auth, projectRows] = await Promise.all([user.role === 'admin' ? loadAuthorization(base44, project_id) : null, sr.Project.filter({ id: project_id })]);
+    const agreedBudget = auth?.authorized ?? null;
     const nonBillable = projectRows[0]?.billing_designation === 'NON_BILLABLE';
     const projectedItems = [];
     for (const l of laborItemsAll) {
@@ -374,6 +380,26 @@ Deno.serve(async (req) => {
           line_total: lr2(remaining * it.unit_price), cost_total: lr2(remaining * (it.unit_cost || 0)), children: it.type === 'service' ? it.children : undefined } : it);
       }
     }
+
+    // ── Current vs projected parts ── Same canonical cap (required − removed − invoiced − drafts); only the label differs.
+    // Invoiced and draft qty are applied first against physically received qty (reserved from stock + installed);
+    // the rest is projected (not yet purchased or received). Receiving later never reopens invoiced qty.
+    const cById = new Map(commitments.map((c) => [c.id, c]));
+    const splitItems = [];
+    for (const it of availableItems) {
+      if (it.type !== 'part') { splitItems.push(it); continue; }
+      const c = cById.get(it.source_id) || {};
+      const physical = Math.min(it.effective_required ?? 0, (c.reserved_from_stock ?? 0) + (c.qty_installed ?? 0));
+      const currentQ = lh(Math.max(0, Math.min(it.qty_available_to_bill, physical - (it.invoiced_qty ?? 0) - (it.qty_allocated || 0))));
+      const projQ = lh(it.qty_available_to_bill - currentQ);
+      const mk = (q, basis) => ({ ...it, ...(basis === 'projected' ? { id: `projected-part:${it.source_id}`, selection_key: `projected-part:${it.source_id}` } : {}),
+        qty_available_to_bill: q, line_total: lr2(q * it.unit_price), cost_total: lr2(q * (it.unit_cost || 0)),
+        metadata: { ...it.metadata, part_basis: basis, received_qty: physical, on_order_qty: c.covered_from_po ?? 0, actual_unit_cost: c.actual_unit_cost ?? null } });
+      if (currentQ > 1e-9) splitItems.push(mk(currentQ, 'current'));
+      if (projQ > 1e-9) splitItems.push(mk(projQ, 'projected'));
+    }
+    availableItems.length = 0;
+    availableItems.push(...splitItems);
 
     // ── Excluded / blocked (never selectable) ──
     const excludedItems = [];
@@ -440,9 +466,13 @@ Deno.serve(async (req) => {
         needs_classification_hours: needsClassificationHours,
         projected_labor_count: projectedAvailable.length,
         projected_labor_total: lr2(projectedAvailable.reduce((s, i) => s + i.line_total, 0)),
+        projected_parts_count: partItems.filter((i) => i.metadata?.part_basis === 'projected').length,
+        projected_parts_total: lr2(partItems.filter((i) => i.metadata?.part_basis === 'projected').reduce((s, i) => s + i.line_total, 0)),
       },
       billing_designation: nonBillable ? 'NON_BILLABLE' : 'BILLABLE',
-      budget: { agreed_budget: agreedBudget, billed_and_drafted: billedAndDrafted, remaining: agreedBudget == null ? null : lr2(agreedBudget - billedAndDrafted) },
+      // billed_and_drafted is net of applied/proposed credit, so a deposit applied later is not counted twice.
+      budget: auth ? { agreed_budget: agreedBudget, billed_and_drafted: auth.consumed, remaining: auth.remaining_authorization,
+        invoiced_net: auth.invoiced_net, drafts_net: auth.drafts_net, credit_balance: auth.credit_balance } : null,
       allocated_items: allocatedItems,
       excluded_items: excludedItems,
       warnings: warnings.length > 0 ? warnings : null,

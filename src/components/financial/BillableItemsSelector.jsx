@@ -1,259 +1,128 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import {
-  ChevronDown,
-  ChevronRight,
-  Loader2,
-  Package,
-  Truck,
-  AlertTriangle,
-  CheckSquare,
-} from "lucide-react";
+import { Loader2, Package, AlertTriangle, CheckSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import BillableLaborGroup from "./BillableLaborGroup";
+import BillablePartsGroup from "./BillablePartsGroup";
+import BillableServicesGroup from "./BillableServicesGroup";
+import BillableSection from "./BillableSection";
 import BillableEligibilityPanel from "./BillableEligibilityPanel";
 
 /**
- * BillableItemsSelector — UNIFIED selector for parts + services
- *
- * PERFORMANCE:
- * - Groups collapsed by default (lazy expansion)
- * - Auto-select only for datasets < 50 items
- * - O(1) selection lookup via Set
- * - Memoized grouping + filtering
- *
- * SERVICE EXPANSION:
- * - Services with children show expandable line item breakdown
+ * BillableItemsSelector — Create Invoice builder, in five sections:
+ * Current/Earned Labor · Projected/Unearned Labor · Current Billable Parts · Projected/Unpurchased Parts · Services.
+ * Groups are collapsed by default. Projected items are never auto- or bulk-selected. Partial qty/hours allowed;
+ * the server rejects anything above what is available (never capped silently).
  */
 
 function useProjectBillableItems(projectId) {
   return useQuery({
     queryKey: ["billableItems", projectId],
-    queryFn: async () => {
-      if (!projectId) return null;
-      const res = await base44.functions.invoke("resolveProjectBillableItems", { project_id: projectId });
-      return res.data;
-    },
+    queryFn: async () => (projectId ? (await base44.functions.invoke("resolveProjectBillableItems", { project_id: projectId })).data : null),
     enabled: !!projectId,
     staleTime: 15000,
     refetchOnWindowFocus: false,
   });
 }
 
-// Earned and projected labor share a task id, so selection is keyed by selection_key when present.
+// Current and projected rows can share a source id, so selection is keyed by selection_key when present.
 const keyOf = (i) => i.selection_key || i.source_id;
-const isProjected = (i) => i.metadata?.labor_basis === 'projected' || i.labor_basis === 'projected';
+const isProjected = (i) => i.metadata?.labor_basis === "projected" || i.labor_basis === "projected" || i.metadata?.part_basis === "projected" || i.part_basis === "projected";
+const sumTotal = (items) => items.reduce((s, i) => s + (i.line_total || 0), 0);
 
-function groupItems(items) {
-  const parts = items.filter(i => i.type === 'part');
-  const services = items.filter(i => i.type === 'service');
-  const labor = items.filter(i => i.type === 'labor' && !isProjected(i));
-  const projected = items.filter(i => i.type === 'labor' && isProjected(i));
-
-  const vendorGroups = {};
+function byVendor(parts) {
+  const groups = {};
   for (const item of parts) {
-    const key = item.vendor_name || 'Unknown Vendor';
-    if (!vendorGroups[key]) {
-      vendorGroups[key] = { vendor_name: key, vendor_id: item.vendor_id, total: 0, items: [] };
-    }
-    vendorGroups[key].items.push(item);
-    vendorGroups[key].total += item.line_total;
+    const key = item.vendor_name || "Unknown Vendor";
+    if (!groups[key]) groups[key] = { vendor_name: key, vendor_id: item.vendor_id, total: 0, items: [] };
+    groups[key].items.push(item);
+    groups[key].total += item.line_total;
   }
-
-  return {
-    partGroups: Object.values(vendorGroups).sort((a, b) => {
-      if (a.vendor_name === 'Unknown Vendor') return 1;
-      if (b.vendor_name === 'Unknown Vendor') return -1;
-      return a.vendor_name.localeCompare(b.vendor_name);
-    }),
-    services,
-    labor,
-    projected,
-  };
+  return Object.values(groups).sort((a, b) => (a.vendor_name === "Unknown Vendor" ? 1 : b.vendor_name === "Unknown Vendor" ? -1 : a.vendor_name.localeCompare(b.vendor_name)));
 }
 
-export default function BillableItemsSelector({
-  projectId,
-  selectedItems,
-  onSelectionChange,
-  className,
-  autoSelect = true,
-}) {
+export default function BillableItemsSelector({ projectId, selectedItems, onSelectionChange, className, autoSelect = true }) {
   const [expandedGroups, setExpandedGroups] = useState({});
   const [expandedServices, setExpandedServices] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
   const [hasAutoSelected, setHasAutoSelected] = useState(false);
-
   const { data, isLoading, error } = useProjectBillableItems(projectId);
 
-  // Filter + group (memoized)
-  const { partGroups, services, labor, projected, allItems, defaultItems } = useMemo(() => {
-    if (!data?.items) return { partGroups: [], services: [], labor: [], projected: [], allItems: [], defaultItems: [] };
-    const items = data.items.filter(i => i.line_total > 0 && i.qty_available_to_bill > 0);
-    const grouped = groupItems(items);
-    // Projected (advance) labor is never auto- or bulk-selected; it must be chosen deliberately.
-    return { ...grouped, allItems: items, defaultItems: items.filter(i => !isProjected(i)) };
+  const { allItems, defaultItems } = useMemo(() => {
+    const items = (data?.items || []).filter((i) => i.line_total > 0 && i.qty_available_to_bill > 0);
+    return { allItems: items, defaultItems: items.filter((i) => !isProjected(i)) };
   }, [data]);
 
-  // O(1) selection lookup
-  const selectedSet = useMemo(() => new Set(selectedItems.map(keyOf)), [selectedItems]);
-  const selectedByKey = useMemo(() => new Map(selectedItems.map(s => [keyOf(s), s])), [selectedItems]);
+  const sections = useMemo(() => {
+    const s = searchTerm.toLowerCase();
+    const items = s ? allItems.filter((i) => i.description?.toLowerCase().includes(s)) : allItems;
+    const parts = items.filter((i) => i.type === "part");
+    const currentParts = parts.filter((i) => !isProjected(i));
+    const projectedParts = parts.filter(isProjected);
+    return {
+      labor: items.filter((i) => i.type === "labor" && !isProjected(i)),
+      projectedLabor: items.filter((i) => i.type === "labor" && isProjected(i)),
+      currentParts, projectedParts, currentGroups: byVendor(currentParts), projectedGroups: byVendor(projectedParts),
+      services: items.filter((i) => i.type === "service"),
+    };
+  }, [allItems, searchTerm]);
 
-  // Build selection payload for an item
+  const selectedSet = useMemo(() => new Set(selectedItems.map(keyOf)), [selectedItems]);
+  const selectedByKey = useMemo(() => new Map(selectedItems.map((s) => [keyOf(s), s])), [selectedItems]);
+
   const buildPayload = useCallback((item) => ({
     selection_key: item.selection_key || null,
-    labor_basis: item.type === 'labor' ? (isProjected(item) ? 'projected' : 'earned') : undefined,
-    source_entity: item.source_entity,
-    source_id: item.source_id,
-    type: item.type,
-    part_id: item.part_id,
-    service_id: item.service_id || null,
-    description: item.description,
-    part_name: item.part_name || item.description,
-    vendor_id: item.vendor_id,
-    vendor_name: item.vendor_name,
-    category_id: item.category_id,
-    category_name: item.category_name,
-    qty: item.qty_available_to_bill,
-    unit_price: item.unit_price,
-    line_total: item.line_total,
-    cost_total: item.cost_total,
-    net_exposure: item.line_total,
-    gross_exposure: item.line_total,
-    credit_applied: 0,
-    needs_review: item.needs_review,
-    review_reason: item.review_reason,
-    children: item.children || null,
+    labor_basis: item.type === "labor" ? (isProjected(item) ? "projected" : "earned") : undefined,
+    part_basis: item.type === "part" ? (item.metadata?.part_basis || null) : undefined,
+    source_entity: item.source_entity, source_id: item.source_id, type: item.type,
+    part_id: item.part_id, service_id: item.service_id || null, description: item.description,
+    part_name: item.part_name || item.description, vendor_id: item.vendor_id, vendor_name: item.vendor_name,
+    category_id: item.category_id, category_name: item.category_name,
+    qty: item.qty_available_to_bill, unit_price: item.unit_price, unit_cost: item.unit_cost || 0,
+    line_total: item.line_total, cost_total: item.cost_total, net_exposure: item.line_total, gross_exposure: item.line_total,
+    credit_applied: 0, needs_review: item.needs_review, review_reason: item.review_reason, children: item.children || null,
   }), []);
 
-  // Auto-select: only for small datasets (<50), once per project
+  // Auto-select current/earned items only, small datasets (<50), once per project.
   useEffect(() => {
     if (defaultItems.length > 0 && selectedItems.length === 0 && !hasAutoSelected) {
       if (autoSelect && defaultItems.length < 50) {
         const seen = new Set();
-        const initial = [];
-        for (const item of defaultItems) {
-          if (!seen.has(keyOf(item))) {
-            seen.add(keyOf(item));
-            initial.push(buildPayload(item));
-          }
-        }
-        onSelectionChange(initial);
+        onSelectionChange(defaultItems.filter((i) => !seen.has(keyOf(i)) && seen.add(keyOf(i))).map(buildPayload));
       }
       setHasAutoSelected(true);
     }
   }, [defaultItems, autoSelect, hasAutoSelected, selectedItems.length, buildPayload, onSelectionChange]);
 
-  // Reset when project changes
-  useEffect(() => {
-    setHasAutoSelected(false);
-    setExpandedGroups({});
-    setExpandedServices({});
-  }, [projectId]);
+  useEffect(() => { setHasAutoSelected(false); setExpandedGroups({}); setExpandedServices({}); }, [projectId]);
 
-  // Performance warning
-  useEffect(() => {
-    if (allItems.length > 100) {
-      console.warn(`[BillableItemsSelector] Large dataset: ${allItems.length} items`);
-    }
-  }, [allItems.length]);
+  const toggleGroup = useCallback((key) => setExpandedGroups((prev) => ({ ...prev, [key]: !prev[key] })), []);
+  const toggleServiceExpand = useCallback((id) => setExpandedServices((prev) => ({ ...prev, [id]: !prev[id] })), []);
 
-  const toggleGroup = useCallback((key) => {
-    setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
-  }, []);
+  const sel = useMemo(() => {
+    const isSelected = (item) => selectedSet.has(keyOf(item));
+    const selectGroup = (items) => onSelectionChange([...selectedItems, ...items.filter((i) => !selectedSet.has(keyOf(i))).map(buildPayload)]);
+    const deselectGroup = (items) => { const ids = new Set(items.map(keyOf)); onSelectionChange(selectedItems.filter((s) => !ids.has(keyOf(s)))); };
+    return {
+      keyOf, isSelected, selectGroup, deselectGroup,
+      toggle: (item, checked) => (checked ? onSelectionChange([...selectedItems, buildPayload(item)]) : onSelectionChange(selectedItems.filter((s) => keyOf(s) !== keyOf(item)))),
+      // Partial allocation of hours or qty. Over-entry is shown as an error, never capped.
+      qtyChange: (item, q) => onSelectionChange(selectedItems.map((s) => (keyOf(s) === keyOf(item)
+        ? { ...s, qty: q, line_total: Math.round((q || 0) * item.unit_price * 100) / 100, cost_total: Math.round((q || 0) * (item.unit_cost || 0) * 100) / 100, net_exposure: (q || 0) * item.unit_price, gross_exposure: (q || 0) * item.unit_price }
+        : s))),
+      selectedQty: (item) => selectedByKey.get(keyOf(item))?.qty,
+      isGroupFullySelected: (items) => items.length > 0 && items.every(isSelected),
+      isGroupPartiallySelected: (items) => { const n = items.filter(isSelected).length; return n > 0 && n < items.length; },
+    };
+  }, [selectedItems, selectedSet, selectedByKey, onSelectionChange, buildPayload]);
 
-  const toggleServiceExpand = useCallback((id) => {
-    setExpandedServices(prev => ({ ...prev, [id]: !prev[id] }));
-  }, []);
-
-  // Selection handlers
-  const handleToggle = useCallback((item, checked) => {
-    if (checked) {
-      onSelectionChange([...selectedItems, buildPayload(item)]);
-    } else {
-      onSelectionChange(selectedItems.filter(s => keyOf(s) !== keyOf(item)));
-    }
-  }, [selectedItems, onSelectionChange, buildPayload]);
-
-  // Partial labor allocation: bill fewer hours than available. Over-entry is shown as an error, never capped.
-  const handleQtyChange = useCallback((item, hours) => {
-    onSelectionChange(selectedItems.map(s => keyOf(s) === keyOf(item)
-      ? { ...s, qty: hours, line_total: Math.round((hours || 0) * item.unit_price * 100) / 100, net_exposure: (hours || 0) * item.unit_price, gross_exposure: (hours || 0) * item.unit_price }
-      : s));
-  }, [selectedItems, onSelectionChange]);
-  const selectedQty = useCallback((item) => selectedByKey.get(keyOf(item))?.qty, [selectedByKey]);
-
-  const handleSelectAll = useCallback(() => {
-    const seen = new Set(selectedItems.map(keyOf));
-    const newItems = defaultItems.filter(i => !seen.has(keyOf(i))).map(buildPayload);
-    onSelectionChange([...selectedItems, ...newItems]);
-  }, [defaultItems, selectedItems, onSelectionChange, buildPayload]);
-
-  const handleDeselectAll = useCallback(() => {
-    onSelectionChange([]);
-  }, [onSelectionChange]);
-
-  const handleSelectGroup = useCallback((items) => {
-    const currentIds = new Set(selectedItems.map(keyOf));
-    const newItems = items.filter(i => !currentIds.has(keyOf(i))).map(buildPayload);
-    onSelectionChange([...selectedItems, ...newItems]);
-  }, [selectedItems, onSelectionChange, buildPayload]);
-
-  const handleDeselectGroup = useCallback((items) => {
-    const ids = new Set(items.map(keyOf));
-    onSelectionChange(selectedItems.filter(s => !ids.has(keyOf(s))));
-  }, [selectedItems, onSelectionChange]);
-
-  const isGroupFullySelected = (items) =>
-    items.length > 0 && items.every(i => selectedSet.has(keyOf(i)));
-  const isGroupPartiallySelected = (items) => {
-    const count = items.filter(i => selectedSet.has(keyOf(i))).length;
-    return count > 0 && count < items.length;
-  };
-
-  // Search filter (memoized)
-  const filteredPartGroups = useMemo(() => {
-    if (!searchTerm) return partGroups;
-    const s = searchTerm.toLowerCase();
-    return partGroups
-      .map(g => ({ ...g, items: g.items.filter(i => i.description?.toLowerCase().includes(s)) }))
-      .filter(g => g.items.length > 0);
-  }, [partGroups, searchTerm]);
-
-  const filteredServices = useMemo(() => {
-    if (!searchTerm) return services;
-    const s = searchTerm.toLowerCase();
-    return services.filter(i => i.description?.toLowerCase().includes(s));
-  }, [services, searchTerm]);
-
-  const filteredLabor = useMemo(() => {
-    if (!searchTerm) return labor;
-    const s = searchTerm.toLowerCase();
-    return labor.filter(i => i.description?.toLowerCase().includes(s));
-  }, [labor, searchTerm]);
-
-  const filteredProjected = useMemo(() => {
-    if (!searchTerm) return projected;
-    const s = searchTerm.toLowerCase();
-    return projected.filter(i => i.description?.toLowerCase().includes(s));
-  }, [projected, searchTerm]);
-
-  // ── RENDER STATES ──
-  if (!projectId) {
-    return <div className="flex items-center justify-center h-40 text-gray-500">Select a project</div>;
-  }
-  if (isLoading) {
-    return <div className="flex items-center justify-center h-40"><Loader2 className="w-5 h-5 animate-spin text-gray-500" /></div>;
-  }
-  if (error) {
-    return <div className="flex items-center justify-center h-40 text-red-400"><AlertTriangle className="w-5 h-5 mr-2" />Failed to load</div>;
-  }
+  if (!projectId) return <div className="flex items-center justify-center h-40 text-gray-500">Select a project</div>;
+  if (isLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="w-5 h-5 animate-spin text-gray-500" /></div>;
+  if (error) return <div className="flex items-center justify-center h-40 text-red-400"><AlertTriangle className="w-5 h-5 mr-2" />Failed to load</div>;
   if (allItems.length === 0) {
     return (
       <div className="space-y-3">
@@ -264,125 +133,52 @@ export default function BillableItemsSelector({
     );
   }
 
-  const allSelected = defaultItems.length > 0 && defaultItems.every(i => selectedSet.has(keyOf(i)));
+  const allSelected = defaultItems.length > 0 && defaultItems.every(sel.isSelected);
   const laborGroupProps = (items, key) => ({
     items, expanded: !!expandedGroups[key], onToggleExpand: () => toggleGroup(key),
-    isSelected: (item) => selectedSet.has(keyOf(item)), selectedQty, onQtyChange: handleQtyChange, onToggle: handleToggle,
-    allSelected: isGroupFullySelected(items), someSelected: isGroupPartiallySelected(items),
-    onSelectAll: () => handleSelectGroup(items), onDeselectAll: () => handleDeselectGroup(items),
+    isSelected: sel.isSelected, selectedQty: sel.selectedQty, onQtyChange: sel.qtyChange, onToggle: sel.toggle,
+    allSelected: sel.isGroupFullySelected(items), someSelected: sel.isGroupPartiallySelected(items),
+    onSelectAll: () => sel.selectGroup(items), onDeselectAll: () => sel.deselectGroup(items),
   });
+  const { labor, projectedLabor, currentParts, projectedParts, currentGroups, projectedGroups, services } = sections;
+  const b = data?.budget;
 
   return (
     <div className={cn("space-y-3", className)}>
-      {/* Summary + Select All */}
-      <div className="flex items-center justify-between px-3 py-2 bg-gray-800/50 rounded-lg text-sm">
-        <span className="text-gray-400">
-          {data?.summary?.part_count || 0} parts, {data?.summary?.service_count || 0} services, {data?.summary?.labor_count || 0} labor
-        </span>
-        <div className="flex items-center gap-2">
-          <span className="text-green-400 font-medium">{formatCurrencyUSD(data?.summary?.grand_total || 0)}</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={allSelected ? handleDeselectAll : handleSelectAll}
-            className="h-6 px-2 text-xs gap-1"
-          >
-            <CheckSquare className="w-3 h-3" />
-            {allSelected ? "Deselect All" : "Select All"}
-          </Button>
-        </div>
+      <div className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-800/50 rounded-lg text-sm">
+        <span className="text-gray-400 text-xs sm:text-sm">Current items {formatCurrencyUSD(sumTotal(defaultItems))} · projected items are optional</span>
+        <Button variant="ghost" size="sm" onClick={allSelected ? () => onSelectionChange([]) : () => sel.selectGroup(defaultItems)} className="h-6 px-2 text-xs gap-1 shrink-0">
+          <CheckSquare className="w-3 h-3" />{allSelected ? "Deselect All" : "Select All Current"}
+        </Button>
       </div>
 
-      {searchTerm !== undefined && (
-        <Input
-          placeholder="Search items..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="bg-gray-800 border-gray-700"
-        />
-      )}
-
-      <div className="space-y-2 max-h-[400px] overflow-y-auto">
-        {/* ── PARTS by vendor (collapsed by default) ── */}
-        {filteredPartGroups.map((group) => {
-          const isExpanded = !!expandedGroups[group.vendor_name];
-          return (
-            <div key={group.vendor_name} className="border border-gray-700 rounded-lg overflow-hidden">
-              <div
-                className="flex items-center gap-2 p-2.5 bg-gray-800/80 cursor-pointer hover:bg-gray-800"
-                onClick={() => toggleGroup(group.vendor_name)}
-              >
-                <Checkbox
-                  checked={isGroupFullySelected(group.items)}
-                  ref={el => { if (el) el.indeterminate = isGroupPartiallySelected(group.items); }}
-                  onCheckedChange={(checked) => checked ? handleSelectGroup(group.items) : handleDeselectGroup(group.items)}
-                  onClick={(e) => e.stopPropagation()}
-                />
-                {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
-                <Package className="w-4 h-4 text-blue-400" />
-                <span className="font-medium text-white flex-1 text-sm">{group.vendor_name}</span>
-                <Badge variant="outline" className="text-xs border-gray-600 text-gray-400">{group.items.length}</Badge>
-                <span className="text-green-400 text-sm font-medium">{formatCurrencyUSD(group.total)}</span>
-              </div>
-              {isExpanded && (
-                <div className="border-t border-gray-700">
-                  {group.items.map((item) => (
-                    <PartItemRow key={item.source_id} item={item} isSelected={selectedSet.has(item.source_id)} onToggle={handleToggle} />
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {/* ── SERVICES (collapsed by default) ── */}
-        {filteredServices.length > 0 && (
-          <div className="border border-amber-700/50 rounded-lg overflow-hidden">
-            <div
-              className="flex items-center gap-2 p-2.5 bg-amber-900/20 cursor-pointer hover:bg-amber-900/30"
-              onClick={() => toggleGroup('__services__')}
-            >
-              <Checkbox
-                checked={isGroupFullySelected(filteredServices)}
-                ref={el => { if (el) el.indeterminate = isGroupPartiallySelected(filteredServices); }}
-                onCheckedChange={(checked) => checked ? handleSelectGroup(filteredServices) : handleDeselectGroup(filteredServices)}
-                onClick={(e) => e.stopPropagation()}
-              />
-              {expandedGroups['__services__'] ? <ChevronDown className="w-4 h-4 text-amber-400" /> : <ChevronRight className="w-4 h-4 text-amber-400" />}
-              <Truck className="w-4 h-4 text-amber-400" />
-              <span className="font-medium text-amber-300 flex-1 text-sm">Services</span>
-              <Badge variant="outline" className="text-xs border-amber-700 text-amber-400">{filteredServices.length}</Badge>
-              <span className="text-amber-400 text-sm font-medium">{formatCurrencyUSD(filteredServices.reduce((s, i) => s + i.line_total, 0))}</span>
-            </div>
-            {expandedGroups['__services__'] && (
-              <div className="border-t border-amber-700/30">
-                {filteredServices.map((item) => (
-                  <ServiceItemRow
-                    key={item.source_id}
-                    item={item}
-                    isSelected={selectedSet.has(item.source_id)}
-                    onToggle={handleToggle}
-                    isChildExpanded={!!expandedServices[item.source_id]}
-                    onToggleExpand={() => toggleServiceExpand(item.source_id)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── EARNED LABOR (collapsed by default) ── */}
-        <BillableLaborGroup {...laborGroupProps(filteredLabor, '__labor__')} />
-
-        {/* ── PROJECTED LABOR (advance billing; needs a confirmed agreed budget) ── */}
-        <BillableLaborGroup projected {...laborGroupProps(filteredProjected, '__projected__')} />
-      </div>
-
-      {projected.length > 0 && data?.budget?.agreed_budget != null && (
+      {b && (
         <p className="px-3 text-xs text-gray-500">
-          Agreed client budget {formatCurrencyUSD(data.budget.agreed_budget)} · {formatCurrencyUSD(data.budget.billed_and_drafted)} invoiced or on drafts · {formatCurrencyUSD(data.budget.remaining)} remaining
+          {b.agreed_budget != null
+            ? <>Authorized {formatCurrencyUSD(b.agreed_budget)} · {formatCurrencyUSD(b.billed_and_drafted)} invoiced or on drafts (net of credits) · <span className={b.remaining < 0 ? "text-red-400" : "text-gray-300"}>{formatCurrencyUSD(b.remaining)} remaining</span></>
+            : "No confirmed client-agreed billing budget. Projected labor can't be billed until one is confirmed."}
         </p>
       )}
+
+      <Input placeholder="Search items..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="bg-gray-800 border-gray-700" />
+
+      <div className="space-y-4 max-h-[440px] overflow-y-auto pr-1">
+        <BillableSection title="Current / Earned Labor" count={labor.length} total={sumTotal(labor)}>
+          <BillableLaborGroup {...laborGroupProps(labor, "__labor__")} />
+        </BillableSection>
+        <BillableSection title="Projected / Unearned Labor" count={projectedLabor.length} total={sumTotal(projectedLabor)} hint="Advance billing against task estimates. Applied first against hours logged later.">
+          <BillableLaborGroup projected {...laborGroupProps(projectedLabor, "__projected__")} />
+        </BillableSection>
+        <BillableSection title="Current Billable Parts" count={currentParts.length} total={sumTotal(currentParts)} hint="Received from stock or installed.">
+          <div className="space-y-2"><BillablePartsGroup groups={currentGroups} expandedGroups={expandedGroups} toggleGroup={toggleGroup} keyPrefix="current" sel={sel} /></div>
+        </BillableSection>
+        <BillableSection title="Projected / Unpurchased Parts" count={projectedParts.length} total={sumTotal(projectedParts)} hint="Not yet purchased or received. Billed at the estimated selling-price snapshot; purchasing and inventory are not changed, and receiving later never re-opens invoiced qty.">
+          <div className="space-y-2"><BillablePartsGroup groups={projectedGroups} expandedGroups={expandedGroups} toggleGroup={toggleGroup} keyPrefix="projected" sel={sel} /></div>
+        </BillableSection>
+        <BillableSection title="Services & Approved Allowances" count={services.length} total={sumTotal(services)}>
+          <BillableServicesGroup items={services} expanded={!!expandedGroups.__services__} onToggleExpand={() => toggleGroup("__services__")} expandedServices={expandedServices} toggleServiceExpand={toggleServiceExpand} sel={sel} />
+        </BillableSection>
+      </div>
 
       <BillableEligibilityPanel summary={data?.summary} allocated={data?.allocated_items} excluded={data?.excluded_items} />
 
@@ -393,164 +189,12 @@ export default function BillableItemsSelector({
         </div>
       )}
 
-      {/* Selection Summary */}
       {selectedItems.length > 0 && (
         <div className="flex items-center justify-between px-3 py-2 bg-green-900/20 border border-green-800/30 rounded-lg">
-          <span className="text-green-400 text-sm">{selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''} selected</span>
-          <span className="text-green-400 font-medium">{formatCurrencyUSD(selectedItems.reduce((s, i) => s + (i.line_total || 0), 0))}</span>
+          <span className="text-green-400 text-sm">{selectedItems.length} item{selectedItems.length !== 1 ? "s" : ""} selected</span>
+          <span className="text-green-400 font-medium">{formatCurrencyUSD(sumTotal(selectedItems))}</span>
         </div>
       )}
     </div>
   );
 }
-
-// ── Margin helper ──
-function MarginBadge({ cost, retail }) {
-  if (!retail || retail <= 0) return null;
-  const margin = retail - (cost || 0);
-  const pct = ((margin / retail) * 100).toFixed(1);
-  const isNegative = margin < 0;
-  return (
-    <span className={cn("text-[10px] font-mono", isNegative ? "text-red-400" : "text-gray-500")}>
-      {isNegative ? "−" : ""}{formatCurrencyUSD(Math.abs(margin))} ({pct}%)
-    </span>
-  );
-}
-
-// ── Part row (with cost/retail/margin) ──
-function PartItemRow({ item, isSelected, onToggle }) {
-  const unitCost = item.unit_cost ?? 0;
-  return (
-    <div className="flex items-center gap-2 px-3 py-2 pl-10 hover:bg-gray-800/50">
-      <Checkbox checked={isSelected} onCheckedChange={(checked) => onToggle(item, checked)} />
-      <Package className="w-3 h-3 text-gray-500" />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-white truncate">{item.description}</p>
-        <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
-          <span>Qty: {item.qty_available_to_bill}</span>
-          <span>×</span>
-          <span>{formatCurrencyUSD(item.unit_price)}</span>
-          {unitCost > 0 && (
-            <>
-              <span className="text-gray-600">|</span>
-              <span>Cost: {formatCurrencyUSD(unitCost)}</span>
-              <MarginBadge cost={unitCost} retail={item.unit_price} />
-            </>
-          )}
-        </div>
-        {item.needs_review && (
-          <div className="flex items-center gap-1 text-xs text-amber-400 mt-0.5">
-            <AlertTriangle className="w-3 h-3" />
-            <span>{item.review_reason}</span>
-          </div>
-        )}
-      </div>
-      <div className="text-right shrink-0">
-        {item.cost_total > 0 && (
-          <p className="text-[10px] text-gray-500">Cost: {formatCurrencyUSD(item.cost_total)}</p>
-        )}
-        <p className="text-sm font-medium text-green-400">{formatCurrencyUSD(item.line_total)}</p>
-      </div>
-    </div>
-  );
-}
-
-// ── Service row (with expandable children) ──
-const ServiceItemRow = React.memo(function ServiceItemRow({ item, isSelected, onToggle, isChildExpanded, onToggleExpand }) {
-  const hasChildren = item.children && item.children.length > 0;
-
-  // Phase 5: Memoize children to avoid re-render on parent state changes
-  const memoizedChildren = useMemo(() => item.children, [item.id]);
-
-  // Phase 4: Validate children total matches parent
-  const childrenSum = useMemo(() => {
-    if (!hasChildren) return 0;
-    return memoizedChildren.reduce((s, c) => s + (c.amount ?? 0), 0);
-  }, [memoizedChildren, hasChildren]);
-
-  const hasMismatch = hasChildren && Math.abs(childrenSum - item.line_total) > 0.01;
-
-  // Log mismatch once (dev aid)
-  useEffect(() => {
-    if (hasMismatch) {
-      console.error("Service total mismatch", {
-        service_id: item.source_id,
-        parent_total: item.line_total,
-        children_sum: childrenSum,
-        diff: childrenSum - item.line_total,
-      });
-    }
-  }, [hasMismatch, item.source_id, item.line_total, childrenSum]);
-
-  return (
-    <div>
-      <div className="flex items-center gap-2 px-3 py-2 pl-10 hover:bg-gray-800/50">
-        <Checkbox checked={isSelected} onCheckedChange={(checked) => onToggle(item, checked)} />
-        {hasChildren ? (
-          <button onClick={(e) => { e.stopPropagation(); onToggleExpand(); }} className="p-0">
-            {isChildExpanded ? <ChevronDown className="w-3 h-3 text-amber-400" /> : <ChevronRight className="w-3 h-3 text-amber-400" />}
-          </button>
-        ) : (
-          <Truck className="w-3 h-3 text-amber-500" />
-        )}
-        <div className="flex-1 min-w-0">
-          <p className="text-sm text-white truncate">
-            {item.description}
-            <span className="ml-1.5 text-[10px] text-amber-400 font-mono">SERVICE</span>
-            {hasChildren && (
-              <span className="ml-1 text-[10px] text-gray-500">({memoizedChildren.length} lines)</span>
-            )}
-          </p>
-          {hasMismatch && (
-            <div className="flex items-center gap-1 text-[10px] text-red-400 mt-0.5">
-              <AlertTriangle className="w-3 h-3" />
-              <span>Children total ({formatCurrencyUSD(childrenSum)}) ≠ parent ({formatCurrencyUSD(item.line_total)})</span>
-            </div>
-          )}
-        </div>
-        <div className="text-right">
-          {item.cost_total > 0 && (
-            <p className="text-xs text-gray-500">Cost: {formatCurrencyUSD(item.cost_total)}</p>
-          )}
-          <p className="text-sm font-medium text-amber-400">{formatCurrencyUSD(item.line_total)}</p>
-        </div>
-      </div>
-
-      {/* Expanded children */}
-      {hasChildren && isChildExpanded && (
-        <div className="ml-14 mr-3 mb-2 border-l-2 border-amber-800/30 pl-3 space-y-1">
-          {memoizedChildren.map((child) => (
-            <div key={child.id} className="flex items-center justify-between py-1 text-xs">
-              <div className="flex items-center gap-2 min-w-0 flex-1">
-                <span className="text-gray-500">↳</span>
-                <Badge variant="outline" className="text-[9px] border-gray-700 text-gray-400 px-1 py-0 h-4 shrink-0">
-                  {child.type}
-                </Badge>
-                <span className="text-gray-300 truncate">{child.description}</span>
-                {child.vendor_name && (
-                  <span className="text-gray-500 truncate">({child.vendor_name})</span>
-                )}
-              </div>
-              <div className="text-right shrink-0 ml-2 flex items-center gap-2">
-                {child.cost_amount > 0 && (
-                  <span className="text-gray-500">Cost: {formatCurrencyUSD(child.cost_amount)}</span>
-                )}
-                <span className="text-amber-300 font-mono">{formatCurrencyUSD(child.amount)}</span>
-                {child.cost_amount > 0 && child.amount > 0 && (
-                  <MarginBadge cost={child.cost_amount} retail={child.amount} />
-                )}
-              </div>
-            </div>
-          ))}
-          {/* Children total footer */}
-          <div className="flex items-center justify-between pt-1 border-t border-amber-800/20">
-            <span className="text-[10px] text-gray-500">Children total</span>
-            <span className={cn("text-[10px] font-mono", hasMismatch ? "text-red-400" : "text-amber-300")}>
-              {formatCurrencyUSD(childrenSum)}
-            </span>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-});

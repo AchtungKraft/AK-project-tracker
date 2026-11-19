@@ -103,13 +103,22 @@ async function appendLines({ base44, user, target, validatedLines, subtotal, blo
   }
 }
 
-// Confirmed agreed client budget (null = not confirmed) and everything already billed or drafted against it.
-async function loadBudget(db, project_id) {
-  const [plans, invoices] = await Promise.all([db.ScopeFundingPlan.filter({ project_id }), db.ProjectInvoice.filter({ project_id })]);
-  const plan = plans[0];
-  const budget = plan?.agreed_budget_confirmed && plan.agreed_client_budget_cents != null ? plan.agreed_client_budget_cents / 100 : null;
-  const billed = invoices.filter((i) => !['cancelled', 'void'].includes(i.status)).reduce((s, i) => s + (i.total ?? i.subtotal ?? 0), 0);
-  return { budget, billed: lr2(billed) };
+// Billing authorization — calculated only in billingAuthorizationCore. budget = confirmed agreed amount (null = none);
+// billed = invoiced + drafted, net of applied/proposed credit (a deposit applied as credit is not consumed twice).
+const AUTH_LOGIC_VERSION = 'auth-v1';
+async function loadBudget(base44, project_id) {
+  const d = (await base44.functions.invoke('billingAuthorizationCore', { project_id })).data;
+  if (!d?.success || d.logic_version !== AUTH_LOGIC_VERSION) throw new Error('Billing authorization unavailable or version mismatch');
+  return { budget: d.authorization.authorized, billed: d.authorization.consumed };
+}
+
+// Physically received qty (reserved from stock + installed). Invoiced and draft qty are applied against it first;
+// the rest of the canonical cap is "projected" (not yet purchased or received). Total cap is unchanged.
+function partPools(c, effectiveRequired, invoicedQty, onDrafts) {
+  const total = Math.max(0, effectiveRequired - invoicedQty - onDrafts);
+  const physical = Math.min(effectiveRequired, (c.reserved_from_stock ?? 0) + (c.qty_installed ?? 0));
+  const current = Math.min(total, Math.max(0, physical - invoicedQty - onDrafts));
+  return { total: lh(total), current: lh(current), projected: lh(total - current) };
 }
 
 Deno.serve(async (req) => {
@@ -253,6 +262,8 @@ Deno.serve(async (req) => {
     // Allocation to other ACTIVE drafts (read under the billing lock). Prevents the same source on two drafts.
     const { qtyBySource: draftQty } = await loadDraftAllocations(base44.asServiceRole.entities, project_id);
     const partQtyUsed = new Map();
+    const partRejections = [];
+    let hasProjectedParts = false;
     const servicesUsed = new Set();
 
     // ── Validate each line ──
@@ -293,7 +304,10 @@ Deno.serve(async (req) => {
         const invoicedQty = commitment.invoiced_qty ?? 0;
         const uninvoicedQty = Math.max(0, effectiveRequired - invoicedQty);
         const onOtherDrafts = draftQty.get(line.source_id) || 0;
-        const qtyAvailable = Math.max(0, uninvoicedQty - onOtherDrafts - (partQtyUsed.get(line.source_id) || 0));
+        const pools = partPools(commitment, effectiveRequired, invoicedQty, onOtherDrafts);
+        const used = partQtyUsed.get(line.source_id) || { total: 0, current: 0, projected: 0 };
+        const basis = ['current', 'projected'].includes(line.part_basis) ? line.part_basis : null; // null = legacy caller, total cap only
+        const qtyAvailable = lh(Math.max(0, pools.total - used.total));
 
         if (qtyAvailable <= 0) {
           const allocated = uninvoicedQty > 0 && onOtherDrafts > 0;
@@ -302,9 +316,20 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        const effectiveQty = Math.min(line.qty ?? qtyAvailable, qtyAvailable);
-        if (!(effectiveQty > 0)) continue;
-        partQtyUsed.set(line.source_id, (partQtyUsed.get(line.source_id) || 0) + effectiveQty);
+        const basisAvailable = basis ? lh(Math.min(qtyAvailable, Math.max(0, pools[basis] - used[basis]))) : qtyAvailable;
+        // Legacy callers without part_basis (e.g. the Invoice Workbench) keep the historical cap-to-available behavior.
+        const effectiveQty = line.qty == null ? basisAvailable : basis ? lh(Number(line.qty)) : Math.min(lh(Number(line.qty)), basisAvailable);
+        if (!(effectiveQty > 0)) {
+          return Response.json({ error: `Line ${i}: part quantity must be greater than 0` }, { status: 400 });
+        }
+        // Never capped silently: asking for more than is available rejects the whole request.
+        if (effectiveQty > basisAvailable + 1e-6) {
+          partRejections.push({ line: i, source_id: line.source_id, basis: basis || 'any', requested_qty: effectiveQty, available_qty: basisAvailable,
+            message: `${line.description || 'Part'}: requested ${effectiveQty} ${basis || ''} qty, ${basisAvailable} available`.replace('  ', ' ') });
+          continue;
+        }
+        partQtyUsed.set(line.source_id, { ...used, total: used.total + effectiveQty, ...(basis ? { [basis]: used[basis] + effectiveQty } : {}) });
+        if (basis === 'projected') hasProjectedParts = true;
         const unitPrice = line.unit_price ?? commitment.unit_retail_snapshot ?? 0;
         const unitCost = commitment.unit_cost_snapshot ?? 0;
         const lineTotal = effectiveQty * unitPrice;
@@ -342,6 +367,9 @@ Deno.serve(async (req) => {
           needs_review: needsReview,
           review_reason: reviewReason,
           sort_order: i,
+          // Estimated selling price and estimated cost are snapshotted on the line; actual cost is tracked on the commitment.
+          metadata: basis ? { part_basis: basis, received_qty_at_draft: lh(Math.min(effectiveRequired, (commitment.reserved_from_stock ?? 0) + (commitment.qty_installed ?? 0))),
+            ...(basis === 'projected' ? { estimated_unit_cost_at_draft: unitCost, on_order_qty_at_draft: commitment.covered_from_po ?? 0 } : {}) } : null,
         });
       }
 
@@ -562,6 +590,9 @@ Deno.serve(async (req) => {
     if (laborRejections.length) {
       return Response.json({ success: false, code: 'LABOR_HOURS_EXCEEDED', error: laborRejections.map((r) => r.message).join('; '), labor_rejections: laborRejections }, { status: 409 });
     }
+    if (partRejections.length) {
+      return Response.json({ success: false, code: 'PART_QTY_EXCEEDED', error: partRejections.map((r) => r.message).join('; '), part_rejections: partRejections }, { status: 409 });
+    }
 
     // All blocked?
     if (validatedLines.length === 0 && blockedLines.length > 0) {
@@ -576,23 +607,28 @@ Deno.serve(async (req) => {
     // ── Compute totals ── (when appending, subtotal = the added lines only)
     const subtotal = validatedLines.reduce((s, l) => s + (l.line_total || 0), 0);
 
-    // ── Approved client budget ── projected (advance) labor must fit the confirmed agreed budget.
-    let budgetCheck = null;
-    if (hasProjected) {
-      const { budget, billed } = await loadBudget(base44.asServiceRole.entities, project_id);
-      if (budget == null) {
-        return Response.json({ success: false, code: 'BUDGET_NOT_CONFIRMED', error: 'Projected labor needs a confirmed agreed client budget on this project.' }, { status: 409 });
-      }
-      const after = lr2(billed + subtotal);
-      budgetCheck = { agreed_budget: lr2(budget), billed_and_drafted: billed, adding: lr2(subtotal), after, remaining_after: lr2(budget - after) };
-      if (after > budget + 0.005) {
-        return Response.json({ success: false, code: 'BUDGET_EXCEEDED', budget: budgetCheck,
-          error: `Agreed client budget is $${budget.toFixed(2)}; $${billed.toFixed(2)} is already invoiced or on drafts, so $${lr2(budget - billed).toFixed(2)} remains. This adds $${lr2(subtotal).toFixed(2)}.` }, { status: 409 });
-      }
-    }
-
     // ── Validate proposed credit ── (append keeps the draft's existing proposed credit)
     const proposedCredit = appending ? (target.credit_proposed ?? 0) : Math.max(0, parseFloat(credit_to_apply) || 0);
+
+    // ── Billing authorization ── (confirmed agreed client budget; consumption is net of credit so deposits count once)
+    // Projected labor: needs a confirmed authorization and must fit it. Projected parts: must fit it when one is confirmed
+    // (parts were always billable before purchase, so without one they are allowed and flagged). Earned/current items are
+    // never blocked by the ceiling; exceeding it is reported as a warning.
+    const { budget, billed } = await loadBudget(base44, project_id);
+    const addingNet = lr2(subtotal - (appending ? 0 : proposedCredit));
+    const after = lr2(billed + addingNet);
+    const budgetCheck = budget == null ? null : { agreed_budget: lr2(budget), billed_and_drafted: billed, adding: addingNet, after, remaining_after: lr2(budget - after) };
+    if (hasProjected && budget == null) {
+      return Response.json({ success: false, code: 'BUDGET_NOT_CONFIRMED', error: 'Projected labor needs a confirmed agreed client budget on this project.' }, { status: 409 });
+    }
+    if (budget != null && after > budget + 0.005) {
+      const msg = `Agreed client budget is $${budget.toFixed(2)}; $${billed.toFixed(2)} is already invoiced or on drafts (net of credits), so $${lr2(budget - billed).toFixed(2)} remains. This adds $${addingNet.toFixed(2)}.`;
+      if (hasProjected || hasProjectedParts) return Response.json({ success: false, code: 'BUDGET_EXCEEDED', budget: budgetCheck, error: msg }, { status: 409 });
+      warnings.push({ code: 'AUTHORIZATION_EXCEEDED', message: msg });
+    }
+    if (hasProjectedParts && budget == null) {
+      warnings.push({ code: 'PROJECTED_PARTS_WITHOUT_AUTHORIZATION', message: 'Projected (not yet received) parts are being billed without a confirmed agreed client budget.' });
+    }
     if (proposedCredit > 0 && !appending) {
       const credits = await base44.entities.ProjectCreditLedger.filter({ project_id });
       const totalAvailable = credits.reduce((s, c) => s + (c.remaining_amount ?? 0), 0);
@@ -604,7 +640,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    const summarize = (l) => ({ type: l.type, source_id: l.source_id, labor_basis: l.metadata?.labor_basis, description: l.description, qty: l.qty, unit_price: l.unit_price, line_total: lr2(l.line_total) });
+    const summarize = (l) => ({ type: l.type, source_id: l.source_id, labor_basis: l.metadata?.labor_basis, part_basis: l.metadata?.part_basis, description: l.description, qty: l.qty, unit_price: l.unit_price, line_total: lr2(l.line_total) });
     if (check_only) {
       return Response.json({ success: true, check_only: true, mode: appending ? 'append' : 'create', would_add: validatedLines.map(summarize),
         adding_subtotal: lr2(subtotal), blocked_lines: blockedLines.length ? blockedLines : null, budget: budgetCheck, warnings: warnings.length ? warnings : null });

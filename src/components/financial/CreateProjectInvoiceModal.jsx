@@ -238,6 +238,7 @@ export default function CreateProjectInvoiceModal({
           unit_price: item.unit_price ?? 0,
         };
         if (item.type === 'labor') linePayload.labor_basis = item.labor_basis || 'earned';
+        if (item.type === 'part' && item.part_basis) linePayload.part_basis = item.part_basis;
         // Phase 1: Pass service children for expanded invoice lines
         if (item.type === 'service' && item.children?.length > 0) {
           linePayload.expanded_lines = item.children;
@@ -278,7 +279,8 @@ export default function CreateProjectInvoiceModal({
       });
 
       if (response.data?.success) {
-        toast({ title: "Invoice draft created", variant: "default" });
+        const authWarn = (response.data.warnings || []).filter((w) => ['AUTHORIZATION_EXCEEDED', 'PROJECTED_PARTS_WITHOUT_AUTHORIZATION'].includes(w.code));
+        toast({ title: "Invoice draft created", description: authWarn.map((w) => w.message).join(' ') || undefined, variant: "default" });
         
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: billingKeys.states(normalizedProjectId) }),
