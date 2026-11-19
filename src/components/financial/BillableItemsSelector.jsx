@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
+import BillableLaborGroup from "./BillableLaborGroup";
 
 /**
  * BillableItemsSelector — UNIFIED selector for parts + services
@@ -47,6 +48,7 @@ function useProjectBillableItems(projectId) {
 function groupItems(items) {
   const parts = items.filter(i => i.type === 'part');
   const services = items.filter(i => i.type === 'service');
+  const labor = items.filter(i => i.type === 'labor');
 
   const vendorGroups = {};
   for (const item of parts) {
@@ -65,6 +67,7 @@ function groupItems(items) {
       return a.vendor_name.localeCompare(b.vendor_name);
     }),
     services,
+    labor,
   };
 }
 
@@ -82,8 +85,8 @@ export default function BillableItemsSelector({
   const { data, isLoading, error } = useProjectBillableItems(projectId);
 
   // Filter + group (memoized)
-  const { partGroups, services, allItems } = useMemo(() => {
-    if (!data?.items) return { partGroups: [], services: [], allItems: [] };
+  const { partGroups, services, labor, allItems } = useMemo(() => {
+    if (!data?.items) return { partGroups: [], services: [], labor: [], allItems: [] };
     const items = data.items.filter(i => i.line_total > 0 && i.qty_available_to_bill > 0);
     const grouped = groupItems(items);
     return { ...grouped, allItems: items };
@@ -209,6 +212,12 @@ export default function BillableItemsSelector({
     return services.filter(i => i.description?.toLowerCase().includes(s));
   }, [services, searchTerm]);
 
+  const filteredLabor = useMemo(() => {
+    if (!searchTerm) return labor;
+    const s = searchTerm.toLowerCase();
+    return labor.filter(i => i.description?.toLowerCase().includes(s));
+  }, [labor, searchTerm]);
+
   // ── RENDER STATES ──
   if (!projectId) {
     return <div className="flex items-center justify-center h-40 text-gray-500">Select a project</div>;
@@ -230,7 +239,7 @@ export default function BillableItemsSelector({
       {/* Summary + Select All */}
       <div className="flex items-center justify-between px-3 py-2 bg-gray-800/50 rounded-lg text-sm">
         <span className="text-gray-400">
-          {data?.summary?.part_count || 0} parts, {data?.summary?.service_count || 0} services
+          {data?.summary?.part_count || 0} parts, {data?.summary?.service_count || 0} services, {data?.summary?.labor_count || 0} labor
         </span>
         <div className="flex items-center gap-2">
           <span className="text-green-400 font-medium">{formatCurrencyUSD(data?.summary?.grand_total || 0)}</span>
@@ -323,7 +332,27 @@ export default function BillableItemsSelector({
             )}
           </div>
         )}
+
+        {/* ── EARNED LABOR (collapsed by default) ── */}
+        <BillableLaborGroup
+          items={filteredLabor}
+          expanded={!!expandedGroups['__labor__']}
+          onToggleExpand={() => toggleGroup('__labor__')}
+          isSelected={(item) => selectedSet.has(item.source_id)}
+          onToggle={handleToggle}
+          allSelected={isGroupFullySelected(filteredLabor)}
+          someSelected={isGroupPartiallySelected(filteredLabor)}
+          onSelectAll={() => handleSelectGroup(filteredLabor)}
+          onDeselectAll={() => handleDeselectGroup(filteredLabor)}
+        />
       </div>
+
+      {data?.summary?.labor_unpriced_hours > 0 && (
+        <div className="flex items-center gap-1.5 px-3 py-2 text-xs text-amber-400 bg-amber-950/20 border border-amber-800/40 rounded-lg">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+          {data.summary.labor_unpriced_hours}h of billable labor can't be invoiced until a billing rate is set for this project.
+        </div>
+      )}
 
       {/* Selection Summary */}
       {selectedItems.length > 0 && (

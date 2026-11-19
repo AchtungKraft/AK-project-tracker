@@ -95,6 +95,8 @@ function groupLinesByCategory(lines, categoryOrder) {
       categoryName = line.category_name || "UNCATEGORIZED";
     } else if (line.type === "service") {
       categoryName = "SERVICES";
+    } else if (line.type === "labor") {
+      categoryName = "LABOR";
     } else if (line.type === "manual") {
       categoryName = "ADDITIONAL ITEMS";
     } else if (line.type === "credit_adjustment") {

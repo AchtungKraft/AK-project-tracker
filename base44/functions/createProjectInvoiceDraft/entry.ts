@@ -10,7 +10,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  * 4. Does NOT deduct credit from ledger — stores credit_proposed only
  * 5. Validates lines against canonical resolver output
  *
- * Supports line types: part, service, manual, outside_cost
+ * Supports line types: part, service, labor (earned billable task hours, server-priced), manual, outside_cost
  *
  * Inputs:
  * - project_id (required)
@@ -19,6 +19,66 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  * - lines: [{ type, source_id?, source_entity?, description, qty, unit_price }]
  * - notes: string
  */
+
+// ┌─ CANONICAL LABOR BILLING v1 — keep identical in getProjectFinancialOverview, resolveProjectBillableItems,
+// │  createProjectInvoiceDraft, markInvoiceSent, getOpenDollarsOverview.
+// │  Earned = hours logged on BILLABLE, non-cancelled tasks × (task override ?? project rate). No rate → unpriced, never assumed.
+// │  Invoiced hours come from labor lines on sent/partial/paid/overdue invoices (time entries are never modified).
+// │  Hours on drafts are "allocated" until sent. Cancelled or deleted invoices release their hours automatically.
+const LABOR_FINAL = ['sent', 'partial', 'paid', 'overdue'];
+const lr2 = (n) => Math.round((n || 0) * 100) / 100;
+const lh = (n) => Math.round((n || 0) * 10000) / 10000;
+function computeLaborBilling({ project, tasks, timeEntries, statusLabelById, invoiceStatusById, laborLines }) {
+  const logged = new Map();
+  for (const e of timeEntries || []) if (e.task_id) logged.set(e.task_id, (logged.get(e.task_id) || 0) + (Number(e.hours) || 0));
+  const invH = new Map(); const draftH = new Map(); const invAmt = new Map();
+  for (const l of laborLines || []) {
+    if (l.type !== 'labor' || !l.source_id) continue;
+    const st = invoiceStatusById.get(l.invoice_id); const q = Number(l.qty) || 0;
+    if (LABOR_FINAL.includes(st)) { invH.set(l.source_id, (invH.get(l.source_id) || 0) + q); invAmt.set(l.source_id, (invAmt.get(l.source_id) || 0) + (l.line_total ?? 0)); }
+    else if (st === 'draft') draftH.set(l.source_id, (draftH.get(l.source_id) || 0) + q);
+  }
+  const items = [];
+  const T = { earned: 0, invoiced: 0, uninvoiced: 0, allocated: 0, uninvH: 0, unpricedH: 0, unpricedTasks: 0, over: 0 };
+  for (const t of tasks || []) {
+    if (t.labor_billing_type !== 'BILLABLE') continue;
+    if (['cancelled', 'canceled'].includes(statusLabelById.get(t.status_id))) continue;
+    const hours = lh(logged.get(t.id) || 0);
+    const rate = t.labor_rate_override ?? project?.labor_billing_rate ?? null;
+    const invoicedHours = lh(invH.get(t.id) || 0);
+    const draftHours = lh(draftH.get(t.id) || 0);
+    const uninvoicedHours = lh(Math.max(0, hours - invoicedHours));
+    const overInvoiced = invoicedHours > hours + 1e-9;
+    if (overInvoiced) T.over++;
+    const uninvoicedAmount = rate == null ? null : lr2(uninvoicedHours * rate);
+    const allocatedAmount = rate == null ? null : lr2(Math.min(uninvoicedHours, draftHours) * rate);
+    if (rate == null) { if (uninvoicedHours > 0) { T.unpricedH += uninvoicedHours; T.unpricedTasks++; } }
+    else { T.earned += hours * rate; T.uninvoiced += uninvoicedAmount; T.allocated += allocatedAmount; T.uninvH += uninvoicedHours; }
+    T.invoiced += invAmt.get(t.id) || 0;
+    items.push({ task_id: t.id, task_name: t.name, rate, hours_logged: hours, invoiced_hours: invoicedHours, draft_hours: draftHours,
+      uninvoiced_hours: uninvoicedHours, uninvoiced_amount: uninvoicedAmount, allocated_amount: allocatedAmount, over_invoiced: overInvoiced });
+  }
+  return { items, totals: { earned: lr2(T.earned), invoiced_amount: lr2(T.invoiced), uninvoiced: lr2(T.uninvoiced), allocated_to_drafts: lr2(T.allocated),
+    available: lr2(T.uninvoiced - T.allocated), uninvoiced_hours: lh(T.uninvH), unpriced_hours: lh(T.unpricedH), unpriced_tasks: T.unpricedTasks, over_invoiced_tasks: T.over } };
+}
+// └─────────────────────────────────────────────────────────────────────────
+
+async function loadProjectLabor(base44, project_id) {
+  const db = base44.asServiceRole.entities;
+  const [projects, tasks, timeEntries, statuses, invoices] = await Promise.all([
+    db.Project.filter({ id: project_id }),
+    db.Task.filter({ project_id, labor_billing_type: 'BILLABLE' }, '-created_date', 5000),
+    db.TaskTimeEntry.filter({ project_id }, '-created_date', 5000),
+    db.StatusList.filter({ scope: 'Task' }),
+    db.ProjectInvoice.filter({ project_id }),
+  ]);
+  const laborLines = invoices.length ? await db.ProjectInvoiceLine.filter({ invoice_id: { $in: invoices.map((i) => i.id) }, type: 'labor' }) : [];
+  return computeLaborBilling({
+    project: projects[0], tasks, timeEntries,
+    statusLabelById: new Map(statuses.map((s) => [s.id, (s.label || '').toLowerCase().trim()])),
+    invoiceStatusById: new Map(invoices.map((i) => [i.id, i.status])), laborLines,
+  });
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -125,13 +185,17 @@ Deno.serve(async (req) => {
     const warnings = [];
     const blockedLines = [];
     const validatedLines = [];
+    const laborByTask = lines.some(l => l.type === 'labor')
+      ? new Map((await loadProjectLabor(base44, project_id)).items.map(l => [l.task_id, l]))
+      : new Map();
+    const laborHoursUsed = new Map();
 
     // ── Validate each line ──
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
 
-      if (!line.type || !['part', 'service', 'manual', 'outside_cost'].includes(line.type)) {
-        return Response.json({ error: `Line ${i}: type must be part|service|manual|outside_cost` }, { status: 400 });
+      if (!line.type || !['part', 'service', 'labor', 'manual', 'outside_cost'].includes(line.type)) {
+        return Response.json({ error: `Line ${i}: type must be part|service|labor|manual|outside_cost` }, { status: 400 });
       }
       if (!line.description) {
         return Response.json({ error: `Line ${i}: description required` }, { status: 400 });
@@ -328,6 +392,39 @@ Deno.serve(async (req) => {
         }
       }
 
+      // ── LABOR LINE ── earned billable hours on a task; price is always the server-resolved rate
+      else if (line.type === 'labor') {
+        if (!line.source_id) {
+          return Response.json({ error: `Line ${i}: source_id (task) required for labor lines` }, { status: 400 });
+        }
+        const lab = laborByTask.get(line.source_id);
+        if (!lab) {
+          blockedLines.push({ line: i, source_id: line.source_id, reason: 'NOT_BILLABLE_LABOR', message: 'Task is not billable labor on this project' });
+          continue;
+        }
+        if (lab.rate == null) {
+          blockedLines.push({ line: i, source_id: line.source_id, reason: 'RATE_NOT_SET', message: 'No billing rate is set for this task or project' });
+          continue;
+        }
+        const avail = lh(lab.uninvoiced_hours - (laborHoursUsed.get(line.source_id) || 0));
+        if (avail <= 0) {
+          blockedLines.push({ line: i, source_id: line.source_id, reason: 'NO_OUTSTANDING', message: `No uninvoiced hours (logged ${lab.hours_logged}, invoiced ${lab.invoiced_hours})` });
+          continue;
+        }
+        const hours = lh(Math.min(Number(line.qty ?? avail) || 0, avail));
+        if (hours <= 0) continue;
+        laborHoursUsed.set(line.source_id, (laborHoursUsed.get(line.source_id) || 0) + hours);
+        validatedLines.push({
+          type: 'labor', source_entity: 'Task', source_id: line.source_id,
+          part_commitment_id: null, part_id: null, part_name: null, part_number: null,
+          description: line.description || `Labor: ${lab.task_name || 'Task'}`,
+          qty: hours, unit_price: lab.rate, line_total: lr2(hours * lab.rate),
+          unit_cost: null, cost_total: null, vendor_id: null, vendor_name: null,
+          category_id: null, category_name: 'Labor', needs_review: false, review_reason: null, sort_order: i,
+          metadata: { task_id: line.source_id, hours_logged_at_draft: lab.hours_logged, invoiced_hours_at_draft: lab.invoiced_hours },
+        });
+      }
+
       // ── MANUAL / OUTSIDE_COST LINE ──
       else {
         const qty = line.qty ?? 1;
@@ -451,7 +548,8 @@ Deno.serve(async (req) => {
     const partsTotal = validatedLines.filter(l => l.type === 'part').reduce((s, l) => s + (l.line_total || 0), 0);
     const servicesTotal = validatedLines.filter(l => l.type === 'service').reduce((s, l) => s + (l.line_total || 0), 0);
     const manualTotal = validatedLines.filter(l => l.type === 'manual' || l.type === 'outside_cost').reduce((s, l) => s + (l.line_total || 0), 0);
-    const computedTotal = partsTotal + servicesTotal + manualTotal;
+    const laborTotal = validatedLines.filter(l => l.type === 'labor').reduce((s, l) => s + (l.line_total || 0), 0);
+    const computedTotal = partsTotal + servicesTotal + manualTotal + laborTotal;
 
     console.log("Invoice Integrity Summary", {
       invoice_id: invoice.id,
@@ -518,6 +616,7 @@ Deno.serve(async (req) => {
         parts_total: partsTotal,
         services_total: servicesTotal,
         manual_total: manualTotal,
+        labor_total: laborTotal,
         computed_total: computedTotal,
         invoice_total: subtotal,
         totals_match: Math.abs(computedTotal - subtotal) <= 0.01,

@@ -11,24 +11,26 @@
       "enum": [
         "part",
         "service",
+        "labor",
         "manual",
         "outside_cost",
         "credit_adjustment"
       ],
-      "description": "Line item type \u2014 part, service, manual, outside_cost, credit_adjustment"
+      "description": "Line item type \u2014 part, service, labor (earned billable task hours), manual, outside_cost, credit_adjustment"
     },
     "source_entity": {
       "type": "string",
       "enum": [
         "PartCommitment",
         "ServiceCommitment",
+        "Task",
         "Manual"
       ],
       "description": "CANONICAL: Entity type this line references. Used by sent/paid mutations."
     },
     "source_id": {
       "type": "string",
-      "description": "CANONICAL: ID of the source record (PartCommitment or ServiceCommitment). Replaces part_commitment_id for unified lookups."
+      "description": "CANONICAL: ID of the source record (PartCommitment, ServiceCommitment, or Task for labor lines)."
     },
     "part_commitment_id": {
       "type": "string",
@@ -52,12 +54,12 @@
     },
     "qty": {
       "type": "number",
-      "description": "Quantity invoiced"
+      "description": "Quantity invoiced (hours for labor lines)"
     },
     "unit_price": {
       "type": "number",
       "default": 0,
-      "description": "Retail price per unit"
+      "description": "Retail price per unit (hourly rate for labor lines)"
     },
     "line_total": {
       "type": "number",
@@ -104,7 +106,7 @@
     },
     "metadata": {
       "type": "object",
-      "description": "Extensible metadata bag for line-specific context (service details, etc.)"
+      "description": "Extensible metadata bag for line-specific context (service details, labor rate source, etc.)"
     }
   },
   "required": [

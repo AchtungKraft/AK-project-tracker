@@ -42,6 +42,7 @@ import CreateProjectInvoiceModal from "@/components/financial/CreateProjectInvoi
 import ProjectInvoiceDetailDrawer from "@/components/financial/ProjectInvoiceDetailDrawer";
 import ReadyToInvoiceSection from "@/components/financial/ReadyToInvoiceSection";
 import InvoiceRowActions from "@/components/financial/InvoiceRowActions";
+import OpenDollarsSection from "@/components/financial/openDollars/OpenDollarsSection";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import CreditSummaryStrip from "@/components/financial/CreditSummaryStrip";
 import ApplyCreditModal from "@/components/financial/ApplyCreditModal";
@@ -184,6 +185,7 @@ export default function ProjectInvoices() {
       queryClient.invalidateQueries({ queryKey: invoiceQueryKey }),
       queryClient.invalidateQueries({ queryKey: ["billingSummary"] }),
       queryClient.invalidateQueries({ queryKey: ["billableItems"] }), // All project billable item caches
+      queryClient.invalidateQueries({ queryKey: ["openDollars"] }),
     ];
     if (normalizedProjectId) {
       invalidations.push(queryClient.invalidateQueries({ queryKey: billingQueryKey }));
@@ -200,6 +202,7 @@ export default function ProjectInvoices() {
       queryClient.invalidateQueries({ queryKey: invoiceQueryKey }),
       queryClient.invalidateQueries({ queryKey: ["billingSummary"] }),
       queryClient.invalidateQueries({ queryKey: ["billableItems"] }), // All billable item caches
+      queryClient.invalidateQueries({ queryKey: ["openDollars"] }),
     ]);
     if (normalizedProjectId) {
       await Promise.all([
@@ -275,7 +278,7 @@ export default function ProjectInvoices() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <Wallet className="w-4 h-4 text-red-400" />
-              <span className="text-xs text-gray-400 uppercase">Unbilled</span>
+              <span className="text-xs text-gray-400 uppercase">Unbilled parts & services</span>
             </div>
             <p className="text-2xl font-bold text-red-300">
               {billingSummaryData?.total_unbilled_projects || 0}
@@ -325,6 +328,8 @@ export default function ProjectInvoices() {
           </CardContent>
         </Card>
       </div>
+
+      <OpenDollarsSection onCreateInvoice={handleCreateFromProject} />
 
       {/* Ready to Invoice Section */}
       <ReadyToInvoiceSection onCreateInvoice={handleCreateFromProject} />

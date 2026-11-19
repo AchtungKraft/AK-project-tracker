@@ -10,6 +10,49 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.54';
 const r2 = (n) => Math.round((n || 0) * 100) / 100;
 const FINAL = ['sent', 'partial', 'paid'];
 
+// ┌─ CANONICAL LABOR BILLING v1 — keep identical in getProjectFinancialOverview, resolveProjectBillableItems,
+// │  createProjectInvoiceDraft, markInvoiceSent, getOpenDollarsOverview.
+// │  Earned = hours logged on BILLABLE, non-cancelled tasks × (task override ?? project rate). No rate → unpriced, never assumed.
+// │  Invoiced hours come from labor lines on sent/partial/paid/overdue invoices (time entries are never modified).
+// │  Hours on drafts are "allocated" until sent. Cancelled or deleted invoices release their hours automatically.
+const LABOR_FINAL = ['sent', 'partial', 'paid', 'overdue'];
+const lr2 = (n) => Math.round((n || 0) * 100) / 100;
+const lh = (n) => Math.round((n || 0) * 10000) / 10000;
+function computeLaborBilling({ project, tasks, timeEntries, statusLabelById, invoiceStatusById, laborLines }) {
+  const logged = new Map();
+  for (const e of timeEntries || []) if (e.task_id) logged.set(e.task_id, (logged.get(e.task_id) || 0) + (Number(e.hours) || 0));
+  const invH = new Map(); const draftH = new Map(); const invAmt = new Map();
+  for (const l of laborLines || []) {
+    if (l.type !== 'labor' || !l.source_id) continue;
+    const st = invoiceStatusById.get(l.invoice_id); const q = Number(l.qty) || 0;
+    if (LABOR_FINAL.includes(st)) { invH.set(l.source_id, (invH.get(l.source_id) || 0) + q); invAmt.set(l.source_id, (invAmt.get(l.source_id) || 0) + (l.line_total ?? 0)); }
+    else if (st === 'draft') draftH.set(l.source_id, (draftH.get(l.source_id) || 0) + q);
+  }
+  const items = [];
+  const T = { earned: 0, invoiced: 0, uninvoiced: 0, allocated: 0, uninvH: 0, unpricedH: 0, unpricedTasks: 0, over: 0 };
+  for (const t of tasks || []) {
+    if (t.labor_billing_type !== 'BILLABLE') continue;
+    if (['cancelled', 'canceled'].includes(statusLabelById.get(t.status_id))) continue;
+    const hours = lh(logged.get(t.id) || 0);
+    const rate = t.labor_rate_override ?? project?.labor_billing_rate ?? null;
+    const invoicedHours = lh(invH.get(t.id) || 0);
+    const draftHours = lh(draftH.get(t.id) || 0);
+    const uninvoicedHours = lh(Math.max(0, hours - invoicedHours));
+    const overInvoiced = invoicedHours > hours + 1e-9;
+    if (overInvoiced) T.over++;
+    const uninvoicedAmount = rate == null ? null : lr2(uninvoicedHours * rate);
+    const allocatedAmount = rate == null ? null : lr2(Math.min(uninvoicedHours, draftHours) * rate);
+    if (rate == null) { if (uninvoicedHours > 0) { T.unpricedH += uninvoicedHours; T.unpricedTasks++; } }
+    else { T.earned += hours * rate; T.uninvoiced += uninvoicedAmount; T.allocated += allocatedAmount; T.uninvH += uninvoicedHours; }
+    T.invoiced += invAmt.get(t.id) || 0;
+    items.push({ task_id: t.id, task_name: t.name, rate, hours_logged: hours, invoiced_hours: invoicedHours, draft_hours: draftHours,
+      uninvoiced_hours: uninvoicedHours, uninvoiced_amount: uninvoicedAmount, allocated_amount: allocatedAmount, over_invoiced: overInvoiced });
+  }
+  return { items, totals: { earned: lr2(T.earned), invoiced_amount: lr2(T.invoiced), uninvoiced: lr2(T.uninvoiced), allocated_to_drafts: lr2(T.allocated),
+    available: lr2(T.uninvoiced - T.allocated), uninvoiced_hours: lh(T.uninvH), unpriced_hours: lh(T.unpricedH), unpriced_tasks: T.unpricedTasks, over_invoiced_tasks: T.over } };
+}
+// └─────────────────────────────────────────────────────────────────────────
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -170,12 +213,12 @@ Deno.serve(async (req) => {
         if (i.status === 'sent' || i.status === 'partial') outstanding += i.balance_due ?? Math.max(0, t - (i.paid_amount ?? 0));
       }
     }
-    const lineSplit = { final: { part: 0, service: 0, other: 0 }, draft: { part: 0, service: 0, other: 0 } };
+    const lineSplit = { final: { part: 0, service: 0, labor: 0, other: 0 }, draft: { part: 0, service: 0, labor: 0, other: 0 } };
     for (const l of lines) {
       const st = invById.get(l.invoice_id)?.status;
       const bucket = FINAL.includes(st) ? 'final' : st === 'draft' ? 'draft' : null;
       if (!bucket) continue;
-      const key = l.type === 'part' ? 'part' : l.type === 'service' ? 'service' : 'other';
+      const key = l.type === 'part' ? 'part' : l.type === 'service' ? 'service' : l.type === 'labor' ? 'labor' : 'other';
       lineSplit[bucket][key] += l.line_total ?? (l.qty || 0) * (l.unit_price || 0);
     }
     const creditsApplied = credits.reduce((a, c) => a + (c.amount_applied ?? 0), 0);
@@ -205,6 +248,11 @@ Deno.serve(async (req) => {
     const entriesByTask = new Map();
     for (const e of timeEntries) if (e.task_id) { const a = entriesByTask.get(e.task_id) || []; a.push({ id: e.id, work_date: e.work_date, hours: Number(e.hours) || 0, by: e.performed_by_name || null }); entriesByTask.set(e.task_id, a); }
     const LB = { billable: 0, included: 0, nonbill: 0, unclass: unlinkedHrs, cancelled: 0, toDate: 0, remHrs: 0, remAmt: 0, unpricedHrs: 0, unpricedTasks: 0, invalidLinks: 0, unclassTasks: 0 };
+    const laborInvoicing = computeLaborBilling({
+      project, tasks, timeEntries, statusLabelById: statusLabel,
+      invoiceStatusById: new Map(invoices.map((i) => [i.id, i.status])), laborLines: lines,
+    });
+    const laborInvByTask = new Map(laborInvoicing.items.map((l) => [l.task_id, l]));
     const laborTasks = tasks.map((t) => {
       const logged = hoursByTask.get(t.id) || 0;
       const type = t.labor_billing_type || 'UNCLASSIFIED';
@@ -229,6 +277,8 @@ Deno.serve(async (req) => {
         logged: r2(logged), remaining_hours: r2(remHrs), billing_type: type, service_commitment_id: t.labor_service_commitment_id || null,
         rate_override: t.labor_rate_override ?? null, effective_rate: rate, billable_to_date: toDate == null ? null : r2(toDate),
         projected_remaining: remAmt == null ? null : r2(remAmt), issues, entries: entriesByTask.get(t.id) || [],
+        invoiced_hours: laborInvByTask.get(t.id)?.invoiced_hours ?? 0, draft_hours: laborInvByTask.get(t.id)?.draft_hours ?? 0,
+        uninvoiced_hours: laborInvByTask.get(t.id)?.uninvoiced_hours ?? null, uninvoiced_amount: laborInvByTask.get(t.id)?.uninvoiced_amount ?? null,
       };
     });
 
@@ -276,6 +326,9 @@ Deno.serve(async (req) => {
         total_current_billable: r2(billable + LB.toDate),
         total_projected_billable: r2(billable + LB.toDate + LB.remAmt),
         labor_cost_configured: false,
+        // Invoicing state of earned labor (derived from labor invoice lines; time entries are never modified)
+        labor_invoiced: laborInvoicing.totals.invoiced_amount, labor_uninvoiced: laborInvoicing.totals.uninvoiced,
+        labor_allocated_to_drafts: laborInvoicing.totals.allocated_to_drafts, labor_available_to_invoice: laborInvoicing.totals.available,
       },
       labor_billing: {
         project_rate: projectRate, rate_set_by: project.labor_rate_set_by || null, rate_set_at: project.labor_rate_set_at || null,
@@ -291,7 +344,7 @@ Deno.serve(async (req) => {
       },
       invoices: {
         by_status: Object.fromEntries(Object.entries(inv).map(([k, v]) => [k, { count: v.count, total: r2(v.total) }])),
-        line_split: { final: { part: r2(lineSplit.final.part), service: r2(lineSplit.final.service), other: r2(lineSplit.final.other) }, draft: { part: r2(lineSplit.draft.part), service: r2(lineSplit.draft.service), other: r2(lineSplit.draft.other) } },
+        line_split: { final: { part: r2(lineSplit.final.part), service: r2(lineSplit.final.service), labor: r2(lineSplit.final.labor), other: r2(lineSplit.final.other) }, draft: { part: r2(lineSplit.draft.part), service: r2(lineSplit.draft.service), labor: r2(lineSplit.draft.labor), other: r2(lineSplit.draft.other) } },
       },
       // Definitions: hours_logged = sum of TaskTimeEntry.hours; hours_estimated = sum of estimates on non-cancelled tasks;
       // hours_remaining = Σ over OPEN tasks of max(estimate − logged on that task, 0) (done tasks and overruns contribute 0).
