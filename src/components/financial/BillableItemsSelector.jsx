@@ -17,6 +17,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import BillableLaborGroup from "./BillableLaborGroup";
+import BillableEligibilityPanel from "./BillableEligibilityPanel";
 
 /**
  * BillableItemsSelector — UNIFIED selector for parts + services
@@ -229,7 +230,12 @@ export default function BillableItemsSelector({
     return <div className="flex items-center justify-center h-40 text-red-400"><AlertTriangle className="w-5 h-5 mr-2" />Failed to load</div>;
   }
   if (allItems.length === 0) {
-    return <div className="flex flex-col items-center justify-center h-40 text-gray-500"><Package className="w-8 h-8 mb-2 text-gray-600" /><p>No billable items for this project</p></div>;
+    return (
+      <div className="space-y-3">
+        <div className="flex flex-col items-center justify-center h-32 text-gray-500"><Package className="w-8 h-8 mb-2 text-gray-600" /><p>No items available for a new invoice</p></div>
+        <BillableEligibilityPanel summary={data?.summary} allocated={data?.allocated_items} excluded={data?.excluded_items} />
+      </div>
+    );
   }
 
   const allSelected = allItems.length > 0 && allItems.every(i => selectedSet.has(i.source_id));
@@ -346,6 +352,8 @@ export default function BillableItemsSelector({
           onDeselectAll={() => handleDeselectGroup(filteredLabor)}
         />
       </div>
+
+      <BillableEligibilityPanel summary={data?.summary} allocated={data?.allocated_items} excluded={data?.excluded_items} />
 
       {data?.summary?.labor_unpriced_hours > 0 && (
         <div className="flex items-center gap-1.5 px-3 py-2 text-xs text-amber-400 bg-amber-950/20 border border-amber-800/40 rounded-lg">

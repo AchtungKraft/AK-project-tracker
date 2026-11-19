@@ -4,7 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Package, Truck, ChevronRight, CheckCircle2 } from "lucide-react";
+import { Loader2, Package, Truck, ChevronRight, CheckCircle2, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 
@@ -153,6 +153,12 @@ function ProjectBillableRow({ project, onCreateInvoice }) {
             <span>{breakdown.services_count}</span>
           </div>
         )}
+        {project.labor?.uninvoiced > 0 && (
+          <div className="flex items-center gap-1 text-xs text-sky-400">
+            <Clock className="w-3.5 h-3.5" />
+            <span>{formatCurrencyUSD(project.labor.available)}</span>
+          </div>
+        )}
       </div>
 
       {/* Total with cost/margin */}
@@ -166,8 +172,14 @@ function ProjectBillableRow({ project, onCreateInvoice }) {
             {formatCurrencyUSD(project.allocated_to_drafts)} on {project.open_draft_count} draft{project.open_draft_count !== 1 ? "s" : ""}
           </p>
         )}
-        {project.allocated_to_drafts > 0 && (
-          <p className="text-[10px] text-gray-500">Uninvoiced: {formatCurrencyUSD(project.total_billable_amount)}</p>
+        {project.excluded_amount > 0 && (
+          <p className="text-[10px] text-gray-400">{formatCurrencyUSD(project.excluded_amount)} excluded</p>
+        )}
+        {project.labor_unpriced_hours > 0 && (
+          <p className="text-[10px] text-gray-400">{project.labor_unpriced_hours}h labor without rate</p>
+        )}
+        {(project.allocated_to_drafts > 0 || project.excluded_amount > 0) && (
+          <p className="text-[10px] text-gray-500">Total unbilled: {formatCurrencyUSD(project.total_unbilled ?? project.total_billable_amount)}</p>
         )}
         {project.total_cost > 0 && (
           <p className="text-[10px] text-gray-500">

@@ -80,6 +80,37 @@ async function loadProjectLabor(base44, project_id) {
   });
 }
 
+const STALE_LOCK_MS = 120000;
+async function acquireBillingLock(sr, projectId, owner) {
+  const token = `${owner}_${crypto.randomUUID()}`;
+  const now = new Date().toISOString();
+  const cas = async (q, set) => (await sr.Project.updateMany(q, { $set: set })).updated;
+  let ok = (await cas({ id: projectId, billing_lock_token: null }, { billing_lock_token: token, billing_lock_at: now })) === 1;
+  if (!ok) {
+    const p = await sr.Project.get(projectId).catch((e) => (e.status === 404 ? null : Promise.reject(e)));
+    if (p?.billing_lock_token && p.billing_lock_at && Date.now() - new Date(p.billing_lock_at).getTime() > STALE_LOCK_MS) {
+      ok = (await cas({ id: projectId, billing_lock_token: p.billing_lock_token }, { billing_lock_token: token, billing_lock_at: now })) === 1;
+    }
+  }
+  if (!ok) return null;
+  return () => cas({ id: projectId, billing_lock_token: token }, { billing_lock_token: null, billing_lock_at: null })
+    .catch((e) => console.error('[createProjectInvoiceDraft] lock release failed', e.message));
+}
+
+// Quantities already on ACTIVE drafts (status=draft) for a project. Parts: summed qty. Services: 1 per draft.
+async function loadDraftAllocations(db, project_id) {
+  const drafts = await db.ProjectInvoice.filter({ project_id, status: 'draft' });
+  const lines = drafts.length ? await db.ProjectInvoiceLine.filter({ invoice_id: { $in: drafts.map((d) => d.id) } }, 'sort_order', 5000) : [];
+  const qtyBySource = new Map(); const svcSeen = new Set();
+  for (const l of lines) {
+    const sid = l.source_id || l.part_commitment_id;
+    if (!sid || !['part', 'service'].includes(l.type)) continue;
+    if (l.type === 'service') { const k = `${l.invoice_id}:${sid}`; if (svcSeen.has(k)) continue; svcSeen.add(k); qtyBySource.set(sid, (qtyBySource.get(sid) || 0) + 1); }
+    else qtyBySource.set(sid, (qtyBySource.get(sid) || 0) + (Number(l.qty) || 0));
+  }
+  return { qtyBySource };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -123,6 +154,12 @@ Deno.serve(async (req) => {
     if (projects.length === 0) {
       return Response.json({ error: 'Project not found' }, { status: 404 });
     }
+
+    // Per-project billing lock: draft creation, line removal, deletion and sending are serialized per project,
+    // so two concurrent creates can never allocate the same part, service or labor hours.
+    const release = await acquireBillingLock(base44.asServiceRole.entities, project_id, 'create_draft');
+    if (!release) return Response.json({ success: false, code: 'BILLING_LOCKED', error: 'Another billing action is in progress for this project. Try again in a moment.' }, { status: 409 });
+    try {
 
     // ── DUPLICATE DRAFT PROTECTION ──
     // Canonical uniqueness boundary: project_id + invoice_type + status=draft
@@ -189,6 +226,10 @@ Deno.serve(async (req) => {
       ? new Map((await loadProjectLabor(base44, project_id)).items.map(l => [l.task_id, l]))
       : new Map();
     const laborHoursUsed = new Map();
+    // Allocation to other ACTIVE drafts (read under the billing lock). Prevents the same source on two drafts.
+    const { qtyBySource: draftQty } = await loadDraftAllocations(base44.asServiceRole.entities, project_id);
+    const partQtyUsed = new Map();
+    const servicesUsed = new Set();
 
     // ── Validate each line ──
     for (let i = 0; i < lines.length; i++) {
@@ -226,14 +267,20 @@ Deno.serve(async (req) => {
         const qtyRemoved = commitment.qty_removed ?? 0;
         const effectiveRequired = Math.max(0, requiredTotal - qtyRemoved);
         const invoicedQty = commitment.invoiced_qty ?? 0;
-        const qtyAvailable = Math.max(0, effectiveRequired - invoicedQty);
+        const uninvoicedQty = Math.max(0, effectiveRequired - invoicedQty);
+        const onOtherDrafts = draftQty.get(line.source_id) || 0;
+        const qtyAvailable = Math.max(0, uninvoicedQty - onOtherDrafts - (partQtyUsed.get(line.source_id) || 0));
 
         if (qtyAvailable <= 0) {
-          blockedLines.push({ line: i, source_id: line.source_id, reason: 'NO_OUTSTANDING', message: `No qty available (effective: ${effectiveRequired}, invoiced: ${invoicedQty})` });
+          const allocated = uninvoicedQty > 0 && onOtherDrafts > 0;
+          blockedLines.push({ line: i, source_id: line.source_id, reason: allocated ? 'ALLOCATED_TO_OTHER_DRAFT' : 'NO_OUTSTANDING',
+            message: allocated ? `Already on an active draft (${onOtherDrafts} of ${uninvoicedQty} uninvoiced)` : `No qty available (effective: ${effectiveRequired}, invoiced: ${invoicedQty})` });
           continue;
         }
 
         const effectiveQty = Math.min(line.qty ?? qtyAvailable, qtyAvailable);
+        if (!(effectiveQty > 0)) continue;
+        partQtyUsed.set(line.source_id, (partQtyUsed.get(line.source_id) || 0) + effectiveQty);
         const unitPrice = line.unit_price ?? commitment.unit_retail_snapshot ?? 0;
         const unitCost = commitment.unit_cost_snapshot ?? 0;
         const lineTotal = effectiveQty * unitPrice;
@@ -295,6 +342,11 @@ Deno.serve(async (req) => {
           blockedLines.push({ line: i, source_id: line.source_id, reason: 'ALREADY_BILLED', message: 'Service is already billed' });
           continue;
         }
+        if ((draftQty.get(line.source_id) || 0) > 0 || servicesUsed.has(line.source_id)) {
+          blockedLines.push({ line: i, source_id: line.source_id, reason: 'ALLOCATED_TO_OTHER_DRAFT', message: 'Service is already on an active draft' });
+          continue;
+        }
+        servicesUsed.add(line.source_id);
 
         const totalBillable = sc.total_billable ?? 0;
         const totalCost = sc.total_cost ?? 0;
@@ -406,9 +458,11 @@ Deno.serve(async (req) => {
           blockedLines.push({ line: i, source_id: line.source_id, reason: 'RATE_NOT_SET', message: 'No billing rate is set for this task or project' });
           continue;
         }
-        const avail = lh(lab.uninvoiced_hours - (laborHoursUsed.get(line.source_id) || 0));
+        const avail = lh(lab.uninvoiced_hours - lab.draft_hours - (laborHoursUsed.get(line.source_id) || 0));
         if (avail <= 0) {
-          blockedLines.push({ line: i, source_id: line.source_id, reason: 'NO_OUTSTANDING', message: `No uninvoiced hours (logged ${lab.hours_logged}, invoiced ${lab.invoiced_hours})` });
+          const allocated = lab.uninvoiced_hours > 0 && lab.draft_hours > 0;
+          blockedLines.push({ line: i, source_id: line.source_id, reason: allocated ? 'ALLOCATED_TO_OTHER_DRAFT' : 'NO_OUTSTANDING',
+            message: allocated ? `Hours already on an active draft (${lab.draft_hours}h of ${lab.uninvoiced_hours}h uninvoiced)` : `No uninvoiced hours (logged ${lab.hours_logged}, invoiced ${lab.invoiced_hours})` });
           continue;
         }
         const hours = lh(Math.min(Number(line.qty ?? avail) || 0, avail));
@@ -622,6 +676,9 @@ Deno.serve(async (req) => {
         totals_match: Math.abs(computedTotal - subtotal) <= 0.01,
       },
     });
+    } finally {
+      await release();
+    }
   } catch (error) {
     console.error('createProjectInvoiceDraft error:', error);
     return Response.json({ error: error.message }, { status: 500 });

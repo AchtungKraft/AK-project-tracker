@@ -31,9 +31,9 @@ export default function BillableLaborGroup({ items, expanded, onToggleExpand, is
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-white truncate">{item.task_name || item.description}</p>
                 <p className="text-xs text-gray-500">
-                  {item.qty_available_to_bill}h uninvoiced × {formatCurrencyUSD(item.unit_price)}/h
+                  {item.qty_available_to_bill}h available × {formatCurrencyUSD(item.unit_price)}/h
                   {item.invoiced_qty > 0 && <span> · {item.invoiced_qty}h already invoiced</span>}
-                  {item.metadata?.draft_hours > 0 && <span className="text-amber-400"> · {item.metadata.draft_hours}h on another draft</span>}
+                  {item.qty_allocated > 0 && <span className="text-amber-400"> · {item.qty_allocated}h already on a draft (not included)</span>}
                 </p>
               </div>
               <p className="text-sm font-medium text-sky-400 shrink-0">{formatCurrencyUSD(item.line_total)}</p>

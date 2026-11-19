@@ -192,6 +192,46 @@ function computeItems({ partCommitments, serviceCommitments, partMap, lookups })
 }
 // └──────────────────────────────────────────────────────────────┘
 
+// ┌─ CANONICAL LABOR BILLING v1 — keep identical in getProjectFinancialOverview, resolveProjectBillableItems,
+// │  createProjectInvoiceDraft, markInvoiceSent, getOpenDollarsOverview, getProjectsBillingSummary.
+const LABOR_FINAL = ['sent', 'partial', 'paid', 'overdue'];
+const lr2 = (n) => Math.round((n || 0) * 100) / 100;
+const lh = (n) => Math.round((n || 0) * 10000) / 10000;
+function computeLaborBilling({ project, tasks, timeEntries, statusLabelById, invoiceStatusById, laborLines }) {
+  const logged = new Map();
+  for (const e of timeEntries || []) if (e.task_id) logged.set(e.task_id, (logged.get(e.task_id) || 0) + (Number(e.hours) || 0));
+  const invH = new Map(); const draftH = new Map(); const invAmt = new Map();
+  for (const l of laborLines || []) {
+    if (l.type !== 'labor' || !l.source_id) continue;
+    const st = invoiceStatusById.get(l.invoice_id); const q = Number(l.qty) || 0;
+    if (LABOR_FINAL.includes(st)) { invH.set(l.source_id, (invH.get(l.source_id) || 0) + q); invAmt.set(l.source_id, (invAmt.get(l.source_id) || 0) + (l.line_total ?? 0)); }
+    else if (st === 'draft') draftH.set(l.source_id, (draftH.get(l.source_id) || 0) + q);
+  }
+  const items = [];
+  const T = { earned: 0, invoiced: 0, uninvoiced: 0, allocated: 0, uninvH: 0, unpricedH: 0, unpricedTasks: 0, over: 0 };
+  for (const t of tasks || []) {
+    if (t.labor_billing_type !== 'BILLABLE') continue;
+    if (['cancelled', 'canceled'].includes(statusLabelById.get(t.status_id))) continue;
+    const hours = lh(logged.get(t.id) || 0);
+    const rate = t.labor_rate_override ?? project?.labor_billing_rate ?? null;
+    const invoicedHours = lh(invH.get(t.id) || 0);
+    const draftHours = lh(draftH.get(t.id) || 0);
+    const uninvoicedHours = lh(Math.max(0, hours - invoicedHours));
+    const overInvoiced = invoicedHours > hours + 1e-9;
+    if (overInvoiced) T.over++;
+    const uninvoicedAmount = rate == null ? null : lr2(uninvoicedHours * rate);
+    const allocatedAmount = rate == null ? null : lr2(Math.min(uninvoicedHours, draftHours) * rate);
+    if (rate == null) { if (uninvoicedHours > 0) { T.unpricedH += uninvoicedHours; T.unpricedTasks++; } }
+    else { T.earned += hours * rate; T.uninvoiced += uninvoicedAmount; T.allocated += allocatedAmount; T.uninvH += uninvoicedHours; }
+    T.invoiced += invAmt.get(t.id) || 0;
+    items.push({ task_id: t.id, task_name: t.name, rate, hours_logged: hours, invoiced_hours: invoicedHours, draft_hours: draftHours,
+      uninvoiced_hours: uninvoicedHours, uninvoiced_amount: uninvoicedAmount, allocated_amount: allocatedAmount, over_invoiced: overInvoiced });
+  }
+  return { items, totals: { earned: lr2(T.earned), invoiced_amount: lr2(T.invoiced), uninvoiced: lr2(T.uninvoiced), allocated_to_drafts: lr2(T.allocated),
+    available: lr2(T.uninvoiced - T.allocated), uninvoiced_hours: lh(T.uninvH), unpriced_hours: lh(T.unpricedH), unpriced_tasks: T.unpricedTasks, over_invoiced_tasks: T.over } };
+}
+// └─────────────────────────────────────────────────────────────────────────
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -250,6 +290,23 @@ Deno.serve(async (req) => {
       servicesByProject[sc.project_id].push(sc);
     }
 
+    // Earned billable labor per project (same canonical rule as the project resolver).
+    const [laborTasks, taskStatuses, laborLines] = await Promise.all([
+      base44.asServiceRole.entities.Task.filter({ labor_billing_type: 'BILLABLE' }, '-created_date', 10000),
+      base44.asServiceRole.entities.StatusList.filter({ scope: 'Task' }),
+      base44.asServiceRole.entities.ProjectInvoiceLine.filter({ type: 'labor' }, '-created_date', 10000),
+    ]);
+    const laborProjectIds = [...new Set(laborTasks.map((t) => t.project_id))];
+    const [laborEntries, laborInvoices] = laborProjectIds.length ? await Promise.all([
+      base44.asServiceRole.entities.TaskTimeEntry.filter({ project_id: { $in: laborProjectIds } }, '-created_date', 20000),
+      base44.asServiceRole.entities.ProjectInvoice.filter({ project_id: { $in: laborProjectIds } }, '-created_date', 10000),
+    ]) : [[], []];
+    const statusLabelById = new Map(taskStatuses.map((s) => [s.id, (s.label || '').toLowerCase().trim()]));
+    const invoiceStatusById = new Map(laborInvoices.map((i) => [i.id, i.status]));
+    const groupBy = (arr, k) => arr.reduce((m, x) => { (m[x[k]] ||= []).push(x); return m; }, {});
+    const tasksByProject = groupBy(laborTasks, 'project_id');
+    const entriesByProject = groupBy(laborEntries, 'project_id');
+
     const results = [];
 
     for (const project of allProjects) {
@@ -257,7 +314,13 @@ Deno.serve(async (req) => {
 
       const projectCommitments = commitmentsByProject[project.id] || [];
       const projectServices = servicesByProject[project.id] || [];
-      if (projectCommitments.length === 0 && projectServices.length === 0) continue;
+      const labor = tasksByProject[project.id]
+        ? computeLaborBilling({ project, tasks: tasksByProject[project.id], timeEntries: entriesByProject[project.id] || [], statusLabelById, invoiceStatusById, laborLines }).totals
+        : null;
+      // Excluded: services marked billed without an AK invoice (never selectable).
+      const excludedServices = projectServices.filter((sc) => (sc.is_billed === true || sc.status === 'billed') && !sc.invoice_id && (sc.total_billable ?? 0) > 0);
+      const excludedAmount = Math.round(excludedServices.reduce((s, sc) => s + sc.total_billable, 0) * 100) / 100;
+      if (projectCommitments.length === 0 && projectServices.length === 0 && !(labor?.uninvoiced > 0)) continue;
 
       const { items } = computeItems({
         partCommitments: projectCommitments,
@@ -266,7 +329,7 @@ Deno.serve(async (req) => {
         lookups: {},
       });
 
-      if (items.length === 0) continue;
+      if (items.length === 0 && !(labor?.uninvoiced > 0) && !(labor?.unpriced_hours > 0)) continue;
 
       const partItems = items.filter(i => i.type === 'part');
       const serviceItems = items.filter(i => i.type === 'service');
@@ -291,16 +354,23 @@ Deno.serve(async (req) => {
           type: i.type,
         }));
 
+      const laborUninvoiced = labor?.uninvoiced || 0;
+      const laborAllocated = labor?.allocated_to_drafts || 0;
       results.push({
         project_id: project.id,
         project_name: project.name,
         client_name: project.client_name || null,
         billable_count: items.length,
-        total_billable_amount: Math.round(totalAmount * 100) / 100,
+        // Uninvoiced scope = parts + services + earned billable labor (available now + on active drafts)
+        total_billable_amount: r2(totalAmount + laborUninvoiced),
         total_cost: Math.round(totalCost * 100) / 100,
-        // total_billable_amount = current uninvoiced scope (unchanged meaning)
-        allocated_to_drafts: r2(allocatedAmount),
-        available_to_invoice: r2(Math.max(0, totalAmount - allocatedAmount)),
+        allocated_to_drafts: r2(allocatedAmount + laborAllocated),
+        available_to_invoice: r2(Math.max(0, totalAmount - allocatedAmount) + Math.max(0, laborUninvoiced - laborAllocated)),
+        excluded_amount: excludedAmount,
+        excluded_count: excludedServices.length,
+        labor_unpriced_hours: labor?.unpriced_hours || 0,
+        total_unbilled: r2(totalAmount + laborUninvoiced + excludedAmount),
+        labor: { uninvoiced: r2(laborUninvoiced), allocated_to_drafts: r2(laborAllocated), available: r2(Math.max(0, laborUninvoiced - laborAllocated)) },
         available_count: availableCount,
         open_draft_count: draftCountByProject[project.id] || 0,
         top_items: topItems,
