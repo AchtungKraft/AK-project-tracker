@@ -50,7 +50,7 @@ export default function ScopeGroupSection({
   return (
     <div className="space-y-2">
       {/* Group Header — organizational, compact */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 border-b border-gray-700/40">
         <button onClick={() => setCollapsed(!collapsed)} className="flex items-center gap-2 flex-1 py-1 text-left group">
           {collapsed
             ? <ChevronRight className="w-4 h-4 text-gray-500 shrink-0" />
