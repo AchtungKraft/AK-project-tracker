@@ -419,6 +419,7 @@ export default function ScopeReviewDisplay({
               hours_min: Number(ld.hours_min) || 0,
               hours_max: Number(ld.hours_max) || 0,
               rate_snapshot: ld.rate_snapshot || 0,
+              description: (ld.description || '').trim(),
               sort_order: idx,
             }))
           );
