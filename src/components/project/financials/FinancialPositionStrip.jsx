@@ -12,7 +12,7 @@ export default function FinancialPositionStrip({ data }) {
     <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">
       <Stat label="Billing opportunity" value={money(p.opportunity)} tone="text-green-400"
         sub={p.non_billable ? `Non-Billable · ${money(p.excluded)} excluded` : `Not yet invoiced · ${money(p.on_drafts)} on drafts`} />
-      <Stat label="Projected total" value={money(p.projected_total)} sub={`Incl. ${money(p.projected_labor_available)} projected labor`} />
+      <Stat label="Projected total" value={money(p.projected_total)} sub={`Incl. ${money((p.projected_labor_available || 0) + (p.projected_labor_on_drafts || 0))} projected labor`} />
       <Stat label="Earned labor" value={money(p.labor_earned_to_date)} sub={`${money(p.labor_projected_remaining)} remaining estimate`} />
       <Stat label="Invoiced" value={money(s.finalized_invoiced)} sub={`Paid ${money(s.paid_amount)} · drafts ${money(s.draft_invoice_amount)}`} />
       <Stat label="Outstanding" value={money(s.outstanding_balance)} tone={s.overdue_count > 0 ? "text-red-400" : "text-amber-300"}

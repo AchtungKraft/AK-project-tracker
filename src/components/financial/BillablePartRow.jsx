@@ -4,13 +4,15 @@ import { Package, AlertTriangle } from "lucide-react";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import MarginBadge from "./MarginBadge";
 import LaborHoursInput from "./LaborHoursInput";
+import PartPriceOverride from "./PartPriceOverride";
 
 // One part row. Selected rows can bill part of the available qty; the server rejects anything above it.
 // Projected rows show received / on-order qty; the price and cost shown are the estimated snapshots stored on the line.
-export default function BillablePartRow({ item, isSelected, qty, onToggle, onQtyChange }) {
+export default function BillablePartRow({ item, isSelected, qty, onToggle, onQtyChange, override, onPriceChange }) {
   const unitCost = item.unit_cost ?? 0;
   const projected = item.metadata?.part_basis === "projected";
   const shownQty = isSelected ? (qty || 0) : item.qty_available_to_bill;
+  const price = override?.unit_price ?? item.unit_price;
   return (
     <div className="flex items-center gap-2 px-3 py-2 pl-10 hover:bg-gray-800/50">
       <Checkbox checked={isSelected} onCheckedChange={(checked) => onToggle(item, checked)} />
@@ -26,9 +28,13 @@ export default function BillablePartRow({ item, isSelected, qty, onToggle, onQty
         {item.needs_review && (
           <div className="flex items-center gap-1 text-xs text-amber-400 mt-0.5"><AlertTriangle className="w-3 h-3" /><span>{item.review_reason}</span></div>
         )}
+        {isSelected && onPriceChange && (
+          <PartPriceOverride canonical={item.unit_price} unitCost={unitCost} override={override}
+            onApply={(o) => onPriceChange(item, o)} onClear={() => onPriceChange(item, null)} />
+        )}
       </div>
       {isSelected && <LaborHoursInput unit="qty" value={qty} max={item.qty_available_to_bill} onChange={(q) => onQtyChange(item, q)} />}
-      <p className="text-sm font-medium text-green-400 shrink-0 w-20 text-right">{formatCurrencyUSD(shownQty * item.unit_price)}</p>
+      <p className="text-sm font-medium text-green-400 shrink-0 w-20 text-right">{formatCurrencyUSD(shownQty * price)}</p>
     </div>
   );
 }

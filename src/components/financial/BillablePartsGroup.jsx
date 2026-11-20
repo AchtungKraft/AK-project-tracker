@@ -28,7 +28,8 @@ export default function BillablePartsGroup({ groups, expandedGroups, toggleGroup
         {isExpanded && (
           <div className="border-t border-gray-700">
             {group.items.map((item) => (
-              <BillablePartRow key={sel.keyOf(item)} item={item} isSelected={sel.isSelected(item)} qty={sel.selectedQty(item)} onToggle={sel.toggle} onQtyChange={sel.qtyChange} />
+              <BillablePartRow key={sel.keyOf(item)} item={item} isSelected={sel.isSelected(item)} qty={sel.selectedQty(item)} onToggle={sel.toggle} onQtyChange={sel.qtyChange}
+                override={sel.selectedOverride(item)} onPriceChange={sel.priceChange} />
             ))}
           </div>
         )}

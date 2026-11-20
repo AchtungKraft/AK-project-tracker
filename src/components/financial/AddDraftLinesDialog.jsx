@@ -8,6 +8,7 @@ import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import { toast } from "@/lib/notify";
 import BillableItemsSelector from "./BillableItemsSelector";
+import { toInvoiceLine } from "./invoiceLinePayload";
 
 // Add parts, services, earned or projected labor to an existing draft. The server validates everything under the
 // project billing lock (same rules as a new draft); existing lines and their prices are never changed.
@@ -22,13 +23,7 @@ export default function AddDraftLinesDialog({ invoice, open, onOpenChange, onSav
 
   const run = async () => {
     setBusy(true); setError(null);
-    const lines = selected.map((i) => ({
-      type: i.type, source_entity: i.source_entity, source_id: i.source_id, description: i.description || i.part_name || "Item",
-      qty: i.qty ?? 1, unit_price: i.unit_price ?? 0,
-      ...(i.type === "labor" ? { labor_basis: i.labor_basis || "earned" } : {}),
-      ...(i.type === "part" && i.part_basis ? { part_basis: i.part_basis } : {}),
-      ...(i.type === "service" && i.children?.length ? { expanded_lines: i.children } : {}),
-    }));
+    const lines = selected.map(toInvoiceLine);
     const res = await base44.functions.invoke("createProjectInvoiceDraft", { project_id: invoice.project_id, append_to_invoice_id: invoice.id, lines })
       .catch((e) => ({ data: e.response?.data || { error: e.message } }));
     setBusy(false);

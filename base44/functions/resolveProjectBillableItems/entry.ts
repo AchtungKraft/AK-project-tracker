@@ -368,10 +368,19 @@ Deno.serve(async (req) => {
     const { qtyBySource, draftsBySource } = await loadDraftAllocations(base44.asServiceRole.entities, project_id);
     const allocatedItems = [];
     const availableItems = [];
+    // Received / unreceived value of part qty already on drafts (same rule as the split below: received qty first).
+    const commitmentById = new Map(commitments.map((c) => [c.id, c]));
+    let allocPartsReceived = 0; let allocPartsUnreceived = 0;
     for (const it of items) {
       const onDrafts = it.type === 'labor' ? (it.metadata?.draft_hours || 0) : (qtyBySource.get(it.source_id) || 0);
       const allocQty = it.type === 'service' ? (onDrafts > 0 ? 1 : 0) : lh(Math.min(it.qty_available_to_bill, onDrafts));
       const remaining = lh(it.qty_available_to_bill - allocQty);
+      if (allocQty > 0 && it.type === 'part') {
+        const c = commitmentById.get(it.source_id) || {};
+        const physical = Math.min(it.effective_required ?? 0, (c.reserved_from_stock ?? 0) + (c.qty_installed ?? 0));
+        const recQ = Math.max(0, Math.min(allocQty, physical - (it.invoiced_qty ?? 0)));
+        allocPartsReceived += recQ * it.unit_price; allocPartsUnreceived += (allocQty - recQ) * it.unit_price;
+      }
       if (allocQty > 0) {
         allocatedItems.push({ ...it, qty_allocated: allocQty, allocated_amount: lr2(allocQty * it.unit_price), draft_invoice_ids: [...(draftsBySource.get(it.source_id) || [])] });
       }
@@ -439,6 +448,17 @@ Deno.serve(async (req) => {
     // Earned scope only; projected (advance) labor is optional and reported separately.
     const availableTotal = lr2(items.reduce((s, i) => s + (i.metadata?.labor_basis === 'projected' ? 0 : i.line_total), 0));
     const excludedTotal = lr2(excludedItems.reduce((s, i) => s + (i.amount || 0), 0));
+    // Whole uninvoiced value (available now + on drafts) by kind; the four amounts add up to uninvoiced_total.
+    const sumT = (f) => lr2(items.filter(f).reduce((s, i) => s + i.line_total, 0));
+    const allocT = (t) => lr2(allocatedItems.filter((i) => i.type === t).reduce((s, i) => s + i.allocated_amount, 0));
+    const uninvoicedBreakdown = {
+      parts_received: lr2(sumT((i) => i.type === 'part' && i.metadata?.part_basis === 'current') + allocPartsReceived),
+      parts_unreceived: lr2(sumT((i) => i.type === 'part' && i.metadata?.part_basis === 'projected') + allocPartsUnreceived),
+      services: lr2(sumT((i) => i.type === 'service') + allocT('service')),
+      labor_earned: lr2(sumT((i) => i.type === 'labor' && i.metadata?.labor_basis !== 'projected') + allocT('labor')),
+      // Advance (projected) labor on drafts that logged hours do not yet cover. Not earned, so not in uninvoiced_total.
+      projected_labor_on_drafts: nonBillable ? 0 : lr2(laborItemsAll.reduce((s, l) => s + (l.rate == null ? 0 : (l.projected_unapplied_draft_hours || 0) * l.rate), 0)),
+    };
 
     return Response.json({
       success: true,
@@ -461,6 +481,7 @@ Deno.serve(async (req) => {
         available_total: availableTotal,
         allocated_to_drafts_total: allocatedTotal,
         uninvoiced_total: lr2(availableTotal + allocatedTotal),
+        uninvoiced_breakdown: uninvoicedBreakdown,
         excluded_total: excludedTotal,
         total_unbilled: lr2(availableTotal + allocatedTotal + excludedTotal),
         needs_classification_hours: needsClassificationHours,

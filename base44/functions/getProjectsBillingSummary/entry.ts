@@ -299,6 +299,8 @@ Deno.serve(async (req) => {
       // Purchasing status only: both stay inside the uninvoiced total.
       let partsReceived = 0;
       let partsUnreceived = 0;
+      let uninvReceived = 0;
+      let uninvUnreceived = 0;
       const cById = new Map(projectCommitments.map((c) => [c.id, c]));
       for (const i of items) {
         const dq = draftQtyBySource.get(i.source_id) ?? 0;
@@ -312,6 +314,10 @@ Deno.serve(async (req) => {
           const recQ = Math.max(0, Math.min(avail, physical - (i.invoiced_qty ?? 0) - allocQty));
           partsReceived += recQ * i.unit_price;
           partsUnreceived += (avail - recQ) * i.unit_price;
+          // Whole uninvoiced qty (drafts included): received qty applies first against invoiced, then here.
+          const recAll = Math.max(0, Math.min(i.qty_available_to_bill, physical - (i.invoiced_qty ?? 0)));
+          uninvReceived += recAll * i.unit_price;
+          uninvUnreceived += (i.qty_available_to_bill - recAll) * i.unit_price;
         }
       }
       const r2 = (n) => Math.round(n * 100) / 100;
@@ -352,6 +358,9 @@ Deno.serve(async (req) => {
           services_total: Math.round(serviceItems.reduce((s, i) => s + i.line_total, 0) * 100) / 100,
           parts_received_total: r2(partsReceived),
           parts_unreceived_total: r2(partsUnreceived),
+          // Same split over the whole uninvoiced parts value (available + on drafts); adds up to parts_total.
+          parts_uninvoiced_received_total: r2(uninvReceived),
+          parts_uninvoiced_unreceived_total: r2(uninvUnreceived),
         },
       });
     }

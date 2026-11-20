@@ -286,16 +286,20 @@ Deno.serve(async (req) => {
     const onDrafts = (t) => add((billD.allocated_items || []).filter((i) => i.type === t), (i) => i.allocated_amount);
     const billedWork = r2(lineSplit.final.part + lineSplit.final.service + lineSplit.final.labor);
     const projectedLaborAvailable = nonBillable ? 0 : r2(laborInvoicing.projected.totals.available_amount);
+    // Kinds cover the whole uninvoiced value (available now + on drafts), so they add up to `opportunity`.
+    const UB = B.uninvoiced_breakdown || {};
+    const projectedOnDrafts = r2(UB.projected_labor_on_drafts || 0);
     const position = {
-      parts_received: add(bItems.filter((i) => i.type === 'part' && i.metadata?.part_basis === 'current')),
-      parts_unreceived: add(bItems.filter((i) => i.type === 'part' && i.metadata?.part_basis === 'projected')),
-      services: add(bItems.filter((i) => i.type === 'service')),
-      labor_earned: add(bItems.filter((i) => i.type === 'labor' && i.metadata?.labor_basis !== 'projected')),
+      parts_received: r2(UB.parts_received), parts_unreceived: r2(UB.parts_unreceived),
+      services: r2(UB.services), labor_earned: r2(UB.labor_earned),
       on_drafts: r2(B.allocated_to_drafts_total), available_now: r2(B.available_total),
       opportunity: r2(B.uninvoiced_total), excluded: r2(B.excluded_total),
       billed_work: billedWork, projected_labor_available: projectedLaborAvailable,
+      // Advance labor already on drafts (not earned yet) and advance labor sent but not yet earned (inside billed_work).
+      projected_labor_on_drafts: projectedOnDrafts,
+      projected_labor_invoiced_unearned: r2(laborInvoicing.advance?.unapplied_invoiced_amount || 0),
       labor_projected_remaining: r2(LB.remAmt), labor_earned_to_date: r2(LB.toDate),
-      projected_total: r2(billedWork + B.uninvoiced_total + projectedLaborAvailable),
+      projected_total: r2(billedWork + B.uninvoiced_total + projectedOnDrafts + projectedLaborAvailable),
       non_billable: nonBillable,
     };
     // Reconciles the line-level scope value (reports) with the canonical position; any difference is flagged, never hidden.

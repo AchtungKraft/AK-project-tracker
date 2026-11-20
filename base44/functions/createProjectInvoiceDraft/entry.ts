@@ -93,6 +93,8 @@ async function appendLines({ base44, user, target, validatedLines, subtotal, blo
       subtotal: newSubtotal, total: newSubtotal, balance_due: lr2(Math.max(0, newSubtotal - (target.credit_proposed ?? 0))),
     } })).updated === 1;
     if (!won) throw Object.assign(new Error('Draft changed while adding lines. Refresh and try again.'), { code: 'INVOICE_CHANGED' });
+    // Line metadata is the primary audit record; the activity log copy never undoes a committed append.
+    await logPriceOverrides(sr, user, target.project_id, target.id, validatedLines).catch((e) => console.error('[appendLines] override log failed', e.message));
     await sr.ActivityLog.create({ action: 'Draft Invoice Lines Added', related_project_id: target.project_id, user_email: user.email,
       notes: JSON.stringify({ invoice_id: target.id, at: new Date().toISOString(), before_subtotal: lr2(target.subtotal ?? 0), after_subtotal: newSubtotal, added: validatedLines.map(summarize), budget: budgetCheck }).slice(0, 8000) });
     return Response.json({ success: true, mode: 'append', invoice_id: target.id, lines_added: created.length, added_subtotal: lr2(subtotal), subtotal: newSubtotal,
@@ -110,6 +112,36 @@ async function loadBudget(base44, project_id) {
   const d = (await base44.functions.invoke('billingAuthorizationCore', { project_id })).data;
   if (!d?.success || d.logic_version !== AUTH_LOGIC_VERSION) throw new Error('Billing authorization unavailable or version mismatch');
   return { budget: d.authorization.authorized, billed: d.authorization.consumed };
+}
+
+// ── PART SELLING PRICE ── Canonical price = the commitment's frozen retail snapshot. A caller price that differs is an
+// explicit administrator override: whole cents, 0 to 10,000,000, a reason (5-500 chars), and below-cost approval when it
+// is under the unit cost. Only the invoice line carries the override; catalog, commitment, PO and inventory are untouched.
+const MAX_PRICE = 10000000;
+function resolvePartPrice(line, canonical, unitCost) {
+  if (line.unit_price == null || line.unit_price === '') return { price: canonical, override: null };
+  const p = typeof line.unit_price === 'number' ? line.unit_price : (typeof line.unit_price === 'string' && /^\d+(\.\d+)?$/.test(line.unit_price.trim()) ? Number(line.unit_price) : NaN);
+  if (!Number.isFinite(p) || p < 0 || p > MAX_PRICE) return { code: 'PRICE_INVALID', message: `selling price must be a number from 0 to ${MAX_PRICE}` };
+  if (Math.abs(Math.round(p * 100) - p * 100) > 1e-6) return { code: 'PRICE_PRECISION', message: 'selling price must be in whole cents' };
+  if (Math.abs(p - canonical) < 0.005) return { price: canonical, override: null };
+  const o = line.price_override && typeof line.price_override === 'object' ? line.price_override : null;
+  const reason = typeof o?.reason === 'string' ? o.reason.trim() : '';
+  if (reason.length < 5) return { code: 'PRICE_OVERRIDE_REASON_REQUIRED', message: `$${p.toFixed(2)} differs from the canonical $${canonical.toFixed(2)}; an override reason (at least 5 characters) is required` };
+  if (reason.length > 500) return { code: 'PRICE_OVERRIDE_REASON_TOO_LONG', message: 'override reason must be 500 characters or fewer' };
+  const belowCost = unitCost > 0 && p < unitCost - 0.005;
+  if (belowCost && o.below_cost_approved !== true) return { code: 'BELOW_COST_APPROVAL_REQUIRED', message: `$${p.toFixed(2)} is below the unit cost $${unitCost.toFixed(2)}; explicit below-cost approval is required` };
+  return { price: lr2(p), override: { original_unit_price: canonical, override_unit_price: lr2(p), reason, below_cost: belowCost, below_cost_approved: belowCost, unit_cost_at_override: unitCost,
+    margin_pct: p > 0 ? lr2(((p - unitCost) / p) * 100) : null } };
+}
+
+// Price-override audit entries (one ActivityLog row per overridden line). Called only after the lines are written.
+async function logPriceOverrides(sr, user, projectId, invoiceId, lines) {
+  for (const l of lines) {
+    const o = l.metadata?.price_override;
+    if (!o) continue;
+    await sr.ActivityLog.create({ action: 'Invoice Line Price Override', related_project_id: projectId, user_email: user.email,
+      notes: JSON.stringify({ invoice_id: invoiceId, source_id: l.source_id, description: l.description, qty: l.qty, ...o }).slice(0, 4000) });
+  }
 }
 
 // Physically received qty (reserved from stock + installed). Invoiced and draft qty are applied against it first;
@@ -263,6 +295,8 @@ Deno.serve(async (req) => {
     const { qtyBySource: draftQty } = await loadDraftAllocations(base44.asServiceRole.entities, project_id);
     const partQtyUsed = new Map();
     const partRejections = [];
+    const priceRejections = [];
+    let overridden = false;
     let hasProjectedParts = false;
     const servicesUsed = new Set();
 
@@ -330,9 +364,21 @@ Deno.serve(async (req) => {
         }
         partQtyUsed.set(line.source_id, { ...used, total: used.total + effectiveQty, ...(basis ? { [basis]: used[basis] + effectiveQty } : {}) });
         if (basis === 'projected') hasProjectedParts = true;
-        const unitPrice = line.unit_price ?? commitment.unit_retail_snapshot ?? 0;
         const unitCost = commitment.unit_cost_snapshot ?? 0;
-        const lineTotal = effectiveQty * unitPrice;
+        const priced = resolvePartPrice(line, lr2(commitment.unit_retail_snapshot ?? 0), unitCost);
+        if (priced.code) {
+          priceRejections.push({ line: i, source_id: line.source_id, code: priced.code, message: `${line.description || 'Part'}: ${priced.message}` });
+          continue;
+        }
+        if (priced.override && user.role !== 'admin') return Response.json({ error: 'Forbidden: price overrides are admin only' }, { status: 403 });
+        const unitPrice = priced.price;
+        const lineTotal = lr2(effectiveQty * unitPrice);
+        if (priced.override) {
+          overridden = true;
+          warnings.push({ line: i, code: priced.override.below_cost ? 'BELOW_COST_OVERRIDE' : 'PRICE_OVERRIDDEN',
+            message: `${line.description || 'Part'}: selling price $${unitPrice.toFixed(2)} instead of $${priced.override.original_unit_price.toFixed(2)}` +
+              (priced.override.margin_pct != null ? ` (margin ${priced.override.margin_pct}%${priced.override.below_cost ? ', below cost, approved' : ''})` : '') });
+        }
 
         const part = partMap.get(commitment.part_id);
         const vendor = part?.default_vendor_id ? vendorMap.get(part.default_vendor_id) : null;
@@ -368,8 +414,11 @@ Deno.serve(async (req) => {
           review_reason: reviewReason,
           sort_order: i,
           // Estimated selling price and estimated cost are snapshotted on the line; actual cost is tracked on the commitment.
-          metadata: basis ? { part_basis: basis, received_qty_at_draft: lh(Math.min(effectiveRequired, (commitment.reserved_from_stock ?? 0) + (commitment.qty_installed ?? 0))),
-            ...(basis === 'projected' ? { estimated_unit_cost_at_draft: unitCost, on_order_qty_at_draft: commitment.covered_from_po ?? 0 } : {}) } : null,
+          metadata: (basis || priced.override) ? {
+            ...(basis ? { part_basis: basis, received_qty_at_draft: lh(Math.min(effectiveRequired, (commitment.reserved_from_stock ?? 0) + (commitment.qty_installed ?? 0))),
+              ...(basis === 'projected' ? { estimated_unit_cost_at_draft: unitCost, on_order_qty_at_draft: commitment.covered_from_po ?? 0 } : {}) } : {}),
+            ...(priced.override ? { price_override: { ...priced.override, by: user.email, at: new Date().toISOString() } } : {}),
+          } : null,
         });
       }
 
@@ -409,7 +458,13 @@ Deno.serve(async (req) => {
         }
 
         // ── SERVICE EXPANSION: If expanded_lines provided, create child lines ──
-        const expandedLines = line.expanded_lines;
+        // Component lines are rebuilt from the stored ServiceLineItem records; caller-supplied amounts are never used.
+        const expandedLines = Array.isArray(line.expanded_lines) && line.expanded_lines.length
+          ? (await base44.asServiceRole.entities.ServiceLineItem.filter({ service_commitment_id: sc.id }))
+            .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+            .map((sli) => ({ id: sli.id, type: sli.type || 'vendor_cost', description: sli.description || sli.type || 'Line Item', cost: sli.cost ?? 0,
+              billing_rate: sli.billing_rate ?? 0, quantity: sli.quantity ?? 1, amount: (sli.billing_rate ?? 0) * (sli.quantity ?? 1), cost_amount: (sli.cost ?? 0) * (sli.quantity ?? 1), vendor_name: null }))
+          : null;
         if (expandedLines && Array.isArray(expandedLines) && expandedLines.length > 0) {
           // Validate children sum matches parent total
           const childrenSum = expandedLines.reduce((s, cl) => s + (cl.amount ?? 0), 0);
@@ -593,6 +648,9 @@ Deno.serve(async (req) => {
     if (partRejections.length) {
       return Response.json({ success: false, code: 'PART_QTY_EXCEEDED', error: partRejections.map((r) => r.message).join('; '), part_rejections: partRejections }, { status: 409 });
     }
+    if (priceRejections.length) {
+      return Response.json({ success: false, code: 'PRICE_OVERRIDE_INVALID', error: priceRejections.map((r) => r.message).join('; '), price_rejections: priceRejections }, { status: 400 });
+    }
 
     // All blocked?
     if (validatedLines.length === 0 && blockedLines.length > 0) {
@@ -640,7 +698,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    const summarize = (l) => ({ type: l.type, source_id: l.source_id, labor_basis: l.metadata?.labor_basis, part_basis: l.metadata?.part_basis, description: l.description, qty: l.qty, unit_price: l.unit_price, line_total: lr2(l.line_total) });
+    const summarize = (l) => ({ type: l.type, source_id: l.source_id, labor_basis: l.metadata?.labor_basis, part_basis: l.metadata?.part_basis, description: l.description, qty: l.qty, unit_price: l.unit_price, line_total: lr2(l.line_total),
+      ...(l.metadata?.price_override ? { price_override: l.metadata.price_override } : {}) });
     if (check_only) {
       return Response.json({ success: true, check_only: true, mode: appending ? 'append' : 'create', would_add: validatedLines.map(summarize),
         adding_subtotal: lr2(subtotal), blocked_lines: blockedLines.length ? blockedLines : null, budget: budgetCheck, warnings: warnings.length ? warnings : null });
@@ -693,6 +752,8 @@ Deno.serve(async (req) => {
       });
       createdLines.push(created);
     }
+
+    if (overridden) await logPriceOverrides(base44.asServiceRole.entities, user, project_id, invoice.id, validatedLines).catch((e) => console.error('[createProjectInvoiceDraft] override log failed', e.message));
 
     // ── Phase 5: Invoice Integrity Summary ──
     const partsTotal = validatedLines.filter(l => l.type === 'part').reduce((s, l) => s + (l.line_total || 0), 0);

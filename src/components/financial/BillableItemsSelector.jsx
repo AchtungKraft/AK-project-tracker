@@ -112,8 +112,16 @@ export default function BillableItemsSelector({ projectId, selectedItems, onSele
       toggle: (item, checked) => (checked ? onSelectionChange([...selectedItems, buildPayload(item)]) : onSelectionChange(selectedItems.filter((s) => keyOf(s) !== keyOf(item)))),
       // Partial allocation of hours or qty. Over-entry is shown as an error, never capped.
       qtyChange: (item, q) => onSelectionChange(selectedItems.map((s) => (keyOf(s) === keyOf(item)
-        ? { ...s, qty: q, line_total: Math.round((q || 0) * item.unit_price * 100) / 100, cost_total: Math.round((q || 0) * (item.unit_cost || 0) * 100) / 100, net_exposure: (q || 0) * item.unit_price, gross_exposure: (q || 0) * item.unit_price }
+        ? { ...s, qty: q, line_total: Math.round((q || 0) * s.unit_price * 100) / 100, cost_total: Math.round((q || 0) * (item.unit_cost || 0) * 100) / 100, net_exposure: (q || 0) * s.unit_price, gross_exposure: (q || 0) * s.unit_price }
         : s))),
+      // Admin part price override (null restores the canonical price). Validated again on the server.
+      priceChange: (item, o) => onSelectionChange(selectedItems.map((s) => {
+        if (keyOf(s) !== keyOf(item)) return s;
+        const price = o ? o.unit_price : item.unit_price;
+        const total = Math.round((s.qty || 0) * price * 100) / 100;
+        return { ...s, unit_price: price, price_override: o ? { reason: o.reason, below_cost_approved: o.below_cost_approved } : null, line_total: total, net_exposure: total, gross_exposure: total };
+      })),
+      selectedOverride: (item) => { const s = selectedByKey.get(keyOf(item)); return s?.price_override ? { ...s.price_override, unit_price: s.unit_price } : null; },
       selectedQty: (item) => selectedByKey.get(keyOf(item))?.qty,
       isGroupFullySelected: (items) => items.length > 0 && items.every(isSelected),
       isGroupPartiallySelected: (items) => { const n = items.filter(isSelected).length; return n > 0 && n < items.length; },

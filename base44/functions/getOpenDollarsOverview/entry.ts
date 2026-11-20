@@ -3,15 +3,18 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.54';
 /**
  * getOpenDollarsOverview — READ-ONLY, admin-only portfolio view of money not yet collected.
  *
- *   Unbilled Project Value = uninvoiced parts + uninvoiced services (getProjectsBillingSummary, canonical computeItems)
- *                          + earned uninvoiced labor (computeLaborBilling below)
- *   Outstanding Invoiced   = balance_due of sent / partial / overdue invoices
- *   Total Open Dollars     = Unbilled Project Value + Outstanding Invoiced
+ *   1. Current Unbilled Value  = uninvoiced parts (received + unreceived) + uninvoiced services (getProjectsBillingSummary)
+ *                               + earned uninvoiced labor (laborBillingCore). Items on drafts stay here ("of which on drafts").
+ *   2. Outstanding Invoiced    = balance due on sent / partial / overdue invoices (billingAuthorizationCore)
+ *   3. Total Open Dollars      = 1 + 2
+ *   4. Additional Projected    = advance labor already on drafts that logged hours do not cover yet
+ *                               + projected labor still available (laborBillingCore projected_available, the same
+ *                                 per-task pool Create Invoice uses: net of sent, drafted and earned hours)
+ *   5. Total Expected          = 3 + 4
  *
- * Items sitting on draft invoices are still unbilled (shown as "on drafts", never added twice).
- * Draft face value is never added; differences between drafts and current values are flagged only.
- * Future scope (confirmed agreed budget) and projected remaining labor are reported separately, never in the totals.
- * Never writes.
+ * Advance labor already sent but not yet earned is inside Outstanding / paid history and is reported for information only.
+ * Confirmed client budgets are an authorization ceiling, listed separately and never added to any total.
+ * Non-billable projects: no unbilled or projected value; outstanding sent invoices still count. Never writes.
  */
 
 // ┌─ CANONICAL LABOR BILLING — calculated only in laborBillingCore (regression vectors run via its self_test).
@@ -38,12 +41,34 @@ async function all(entity, q) {
 }
 const groupBy = (rows, key) => { const m = new Map(); for (const r of rows) { const k = r[key]; if (!m.has(k)) m.set(k, []); m.get(k).push(r); } return m; };
 
+// Splits projected labor still available by authorization. Room = budget left after drafts, minus current unbilled work
+// not yet on a draft (it will consume the budget when invoiced). Pure, so it is covered by the self test below.
+function splitProjected({ available, budget, remaining, unbilledNotOnDrafts }) {
+  if (budget == null) return { within_budget: 0, beyond_budget: 0, no_budget: lr2(available) };
+  const room = Math.max(0, (remaining ?? 0) - unbilledNotOnDrafts);
+  const within = Math.min(available, room);
+  return { within_budget: lr2(within), beyond_budget: lr2(available - within), no_budget: 0 };
+}
+
+function selfTest() {
+  const cases = [
+    { in: { available: 4785, budget: 30000, remaining: 30000, unbilledNotOnDrafts: 21797 }, out: { within_budget: 4785, beyond_budget: 0, no_budget: 0 } },
+    { in: { available: 5000, budget: 10000, remaining: 3000, unbilledNotOnDrafts: 1000 }, out: { within_budget: 2000, beyond_budget: 3000, no_budget: 0 } },
+    { in: { available: 800, budget: null, remaining: null, unbilledNotOnDrafts: 50 }, out: { within_budget: 0, beyond_budget: 0, no_budget: 800 } },
+    { in: { available: 300, budget: 1000, remaining: -50, unbilledNotOnDrafts: 0 }, out: { within_budget: 0, beyond_budget: 300, no_budget: 0 } },
+  ];
+  const results = cases.map((c) => ({ pass: JSON.stringify(splitProjected(c.in)) === JSON.stringify(c.out), got: splitProjected(c.in), expect: c.out }));
+  return { pass: results.every((r) => r.pass), results };
+}
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me().catch((e) => (e.status === 401 ? null : Promise.reject(e)));
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
     if (user.role !== 'admin') return Response.json({ error: 'Forbidden' }, { status: 403 });
+    const body = await req.json().catch(() => ({}));
+    if (body.self_test) return Response.json({ success: true, self_test: selfTest() });
 
     const db = base44.asServiceRole.entities;
     const [summaryRes, projects, invoices, laborData, authRes] = await Promise.all([
@@ -55,7 +80,6 @@ Deno.serve(async (req) => {
     ]);
     const summary = summaryRes.data;
     if (!summary?.success) return Response.json({ error: 'Parts and services summary unavailable' }, { status: 502 });
-    // Outstanding, overdue and confirmed budgets come from the canonical invoice position (same as the project screens).
     const auth = authRes.data;
     if (!auth?.success || auth.logic_version !== AUTH_LOGIC_VERSION) return Response.json({ error: 'Invoice position unavailable or version mismatch' }, { status: 502 });
 
@@ -63,65 +87,96 @@ Deno.serve(async (req) => {
     const invByProject = groupBy(invoices, 'project_id');
 
     const rows = [];
+    const authorization = [];
     for (const project of projects) {
       if (project.is_system_project) continue;
       const ps = psByProject.get(project.id);
       const pInvoices = invByProject.get(project.id) || [];
       const labor = laborData.projects[project.id] || laborData.empty;
       const L = labor.totals;
-
-      // Non-billable: nothing is counted as unbilled (Ready to Invoice skips it too); outstanding sent invoices still count.
+      const ADV = labor.advance || {};
+      const A = auth.projects[project.id];
       const nonBillable = project.billing_designation === 'NON_BILLABLE';
-      const parts = ps?.breakdown?.parts_total ?? 0;
-      const services = ps?.breakdown?.services_total ?? 0;
-      const unbilled = nonBillable ? 0 : lr2(parts + services + L.uninvoiced);
-      const onDrafts = lr2((ps?.allocated_to_drafts ?? 0) + L.allocated_to_drafts);
+
+      // 1. Current unbilled (non-billable: nothing; Ready to Invoice skips it too)
+      const bd = ps?.breakdown || {};
+      const parts = nonBillable ? 0 : lr2(bd.parts_total ?? 0);
+      const partsReceived = nonBillable ? 0 : lr2(bd.parts_uninvoiced_received_total ?? 0);
+      const partsUnreceived = nonBillable ? 0 : lr2(bd.parts_uninvoiced_unreceived_total ?? 0);
+      const services = nonBillable ? 0 : lr2(bd.services_total ?? 0);
+      const laborEarned = nonBillable ? 0 : lr2(L.uninvoiced);
+      const unbilled = lr2(parts + services + laborEarned);
+      // Already includes earned labor on drafts (getProjectsBillingSummary adds it); never added a second time.
+      const onDrafts = nonBillable ? 0 : lr2(ps?.allocated_to_drafts ?? 0);
+
+      // 2. Outstanding
+      const outstanding = A?.receivables_outstanding ?? 0;
+      const total = lr2(unbilled + outstanding);
+
+      // 4. Additional projected work (not in 1 or 2)
+      const projOnDrafts = nonBillable ? 0 : lr2(ADV.unapplied_draft_amount ?? 0);
+      const projAvailable = nonBillable ? 0 : lr2(labor.projected.totals.available_amount);
+      const split = splitProjected({ available: projAvailable, budget: A?.authorized ?? null, remaining: A?.remaining_authorization ?? null, unbilledNotOnDrafts: Math.max(0, unbilled - onDrafts) });
+      const additional = lr2(projOnDrafts + projAvailable);
+
       const drafts = pInvoices.filter((i) => i.status === 'draft');
       const draftFace = lr2(drafts.reduce((a, i) => a + (i.subtotal ?? i.total ?? 0), 0));
-      const A = auth.projects[project.id];
-      const outstanding = A?.receivables_outstanding ?? 0;
-      const outstandingCount = A?.outstanding_count ?? 0;
-
-      // Separate, never in totals
-      const projectedLabor = labor.projected.totals.remaining_amount;
-      const agreedBudget = A?.authorized ?? null;
-
       const flags = [];
       if (L.unpriced_hours > 0) flags.push({ code: 'LABOR_RATE_NOT_SET', message: `${L.unpriced_hours}h of billable labor on ${L.unpriced_tasks} task(s) have no billing rate and are not counted.` });
       if (L.over_invoiced_tasks > 0) flags.push({ code: 'LABOR_OVER_INVOICED', message: `${L.over_invoiced_tasks} task(s) have more hours invoiced than logged or estimated.` });
-      if (nonBillable) flags.push({ code: 'PROJECT_NON_BILLABLE', message: 'Project is marked Non-Billable: excluded from unbilled totals and new invoicing.' });
-      if (drafts.length && Math.abs(draftFace - onDrafts) > 0.01) flags.push({ code: 'DRAFTS_DIFFER_FROM_CURRENT', message: `Draft invoices total $${draftFace.toFixed(2)}; the current uninvoiced value of the items on them is $${onDrafts.toFixed(2)}. Review the drafts before sending.` });
+      if (nonBillable) flags.push({ code: 'PROJECT_NON_BILLABLE', message: 'Project is marked Non-Billable: excluded from unbilled, projected and new invoicing.' });
+      if (split.beyond_budget > 0) flags.push({ code: 'PROJECTED_BEYOND_BUDGET', message: `$${split.beyond_budget.toFixed(2)} of projected labor is beyond the confirmed client budget.` });
+      if (!nonBillable && drafts.length && Math.abs(draftFace - (onDrafts + projOnDrafts)) > 0.01) flags.push({ code: 'DRAFTS_DIFFER_FROM_CURRENT', message: `Draft invoices total $${draftFace.toFixed(2)}; the current value of the items on them is $${lr2(onDrafts + projOnDrafts).toFixed(2)}. Review the drafts before sending.` });
 
-      const total = lr2(unbilled + outstanding);
-      if (total === 0 && !flags.length && !drafts.length) continue;
+      if (A?.authorized != null) {
+        authorization.push({ project_id: project.id, project_name: project.name, client_name: project.client_name || null,
+          budget: A.authorized, invoiced_net: A.invoiced_net, drafts_net: A.drafts_net, consumed: A.consumed, remaining: A.remaining_authorization,
+          unbilled_not_on_drafts: lr2(Math.max(0, unbilled - onDrafts)), projected_within_budget: split.within_budget, projected_beyond_budget: split.beyond_budget,
+          billing_designation: nonBillable ? 'NON_BILLABLE' : 'BILLABLE' });
+      }
+
+      if (total === 0 && additional === 0 && !flags.length && !drafts.length) continue;
       rows.push({
         project_id: project.id, project_name: project.name, client_name: project.client_name || null,
         labor_rate: project.labor_billing_rate ?? null, labor_unpriced_hours: L.unpriced_hours,
         billing_designation: nonBillable ? 'NON_BILLABLE' : 'BILLABLE',
-        projected_labor_available: nonBillable ? 0 : labor.projected.totals.available_amount,
-        unbilled: nonBillable ? { parts: 0, parts_received: 0, parts_unreceived: 0, services: 0, labor: 0, labor_hours: 0, total: 0 } : { parts: lr2(parts), parts_received: ps?.breakdown?.parts_received_total ?? 0, parts_unreceived: ps?.breakdown?.parts_unreceived_total ?? 0, services: lr2(services), labor: L.uninvoiced, labor_hours: L.uninvoiced_hours, total: unbilled },
+        unbilled: { parts, parts_received: partsReceived, parts_unreceived: partsUnreceived, services, labor: laborEarned, labor_hours: nonBillable ? 0 : L.uninvoiced_hours, total: unbilled },
         on_drafts: onDrafts, draft_count: drafts.length, draft_face_value: draftFace,
-        outstanding, outstanding_count: outstandingCount, overdue: A?.overdue_total ?? 0, overdue_count: A?.overdue_count ?? 0,
+        outstanding, outstanding_count: A?.outstanding_count ?? 0, overdue: A?.overdue_total ?? 0, overdue_count: A?.overdue_count ?? 0,
         total_open: total,
-        future: { agreed_budget: agreedBudget, projected_labor_remaining: lr2(projectedLabor) },
+        projected: { on_drafts: projOnDrafts, available: projAvailable, ...split, additional,
+          invoiced_unearned: lr2(ADV.unapplied_invoiced_amount ?? 0), unpriced_remaining_hours: labor.projected.totals.unpriced_remaining_hours },
+        expected_total: lr2(total + additional),
+        agreed_budget: A?.authorized ?? null,
         flags,
       });
     }
-    rows.sort((a, b) => b.total_open - a.total_open);
+    rows.sort((a, b) => b.expected_total - a.expected_total);
+    authorization.sort((a, b) => (b.budget ?? 0) - (a.budget ?? 0));
 
-    const sum = (f) => lr2(rows.reduce((a, r) => a + f(r), 0));
+    const sum = (list, f) => lr2(list.reduce((a, r) => a + (f(r) || 0), 0));
     return Response.json({
       success: true, generated_at: new Date().toISOString(),
       totals: {
-        unbilled_parts: sum((r) => r.unbilled.parts), unbilled_parts_received: sum((r) => r.unbilled.parts_received), unbilled_parts_unreceived: sum((r) => r.unbilled.parts_unreceived),
-        overdue: sum((r) => r.overdue), overdue_count: rows.reduce((a, r) => a + r.overdue_count, 0), unbilled_services: sum((r) => r.unbilled.services), unbilled_labor: sum((r) => r.unbilled.labor),
-        unbilled_total: sum((r) => r.unbilled.total), on_drafts: sum((r) => r.on_drafts), draft_face_value: sum((r) => r.draft_face_value),
-        outstanding: sum((r) => r.outstanding), total_open: sum((r) => r.total_open),
-        future_agreed_budget: sum((r) => r.future.agreed_budget ?? 0), future_projected_labor: sum((r) => r.future.projected_labor_remaining),
+        unbilled_parts: sum(rows, (r) => r.unbilled.parts), unbilled_parts_received: sum(rows, (r) => r.unbilled.parts_received), unbilled_parts_unreceived: sum(rows, (r) => r.unbilled.parts_unreceived),
+        unbilled_services: sum(rows, (r) => r.unbilled.services), unbilled_labor: sum(rows, (r) => r.unbilled.labor),
+        unbilled_total: sum(rows, (r) => r.unbilled.total), on_drafts: sum(rows, (r) => r.on_drafts), draft_face_value: sum(rows, (r) => r.draft_face_value),
+        outstanding: sum(rows, (r) => r.outstanding), overdue: sum(rows, (r) => r.overdue), overdue_count: rows.reduce((a, r) => a + r.overdue_count, 0),
+        total_open: sum(rows, (r) => r.total_open),
+        projected_on_drafts: sum(rows, (r) => r.projected.on_drafts), projected_available: sum(rows, (r) => r.projected.available),
+        projected_within_budget: sum(rows, (r) => r.projected.within_budget), projected_beyond_budget: sum(rows, (r) => r.projected.beyond_budget),
+        projected_no_budget: sum(rows, (r) => r.projected.no_budget), additional_projected: sum(rows, (r) => r.projected.additional),
+        projected_invoiced_unearned: sum(rows, (r) => r.projected.invoiced_unearned),
+        unpriced_projected_hours: lh(rows.reduce((a, r) => a + (r.projected.unpriced_remaining_hours || 0), 0)),
+        expected_total: sum(rows, (r) => r.expected_total),
         projects_needing_rate: rows.filter((r) => r.flags.some((f) => f.code === 'LABOR_RATE_NOT_SET')).length,
         unpriced_labor_hours: lh(rows.reduce((a, r) => a + r.labor_unpriced_hours, 0)),
       },
       projects: rows,
+      authorization: {
+        totals: { budget: sum(authorization, (a) => a.budget), consumed: sum(authorization, (a) => a.consumed), remaining: sum(authorization, (a) => a.remaining), projects: authorization.length },
+        projects: authorization,
+      },
     });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });

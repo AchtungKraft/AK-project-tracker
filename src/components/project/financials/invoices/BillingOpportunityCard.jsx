@@ -20,12 +20,13 @@ export default function BillingOpportunityCard({ p }) {
           <Row label="Unreceived parts" sub="Ordered or not yet purchased; can be advance-billed" value={money(p.parts_unreceived)} />
           <Row label="Services" value={money(p.services)} />
           <Row label="Earned labor" sub="Logged billable hours" value={money(p.labor_earned)} />
-          <Row label="On draft invoices" value={money(p.on_drafts)} />
           <Row strong label="Not yet invoiced" value={money(p.opportunity)} />
+          <Row muted label="Of which on draft invoices" value={money(p.on_drafts)} />
         </div>
         <div className="space-y-1.5">
-          <Row label="Already invoiced work" value={money(p.billed_work)} />
+          <Row label="Already invoiced work" value={money(p.billed_work)} sub={p.projected_labor_invoiced_unearned > 0 ? `Incl. ${money(p.projected_labor_invoiced_unearned)} advance labor not yet earned` : null} />
           <Row label="Not yet invoiced" value={money(p.opportunity)} />
+          <Row label="Advance labor on drafts" sub="Projected hours not yet logged" value={money(p.projected_labor_on_drafts)} />
           <Row label="Projected labor available" sub="Advance billing against task estimates" value={money(p.projected_labor_available)} />
           <Row strong label="Projected total" value={money(p.projected_total)} />
           {p.excluded > 0 && <Row muted label={p.non_billable ? "Excluded: project is Non-Billable" : "Excluded from billing"} value={money(p.excluded)} />}

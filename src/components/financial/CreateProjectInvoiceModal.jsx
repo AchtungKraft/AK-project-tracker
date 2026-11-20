@@ -53,6 +53,7 @@ import { guardInvoiceMutation, registerInvoiceCreationSurface } from "@/componen
 import { billingKeys, invoiceKeys, creditKeys, normalizeProjectId } from "./queryKeyFactories";
 import InvoiceTotalsPanel from "./InvoiceTotalsPanel";
 import ManualLinesSection from "./ManualLinesSection";
+import { toInvoiceLine } from "./invoiceLinePayload";
 
 // DEV guardrails
 if (import.meta.env.DEV) {
@@ -229,21 +230,7 @@ export default function CreateProjectInvoiceModal({
 
       for (const item of selectedParts) {
         if (!item.source_id) continue;
-        const linePayload = {
-          type: item.type || "part",
-          source_entity: item.source_entity,
-          source_id: item.source_id,
-          description: item.description || item.part_name || 'Item',
-          qty: item.qty ?? 1,
-          unit_price: item.unit_price ?? 0,
-        };
-        if (item.type === 'labor') linePayload.labor_basis = item.labor_basis || 'earned';
-        if (item.type === 'part' && item.part_basis) linePayload.part_basis = item.part_basis;
-        // Phase 1: Pass service children for expanded invoice lines
-        if (item.type === 'service' && item.children?.length > 0) {
-          linePayload.expanded_lines = item.children;
-        }
-        lines.push(linePayload);
+        lines.push(toInvoiceLine(item));
       }
 
       for (const line of manualLines) {

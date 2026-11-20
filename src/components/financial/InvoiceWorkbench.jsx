@@ -748,7 +748,7 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
         source_id: item.commitment_id || item.source_id,
         description: item.part_name || item.description || 'Unknown',
         qty: item.assigned_qty || item.required_total || 1,
-        unit_price: item.unit_retail || item.unit_price || 0,
+        // No price sent: the server bills parts at the canonical selling price and services at their stored amount.
       }));
       
       const response = await base44.functions.invoke('createProjectInvoiceDraft', {

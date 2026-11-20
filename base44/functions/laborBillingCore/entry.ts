@@ -38,18 +38,23 @@ const lh = (n) => Math.round((n || 0) * 10000) / 10000;
 function computeLaborBilling({ project, tasks, timeEntries, statusLabelById, invoiceStatusById, laborLines, baselineByTask = new Map() }) {
   const logged = new Map();
   for (const e of timeEntries || []) if (e.task_id) logged.set(e.task_id, (logged.get(e.task_id) || 0) + (Number(e.hours) || 0));
-  const invH = new Map(); const draftH = new Map(); const invAmt = new Map(); const projH = new Map();
+  const invH = new Map(); const draftH = new Map(); const invAmt = new Map(); const projH = new Map(); const projDraftH = new Map();
   for (const l of laborLines || []) {
     if (l.type !== 'labor' || !l.source_id) continue;
     const st = invoiceStatusById.get(l.invoice_id); const q = Number(l.qty) || 0;
     if (LABOR_FINAL.includes(st)) { invH.set(l.source_id, (invH.get(l.source_id) || 0) + q); invAmt.set(l.source_id, (invAmt.get(l.source_id) || 0) + (l.line_total ?? 0)); }
     else if (st === 'draft') draftH.set(l.source_id, (draftH.get(l.source_id) || 0) + q);
     else continue;
-    if (l.metadata?.labor_basis === 'projected') projH.set(l.source_id, (projH.get(l.source_id) || 0) + q);
+    if (l.metadata?.labor_basis === 'projected') {
+      projH.set(l.source_id, (projH.get(l.source_id) || 0) + q);
+      if (st === 'draft') projDraftH.set(l.source_id, (projDraftH.get(l.source_id) || 0) + q);
+    }
   }
   const items = []; const projTasks = [];
   const T = { earned: 0, invoiced: 0, uninvoiced: 0, allocated: 0, uninvH: 0, unpricedH: 0, unpricedTasks: 0, over: 0 };
   const P = { remH: 0, remAmt: 0, unpricedRemH: 0, availH: 0, availAmt: 0 };
+  // Advance billing not yet covered by logged hours, split by where it sits (reporting only; eligibility unchanged).
+  const ADV = { invH: 0, invAmt: 0, draftH: 0, draftAmt: 0 };
   for (const t of tasks || []) {
     if (t.labor_billing_type !== 'BILLABLE') continue;
     const label = statusLabelById.get(t.status_id);
@@ -75,12 +80,17 @@ function computeLaborBilling({ project, tasks, timeEntries, statusLabelById, inv
     if (rate == null) { if (uninvoicedHours > 0) { T.unpricedH += uninvoicedHours; T.unpricedTasks++; } }
     else { T.earned += hours * rate; T.uninvoiced += uninvoicedAmount; T.allocated += allocatedAmount; T.uninvH += uninvoicedHours; }
     T.invoiced += invAmt.get(t.id) || 0;
+    const rec = reconcile({ rawLogged, billedAll, projBilled: projH.get(t.id) || 0, est, baseline: baselineByTask.get(t.id) });
+    // Logged hours apply first to advance billing already sent; what is still ahead of logged work is split invoiced / on drafts.
+    const unappliedDraft = lh(Math.min(projDraftH.get(t.id) || 0, rec.projected_unapplied_hours));
+    const unappliedInv = lh(rec.projected_unapplied_hours - unappliedDraft);
+    if (rate != null) { ADV.invH += unappliedInv; ADV.invAmt += unappliedInv * rate; ADV.draftH += unappliedDraft; ADV.draftAmt += unappliedDraft * rate; }
     items.push({ task_id: t.id, task_name: t.name, rate, hours_logged: hours, invoiced_hours: invoicedHours, draft_hours: draftHours,
       uninvoiced_hours: uninvoicedHours, uninvoiced_amount: uninvoicedAmount, allocated_amount: allocatedAmount, over_invoiced: overInvoiced,
       estimated_hours: est || null, done, cap_hours: lh(cap), earned_available_hours: earnedAvail,
       projected_available_hours: projAvail, projected_available_amount: rate == null ? null : lr2(projAvail * rate), sendable_hours: sendable,
       // Reconciliation (tracking only; eligibility above is unchanged). Earned hours above the estimate stay earned.
-      ...reconcile({ rawLogged, billedAll, projBilled: projH.get(t.id) || 0, est, baseline: baselineByTask.get(t.id) }) });
+      ...rec, projected_draft_hours: lh(projDraftH.get(t.id) || 0), projected_unapplied_invoiced_hours: unappliedInv, projected_unapplied_draft_hours: unappliedDraft });
 
     const remH = !done && est ? Math.max(est - rawLogged, 0) : 0;
     const remAmt = rate == null ? null : remH * rate;
@@ -94,6 +104,8 @@ function computeLaborBilling({ project, tasks, timeEntries, statusLabelById, inv
       available: lr2(T.uninvoiced - T.allocated), uninvoiced_hours: lh(T.uninvH), unpriced_hours: lh(T.unpricedH), unpriced_tasks: T.unpricedTasks, over_invoiced_tasks: T.over },
     projected: { tasks: projTasks, totals: { remaining_hours: lh(P.remH), remaining_amount: lr2(P.remAmt), unpriced_remaining_hours: lh(P.unpricedRemH),
       available_hours: lh(P.availH), available_amount: lr2(P.availAmt) } },
+    // Advance (projected) billing still ahead of logged work. Never part of earned uninvoiced or projected available.
+    advance: { unapplied_invoiced_hours: lh(ADV.invH), unapplied_invoiced_amount: lr2(ADV.invAmt), unapplied_draft_hours: lh(ADV.draftH), unapplied_draft_amount: lr2(ADV.draftAmt) },
   };
 }
 
@@ -184,6 +196,19 @@ function runVectors() {
   const expR = { r1: [3, 0, 4, 4, 0, 2, 2, 5, 4], r2: [0, 1, 4, 2, 2, 0, -3, 5, null] };
   const recPass = JSON.stringify(gotR) === JSON.stringify(expR) && rec.totals.available === 300;
   results.push({ name: 'projected billing reconciles against later hours; overrun above estimate stays earned and billable', pass: recPass, ...(recPass ? {} : { got: gotR, expect: expR, available: rec.totals.available }) });
+  // Advance split: s1 est 10, 2h logged, 3h projected sent + 4h projected on a draft → 2h applied to the sent advance,
+  // 1h sent-unearned, 4h draft-unearned, 3h still projected-available (10 − 7). s2 is cancelled-invoice only → nothing counted.
+  const adv = computeLaborBilling({ project: { labor_billing_rate: 100 }, statusLabelById, invoiceStatusById,
+    tasks: [B('s1', { estimated_hours: 10 }), B('s2', { estimated_hours: 2 })],
+    timeEntries: [{ task_id: 's1', hours: 2 }],
+    laborLines: [{ type: 'labor', source_id: 's1', invoice_id: 'A', qty: 3, line_total: 300, metadata: { labor_basis: 'projected' } },
+      { type: 'labor', source_id: 's1', invoice_id: 'D', qty: 4, line_total: 400, metadata: { labor_basis: 'projected' } },
+      { type: 'labor', source_id: 's2', invoice_id: 'C', qty: 2, line_total: 200, metadata: { labor_basis: 'projected' } }] });
+  const s1 = adv.items.find((i) => i.task_id === 's1');
+  const gotA = [adv.advance.unapplied_invoiced_amount, adv.advance.unapplied_draft_amount, adv.projected.totals.available_amount, s1.earned_available_hours, adv.totals.uninvoiced];
+  const expA = [100, 400, 500, 0, 0]; // available: s1 3h + s2 2h (its cancelled advance is released)
+  const advPass = JSON.stringify(gotA) === JSON.stringify(expA);
+  results.push({ name: 'advance billing split: sent-unearned vs draft-unearned vs still available; cancelled invoices ignored', pass: advPass, ...(advPass ? {} : { got: gotA, expect: expA }) });
   return { pass: results.every((r) => r.pass), results };
 }
 
