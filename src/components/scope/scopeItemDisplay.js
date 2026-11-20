@@ -1,0 +1,63 @@
+/**
+ * Presentation helpers for a Scope Item card. Totals come from the canonical
+ * computeScopeItemPricing — nothing here recalculates estimates.
+ */
+import { formatDollarRange } from "./scopePricingHelpers";
+import { formatHoursRange } from "./scopeHelpers";
+
+/** Header total + pending reason, identical rules to the previous pricing display. */
+export function getTotalDisplay(pricing) {
+  if (pricing.pricing_model === 'legacy_estimate') {
+    if (pricing.legacy_budget_tbd) return { totalLabel: null, pendingReason: 'Estimate TBD' };
+    return { totalLabel: formatDollarRange(pricing.legacy_budget_min, pricing.legacy_budget_max), pendingReason: null };
+  }
+  if (pricing.estimate_complete) {
+    return { totalLabel: formatDollarRange(pricing.total_estimate_min, pricing.total_estimate_max), pendingReason: null };
+  }
+  const hasHardCost = !pricing.hard_cost_tbd && pricing.hard_cost_min != null && pricing.hard_cost_max != null;
+  const hasLabor = pricing.labor_estimated;
+  if (pricing.hard_cost_tbd) {
+    if (hasLabor && pricing.ak_labor_min > 0) return { totalLabel: `From ${formatDollarRange(pricing.ak_labor_min, null).replace('From ', '')}`, pendingReason: 'Final hard cost TBD' };
+    return { totalLabel: null, pendingReason: 'Pending hard cost estimate' };
+  }
+  if (hasHardCost && !hasLabor) return { totalLabel: null, pendingReason: 'Pending AK labor' };
+  if (!hasHardCost && hasLabor) {
+    const partialMin = (pricing.hard_cost_min || 0) + pricing.ak_labor_min;
+    if (partialMin > 0) return { totalLabel: `From ${formatDollarRange(partialMin, null).replace('From ', '')}`, pendingReason: 'Hard cost range still TBD' };
+    return { totalLabel: null, pendingReason: 'Pending final hard cost' };
+  }
+  return { totalLabel: null, pendingReason: 'Estimate pending' };
+}
+
+/** Hard cost rows: structured lines, or the single legacy hard cost as one row. */
+export function getHardCostRows(item) {
+  if (item.pricing_model !== 'hard_cost_plus_labor') return [];
+  if (item.hard_cost_lines?.length) {
+    return item.hard_cost_lines.map(l => ({ description: l.description?.trim() || 'Hard cost', value: l.tbd ? 'TBD' : formatDollarRange(l.min, l.max), tbd: !!l.tbd }));
+  }
+  if (!item.hard_cost_tbd && item.hard_cost_min == null && item.hard_cost_max == null) return [];
+  return [{ description: item.hard_cost_note?.trim() || 'Hard cost', value: item.hard_cost_tbd ? 'TBD' : formatDollarRange(item.hard_cost_min, item.hard_cost_max), tbd: !!item.hard_cost_tbd }];
+}
+
+/** Labor rows sorted by the editor's order. */
+export function getLaborRows(laborEstimates) {
+  return laborEstimates.slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)).map((le, i) => ({
+    key: le.id || i,
+    category: le.labor_group_name_snapshot || 'Labor',
+    description: le.description?.trim() || '',
+    hours: formatHoursRange(le.hours_min, le.hours_max) || '—',
+    cost: formatDollarRange((le.hours_min || 0) * (le.rate_snapshot || 0), (le.hours_max || 0) * (le.rate_snapshot || 0)),
+    rate: le.rate_snapshot,
+  }));
+}
+
+/** Legacy notes shown only when they add information not already in a row. */
+export function getExtraNotes(item, hardCostRows) {
+  const shown = new Set(hardCostRows.map(r => r.description.toLowerCase()));
+  const notes = [];
+  for (const n of [item.hard_cost_note, item.budget_note]) {
+    const t = n?.trim();
+    if (t && !shown.has(t.toLowerCase())) { shown.add(t.toLowerCase()); notes.push(t); }
+  }
+  return notes;
+}
