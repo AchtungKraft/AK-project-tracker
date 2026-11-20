@@ -8,14 +8,19 @@ import { toPrintModel } from "@/components/scope/clientReportAdapter";
 
 /**
  * Client-safe Scope Review report for the Client Portal.
- * /clientscopereport?requestId=…&token=…|slug=…&report=detailed|financial_summary&scope=all|approved|pending|selected&items=id,id
- * Data comes only from clientScopeReview (server validates access and filters fields and items);
- * rendering reuses the existing report generators, which open the browser's Print / Save as PDF.
+ * /clientscopereport#ticket=…  — the ticket is a 15-minute report authorization issued by
+ * clientScopeReview (action: create_report_link). It sits in the URL fragment so it is never sent
+ * to servers or Referer headers, and is removed from the address bar once read. No reusable client
+ * credential is accepted here. Rendering reuses the existing report generators (browser Print / Save as PDF).
  */
+let cachedTicket = null; // read once: effects can run twice in development
+const readTicket = () => {
+  const ticket = new URLSearchParams(window.location.hash.slice(1)).get("ticket");
+  if (ticket) { cachedTicket = ticket; window.history.replaceState(null, "", window.location.pathname); }
+  return cachedTicket;
+};
+
 export default function ClientScopeReport() {
-  const p = new URLSearchParams(window.location.search);
-  const report = p.get("report") === "financial_summary" ? "financial_summary" : "detailed";
-  const scope = p.get("scope") || "all";
   const [portalEl, setPortalEl] = useState(null);
   const [state, setState] = useState({ loading: true });
 
@@ -28,22 +33,22 @@ export default function ClientScopeReport() {
   }, []);
 
   useEffect(() => {
-    const payload = { requestId: p.get("requestId"), token: p.get("token") || undefined, slug: p.get("slug") || undefined, scope, report_type: report,
-      item_ids: scope === "selected" ? (p.get("items") || "").split(",").filter(Boolean) : undefined };
-    base44.functions.invoke("clientScopeReview", payload)
-      .then(res => setState({ model: toPrintModel(res.data) }))
+    const ticket = readTicket();
+    if (!ticket) { setState({ error: "This report link is incomplete. Open the report again from the Client Portal." }); return; }
+    base44.functions.invoke("clientScopeReview", { ticket })
+      .then(res => setState({ model: toPrintModel(res.data), report: res.data.report_type, scope: res.data.scope }))
       .catch(err => setState({ error: err?.response?.data?.error?.message || "This report is unavailable." }));
   }, []);
 
   if (!portalEl) return null;
   if (state.error || state.loading) {
     return createPortal(
-      <div style={{ position: "fixed", inset: 0, background: "white", display: "flex", alignItems: "center", justifyContent: "center", color: "#374151", fontFamily: "system-ui" }}>
+      <div style={{ position: "fixed", inset: 0, background: "white", display: "flex", alignItems: "center", justifyContent: "center", color: "#374151", fontFamily: "system-ui", padding: 24, textAlign: "center" }}>
         {state.error ? state.error : <Loader2 className="w-8 h-8 animate-spin text-gray-400" />}
       </div>, portalEl);
   }
 
-  const { model } = state;
+  const { model, report, scope } = state;
   const close = () => window.close();
   return createPortal(
     report === "financial_summary"

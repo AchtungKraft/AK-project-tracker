@@ -1,0 +1,94 @@
+{
+  "name": "ClientReportTicket",
+  "type": "object",
+  "properties": {
+    "ticket_hash": {
+      "type": "string",
+      "description": "SHA-256 of the ticket. The raw ticket is never stored."
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "access_id": {
+      "type": "string",
+      "description": "ProjectClientAccess that authorized it; re-checked on every use"
+    },
+    "client_contact_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "all",
+        "approved",
+        "pending",
+        "selected"
+      ]
+    },
+    "report_type": {
+      "type": "string",
+      "enum": [
+        "detailed",
+        "financial_summary"
+      ]
+    },
+    "item_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "use_count": {
+      "type": "integer",
+      "default": 0
+    },
+    "last_used_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "ticket_hash",
+    "request_id",
+    "project_id",
+    "access_id",
+    "scope",
+    "report_type",
+    "expires_at"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "report_ticket_service_only"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "report_ticket_service_only"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "report_ticket_service_only"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "report_ticket_service_only"
+      }
+    }
+  }
+}
