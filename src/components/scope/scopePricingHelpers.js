@@ -21,8 +21,9 @@ export function computeScopeItemPricing(item, laborEstimates = []) {
   for (const le of laborEstimates) {
     ak_hours_min += le.hours_min || 0;
     ak_hours_max += le.hours_max || 0;
-    ak_labor_min += (le.hours_min || 0) * (le.rate_snapshot || 0);
-    ak_labor_max += (le.hours_max || 0) * (le.rate_snapshot || 0);
+    // labor_cost_min/max: server-computed item labor dollars on client-safe data (no rates sent to clients)
+    ak_labor_min += le.labor_cost_min ?? (le.hours_min || 0) * (le.rate_snapshot || 0);
+    ak_labor_max += le.labor_cost_max ?? (le.hours_max || 0) * (le.rate_snapshot || 0);
   }
   const labor_estimated = laborEstimates.length > 0 && (ak_hours_min > 0 || ak_hours_max > 0);
 

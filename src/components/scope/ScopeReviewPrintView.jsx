@@ -628,11 +628,11 @@ export default function ScopeReviewPrintView({
                               <div className="sp-deliverable-details" style={{ marginTop: 8, padding: '7px 10px', background: '#f8fafc', borderLeft: '2px solid #cbd5e1', fontSize: T.bodySize, lineHeight: 1.45 }}>
                                 {item.hard_cost_lines?.length > 0 && <div style={{ marginBottom: 5 }}>
                                   <div style={{ fontWeight: 700, color: T.colorPrimary }}>Hard Costs</div>
-                                  {item.hard_cost_lines.map((l,i) => <div key={i} style={{ display:'flex', justifyContent:'space-between', gap:12, marginTop:3 }}><span>{l.description || 'Cost'}</span><span style={{ whiteSpace:'nowrap' }}>{l.tbd ? 'TBD' : formatDollarRange(l.min,l.max)}</span></div>)}
+                                  {item.hard_cost_lines.map((l,i) => <div key={i} style={{ display:'flex', justifyContent:'space-between', gap:12, marginTop:3 }}><span style={{ whiteSpace:'pre-wrap' }}>{l.description || 'Cost'}</span><span style={{ whiteSpace:'nowrap' }}>{l.tbd ? 'TBD' : formatDollarRange(l.min,l.max)}</span></div>)}
                                 </div>}
                                 {(laborByItem.get(item.id) || []).some(l => l.description) && <div>
                                   <div style={{ fontWeight: 700, color: T.colorPrimary }}>Ächtung Kraft Labor</div>
-                                  {(laborByItem.get(item.id) || []).filter(l => l.description).map((l,i) => <div key={i} style={{ display:'flex', justifyContent:'space-between', gap:12, marginTop:3 }}><span>{l.labor_group_name_snapshot} — {l.description}</span><span style={{ whiteSpace:'nowrap' }}>{l.hours_min}–{l.hours_max} hrs</span></div>)}
+                                  {(laborByItem.get(item.id) || []).filter(l => l.description).map((l,i) => <div key={i} style={{ display:'flex', justifyContent:'space-between', gap:12, marginTop:3 }}><span style={{ whiteSpace:'pre-wrap' }}>{l.labor_group_name_snapshot} — {l.description}</span><span style={{ whiteSpace:'nowrap' }}>{l.hours_min}–{l.hours_max} hrs</span></div>)}
                                 </div>}
                               </div>
                             )}

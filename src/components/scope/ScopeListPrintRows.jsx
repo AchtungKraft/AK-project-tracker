@@ -48,7 +48,7 @@ export default function ScopeListPrintRows({ hierarchy, laborEstimates, showStat
               <td style={{ backgroundColor: tone[0], borderLeft: "3px solid " + tone[1] }}>
                 <div style={{ fontWeight: 600 }}>{item.title} <span style={{ color: tone[1], fontSize: "7pt", fontWeight: 700, marginLeft: 6, whiteSpace: "nowrap" }}>({statusText})</span></div>
                 <div style={{ color: "#6b7280", fontSize: "7.5pt" }}>{g.name}{note ? ` · ${note}` : ''}</div>
-                {detailLines.length > 0 && <div style={{marginTop:5, paddingTop:5, borderTop:"1px solid #dbe2ea"}}>{detailLines.map((line,i) => <div key={i} style={{color:"#475569",fontSize:"7.5pt",marginTop:2,lineHeight:1.35}}>{line}</div>)}</div>}
+                {detailLines.length > 0 && <div style={{marginTop:5, paddingTop:5, borderTop:"1px solid #dbe2ea"}}>{detailLines.map((line,i) => <div key={i} style={{color:"#475569",fontSize:"7.5pt",marginTop:2,lineHeight:1.35,whiteSpace:"pre-wrap"}}>{line}</div>)}</div>}
               </td>
               {showStatus && <td style={{ fontSize: "8pt", fontWeight: 700, color: tone[1] }}>{statusText}</td>}
               <td className="num hc">{hardCostLabel(p)}</td>

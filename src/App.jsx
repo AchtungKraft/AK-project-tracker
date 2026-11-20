@@ -22,6 +22,7 @@ import Clients from './pages/Clients';
 import ClientAccountDetail from './pages/ClientAccountDetail';
 import RetainerDetail from './pages/RetainerDetail';
 import CustomPartsConfiguration from './pages/CustomPartsConfiguration';
+import ClientScopeReport from './pages/ClientScopeReport';
 
 // VendorPOBuilder page removed — vendor PO creation is now inline in GlobalNeedToOrder
 
@@ -79,6 +80,7 @@ const AuthenticatedApp = () => {
       <Route path="/projectprintview" element={<ProjectPrintView />} />
       <Route path="/personprintview" element={<PersonPrintView />} />
       <Route path="/clientpage" element={<ClientPage />} />
+      <Route path="/clientscopereport" element={<ClientScopeReport />} />
       <Route path="/buildknowledge" element={
         <LayoutWrapper currentPageName="BuildKnowledge">
           <BuildKnowledge />

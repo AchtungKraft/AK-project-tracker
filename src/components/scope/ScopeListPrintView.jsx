@@ -36,9 +36,9 @@ const STYLES = `
 `;
 
 /** Compact list-style print of a scope review: hard cost/parts vs labor per item. */
-export default function ScopeListPrintView({ request, project, categories, groups, items, laborEstimates, onClose }) {
+export default function ScopeListPrintView({ request, project, categories, groups, items, laborEstimates, onClose, initialFilter }) {
   const hasApproved = items.some(i => i.decision_status === "approved");
-  const [filter, setFilter] = useState(hasApproved ? "approved" : "all");
+  const [filter, setFilter] = useState(initialFilter || (hasApproved ? "approved" : "all"));
 
   const visible = useMemo(
     () => (filter === "approved" ? items.filter(i => i.decision_status === "approved") : items),
