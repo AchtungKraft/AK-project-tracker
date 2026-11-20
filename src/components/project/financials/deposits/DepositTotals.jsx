@@ -21,6 +21,12 @@ export default function DepositTotals({ t }) {
         <Stat label="Available balance" value={t.available_to_apply} tone="text-amber-300" sub={t.reserved_by_drafts > 0 ? `${money(t.reserved_by_drafts)} reserved by drafts` : null} />
         <Stat label="Outstanding project invoices" value={t.project_invoices_outstanding} />
       </div>
+      {(t.general_credit_balance > 0 || t.reserved_legacy_drafts > 0) && (
+        <p className="text-xs text-sky-300">
+          {t.general_credit_balance > 0 && `General project credit (not a deposit): ${money(t.general_credit_balance)}, ${money(t.available_general_credit)} available${t.reserved_general_by_drafts > 0 ? `, ${money(t.reserved_general_by_drafts)} reserved by drafts` : ""}. `}
+          {t.reserved_legacy_drafts > 0 && `${money(t.reserved_legacy_drafts)} is reserved by older drafts that draw from any credit.`}
+        </p>
+      )}
       {t.needs_qb_entry > 0 && <p className="text-xs text-amber-300">{t.needs_qb_entry} item{t.needs_qb_entry > 1 ? "s" : ""} recorded here still need a manual QuickBooks entry. Nothing is posted to QuickBooks automatically.</p>}
     </div>
   );

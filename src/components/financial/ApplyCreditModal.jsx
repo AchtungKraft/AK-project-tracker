@@ -2,9 +2,9 @@ import React from "react";
 import ApplyDepositDialog from "@/components/project/financials/deposits/ApplyDepositDialog";
 
 /**
- * ApplyCreditModal — now a thin wrapper over the secured Apply dialog (projectDepositAction, sources 'all').
- * The old manual allocator (applyProjectCreditManual) was retired: it could spend the same credit twice under
- * concurrent use. Parts settlement without an invoice stays in SettlePartsWithCreditModal.
+ * ApplyCreditModal — applies GENERAL project credit (part removals, adjustments) through the secured
+ * projectDepositAction (sources 'general'). Deposit credit is applied separately with Apply Available Deposit;
+ * the two are never combined. Parts settlement without an invoice stays in SettlePartsWithCreditModal.
  */
 export default function ApplyCreditModal({ open, onClose, projectId, onSuccess }) {
   return (
@@ -12,7 +12,7 @@ export default function ApplyCreditModal({ open, onClose, projectId, onSuccess }
       open={!!open}
       onOpenChange={(o) => !o && onClose?.()}
       projectId={projectId ? String(projectId) : null}
-      sources="all"
+      sources="general"
       onDone={(r) => onSuccess?.(r)}
     />
   );

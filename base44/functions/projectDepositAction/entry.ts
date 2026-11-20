@@ -21,7 +21,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  */
 
 const STALE_MS = 120000;
-const DEPOSIT_LOGIC_VERSION = 'dep-v1';
+const DEPOSIT_LOGIC_VERSION = 'dep-v2'; // v2: deposit and general credit are separate pools
 const norm = (s) => String(s || '').trim().toLowerCase();
 const METHODS = ['check', 'ach', 'wire', 'card', 'cash', 'other'];
 const OPEN = ['sent', 'partial', 'overdue'];
@@ -57,17 +57,59 @@ async function loadState(db, project_id) {
   return { invoices, credits, txs, payments, depIds, reversed };
 }
 
+// CANONICAL CREDIT CLASSIFICATION (markInvoiceSent and applyProjectCreditToCommitments use the same rule):
+// deposit credit = a ledger row created by a payment on a deposit invoice (an actual advance payment).
+// Everything else (part removals, overpayments on work invoices, legacy cancellation credits, adjustments) is general credit.
 const isDepositCredit = (c, st) => !c.reversed_from_invoice_id && st.depIds.has(c.source_invoice_id);
+const creditClass = (c, st) => (isDepositCredit(c, st) ? 'deposit' : 'general');
+const fifo = (a, b) => String(a.created_date || '').localeCompare(String(b.created_date || '')) || String(a.id).localeCompare(String(b.id));
 
-// What can be drawn now: positive rows in FIFO order, minus credit already proposed on drafts (applied at send).
+// Draft reservations by kind. Split drafts reserve each kind separately; older drafts (no split) reserve from any credit.
+function reservations(st, excludeInvoiceId = null) {
+  const r = { deposit: 0, general: 0, legacy: 0 };
+  for (const i of st.invoices) {
+    if (i.status !== 'draft' || i.id === excludeInvoiceId) continue;
+    if (i.credit_selection_mode === 'split') { r.deposit += Math.max(0, cents(i.credit_proposed_deposit)); r.general += Math.max(0, cents(i.credit_proposed_general)); }
+    else r.legacy += Math.max(0, cents(i.credit_proposed));
+  }
+  return r;
+}
+
+// What can be drawn now, per kind: positive rows of that kind (oldest first) minus what drafts reserve.
+// Legacy any-credit reservations reduce the combined cap, so neither kind can be promised twice.
+function pools(st, excludeInvoiceId = null) {
+  const rows = st.credits.filter((c) => cents(c.remaining_amount) >= 1).sort(fifo);
+  const byKind = { deposit: rows.filter((c) => creditClass(c, st) === 'deposit'), general: rows.filter((c) => creditClass(c, st) === 'general') };
+  const sumC = (rs) => rs.reduce((s, c) => s + cents(c.remaining_amount), 0);
+  const res = reservations(st, excludeInvoiceId);
+  const totalC = sumC(rows);
+  const capC = totalC - res.deposit - res.general - res.legacy;
+  const out = { reserved: res, total_cents: totalC };
+  for (const k of ['deposit', 'general']) {
+    const poolC = sumC(byKind[k]);
+    out[k] = { rows: byKind[k], poolC, availC: Math.max(0, Math.min(poolC - res[k], capC)) };
+  }
+  out.combinedAvailC = Math.max(0, capC);
+  return out;
+}
+
+// sources: 'deposit' (Apply Available Deposit) or 'general' (Apply general project credit). Never mixed.
 function availability(st, sources = 'deposit') {
-  const rows = st.credits
-    .filter((c) => cents(c.remaining_amount) >= 1 && (sources === 'all' || isDepositCredit(c, st)))
-    .sort((a, b) => String(a.created_date || '').localeCompare(String(b.created_date || '')) || String(a.id).localeCompare(String(b.id)));
-  const poolC = rows.reduce((s, c) => s + cents(c.remaining_amount), 0);
-  const totalC = st.credits.reduce((s, c) => s + Math.max(0, cents(c.remaining_amount)), 0);
-  const proposedC = st.invoices.filter((i) => i.status === 'draft').reduce((s, i) => s + Math.max(0, cents(i.credit_proposed)), 0);
-  return { rows, poolC, proposedC, availC: Math.max(0, Math.min(poolC, totalC - proposedC)) };
+  const p = pools(st);
+  const k = sources === 'general' ? 'general' : 'deposit';
+  return { rows: p[k].rows, poolC: p[k].poolC, proposedC: p.reserved[k] + p.reserved.legacy, availC: p[k].availC };
+}
+
+// Read-only availability for invoice drafting (createProjectInvoiceDraft validates against this).
+async function creditAvailability(db, project_id, exclude_invoice_id) {
+  const st = await loadState(db, project_id);
+  const p = pools(st, exclude_invoice_id || null);
+  return {
+    success: true, logic_version: DEPOSIT_LOGIC_VERSION,
+    available_deposit: p.deposit.availC / 100, available_general: p.general.availC / 100,
+    deposit_balance: p.deposit.poolC / 100, general_balance: p.general.poolC / 100,
+    reserved_deposit: p.reserved.deposit / 100, reserved_general: p.reserved.general / 100, reserved_legacy: p.reserved.legacy / 100,
+  };
 }
 
 const outstandingC = (inv) => Math.max(0, cents(inv.subtotal) - cents(inv.credit_applied) - cents(inv.paid_amount));
@@ -124,7 +166,8 @@ async function apply(db, a) {
     const outC = outstandingC(inv);
     const { rows, availC, proposedC } = availability(st, a.sources);
     if (a.amount_cents > outC) throw fail(409, 'EXCEEDS_INVOICE', `Invoice ${label(inv)} only has ${usd(outC)} outstanding.`);
-    if (a.amount_cents > availC) throw fail(409, 'EXCEEDS_AVAILABLE', `Only ${usd(availC)} is available${proposedC ? ` (${usd(proposedC)} is reserved by draft invoices)` : ''}.`);
+    const kindLabel = a.sources === 'general' ? 'general project credit' : 'deposit credit';
+    if (a.amount_cents > availC) throw fail(409, 'EXCEEDS_AVAILABLE', `Only ${usd(availC)} of ${kindLabel} is available${proposedC ? ` (${usd(proposedC)} is reserved by draft invoices)` : ''}.`);
 
     const moves = [];
     let invoiceSet = null;
@@ -284,10 +327,11 @@ const SYSTEM_APP = /^(send|cancel):/; // applied at send / returned when that in
 async function summary(db, project_id) {
   const st = await loadState(db, project_id);
   const active = (t) => !st.reversed.has(t.id);
-  const recon = new Map(st.txs.filter((t) => t.type === 'qb_reconcile').map((t) => [t.reconciles_ref, t]));
+  // A reconciliation later withdrawn by a qb_correction no longer counts.
+  const recon = new Map(st.txs.filter((t) => t.type === 'qb_reconcile' && !st.reversed.has(t.id)).sort((x, y) => String(x.recorded_at).localeCompare(String(y.recorded_at))).map((t) => [t.reconciles_ref, t]));
   const qb = (ref, inQb) => {
     const r = recon.get(ref);
-    return r ? { qb_ref: ref, qb_status: QB.DONE, qb_reference: r.reference || null, qb_reconciled_by: r.actor_email, qb_reconciled_at: r.recorded_at }
+    return r ? { qb_ref: ref, qb_status: QB.DONE, qb_reference: r.reference || null, qb_reconciled_by: r.actor_email, qb_reconciled_at: r.recorded_at, qb_reconcile_tx_id: r.id }
       : { qb_ref: ref, qb_status: inQb ? QB.IN : QB.NEEDS };
   };
   const deposits = st.invoices.filter((i) => i.invoice_type === 'deposit' && i.status !== 'draft').map((inv) => {
@@ -299,6 +343,7 @@ async function summary(db, project_id) {
     return {
       invoice_id: inv.id, qb_invoice_number: inv.qb_invoice_number || null, status: inv.status, issue_date: inv.issue_date || null, recorded_from_quickbooks: fromQb,
       origin: fromQb ? 'quickbooks_existing' : 'ak_projects', qb_export_status: inv.qb_export_status || null, qb_link_reference: inv.qb_link_reference || null,
+      qb_export_id: inv.qb_export_id || null,
       export_eligible: !fromQb && !inv.qb_export_status && inv.status !== 'cancelled',
       invoiced: cents(inv.subtotal) / 100, received: pays.filter((p) => !p.reversed_at).reduce((s, p) => s + p.amount_cents, 0) / 100,
       payment_count: pays.filter((p) => !p.reversed_at).length,
@@ -309,8 +354,12 @@ async function summary(db, project_id) {
   });
   const issued = deposits.filter((d) => ISSUED.includes(d.status));
   const sum = (rows, k) => Math.round(rows.reduce((s, r) => s + cents(r[k]), 0)) / 100;
-  const { availC, proposedC } = availability(st, 'deposit');
-  const allAvail = availability(st, 'all');
+  const pl = pools(st);
+  const creditById = new Map(st.credits.map((c) => [c.id, c]));
+  const classOf = (ts) => {
+    const kinds = new Set(ts.map((x) => creditById.get(x.credit_ledger_id)).filter(Boolean).map((c) => creditClass(c, st)));
+    return kinds.size === 1 ? [...kinds][0] : kinds.size ? 'mixed' : null;
+  };
   const invById = new Map(st.invoices.map((i) => [i.id, i]));
   const depCreditIds = new Set(deposits.map((d) => d.credit_ledger_id).filter(Boolean));
   const sendJournaled = new Set(st.txs.filter((t) => String(t.application_id).startsWith('send:')).map((t) => t.application_id));
@@ -328,7 +377,7 @@ async function summary(db, project_id) {
     }
   }
   const groups = new Map();
-  for (const t of st.txs.filter((x) => x.type !== 'qb_reconcile')) { if (!groups.has(t.application_id)) groups.set(t.application_id, []); groups.get(t.application_id).push(t); }
+  for (const t of st.txs.filter((x) => x.type !== 'qb_reconcile' && x.type !== 'qb_correction')) { if (!groups.has(t.application_id)) groups.set(t.application_id, []); groups.get(t.application_id).push(t); }
   for (const [appId, ts] of groups) {
     const t = ts[0]; const amt = ts.reduce((s, x) => s + x.amount_cents, 0) / 100;
     const sign = { apply: -1, refund: -1, apply_reversal: 1, refund_reversal: 1, register_existing: 0 }[t.type];
@@ -339,6 +388,7 @@ async function summary(db, project_id) {
       amount: sign === 0 ? amt : sign * amt, deposit: [...new Set(ts.map((x) => label(invById.get(x.source_invoice_id))))].join(', '),
       invoice: target ? label(target) : null, invoice_status: target?.status || null, detail: [t.method, t.reference, t.note].filter(Boolean).join(' · '), actor: t.actor_email,
       reversible: ['apply', 'refund'].includes(t.type) && !SYSTEM_APP.test(appId) && ts.every(active),
+      credit_class: t.type === 'register_existing' ? 'deposit' : classOf(ts),
       ...qb(`app:${appId}`, t.type === 'register_existing'),
     });
   }
@@ -351,8 +401,12 @@ async function summary(db, project_id) {
     totals: {
       requested: sum(issued, 'invoiced'), received: sum(deposits, 'received'), credit_created: sum(deposits, 'credit'),
       applied: sum(deposits, 'applied'), refunded: sum(deposits, 'refunded'), remaining: sum(deposits, 'remaining'),
-      deposit_invoices_outstanding: sum(issued, 'outstanding'), reserved_by_drafts: proposedC / 100,
-      available_to_apply: availC / 100, available_all_credit: allAvail.availC / 100,
+      deposit_invoices_outstanding: sum(issued, 'outstanding'), reserved_by_drafts: (pl.reserved.deposit + pl.reserved.legacy) / 100,
+      available_to_apply: pl.deposit.availC / 100,
+      // General project credit is reported separately and never folded into the deposit balance.
+      general_credit_balance: pl.general.poolC / 100, available_general_credit: pl.general.availC / 100,
+      reserved_general_by_drafts: pl.reserved.general / 100, reserved_legacy_drafts: pl.reserved.legacy / 100,
+      available_all_credit: pl.combinedAvailC / 100,
       project_invoices_outstanding: projectOpen.reduce((s, i) => s + outstandingC(i), 0) / 100,
       needs_qb_entry: [...deposits.filter((d) => d.status !== 'cancelled'), ...history].filter((x) => x.qb_status === QB.NEEDS).length,
     },
@@ -362,6 +416,10 @@ async function summary(db, project_id) {
       credit_applied: cents(i.credit_applied) / 100, paid_amount: cents(i.paid_amount) / 100, outstanding: outstandingC(i) / 100,
     })),
     history,
+    qb_corrections: st.txs.filter((t) => t.type === 'qb_correction').sort((x, y) => String(y.recorded_at).localeCompare(String(x.recorded_at))).map((t) => ({
+      id: t.id, at: t.recorded_at, ref: t.reconciles_ref, actor: t.actor_email, reason: t.note, detail: t.correction_detail || null,
+      item: t.reconciles_ref?.startsWith('invoice:') ? label(invById.get(t.reconciles_ref.slice(8))) : t.reconciles_ref,
+    })),
   };
 }
 
@@ -372,8 +430,11 @@ async function qbReconcile(db, a) {
     const item = s.deposits.find((d) => d.qb_ref === a.ref) || s.history.find((h) => h.qb_ref === a.ref);
     if (!item) throw fail(404, 'NOT_FOUND', 'That deposit item was not found on this project.');
     if (item.qb_status === QB.DONE) return { success: true, idempotent: true, qb_status: QB.DONE };
+    // A reconciliation withdrawn by a correction stays in the journal; a new confirmation gets the next sequence number.
+    const n = (await db.findTx({ project_id: a.project_id, type: 'qb_reconcile', reconciles_ref: a.ref })).length;
+    const k = n ? `qbrec:${a.ref}:${n + 1}` : `qbrec:${a.ref}`;
     await db.createTx([{
-      type: 'qb_reconcile', project_id: a.project_id, application_id: `qbrec:${a.ref}`, idempotency_key: `qbrec:${a.ref}`, reconciles_ref: a.ref,
+      type: 'qb_reconcile', project_id: a.project_id, application_id: k, idempotency_key: k, reconciles_ref: a.ref,
       amount_cents: Math.abs(cents(item.amount ?? item.invoiced)), reference: a.qb_reference, note: a.note || '', actor_email: a.user_email,
       recorded_at: new Date().toISOString(), transaction_date: today(),
     }]);
@@ -396,6 +457,71 @@ async function qbLink(db, a) {
       throw fail(409, 'INVOICE_CHANGED', 'Invoice changed. Reload and try again.');
     }
     return { success: true, qb_export_status: 'linked' };
+  });
+}
+
+// ADMIN CORRECTION OF A QUICKBOOKS STATUS. Append-only: a qb_correction entry keeps the previous and new values; the
+// original export / link / reconciliation record is never edited or deleted.
+//  exported   → to_linked          it is in QuickBooks, entered by hand or under another number (stays out of exports)
+//             → not_in_quickbooks  the export file was never imported
+//  linked     → fix_reference | not_in_quickbooks
+//  reconciled → fix_reference | not_in_quickbooks (back to "needs manual entry")
+// not_in_quickbooks needs a reason, an explicit attestation and the item's QuickBooks number typed back, and is refused
+// while anything else recorded here says the item is in QuickBooks. Only then can a deposit be exported again.
+const CORRECTIONS = { exported: ['to_linked', 'not_in_quickbooks'], linked: ['fix_reference', 'not_in_quickbooks'], reconciled: ['fix_reference', 'not_in_quickbooks'] };
+
+async function qbCorrect(db, a) {
+  if (!CORRECTIONS[a.status]?.includes(a.correction)) throw fail(400, 'BAD_CORRECTION', `"${a.correction}" is not a valid correction for ${a.status}.`);
+  if (a.correction !== 'not_in_quickbooks' && String(a.qb_reference || '').trim().length < 1) throw fail(400, 'NO_REFERENCE', 'Enter the correct QuickBooks reference.');
+  if (a.correction === 'not_in_quickbooks' && a.attest !== true) throw fail(400, 'NO_ATTESTATION', 'Confirm you checked QuickBooks and this item is not there.');
+  return withLock(db, a.project_id, `qbfix_${a.key}`, async () => {
+    const fixKey = `qbfix:${a.key}`;
+    if ((await db.findTx({ idempotency_key: fixKey })).length) return { success: true, idempotent: true };
+    const st = await loadState(db, a.project_id);
+    const now = new Date().toISOString();
+    const entry = (ref, detail, extra = {}) => ({
+      type: 'qb_correction', project_id: a.project_id, application_id: fixKey, idempotency_key: fixKey, reconciles_ref: ref, amount_cents: 0,
+      reference: a.qb_reference || null, note: a.reason, correction_detail: detail, actor_email: a.user_email, recorded_at: now, transaction_date: today(), ...extra,
+    });
+    const activeRecon = (ref) => st.txs.find((t) => t.type === 'qb_reconcile' && t.reconciles_ref === ref && !st.reversed.has(t.id));
+
+    if (a.status === 'reconciled') {
+      const recTx = activeRecon(a.ref);
+      if (!recTx) throw fail(409, 'NOT_RECONCILED', 'This item is not marked reconciled (it may already have been corrected).');
+      if (a.correction === 'not_in_quickbooks' && norm(a.confirm) !== norm(recTx.reference)) throw fail(400, 'CONFIRM_MISMATCH', `Type the QuickBooks reference ${recTx.reference} to confirm.`);
+      await db.createTx([entry(a.ref, { status: 'reconciled', correction: a.correction, previous: { qb_status: QB.DONE, reference: recTx.reference, by: recTx.actor_email, at: recTx.recorded_at }, next: a.correction === 'fix_reference' ? { qb_status: QB.DONE, reference: a.qb_reference } : { qb_status: QB.NEEDS } }, { reverses_transaction_id: recTx.id })]);
+      if (a.correction === 'fix_reference') {
+        const n = st.txs.filter((t) => t.type === 'qb_reconcile' && t.reconciles_ref === a.ref).length + 1;
+        await db.createTx([{ type: 'qb_reconcile', project_id: a.project_id, application_id: `qbrec:${a.ref}:${n}`, idempotency_key: `qbrec:${a.ref}:${n}`, reconciles_ref: a.ref, amount_cents: recTx.amount_cents, reference: a.qb_reference, note: `Corrected reference (was ${recTx.reference})`, actor_email: a.user_email, recorded_at: now, transaction_date: today() }]);
+      }
+      return { success: true, qb_status: a.correction === 'fix_reference' ? QB.DONE : QB.NEEDS };
+    }
+
+    const inv = st.invoices.find((i) => i.id === a.invoice_id);
+    if (!inv) throw fail(404, 'NOT_FOUND', 'Invoice not found on this project.');
+    if (inv.invoice_type !== 'deposit') throw fail(400, 'NOT_DEPOSIT', 'QuickBooks export status is tracked on deposit invoices only.');
+    if (inv.recorded_from_quickbooks) throw fail(400, 'FROM_QUICKBOOKS', 'This deposit was recorded from an invoice that exists in QuickBooks; its status cannot be changed.');
+    if ((inv.qb_export_status || null) !== a.status) throw fail(409, 'STATUS_CHANGED', `This invoice is ${inv.qb_export_status || 'not marked in QuickBooks'}, not ${a.status}. Reload and try again.`);
+    if (a.correction === 'not_in_quickbooks') {
+      const want = inv.qb_invoice_number || inv.id;
+      if (norm(a.confirm) !== norm(want)) throw fail(400, 'CONFIRM_MISMATCH', `Type the invoice number ${want} to confirm.`);
+      const payIds = st.payments.filter((p) => p.invoice_id === inv.id).map((p) => `payment:${p.id}`);
+      const blocking = [`invoice:${inv.id}`, ...payIds].filter((r) => activeRecon(r));
+      if (blocking.length) throw fail(409, 'RECONCILED_IN_QUICKBOOKS', `This deposit${blocking[0].startsWith('payment:') ? "'s payment" : ''} is marked reconciled in QuickBooks. Correct that reconciliation first; otherwise exporting it again would duplicate it.`);
+    }
+    const previous = { qb_export_status: inv.qb_export_status, qb_export_id: inv.qb_export_id || null, qb_exported_at: inv.qb_exported_at || null, qb_exported_by: inv.qb_exported_by || null, qb_link_reference: inv.qb_link_reference || null, qb_linked_at: inv.qb_linked_at || null, qb_linked_by: inv.qb_linked_by || null };
+    const set = a.correction === 'to_linked' ? { qb_export_status: 'linked', qb_link_reference: a.qb_reference, qb_linked_at: now, qb_linked_by: a.user_email }
+      : a.correction === 'fix_reference' ? { qb_link_reference: a.qb_reference }
+      : { qb_export_status: null, qb_link_reference: null, qb_export_id: null };
+    const won = await db.invoiceCas({ id: inv.id, qb_export_status: a.status }, set);
+    if (won !== 1) throw fail(409, 'STATUS_CHANGED', 'Invoice changed. Reload and try again.');
+    try {
+      await db.createTx([entry(`invoice:${inv.id}`, { status: a.status, correction: a.correction, previous, next: set, export_id: previous.qb_export_id })]);
+    } catch (e) {
+      await db.invoiceCas({ id: inv.id, ...(set.qb_export_status === undefined ? {} : { qb_export_status: set.qb_export_status }) }, { qb_export_status: previous.qb_export_status, qb_export_id: previous.qb_export_id, qb_link_reference: previous.qb_link_reference, qb_linked_at: previous.qb_linked_at, qb_linked_by: previous.qb_linked_by }).catch(() => {});
+      throw e;
+    }
+    return { success: true, qb_export_status: set.qb_export_status === undefined ? a.status : set.qb_export_status, export_eligible: a.correction === 'not_in_quickbooks' };
   });
 }
 
@@ -622,6 +748,78 @@ async function runSelfTest() {
     const [s2, b2] = await reg(db, { key: 'R10', qb_invoice_number: 'QB-100', payment: { reference: 'chk-1 ' } });
     return { pass: s === 200 && s2 === 409 && b2.code === 'DUPLICATE_PAYMENT' };
   });
+  // ── Deposit vs general credit separation ──
+  const withGeneral = (extra = {}) => base({ ...extra, credits: [{ id: 'cg', project_id: 'p1', source_invoice_id: 'pc-removal', credit_amount: 120, remaining_amount: 120, notes: 'part removal', created_date: '2025-06-01' }, ...(extra.credits || [])] });
+  await test('deposit-only application never draws general credit, even when general credit is older', async () => {
+    const db = withGeneral(); const [s] = await ap(db, 'i1', 50000); const [s2, b2] = await ap(db, 'i1', 100);
+    return { pass: s === 200 && rem(db, 'cg') === 120 && rem(db, 'c1') === 0 && rem(db, 'c2') === 0 && s2 === 409 && b2.code === 'EXCEEDS_AVAILABLE' && txs(db).every((t) => t.credit_ledger_id !== 'cg') };
+  });
+  await test('general-only application draws general credit only; deposits untouched', async () => {
+    const db = withGeneral(); const [s] = await ap(db, 'i1', 12000, 'G', 'general'); const [s2, b2] = await ap(db, 'i1', 100, 'G2', 'general');
+    const sm = await summary(db, 'p1'); const h = sm.history.find((x) => x.application_id === 'G');
+    return { pass: s === 200 && rem(db, 'cg') === 0 && rem(db, 'c1') === 300 && rem(db, 'c2') === 200 && s2 === 409 && h?.credit_class === 'general' && sm.totals.applied === 0 && sm.totals.available_to_apply === 500 && sm.totals.available_general_credit === 0 };
+  });
+  await test('mixed availability reported separately; split drafts reserve each kind; legacy draft caps the combined total', async () => {
+    const db = withGeneral({ invoices: [{ id: 'dS', project_id: 'p1', invoice_type: 'progress', status: 'draft', credit_selection_mode: 'split', credit_proposed: 150, credit_proposed_deposit: 100, credit_proposed_general: 50 }] });
+    const a1 = await creditAvailability(db, 'p1');
+    db.T.invoices.set('dL', { id: 'dL', project_id: 'p1', invoice_type: 'progress', status: 'draft', credit_proposed: 400 });
+    const a2 = await creditAvailability(db, 'p1'); const a3 = await creditAvailability(db, 'p1', 'dS');
+    const [s] = await ap(db, 'i1', 10000); const [sg] = await ap(db, 'i1', 7100, 'GG', 'general');
+    return { pass: a1.available_deposit === 400 && a1.available_general === 70 && a1.deposit_balance === 500 && a1.general_balance === 120
+      && a2.available_deposit === 70 && a2.available_general === 70 && a3.available_deposit === 220 && a3.available_general === 120 && s === 409 && sg === 409, a1, a2, a3 };
+  });
+  await test('concurrent deposit and general applications: each pool never over-drawn, journal matches ledger', async () => {
+    const db = withGeneral(); const res = await Promise.all([...Array.from({ length: 4 }, () => ap(db, 'i1', 15000)), ...Array.from({ length: 3 }, () => ap(db, 'i1', 5000, undefined, 'general'))]);
+    const t = txs(db); const okDep = t.filter((x) => x.credit_ledger_id !== 'cg').reduce((s, x) => s + x.amount_cents, 0); const okGen = t.filter((x) => x.credit_ledger_id === 'cg').reduce((s, x) => s + x.amount_cents, 0);
+    return { pass: res.every(([s]) => s === 200 || s === 409) && cents(rem(db, 'c1') + rem(db, 'c2')) === 50000 - okDep && cents(rem(db, 'cg')) === 12000 - okGen && okDep <= 50000 && okGen <= 12000 && Math.round(inv(db, 'i1').credit_applied * 100) === okDep + okGen && unlocked(db), okDep, okGen };
+  });
+
+  // ── QuickBooks status corrections ──
+  const fix = (db, o) => run(qbCorrect(db, { project_id: 'p1', reason: 'Marked against the wrong item', user_email: 'admin@x', key: `fx${++k}`, ...o }));
+  await test('reconciled with the wrong reference: corrected append-only, original kept, still reconciled', async () => {
+    const db = base(); await run(qbReconcile(db, { project_id: 'p1', ref: 'invoice:d1', qb_reference: 'QB-WRONG', user_email: 't@x' }));
+    const [s] = await fix(db, { status: 'reconciled', ref: 'invoice:d1', correction: 'fix_reference', qb_reference: 'QB-D1' });
+    const sm = await summary(db, 'p1'); const d1 = sm.deposits.find((d) => d.invoice_id === 'd1');
+    const recs = txs(db).filter((t) => t.type === 'qb_reconcile');
+    return { pass: s === 200 && d1.qb_status === 'reconciled' && d1.qb_reference === 'QB-D1' && recs.length === 2 && recs.some((t) => t.reference === 'QB-WRONG') && sm.qb_corrections.length === 1 && sm.qb_corrections[0].detail.previous.reference === 'QB-WRONG' };
+  });
+  await test('reconciled in error: back to needs entry only with attestation + typed reference; can be reconciled again', async () => {
+    const db = base(); await run(qbReconcile(db, { project_id: 'p1', ref: 'payment:pp1', qb_reference: 'PMT-9', user_email: 't@x' }));
+    const [s1, b1] = await fix(db, { status: 'reconciled', ref: 'payment:pp1', correction: 'not_in_quickbooks', attest: false, confirm: 'PMT-9' });
+    const [s2, b2] = await fix(db, { status: 'reconciled', ref: 'payment:pp1', correction: 'not_in_quickbooks', attest: true, confirm: 'nope' });
+    const [s3] = await fix(db, { status: 'reconciled', ref: 'payment:pp1', correction: 'not_in_quickbooks', attest: true, confirm: 'pmt-9' });
+    const mid = (await summary(db, 'p1')).history.find((h) => h.qb_ref === 'payment:pp1')?.qb_status;
+    const [s4] = await run(qbReconcile(db, { project_id: 'p1', ref: 'payment:pp1', qb_reference: 'PMT-10', user_email: 't@x' }));
+    const end = (await summary(db, 'p1')).history.find((h) => h.qb_ref === 'payment:pp1');
+    return { pass: s1 === 400 && b1.code === 'NO_ATTESTATION' && s2 === 400 && b2.code === 'CONFIRM_MISMATCH' && s3 === 200 && mid === 'needs_manual_entry' && s4 === 200 && end.qb_status === 'reconciled' && end.qb_reference === 'PMT-10' && txs(db).filter((t) => t.type === 'qb_reconcile').length === 2 };
+  });
+  await test('exported in error but entered by hand: exported → linked, still excluded from export; original export kept in audit', async () => {
+    const db = base(); Object.assign(db.T.invoices.get('d1'), { qb_export_status: 'exported', qb_export_id: 'QBX-1', qb_exported_at: '2026-11-10T00:00:00Z' });
+    const [s] = await fix(db, { status: 'exported', invoice_id: 'd1', correction: 'to_linked', qb_reference: 'QB-1042' });
+    const d1 = (await summary(db, 'p1')).deposits.find((d) => d.invoice_id === 'd1'); const c = txs(db).find((t) => t.type === 'qb_correction');
+    return { pass: s === 200 && d1.qb_export_status === 'linked' && !d1.export_eligible && d1.qb_link_reference === 'QB-1042' && c.correction_detail.previous.qb_export_id === 'QBX-1' && c.correction_detail.previous.qb_export_status === 'exported' };
+  });
+  await test('exported but never imported: re-enables export only with attestation + typed number; refused while its payment is reconciled', async () => {
+    const db = base(); Object.assign(db.T.invoices.get('d1'), { qb_export_status: 'exported', qb_export_id: 'QBX-1' });
+    await run(qbReconcile(db, { project_id: 'p1', ref: 'payment:pp1', qb_reference: 'PMT-1', user_email: 't@x' }));
+    const [s1, b1] = await fix(db, { status: 'exported', invoice_id: 'd1', correction: 'not_in_quickbooks', attest: true, confirm: 'QB-D1' });
+    const blocked = inv(db, 'd1').qb_export_status;
+    await fix(db, { status: 'reconciled', ref: 'payment:pp1', correction: 'not_in_quickbooks', attest: true, confirm: 'PMT-1' });
+    const [s2] = await fix(db, { status: 'exported', invoice_id: 'd1', correction: 'not_in_quickbooks', attest: true, confirm: 'qb-d1' });
+    const d1 = (await summary(db, 'p1')).deposits.find((d) => d.invoice_id === 'd1');
+    return { pass: s1 === 409 && b1.code === 'RECONCILED_IN_QUICKBOOKS' && blocked === 'exported' && s2 === 200 && d1.export_eligible && d1.qb_export_id === null && txs(db).filter((t) => t.type === 'qb_correction').length === 2 };
+  });
+  await test('correction guards: status must match, valid correction only, same key applied once, balances untouched', async () => {
+    const db = base(); const before = JSON.stringify([...db.T.credits.values(), ...db.T.payments.values()]);
+    const [s1, b1] = await fix(db, { status: 'exported', invoice_id: 'd1', correction: 'to_linked', qb_reference: 'X' });
+    db.T.invoices.get('d1').qb_export_status = 'linked';
+    const [s2, b2] = await fix(db, { status: 'linked', invoice_id: 'd1', correction: 'to_linked', qb_reference: 'X' });
+    const [s3] = await fix(db, { status: 'linked', invoice_id: 'd1', correction: 'fix_reference', qb_reference: 'QB-9', key: 'same' });
+    const [s4, b4] = await fix(db, { status: 'linked', invoice_id: 'd1', correction: 'fix_reference', qb_reference: 'QB-9', key: 'same' });
+    const [s5, b5] = await fix(db, { status: 'linked', invoice_id: 'i1', correction: 'fix_reference', qb_reference: 'QB-9' });
+    return { pass: s1 === 409 && b1.code === 'STATUS_CHANGED' && s2 === 400 && b2.code === 'BAD_CORRECTION' && s3 === 200 && s4 === 200 && b4.idempotent && s5 === 400 && b5.code === 'NOT_DEPOSIT'
+      && txs(db).filter((t) => t.type === 'qb_correction').length === 1 && JSON.stringify([...db.T.credits.values(), ...db.T.payments.values()]) === before && unlocked(db) };
+  });
   return { function: 'projectDepositAction', mock_only: true, passed: results.filter((r) => r.pass).length, total: results.length, results };
 }
 
@@ -644,7 +842,18 @@ Deno.serve(async (req) => {
           return summary(db, b.project_id);
         case 'apply':
           if (!b.invoice_id) throw fail(400, 'NO_INVOICE', 'invoice_id required');
-          return apply(db, { invoice_id: b.invoice_id, amount_cents: amountC(b.amount), key: needKey(), note: String(b.note || '').slice(0, 500), sources: b.sources === 'all' ? 'all' : 'deposit', user_email: user.email });
+          if (b.sources && !['deposit', 'general'].includes(b.sources)) throw fail(400, 'BAD_SOURCES', 'Choose deposit credit or general project credit; they are never combined in one application.');
+          return apply(db, { invoice_id: b.invoice_id, amount_cents: amountC(b.amount), key: needKey(), note: String(b.note || '').slice(0, 500), sources: b.sources === 'general' ? 'general' : 'deposit', user_email: user.email });
+        case 'credit_availability':
+          if (!b.project_id) throw fail(400, 'NO_PROJECT', 'project_id required');
+          return creditAvailability(db, b.project_id, b.exclude_invoice_id);
+        case 'qb_correct': {
+          const reason = String(b.reason || '').trim().slice(0, 1000);
+          if (!b.project_id) throw fail(400, 'NO_PROJECT', 'project_id required');
+          if (reason.length < 10) throw fail(400, 'NO_REASON', 'Explain the correction (at least 10 characters).');
+          if (b.status === 'reconciled' ? !/^(invoice|payment|payment_reversal|app):.+/.test(String(b.ref || '')) : !b.invoice_id) throw fail(400, 'NO_ITEM', 'Item required');
+          return qbCorrect(db, { project_id: b.project_id, status: b.status, correction: b.correction, invoice_id: b.invoice_id, ref: b.ref, qb_reference: String(b.qb_reference || '').trim().slice(0, 200) || null, confirm: b.confirm, attest: b.attest === true, reason, key: needKey(), user_email: user.email });
+        }
         case 'refund': {
           if (!b.credit_ledger_id) throw fail(400, 'NO_CREDIT', 'credit_ledger_id required');
           if (!isDate(b.date)) throw fail(400, 'NO_DATE', 'Refund date required.');

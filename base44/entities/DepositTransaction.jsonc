@@ -10,7 +10,8 @@
         "apply_reversal",
         "refund",
         "refund_reversal",
-        "qb_reconcile"
+        "qb_reconcile",
+        "qb_correction"
       ],
       "enumColors": [
         "blue",
@@ -18,9 +19,10 @@
         "yellow",
         "red",
         "purple",
-        "gray"
+        "gray",
+        "pink"
       ],
-      "description": "Append-only deposit journal entry. Corrections are new entries that reference reverses_transaction_id; entries are never edited or deleted. Applications made when an invoice is sent use application_id send:{invoice}; credit returned when that invoice is cancelled uses cancel:{invoice}. qb_reconcile marks one item as entered in QuickBooks."
+      "description": "Append-only credit journal entry. Corrections are new entries that reference reverses_transaction_id; entries are never edited or deleted. Applications made when an invoice is sent use application_id send:{invoice}; credit returned when that invoice is cancelled uses cancel:{invoice}. qb_reconcile marks one item as entered in QuickBooks. qb_correction records an admin correction of a QuickBooks status (exported, linked or reconciled) with the original values in correction_detail."
     },
     "project_id": {
       "type": "string"
@@ -44,21 +46,21 @@
         "string",
         "null"
       ],
-      "description": "ProjectCreditLedger row (the deposit credit) this entry draws from or restores"
+      "description": "ProjectCreditLedger row this entry draws from or restores (deposit or general credit; the row's origin decides which)"
     },
     "source_invoice_id": {
       "type": [
         "string",
         "null"
       ],
-      "description": "Original deposit invoice behind the credit (traceability to the receipt)"
+      "description": "Original invoice behind the credit (traceability to the receipt)"
     },
     "target_invoice_id": {
       "type": [
         "string",
         "null"
       ],
-      "description": "Invoice the deposit was applied to"
+      "description": "Invoice the credit was applied to"
     },
     "reverses_transaction_id": {
       "type": [
@@ -72,11 +74,11 @@
         "string",
         "null"
       ],
-      "description": "qb_reconcile only: the item marked as entered in QuickBooks (invoice:{id}, payment:{id}, payment_reversal:{id} or app:{application_id})"
+      "description": "qb_reconcile / qb_correction: the item (invoice:{id}, payment:{id}, payment_reversal:{id} or app:{application_id})"
     },
     "amount_cents": {
       "type": "integer",
-      "description": "Positive integer cents"
+      "description": "Non-negative integer cents (0 for QuickBooks status corrections)"
     },
     "ledger_before_cents": {
       "type": [
@@ -113,6 +115,13 @@
     },
     "note": {
       "type": "string"
+    },
+    "correction_detail": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "qb_correction only: { status: exported|linked|reconciled, correction: to_linked|fix_reference|not_in_quickbooks, previous: {...}, next: {...}, export_id }"
     },
     "actor_email": {
       "type": "string"

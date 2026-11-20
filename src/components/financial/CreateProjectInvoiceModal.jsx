@@ -52,6 +52,7 @@ import BillingValidationBanner from "./BillingValidationBanner";
 import { guardInvoiceMutation, registerInvoiceCreationSurface } from "@/components/dev/CanonicalArchitectureGuards";
 import { billingKeys, invoiceKeys, creditKeys, normalizeProjectId } from "./queryKeyFactories";
 import InvoiceTotalsPanel from "./InvoiceTotalsPanel";
+import InvoiceCreditSelector from "./InvoiceCreditSelector";
 import ManualLinesSection from "./ManualLinesSection";
 import { toInvoiceLine } from "./invoiceLinePayload";
 
@@ -89,9 +90,12 @@ export default function CreateProjectInvoiceModal({
   const [checkingDraft, setCheckingDraft] = useState(false);
 
   // Credit state
-  const [availableCredit, setAvailableCredit] = useState(0);
-  const [creditToApply, setCreditToApply] = useState(null);
-  const [creditInputValue, setCreditInputValue] = useState("");
+  // Explicit credit by kind; nothing is applied unless the user enters an amount.
+  const [creditAvail, setCreditAvail] = useState(null);
+  const [creditLoading, setCreditLoading] = useState(false);
+  const [creditDeposit, setCreditDeposit] = useState("");
+  const [creditGeneral, setCreditGeneral] = useState("");
+  const resetCredit = () => { setCreditDeposit(""); setCreditGeneral(""); };
 
   const normalizedProjectId = normalizeProjectId(selectedProjectId);
 
@@ -105,9 +109,8 @@ export default function CreateProjectInvoiceModal({
       setDepositAmount("");
       setNotes("");
       setManualLines([]);
-      setCreditToApply(null);
-      setCreditInputValue("");
-      setAvailableCredit(0);
+      resetCredit();
+      setCreditAvail(null);
       setExistingDraft(null);
       setCheckingDraft(false);
     }
@@ -160,20 +163,16 @@ export default function CreateProjectInvoiceModal({
   }, [open]);
 
   // ── Fetch credit for selected project ──
+  // Canonical availability by kind, already net of credit reserved by other drafts.
   useEffect(() => {
-    if (!normalizedProjectId || !open) {
-      setAvailableCredit(0);
-      return;
-    }
-    (async () => {
-      try {
-        const credits = await base44.entities.ProjectCreditLedger.filter({ project_id: normalizedProjectId });
-        const total = credits.reduce((s, c) => s + (c.remaining_amount ?? 0), 0);
-        setAvailableCredit(total);
-      } catch (e) {
-        console.warn('Failed to fetch credits:', e);
-      }
-    })();
+    if (!normalizedProjectId || !open) { setCreditAvail(null); return; }
+    let cancelled = false;
+    setCreditLoading(true);
+    base44.functions.invoke("projectDepositAction", { action: "credit_availability", project_id: normalizedProjectId })
+      .then((r) => { if (!cancelled) setCreditAvail(r.data?.success ? r.data : null); })
+      .catch(() => { if (!cancelled) setCreditAvail(null); })
+      .finally(() => { if (!cancelled) setCreditLoading(false); });
+    return () => { cancelled = true; };
   }, [normalizedProjectId, open]);
 
   // ── Computed totals (memoized) ──
@@ -193,17 +192,21 @@ export default function CreateProjectInvoiceModal({
     ? parseFloat(depositAmount) || 0 
     : partsGrossTotal + manualTotal;
 
-  const suggestedCredit = Math.min(availableCredit, subtotal);
-  const effectiveCreditToApply = creditToApply !== null ? creditToApply : suggestedCredit;
+  const creditAllowed = invoiceType !== "deposit";
+  const depAmt = creditAllowed ? parseFloat(creditDeposit) || 0 : 0;
+  const genAmt = creditAllowed ? parseFloat(creditGeneral) || 0 : 0;
+  const cents = (s) => /^\d*(\.\d{0,2})?$/.test(String(s || "").trim());
 
   const creditValidationError = useMemo(() => {
-    if (effectiveCreditToApply < 0) return "Credit cannot be negative";
-    if (effectiveCreditToApply > availableCredit) return `Exceeds available credit (${formatCurrencyUSD(availableCredit)})`;
-    if (effectiveCreditToApply > subtotal) return `Exceeds invoice subtotal (${formatCurrencyUSD(subtotal)})`;
+    if (!creditAllowed) return null;
+    if (!cents(creditDeposit) || !cents(creditGeneral)) return "Credit amounts must be zero or more, in whole cents";
+    if (depAmt > (creditAvail?.available_deposit ?? 0) + 0.005) return `Deposit credit exceeds what is available (${formatCurrencyUSD(creditAvail?.available_deposit ?? 0)})`;
+    if (genAmt > (creditAvail?.available_general ?? 0) + 0.005) return `General credit exceeds what is available (${formatCurrencyUSD(creditAvail?.available_general ?? 0)})`;
+    if (depAmt + genAmt > subtotal + 0.005) return `Credit exceeds the invoice subtotal (${formatCurrencyUSD(subtotal)})`;
     return null;
-  }, [effectiveCreditToApply, availableCredit, subtotal]);
+  }, [creditAllowed, creditDeposit, creditGeneral, depAmt, genAmt, creditAvail, subtotal]);
 
-  const balanceDue = Math.max(0, subtotal - effectiveCreditToApply);
+  const balanceDue = Math.max(0, subtotal - depAmt - genAmt);
 
   // ── Item count for display ──
   const lineItemCount = invoiceType === "deposit" 
@@ -264,7 +267,8 @@ export default function CreateProjectInvoiceModal({
         invoice_type: invoiceType,
         lines,
         notes,
-        credit_to_apply: effectiveCreditToApply,
+        credit_deposit: depAmt,
+        credit_general: genAmt,
       });
 
       if (response.data?.success) {
@@ -297,7 +301,7 @@ export default function CreateProjectInvoiceModal({
     } finally {
       setIsSubmitting(false);
     }
-  }, [canSubmit, selectedParts, manualLines, invoiceType, depositAmount, selectedProjectId, notes, effectiveCreditToApply, normalizedProjectId, queryClient, onSuccess]);
+  }, [canSubmit, selectedParts, manualLines, invoiceType, depositAmount, selectedProjectId, notes, depAmt, genAmt, normalizedProjectId, queryClient, onSuccess]);
 
   if (!open) return null;
 
@@ -324,8 +328,7 @@ export default function CreateProjectInvoiceModal({
                 if (!val) return;
                 setSelectedProjectId(val);
                 setSelectedParts([]);
-                setCreditToApply(null);
-                setCreditInputValue("");
+                resetCredit();
               }}
               className="w-full"
             />
@@ -481,24 +484,16 @@ export default function CreateProjectInvoiceModal({
           <InvoiceTotalsPanel
             subtotal={subtotal}
             totalCost={invoiceType === "deposit" ? 0 : totalCost}
-            availableCredit={availableCredit}
-            effectiveCreditToApply={effectiveCreditToApply}
-            creditInputValue={creditInputValue}
-            creditValidationError={creditValidationError}
-            suggestedCredit={suggestedCredit}
+            creditDeposit={depAmt}
+            creditGeneral={genAmt}
+            creditValid={!creditValidationError}
             balanceDue={balanceDue}
-            lineItemCount={lineItemCount}
-            onCreditChange={(val) => {
-              setCreditInputValue(val);
-              const parsed = parseFloat(val);
-              setCreditToApply(isNaN(parsed) ? null : parsed);
-            }}
-            onCreditReset={() => {
-              setCreditToApply(null);
-              setCreditInputValue("");
-            }}
-            maxCredit={Math.min(availableCredit, subtotal)}
-          />
+          >
+            {creditAllowed && (
+              <InvoiceCreditSelector availability={creditAvail} loading={creditLoading} subtotal={subtotal}
+                deposit={creditDeposit} general={creditGeneral} onDeposit={setCreditDeposit} onGeneral={setCreditGeneral} error={creditValidationError} />
+            )}
+          </InvoiceTotalsPanel>
         )}
 
         {/* ── ACTION BAR ── */}

@@ -61,7 +61,38 @@
     "credit_proposed": {
       "type": "number",
       "default": 0,
-      "description": "Credit amount proposed at draft creation. NOT deducted from ledger until sent."
+      "description": "Credit amount proposed at draft creation (deposit + general when credit_selection_mode is split). NOT deducted from ledger until sent."
+    },
+    "credit_selection_mode": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "split",
+        null
+      ],
+      "description": "split = draft names deposit credit and general credit separately and each is drawn only from its own kind at send. Null on older drafts: credit_proposed is drawn from any credit, oldest first (legacy behavior, preserved)."
+    },
+    "credit_proposed_deposit": {
+      "type": "number",
+      "default": 0,
+      "description": "split drafts: deposit-origin credit selected for this invoice"
+    },
+    "credit_proposed_general": {
+      "type": "number",
+      "default": 0,
+      "description": "split drafts: general project credit selected for this invoice"
+    },
+    "credit_applied_deposit": {
+      "type": "number",
+      "default": 0,
+      "description": "Deposit-origin credit deducted at send"
+    },
+    "credit_applied_general": {
+      "type": "number",
+      "default": 0,
+      "description": "General project credit deducted at send"
     },
     "credit_applied": {
       "type": "number",
@@ -107,7 +138,14 @@
         "linked",
         null
       ],
-      "description": "AK-created invoice already in QuickBooks: exported = included in a QuickBooks export file; linked = admin confirmed it already exists in QuickBooks. Null = not yet in QuickBooks. Deposit invoices with a value here (or recorded_from_quickbooks) are excluded from new QuickBooks exports."
+      "description": "AK-created invoice already in QuickBooks: exported = included in a QuickBooks export file; linked = admin confirmed it already exists in QuickBooks. Null = not yet in QuickBooks. Deposit invoices with a value here (or recorded_from_quickbooks) are excluded from new QuickBooks exports. Changed only by export or the admin correction workflow."
+    },
+    "qb_export_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "export_number of the QuickBooksExport file that included this deposit invoice"
     },
     "qb_exported_at": {
       "type": [
@@ -158,6 +196,13 @@
         "properties": {
           "credit_id": {
             "type": "string"
+          },
+          "credit_class": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "deposit | general | any (legacy draft)"
           },
           "amount": {
             "type": "number"

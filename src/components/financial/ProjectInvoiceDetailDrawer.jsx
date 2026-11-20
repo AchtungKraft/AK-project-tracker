@@ -61,6 +61,7 @@ import InvoicePaymentHistory from "@/components/financial/payments/InvoicePaymen
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import { invoiceKeys } from "@/components/financial/queryKeyFactories";
 import ApplyDepositDialog from "@/components/project/financials/deposits/ApplyDepositDialog";
+import SendCreditSummary from "./SendCreditSummary";
 import { guardInvoiceMutation } from "@/components/dev/CanonicalArchitectureGuards";
 import { downloadClientDetailPDF } from "@/components/financial/ClientDetailPDFExport";
 
@@ -544,6 +545,17 @@ export default function ProjectInvoiceDetailDrawer({
                     </span>
                   </div>
                 )}
+                {((invoice.credit_applied_deposit || 0) > 0 || (invoice.credit_applied_general || 0) > 0) && (
+                  <div className="text-right text-xs text-gray-500">
+                    At send: {formatCurrencyUSD(invoice.credit_applied_deposit || 0)} deposit credit, {formatCurrencyUSD(invoice.credit_applied_general || 0)} general credit
+                  </div>
+                )}
+                {invoice.status === "draft" && (invoice.credit_proposed || 0) > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Credit reserved{invoice.credit_selection_mode === "split" ? ` (deposit ${formatCurrencyUSD(invoice.credit_proposed_deposit || 0)}, general ${formatCurrencyUSD(invoice.credit_proposed_general || 0)})` : " (any credit, older draft)"}</span>
+                    <span className="font-mono text-gray-300">-{formatCurrencyUSD(invoice.credit_proposed)}</span>
+                  </div>
+                )}
                 <Separator className="bg-gray-700 my-2" />
                 <div className="flex justify-between text-lg font-bold">
                   <span className="text-white">Total</span>
@@ -662,6 +674,7 @@ export default function ProjectInvoiceDetailDrawer({
             <DialogTitle>Mark Invoice as Sent</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            <SendCreditSummary invoice={invoice} />
             <div className="space-y-2">
               <Label>QuickBooks Invoice Number *</Label>
               <Input

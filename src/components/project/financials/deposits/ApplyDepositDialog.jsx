@@ -19,7 +19,8 @@ export default function ApplyDepositDialog({ open, onOpenChange, projectId, invo
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const invoices = data?.open_invoices || [];
-  const available = sources === "all" ? data?.totals?.available_all_credit ?? 0 : data?.totals?.available_to_apply ?? 0;
+  const general = sources === "general";
+  const available = general ? data?.totals?.available_general_credit ?? 0 : data?.totals?.available_to_apply ?? 0;
   const inv = invoices.find((i) => i.id === target);
   const max = inv ? Math.min(inv.outstanding, available) : 0;
 
@@ -30,7 +31,7 @@ export default function ApplyDepositDialog({ open, onOpenChange, projectId, invo
     setSaving(true); setError("");
     const r = await depositAction({ action: "apply", invoice_id: target, amount: parseFloat(amount), note, sources, idempotency_key: key });
     setSaving(false);
-    if (!r.success) { setError(r.error || "Could not apply deposit."); setKey(newKey()); return; }
+    if (!r.success) { setError(r.error || "Could not apply credit."); setKey(newKey()); return; }
     await refresh(); onDone?.(r); onOpenChange(false);
   };
   const amt = parseFloat(amount);
@@ -38,11 +39,13 @@ export default function ApplyDepositDialog({ open, onOpenChange, projectId, invo
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader><DialogTitle>{sources === "all" ? "Apply client credit" : "Apply available deposit"}</DialogTitle>
-          <DialogDescription>Reduces what the client owes on the invoice. Record the same application in QuickBooks.</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>{general ? "Apply general project credit" : "Apply available deposit"}</DialogTitle>
+          <DialogDescription>{general
+            ? "Uses general project credit only (part removals, adjustments). Deposit credit is never drawn here."
+            : "Uses client deposit credit only, oldest receipt first. General project credit is never drawn here."} Record the same application in QuickBooks.</DialogDescription></DialogHeader>
         {isLoading ? <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-gray-500" /></div> : (
           <div className="space-y-3 py-2">
-            <div className="flex justify-between rounded-lg bg-gray-800/50 p-3 text-sm"><span className="text-gray-400">Available to apply</span><span className="tabular-nums text-amber-300">{money(available)}</span></div>
+            <div className="flex justify-between rounded-lg bg-gray-800/50 p-3 text-sm"><span className="text-gray-400">{general ? "General credit available" : "Deposit credit available"}</span><span className="tabular-nums text-amber-300">{money(available)}</span></div>
             <div className="space-y-1"><Label>Invoice</Label>
               <Select value={target || ""} onValueChange={setTarget}><SelectTrigger><SelectValue placeholder={invoices.length ? "Choose an invoice" : "No open invoices"} /></SelectTrigger>
                 <SelectContent>{invoices.map((i) => <SelectItem key={i.id} value={i.id}>{i.label} · {i.invoice_type} · {money(i.outstanding)} outstanding</SelectItem>)}</SelectContent></Select></div>

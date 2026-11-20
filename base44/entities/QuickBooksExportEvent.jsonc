@@ -1,0 +1,82 @@
+{
+  "name": "QuickBooksExportEvent",
+  "type": "object",
+  "properties": {
+    "export_number": {
+      "type": "string",
+      "description": "Export this activity concerns"
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "generated",
+        "downloaded",
+        "regenerated"
+      ],
+      "enumColors": [
+        "green",
+        "blue",
+        "yellow"
+      ]
+    },
+    "related_export_number": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "regenerated: the new file's export_number"
+    },
+    "content_sha256": {
+      "type": "string"
+    },
+    "integrity_ok": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "downloaded: stored file still matches its recorded fingerprint"
+    },
+    "note": {
+      "type": "string"
+    },
+    "actor_email": {
+      "type": "string"
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "export_number",
+    "project_id",
+    "event_type",
+    "actor_email",
+    "recorded_at"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "qb_export_service_only"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "qb_export_service_only"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "qb_export_service_only"
+      }
+    }
+  }
+}

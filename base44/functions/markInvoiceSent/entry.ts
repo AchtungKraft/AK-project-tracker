@@ -73,23 +73,44 @@ async function reconcilePendingPlan(db, inv, key) {
   return true;
 }
 
-async function applyCredits(db, inv, key, journal) {
-  const creditToApply = inv.credit_proposed ?? inv.credit_applied ?? 0;
-  if (creditToApply <= 0) return { creditToApply, applied: 0 };
+// Credit kinds (same rule as projectDepositAction): deposit = ledger row from a payment on a deposit invoice; else general.
+// Split drafts name an amount of each kind and each is drawn only from rows of that kind, oldest first.
+// Older drafts (no credit_selection_mode) keep their original behavior: credit_proposed from any credit, oldest first.
+async function planCredits(db, inv) {
+  const split = inv.credit_selection_mode === 'split';
+  const want = split
+    ? [['deposit', Math.max(0, inv.credit_proposed_deposit ?? 0)], ['general', Math.max(0, inv.credit_proposed_general ?? 0)]]
+    : [['any', inv.credit_proposed ?? inv.credit_applied ?? 0]];
+  const creditToApply = want.reduce((s, [, v]) => s + v, 0);
+  if (creditToApply <= 0) return { creditToApply, plan: [] };
+  const depIds = new Set((await db.findInvoices({ project_id: inv.project_id })).filter((i) => i.invoice_type === 'deposit').map((i) => i.id));
+  const kindOf = (c) => (!c.reversed_from_invoice_id && depIds.has(c.source_invoice_id) ? 'deposit' : 'general');
   // Rows under half a cent are floating-point residue, not credit.
   const available = (await db.findCredits({ project_id: inv.project_id }))
     .filter((c) => (c.remaining_amount ?? 0) >= 0.005)
     .sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
   const plan = [];
-  let remaining = creditToApply;
-  for (const c of available) {
-    if (remaining <= 0) break;
-    const toApply = Math.min(c.remaining_amount, remaining);
-    if (toApply <= 0) continue;
-    plan.push({ credit_id: c.id, amount: toApply, before: c.remaining_amount, after: c.remaining_amount - toApply,
-      prev_applied_to_invoice_id: c.applied_to_invoice_id ?? null, prev_credit_idempotency_key: c.credit_idempotency_key ?? null });
-    remaining -= toApply;
+  for (const [kind, amount] of want) {
+    let remaining = amount;
+    for (const c of available) {
+      if (remaining <= 0) break;
+      if (kind !== 'any' && kindOf(c) !== kind) continue;
+      const toApply = Math.min(c.remaining_amount, remaining);
+      if (toApply <= 0) continue;
+      plan.push({ credit_id: c.id, credit_class: kindOf(c), amount: toApply, before: c.remaining_amount, after: c.remaining_amount - toApply,
+        prev_applied_to_invoice_id: c.applied_to_invoice_id ?? null, prev_credit_idempotency_key: c.credit_idempotency_key ?? null });
+      remaining -= toApply;
+    }
   }
+  return { creditToApply, plan };
+}
+const byClass = (plan) => ({
+  deposit: lr2(plan.filter((e) => e.credit_class === 'deposit').reduce((s, e) => s + e.amount, 0)),
+  general: lr2(plan.filter((e) => e.credit_class !== 'deposit').reduce((s, e) => s + e.amount, 0)),
+});
+
+async function applyCredits(db, inv, key, journal) {
+  const { creditToApply, plan } = await planCredits(db, inv);
   if (plan.length === 0) return { creditToApply, applied: 0 };
   if ((await db.invoiceCas({ id: inv.id, status: 'draft' }, { credit_application_plan: plan, credit_plan_state: 'pending' })) !== 1) {
     throw conflict('Invoice changed during send', 'INVOICE_CHANGED');
@@ -272,12 +293,13 @@ async function markSent(db, { invoice_id, qb_invoice_number, issue_date, due_dat
       const won = await db.invoiceCas({ id: invoice_id, status: 'draft' }, {
         status: 'sent', qb_invoice_number, issue_date, due_date, credit_applied: actualCreditApplied, balance_due: balanceDue,
         credit_idempotency_key: key, credit_plan_state: journal.length ? 'applied' : null,
+        credit_applied_deposit: byClass(journal).deposit, credit_applied_general: byClass(journal).general,
       });
       if (won !== 1) throw conflict('Invoice changed during send', 'INVOICE_CHANGED');
       const journalPending = await journaled(journal);
       return [200, {
         success: true, invoice_id, status: 'sent', qb_invoice_number, issue_date, due_date,
-        credit_proposed: creditToApply, credit_applied: actualCreditApplied, balance_due: balanceDue,
+        credit_proposed: creditToApply, credit_applied: actualCreditApplied, credit_applied_by_kind: byClass(journal), balance_due: balanceDue,
         commitment_updates: commitmentUpdates.map(strip), service_updates: serviceUpdates, deposit_journal_pending: journalPending,
       }];
     } catch (err) {
@@ -309,6 +331,7 @@ function realDb(base44) {
   const sr = base44.asServiceRole.entities;
   return {
     getInvoice: async (id) => (await base44.entities.ProjectInvoice.filter({ id }))[0] || null,
+    findInvoices: (q) => sr.ProjectInvoice.filter(q),
     listLines: (invoice_id) => base44.entities.ProjectInvoiceLine.filter({ invoice_id }),
     getCommitment: async (id) => (await base44.entities.PartCommitment.filter({ id }))[0] || null,
     updateCommitment: (id, d) => sr.PartCommitment.update(id, d),
@@ -375,6 +398,7 @@ function mockDb(seed, faults = {}) {
   return {
     T,
     getInvoice: async (id) => (await find('getInvoice', T.invoices, { id }))[0] || null,
+    findInvoices: (q) => find('findInvoices', T.invoices, q),
     listLines: (invoice_id) => find('listLines', T.lines, { invoice_id }),
     getCommitment: async (id) => (await find('getCommitment', T.commitments, { id }))[0] || null,
     updateCommitment: upd('updateCommitment', T.commitments),
@@ -634,6 +658,36 @@ async function runSelfTest() {
     const db = partSeed({ budget: { budget: 1000, billed_final: 300, credit_balance: 300 }, subtotal: 1000, credit: 300 });
     const [s, b] = await run(db);
     return { pass: s === 200 && inv(db).credit_applied === 300 && inv(db).balance_due === 700, status: s, body: s === 200 ? undefined : b };
+  });
+
+  // ── Deposit vs general credit at send ──
+  const kindSeed = (inv, credits) => mockDb({
+    invoices: [{ id: 'inv1', project_id: 'p1', status: 'draft', invoice_type: 'progress', subtotal: 1000, credit_applied: 0, ...inv },
+      { id: 'dep1', project_id: 'p1', invoice_type: 'deposit', status: 'paid', subtotal: 300 }],
+    credits, projects: [{ id: 'p1', billing_lock_token: null }],
+  });
+  const GEN = { id: 'cg', project_id: 'p1', source_invoice_id: 'removal', credit_amount: 100, remaining_amount: 100, created_date: '2025-01-01T00:00:00Z' };
+  const DEP = { id: 'cd', project_id: 'p1', source_invoice_id: 'dep1', credit_amount: 300, remaining_amount: 300, created_date: '2026-03-01T00:00:00Z', payment_idempotency_key: 'pay_credit:dep1' };
+  await test('split draft: deposit portion only from deposit credit, general only from general credit (older general row not used for deposit)', async () => {
+    const db = kindSeed({ credit_selection_mode: 'split', credit_proposed: 300, credit_proposed_deposit: 250, credit_proposed_general: 50 }, [GEN, DEP]);
+    const [s, b] = await run(db); const i = inv(db); const t = [...db.T.txs.values()];
+    return { pass: s === 200 && db.T.credits.get('cd').remaining_amount === 50 && db.T.credits.get('cg').remaining_amount === 50 && i.credit_applied === 300 && i.credit_applied_deposit === 250 && i.credit_applied_general === 50
+      && i.balance_due === 700 && b.credit_applied_by_kind.deposit === 250 && t.length === 2 && i.credit_application_plan.map((e) => e.credit_class).join() === 'deposit,general' };
+  });
+  await test('split draft asking only for deposit credit when only general credit exists: general credit untouched', async () => {
+    const db = kindSeed({ credit_selection_mode: 'split', credit_proposed: 200, credit_proposed_deposit: 200, credit_proposed_general: 0 }, [GEN]);
+    const [s] = await run(db);
+    return { pass: s === 200 && db.T.credits.get('cg').remaining_amount === 100 && inv(db).credit_applied === 0 && inv(db).balance_due === 1000 };
+  });
+  await test('older draft without a split keeps its original behavior (any credit, oldest first)', async () => {
+    const db = kindSeed({ credit_proposed: 150 }, [GEN, DEP]);
+    const [s] = await run(db); const i = inv(db);
+    return { pass: s === 200 && db.T.credits.get('cg').remaining_amount === 0 && db.T.credits.get('cd').remaining_amount === 250 && i.credit_applied_general === 100 && i.credit_applied_deposit === 50 };
+  });
+  await test('split draft send is idempotent and concurrent sends deduct once', async () => {
+    const db = kindSeed({ credit_selection_mode: 'split', credit_proposed: 120, credit_proposed_deposit: 100, credit_proposed_general: 20 }, [GEN, DEP]);
+    const r = await Promise.all(Array.from({ length: 4 }, () => run(db))); await run(db);
+    return { pass: r.filter(([s]) => s === 200).length === 1 && db.T.credits.get('cd').remaining_amount === 200 && db.T.credits.get('cg').remaining_amount === 80 && [...db.T.txs.values()].length === 2 };
   });
 
   return { function: 'markInvoiceSent', mock_only: true, passed: results.filter((r) => r.pass).length, total: results.length, results };

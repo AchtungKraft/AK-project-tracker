@@ -140,9 +140,12 @@ Deno.serve(async (req) => {
       };
     });
 
-    // Get available credits (ordered oldest first)
+    // Get available credits (ordered oldest first). GENERAL credit only: deposit credit (a ledger row from a payment on a
+    // deposit invoice, same rule as projectDepositAction) moves only through the deposit journal and invoice sends.
+    const depositInvoiceIds = new Set((await base44.asServiceRole.entities.ProjectInvoice.filter({ project_id, invoice_type: 'deposit' })).map((i) => i.id));
     const availableCredits = creditLedgers
       .filter(cl => (cl.remaining_amount || 0) > 0)
+      .filter(cl => cl.reversed_from_invoice_id || !depositInvoiceIds.has(cl.source_invoice_id))
       .sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
 
     // Calculate totals

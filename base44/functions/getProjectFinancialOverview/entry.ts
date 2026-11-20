@@ -15,7 +15,7 @@ const FINAL = ['sent', 'partial', 'paid', 'overdue'];
 // │  This file keeps line-level scope value and cost detail for reconciliation and reports; it does not re-derive billing totals.
 const AUTH_LOGIC_VERSION = 'auth-v1';
 const BILLING_LOGIC_VERSION = 'v1.0';
-const DEPOSIT_LOGIC_VERSION = 'dep-v1';
+const DEPOSIT_LOGIC_VERSION = 'dep-v2';
 async function core(base44, name, payload, ok) {
   const d = (await base44.functions.invoke(name, payload)).data;
   if (!d?.success || !ok(d)) throw new Error(`${name} unavailable or version mismatch`);

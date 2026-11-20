@@ -108,6 +108,7 @@ async function appendLines({ base44, user, target, validatedLines, subtotal, blo
 // Billing authorization — calculated only in billingAuthorizationCore. budget = confirmed agreed amount (null = none);
 // billed = invoiced + drafted, net of applied/proposed credit (a deposit applied as credit is not consumed twice).
 const AUTH_LOGIC_VERSION = 'auth-v1';
+const DEPOSIT_LOGIC_VERSION = 'dep-v2';
 async function loadBudget(base44, project_id) {
   const d = (await base44.functions.invoke('billingAuthorizationCore', { project_id })).data;
   if (!d?.success || d.logic_version !== AUTH_LOGIC_VERSION) throw new Error('Billing authorization unavailable or version mismatch');
@@ -676,7 +677,16 @@ async function handleDraft(base44, user, payload) {
     const subtotal = validatedLines.reduce((s, l) => s + (l.line_total || 0), 0);
 
     // ── Validate proposed credit ── (append keeps the draft's existing proposed credit)
-    const proposedCredit = appending ? (target.credit_proposed ?? 0) : Math.max(0, parseFloat(credit_to_apply) || 0);
+    // Credit is chosen explicitly per kind (deposit / general) and never combined automatically. The old single
+    // credit_to_apply (drawn from any credit) is refused for new drafts; existing drafts keep what they were created with.
+    const money = (v) => { const n = Number(v ?? 0); return Number.isFinite(n) && n >= 0 && Math.abs(Math.round(n * 100) - n * 100) < 1e-6 ? n : NaN; };
+    const creditSel = { deposit: money(payload.credit_deposit), general: money(payload.credit_general) };
+    if (!appending) {
+      if ((parseFloat(credit_to_apply) || 0) > 0) return Response.json({ success: false, code: 'CREDIT_KIND_REQUIRED', error: 'Choose how much deposit credit and how much general project credit to apply; they are not combined automatically.' }, { status: 400 });
+      if (Number.isNaN(creditSel.deposit) || Number.isNaN(creditSel.general)) return Response.json({ success: false, code: 'BAD_CREDIT', error: 'Credit amounts must be zero or more, in whole cents.' }, { status: 400 });
+      if (invoice_type === 'deposit' && creditSel.deposit + creditSel.general > 0) return Response.json({ success: false, code: 'CREDIT_ON_DEPOSIT', error: 'Credit cannot be applied to a deposit invoice.' }, { status: 400 });
+    }
+    const proposedCredit = appending ? (target.credit_proposed ?? 0) : lr2(creditSel.deposit + creditSel.general);
 
     // ── Billing authorization ── (confirmed agreed client budget; consumption is net of credit so deposits count once)
     // Projected labor: needs a confirmed authorization and must fit it. Projected parts: must fit it when one is confirmed
@@ -698,12 +708,16 @@ async function handleDraft(base44, user, payload) {
       warnings.push({ code: 'PROJECTED_PARTS_WITHOUT_AUTHORIZATION', message: 'Projected (not yet received) parts are being billed without a confirmed agreed client budget.' });
     }
     if (proposedCredit > 0 && !appending) {
-      const credits = await base44.entities.ProjectCreditLedger.filter({ project_id });
-      const totalAvailable = credits.reduce((s, c) => s + (c.remaining_amount ?? 0), 0);
-      if (proposedCredit > totalAvailable) {
-        return Response.json({ error: `Proposed credit (${proposedCredit}) exceeds available (${totalAvailable})` }, { status: 400 });
+      // Availability per kind comes from the canonical deposit handler (net of what other drafts reserve).
+      const av = (await base44.functions.invoke('projectDepositAction', { action: 'credit_availability', project_id })).data;
+      if (!av?.success || av.logic_version !== DEPOSIT_LOGIC_VERSION) throw new Error('Credit availability unavailable or version mismatch');
+      if (creditSel.deposit > av.available_deposit + 0.005) {
+        return Response.json({ success: false, code: 'EXCEEDS_DEPOSIT_CREDIT', error: `Deposit credit selected ($${creditSel.deposit.toFixed(2)}) exceeds available deposit credit ($${av.available_deposit.toFixed(2)}).` }, { status: 400 });
       }
-      if (proposedCredit > subtotal) {
+      if (creditSel.general > av.available_general + 0.005) {
+        return Response.json({ success: false, code: 'EXCEEDS_GENERAL_CREDIT', error: `General credit selected ($${creditSel.general.toFixed(2)}) exceeds available general project credit ($${av.available_general.toFixed(2)}).` }, { status: 400 });
+      }
+      if (proposedCredit > subtotal + 0.005) {
         return Response.json({ error: `Proposed credit (${proposedCredit}) exceeds subtotal (${subtotal})` }, { status: 400 });
       }
     }
@@ -726,6 +740,9 @@ async function handleDraft(base44, user, payload) {
       status: 'draft',
       subtotal,
       credit_proposed: proposedCredit,
+      credit_selection_mode: 'split',
+      credit_proposed_deposit: creditSel.deposit,
+      credit_proposed_general: creditSel.general,
       credit_applied: 0, // NOT applied yet — only at sent
       credit_preview: proposedCredit, // backward compat
       total: subtotal,
@@ -814,6 +831,8 @@ async function handleDraft(base44, user, payload) {
         status: 'draft',
         subtotal,
         credit_proposed: proposedCredit,
+        credit_proposed_deposit: creditSel.deposit,
+        credit_proposed_general: creditSel.general,
         credit_applied: 0,
         total: subtotal,
         balance_due: balanceDue,
@@ -881,6 +900,16 @@ function mockDb(seed) {
       const pr = tables.Project.find((x) => x.id === p.project_id);
       const consumed = lr2(tables.ProjectInvoice.filter((i) => i.project_id === p.project_id && !['cancelled', 'void'].includes(i.status)).reduce((s, i) => s + (i.subtotal || 0) - (i.credit_proposed || 0), 0));
       return { data: { success: true, logic_version: AUTH_LOGIC_VERSION, authorization: { authorized: pr.budget ?? null, consumed } } };
+    }
+    if (fn === 'projectDepositAction' && p.action === 'credit_availability') {
+      // Same rule as the canonical handler: deposit credit = row from a deposit invoice payment; drafts reserve per kind.
+      const inv = tables.ProjectInvoice.filter((i) => i.project_id === p.project_id);
+      const dep = new Set(inv.filter((i) => i.invoice_type === 'deposit').map((i) => i.id));
+      const rows = (tables.ProjectCreditLedger || []).filter((c) => c.project_id === p.project_id && (c.remaining_amount || 0) >= 0.01);
+      const pool = (k) => lr2(rows.filter((c) => (dep.has(c.source_invoice_id) && !c.reversed_from_invoice_id) === (k === 'deposit')).reduce((s, c) => s + c.remaining_amount, 0));
+      const drafts = inv.filter((i) => i.status === 'draft' && i.credit_selection_mode === 'split');
+      const res = (k) => drafts.reduce((s, i) => s + (i[`credit_proposed_${k}`] || 0), 0);
+      return { data: { success: true, logic_version: DEPOSIT_LOGIC_VERSION, available_deposit: lr2(pool('deposit') - res('deposit')), available_general: lr2(pool('general') - res('general')) } };
     }
     throw new Error(`unexpected invoke ${fn}`);
   } };
@@ -1004,6 +1033,38 @@ async function runSelfTest() {
     const m = seedProject({ designation: 'NON_BILLABLE' });
     const r = await call(m, { lines: [lab(1)] });
     return { pass: r.code === 'PROJECT_NON_BILLABLE' && linesOf(m).length === 1 && unlocked(m) };
+  });
+  // ── Explicit deposit / general credit selection on new drafts ──
+  const credSeed = () => {
+    const m = seedProject();
+    m.tables.ProjectInvoice.push({ id: 'DEP', project_id: 'P', invoice_type: 'deposit', status: 'paid', subtotal: 400 });
+    m.tables.ProjectCreditLedger = [
+      { id: 'cg', project_id: 'P', source_invoice_id: 'removal', credit_amount: 80, remaining_amount: 80 },
+      { id: 'cd', project_id: 'P', source_invoice_id: 'DEP', credit_amount: 400, remaining_amount: 400 },
+    ];
+    return m;
+  };
+  const create = async (m, body) => { const r = await handleDraft(m.base44, user, { project_id: 'P', invoice_type: 'final', lines: [part('c1', 1, 'current')], ...body }); return { status: r.status, ...(await r.json()) }; };
+  await t('new draft records deposit and general credit separately; ledger untouched', async () => {
+    const m = credSeed(); const r = await create(m, { credit_deposit: 200, credit_general: 50 });
+    const d = m.tables.ProjectInvoice.find((i) => i.id === r.invoice_id);
+    return { pass: r.success && d.credit_selection_mode === 'split' && d.credit_proposed === 250 && d.credit_proposed_deposit === 200 && d.credit_proposed_general === 50 && d.balance_due === 50 && m.tables.ProjectCreditLedger.every((c) => c.remaining_amount === c.credit_amount) };
+  });
+  await t('general credit beyond general balance refused even when deposit credit could cover it', async () => {
+    const m = credSeed(); const r = await create(m, { credit_general: 81 });
+    return { pass: r.status === 400 && r.code === 'EXCEEDS_GENERAL_CREDIT' && !m.tables.ProjectInvoice.some((i) => i.invoice_type === 'final' && i.status === 'draft') };
+  });
+  await t('deposit credit already reserved by another draft is not offered twice', async () => {
+    const m = credSeed(); m.tables.ProjectInvoice.push({ id: 'DR2', project_id: 'P', invoice_type: 'progress', status: 'draft', credit_selection_mode: 'split', credit_proposed: 300, credit_proposed_deposit: 300, credit_proposed_general: 0, subtotal: 300 });
+    const r = await create(m, { credit_deposit: 101 }); const ok = await create(m, { credit_deposit: 100 });
+    return { pass: r.status === 400 && r.code === 'EXCEEDS_DEPOSIT_CREDIT' && ok.success };
+  });
+  await t('old single credit amount refused; no credit on deposit invoices; zero credit is the default', async () => {
+    const m = credSeed();
+    const a = await create(m, { credit_to_apply: 100 });
+    const b = await handleDraft(m.base44, user, { project_id: 'P', invoice_type: 'deposit', lines: [{ type: 'manual', description: 'Deposit', qty: 1, unit_price: 500 }], credit_deposit: 10 }).then(async (x) => ({ status: x.status, ...(await x.json()) }));
+    const c = await create(m, {}); const d = m.tables.ProjectInvoice.find((i) => i.id === c.invoice_id);
+    return { pass: a.status === 400 && a.code === 'CREDIT_KIND_REQUIRED' && b.status === 400 && b.code === 'CREDIT_ON_DEPOSIT' && c.success && d.credit_proposed === 0 && d.balance_due === 300 };
   });
   return { function: 'createProjectInvoiceDraft', mock_only: true, passed: results.filter((r) => r.pass).length, total: results.length, results };
 }
