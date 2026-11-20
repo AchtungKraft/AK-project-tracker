@@ -16,11 +16,8 @@ export default function ApprovedScopeBudgetSection({ projectId }) {
   });
   if (error?.response?.status === 403) return null;
   return (
-    <section className="rounded-lg border border-sky-900/50 bg-sky-950/10 p-4 space-y-3" aria-label="Approved Scope Budget">
-      <div>
-        <h3 className="text-sm font-semibold text-white">Approved Scope Budget <span className="font-normal text-sky-300">(planning, not invoice eligible)</span></h3>
-        <p className="text-xs text-gray-400 mt-0.5">Read-only. Not included in current billable, projected value, profitability, invoice availability or purchasing.</p>
-      </div>
+    <div className="space-y-3" aria-label="Approved Scope Budget">
+      <p className="text-xs text-gray-400">Read-only. Not included in current billable, projected value, profitability, invoice availability or purchasing.</p>
       {isLoading ? <div className="py-6 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-sky-400" /></div>
         : error || !data?.success ? <p className="text-xs text-red-400">Could not load approved scope budget: {error?.response?.data?.error || error?.message || data?.error}</p>
         : !data.totals.items && !data.excluded.length ? <p className="text-xs text-gray-500">No approved scope items for this project.</p>
@@ -43,8 +40,8 @@ export default function ApprovedScopeBudgetSection({ projectId }) {
         </>}
       <div className="flex items-start gap-2 text-xs text-gray-300 bg-gray-900/60 rounded-md px-3 py-2">
         <Info className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
-        <span><strong>Funding and progress billing: not enabled yet.</strong> This budget can't be invoiced or applied as credit.</span>
+        <span>This approved scope estimate can't be invoiced or applied as credit. Billing authorization comes from the confirmed client budget above.</span>
       </div>
-    </section>
+    </div>
   );
 }

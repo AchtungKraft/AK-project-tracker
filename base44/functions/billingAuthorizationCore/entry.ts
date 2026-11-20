@@ -32,6 +32,39 @@ const isOverdue = (i, today) => OPEN.includes(i.status) && (i.status === 'overdu
 // A cancelled record that was never issued and carries a regression-test line is audit history only.
 const isTestRecord = (i) => CLOSED.includes(i.status) && !i.issue_date && !i.qb_invoice_number && /regression test/i.test(`${i.cancellation_reason || ''} ${i.notes || ''}`);
 
+// Funding view (deposit / progress / final split and credit sources). Same issued set and amounts as above.
+const RESIDUE = 0.005; // ledger rows below half a cent are floating-point residue, not real credit
+const gross = (i) => i.subtotal ?? i.total;
+function fundingBreakdown(invoices, credits) {
+  const by_type = {};
+  for (const t of ['deposit', 'progress', 'final']) {
+    const xs = invoices.filter((v) => v.invoice_type === t);
+    const live = xs.filter((v) => FINAL.includes(v.status)), drafts = xs.filter((v) => v.status === 'draft');
+    by_type[t] = { invoiced: sum(live, gross), received: sum(live, (v) => v.paid_amount), live_count: live.length, paid_count: live.filter((v) => v.status === 'paid').length, draft_count: drafts.length, draft_total: sum(drafts, gross) };
+  }
+  const typeOf = new Map(invoices.map((v) => [v.id, v.invoice_type]));
+  const src = (c) => (c.reversed_from_invoice_id ? 'reversal' : typeOf.get(c.source_invoice_id) === 'deposit' ? 'deposit' : String(c.payment_idempotency_key || '').startsWith('pay_credit:') ? 'overpayment' : 'other');
+  const by_source = {};
+  let issued = 0, remaining = 0, residue = 0;
+  for (const c of credits) {
+    const amt = Number(c.credit_amount) || 0;
+    let rem = Number(c.remaining_amount) || 0;
+    if (rem > 0 && rem < RESIDUE) { residue++; rem = 0; }
+    const k = src(c);
+    by_source[k] = by_source[k] || { issued: 0, remaining: 0, rows: 0 };
+    by_source[k].issued = r2(by_source[k].issued + amt); by_source[k].remaining = r2(by_source[k].remaining + rem); by_source[k].rows++;
+    issued += amt; remaining += rem;
+  }
+  const live = invoices.filter((v) => FINAL.includes(v.status)), drafts = invoices.filter((v) => v.status === 'draft');
+  return {
+    invoiced_total: sum(live, gross), received_total: sum(live, (v) => v.paid_amount), live_invoices: live.length, draft_invoices: drafts.length, draft_total: sum(drafts, gross),
+    by_type,
+    credits: { issued: r2(issued), remaining: r2(remaining), used: r2(issued - remaining), rows: credits.length, rounding_residue_rows: residue, by_source },
+    credit_applied_on_invoices: sum(live, (v) => v.credit_applied),
+    credit_proposed_on_drafts: sum(drafts, (v) => v.credit_proposed),
+  };
+}
+
 function computeAuthorization({ plan, versions = [], invoices = [], credits = [], today = new Date().toISOString().slice(0, 10) }) {
   const authorized = plan?.agreed_budget_confirmed && plan.agreed_client_budget_cents != null ? r2(plan.agreed_client_budget_cents / 100) : null;
   // Confirmed amounts over time, from the funding plan's saved versions (originals are never overwritten).
@@ -67,7 +100,8 @@ function computeAuthorization({ plan, versions = [], invoices = [], credits = []
       credit_applied: sum(depCredits, (c) => (c.credit_amount ?? 0) - (c.remaining_amount ?? 0)),
       credit_remaining: sum(depCredits, (c) => c.remaining_amount),
     },
-    credit_balance: sum(credits, (c) => c.remaining_amount),
+    credit_balance: sum(credits, (c) => ((Number(c.remaining_amount) || 0) < RESIDUE ? 0 : c.remaining_amount)),
+    funding: fundingBreakdown(invoices, credits),
     // balance_due is already net of send-time credit and payments (recordInvoicePayment)
     receivables_outstanding: sum(open, balanceOf),
     issued_count: final.length, paid_total: sum(final, (i) => i.paid_amount),
@@ -122,6 +156,22 @@ function runVectors() {
   ] });
   ck('overdue invoices remain issued and outstanding', [od.invoiced_gross, od.receivables_outstanding, od.overdue_count, od.overdue_total, od.paid_total], [1700, 1550, 2, 1250, 150]);
   ck('cancelled records stay in history only; test record identified', [od.consumed, od.drafts_net, od.cancelled_history.map((h) => h.is_test)], [1700, 0, [true, false]]);
+  // Funding breakdown: partial payment, paid deposit, applied and unapplied credit, overdue, draft and void excluded, residue ignored.
+  const f = computeAuthorization({ plan, today: '2026-11-20', invoices: [
+    { id: 'iv1', invoice_type: 'deposit', status: 'paid', subtotal: 500, total: 500, paid_amount: 500, balance_due: 0 },
+    { id: 'iv2', invoice_type: 'progress', status: 'partial', subtotal: 200, total: 200, paid_amount: 20, credit_applied: 150, balance_due: 30 },
+    { id: 'iv5', invoice_type: 'final', status: 'overdue', subtotal: 100, total: 100, paid_amount: 0, balance_due: 100 },
+    { id: 'iv3', invoice_type: 'progress', status: 'draft', subtotal: 300, total: 300, credit_proposed: 100 },
+    { id: 'iv4', invoice_type: 'progress', status: 'void', subtotal: 999, total: 999 },
+  ], credits: [
+    { source_invoice_id: 'iv1', credit_amount: 500, remaining_amount: 350 },
+    { source_invoice_id: 'iv2', credit_amount: 40, remaining_amount: 0.0000000000018, payment_idempotency_key: 'pay_credit:iv2' },
+    { source_invoice_id: 'iv4', reversed_from_invoice_id: 'iv4', credit_amount: 20, remaining_amount: 20 },
+  ] }).funding;
+  ck('funding totals match the issued set (drafts, void excluded; overdue included)', [f.invoiced_total, f.received_total, f.draft_total, f.live_invoices], [800, 520, 300, 3]);
+  ck('deposit / progress / final split', [f.by_type.deposit.received, f.by_type.progress.invoiced, f.by_type.progress.received, f.by_type.progress.draft_total, f.by_type.final.invoiced], [500, 200, 20, 300, 100]);
+  ck('credit remaining ignores rounding residue; sources classified', [f.credits.remaining, f.credits.rounding_residue_rows, f.credits.issued, f.credits.by_source.deposit?.remaining, f.credits.by_source.overpayment?.rows, f.credits.by_source.reversal?.remaining], [370, 1, 560, 350, 1, 20]);
+  ck('applied (sent) vs proposed (draft) credit kept separate', [f.credit_applied_on_invoices, f.credit_proposed_on_drafts], [150, 100]);
   return { pass: checks.every((x) => x.pass), checks };
 }
 

@@ -38,7 +38,7 @@ export default function LaborTaskClassifier({ projectId, lb, q, setQ, filter, se
         </div>
       </div>
       <LaborClassifyBar projectId={projectId} services={lb.services} selectedIds={[...selected]} onDone={() => { keep(selected); setSelected(new Set()); }} />
-      <div className="max-h-[65vh] overflow-y-auto rounded border border-gray-800">
+      <div className="md:max-h-[65vh] md:overflow-y-auto rounded border border-gray-800">
         <div className="flex items-center gap-2 px-2 py-1.5 text-[11px] uppercase text-gray-500 bg-black/40 sticky top-0">
           <input type="checkbox" checked={allSel} onChange={() => setSelected(allSel ? new Set() : new Set(rows.map((r) => r.id)))} />
           <span className="flex-1">Task ({rows.length})</span><span className="w-40 text-right hidden md:block">Logged / remaining</span><span className="w-28 text-right">Labor value</span>

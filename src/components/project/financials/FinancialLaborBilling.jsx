@@ -18,9 +18,9 @@ export default function FinancialLaborBilling({ projectId, lb, labor }) {
   const h = lb.hours;
   const needs = lb.unclassified_tasks + lb.invalid_service_links + lb.unpriced_tasks;
   return (
-    <div className="rounded-lg border border-red-900/30 bg-black/40 p-3 text-sm text-gray-300 space-y-3">
+    <div className="text-sm text-gray-300 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-medium text-white">Labor hours & billing <span className="text-xs text-gray-500">(earned from logged hours)</span></div>
+        <div className="text-xs text-gray-500">Earned from logged hours</div>
         <Button size="sm" variant="outline" onClick={() => setOpen(true)} className="h-8 border-gray-700 text-gray-200">
           <ListChecks className="w-4 h-4 mr-1" />Manage task classification{needs > 0 && <span className="ml-1 text-amber-400">({needs})</span>}
         </Button>

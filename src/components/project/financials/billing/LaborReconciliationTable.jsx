@@ -7,8 +7,7 @@ const range = (o) => (!o ? "—" : o.min != null && o.max != null && o.min !== o
 // are never changed, and hours above the estimate stay earned and invoiceable.
 export default function LaborReconciliationTable({ rows }) {
   return (
-    <section className="rounded-lg border border-gray-800 bg-black/40 p-3 space-y-2">
-      <h3 className="text-sm font-semibold text-white">Projected labor reconciliation</h3>
+    <div className="space-y-2">
       <p className="text-xs text-gray-500">Hours billed in advance are applied first against hours logged later. Overruns stay visible and billable as earned labor.</p>
       {!rows.length ? <p className="text-xs text-gray-500">No tasks with advance billing or hours over estimate.</p> : (
         <div className="overflow-x-auto">
@@ -34,6 +33,6 @@ export default function LaborReconciliationTable({ rows }) {
           </table>
         </div>
       )}
-    </section>
+    </div>
   );
 }

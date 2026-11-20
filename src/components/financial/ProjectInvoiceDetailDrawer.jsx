@@ -40,9 +40,11 @@ import {
   X,
   ChevronDown,
   Trash2,
+  Plus,
 } from "lucide-react";
 import DeleteDraftInvoiceDialog from "@/components/financial/DeleteDraftInvoiceDialog";
 import EditDraftLinesDialog from "@/components/financial/EditDraftLinesDialog";
+import AddDraftLinesDialog from "@/components/financial/AddDraftLinesDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -73,6 +75,7 @@ export default function ProjectInvoiceDetailDrawer({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteDraft, setShowDeleteDraft] = useState(false);
   const [showEditDraft, setShowEditDraft] = useState(false);
+  const [showAddLines, setShowAddLines] = useState(false);
   const { data: currentUser } = useQuery({ queryKey: ["currentUser"], queryFn: () => base44.auth.me(), staleTime: 300000 });
 
   // DETERMINISTIC: Normalize invoice ID
@@ -622,6 +625,12 @@ export default function ProjectInvoiceDetailDrawer({
                   </DropdownMenuContent>
                 </DropdownMenu>
                 {invoice.status === "draft" && currentUser?.role === "admin" && (
+                  <Button variant="outline" onClick={() => setShowAddLines(true)} className="gap-2">
+                    <Plus className="w-4 h-4" />
+                    Add Lines
+                  </Button>
+                )}
+                {invoice.status === "draft" && currentUser?.role === "admin" && (
                   <Button variant="outline" onClick={() => setShowEditDraft(true)} className="gap-2">
                     <Pencil className="w-4 h-4" />
                     Edit Draft
@@ -686,6 +695,13 @@ export default function ProjectInvoiceDetailDrawer({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AddDraftLinesDialog
+        invoice={invoice}
+        open={showAddLines}
+        onOpenChange={setShowAddLines}
+        onSaved={() => { queryClient.invalidateQueries(); onUpdated?.(); }}
+      />
 
       <EditDraftLinesDialog
         invoice={invoice}

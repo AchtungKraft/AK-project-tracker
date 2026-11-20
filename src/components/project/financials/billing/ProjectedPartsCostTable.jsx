@@ -6,8 +6,7 @@ const m = (v) => (v == null ? "Pending" : formatCurrencyUSD(v));
 // Parts invoiced before they were received: estimated cost on the invoice line vs actual purchase cost, and final margin.
 export default function ProjectedPartsCostTable({ rows }) {
   return (
-    <section className="rounded-lg border border-gray-800 bg-black/40 p-3 space-y-2">
-      <h3 className="text-sm font-semibold text-white">Projected parts: estimated vs actual cost</h3>
+    <div className="space-y-2">
       {!rows.length ? <p className="text-xs text-gray-500">No issued invoices include projected parts.</p> : (
         <div className="overflow-x-auto">
           <table className="w-full text-xs min-w-[640px]">
@@ -30,6 +29,6 @@ export default function ProjectedPartsCostTable({ rows }) {
           </table>
         </div>
       )}
-    </section>
+    </div>
   );
 }

@@ -9,12 +9,12 @@ import FinancialLaborRows from "./FinancialLaborRows";
 function Section({ title, count, note, children }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="rounded-lg border border-red-900/30 bg-black/40">
-      <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-2 p-3 text-sm text-white">
+    <div className="border-t border-gray-800 first:border-t-0">
+      <button onClick={() => setOpen(!open)} aria-expanded={open} className="w-full flex items-center gap-2 py-2 text-sm text-white">
         {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         {title} <span className="text-gray-500">({count})</span>
       </button>
-      {open && <div className="px-3 pb-3 space-y-2">{note}<div className="overflow-x-auto">{children}</div></div>}
+      {open && <div className="pb-3 space-y-2">{note}<div className="overflow-x-auto">{children}</div></div>}
     </div>
   );
 }
