@@ -10,7 +10,7 @@ const KIND = {
 };
 
 // Complete, append-only trail: receipts, applications, refunds and their corrective entries, with QuickBooks status.
-export default function DepositHistory({ history, onReverse, onQb }) {
+export default function DepositHistory({ history, onReverse, onQb, onCorrect }) {
   if (!history.length) return <p className="text-sm text-gray-500">No deposit activity yet.</p>;
   return (
     <div className="max-h-96 overflow-y-auto divide-y divide-gray-800 text-sm">
@@ -25,6 +25,7 @@ export default function DepositHistory({ history, onReverse, onQb }) {
           <div className={`tabular-nums ${h.amount < 0 ? "text-blue-300" : "text-emerald-300"}`}>{money(h.amount)}</div>
           <div className="flex shrink-0 flex-col items-end gap-1">
             {h.reversible && <Button size="sm" variant="ghost" className="h-7 text-gray-400" onClick={() => onReverse(h)}>Reverse</Button>}
+            {h.qb_status === "reconciled" && h.qb_ref && <Button size="sm" variant="ghost" className="h-7 text-gray-400" onClick={() => onCorrect({ status: "reconciled", ref: h.qb_ref, confirm_value: h.qb_reference, title: `${KIND[h.kind] || h.kind} · ${money(h.amount)}${h.invoice ? ` · invoice ${h.invoice}` : ""}` })}>Correct</Button>}
             {h.qb_status === "needs_manual_entry" && <Button size="sm" variant="ghost" className="h-7 text-gray-400" onClick={() => onQb({ mode: "reconcile", ref: h.qb_ref, title: `${KIND[h.kind] || h.kind} · ${money(h.amount)}${h.invoice ? ` · invoice ${h.invoice}` : ""}` })}>Mark reconciled</Button>}
           </div>
         </div>

@@ -8,7 +8,7 @@ const STATUS = { sent: "bg-blue-900/50 text-blue-200", partial: "bg-amber-900/50
 const ORIGIN = { quickbooks_existing: "Recorded from QuickBooks", ak_projects: "Created in AK PROJECTS" };
 
 // One row per deposit invoice (the original receipt). Cancelled deposits are history only.
-export default function DepositList({ deposits, onRecordPayment, onRefund, onQb }) {
+export default function DepositList({ deposits, onRecordPayment, onRefund, onQb, onCorrect }) {
   if (!deposits.length) return <p className="text-sm text-gray-500">No deposits recorded yet.</p>;
   return (
     <div className="overflow-x-auto">
@@ -36,6 +36,8 @@ export default function DepositList({ deposits, onRecordPayment, onRefund, onQb 
                 {["sent", "partial", "overdue"].includes(d.status) && <Button size="sm" variant="outline" className="h-7" onClick={() => onRecordPayment(d)}>Record payment</Button>}
                 {d.remaining > 0 && <Button size="sm" variant="ghost" className="h-7 text-red-300" onClick={() => onRefund(d)}>Refund</Button>}
                 {d.export_eligible && <Button size="sm" variant="ghost" className="h-7 text-gray-400" onClick={() => onQb({ mode: "link", invoice_id: d.invoice_id, title: `Deposit invoice ${d.qb_invoice_number || ""} · ${money(d.invoiced)}` })}>Already in QuickBooks</Button>}
+                {d.origin !== "quickbooks_existing" && ["exported", "linked"].includes(d.qb_export_status) && <Button size="sm" variant="ghost" className="h-7 text-gray-400" onClick={() => onCorrect({ status: d.qb_export_status, invoice_id: d.invoice_id, confirm_value: d.qb_invoice_number || d.invoice_id, title: `Deposit invoice ${d.qb_invoice_number || ""} · ${money(d.invoiced)}` })}>Correct {d.qb_export_status}</Button>}
+                {d.qb_status === "reconciled" && <Button size="sm" variant="ghost" className="h-7 text-gray-400" onClick={() => onCorrect({ status: "reconciled", ref: d.qb_ref, confirm_value: d.qb_reference, title: `Deposit invoice ${d.qb_invoice_number || ""} · ${money(d.invoiced)}` })}>Correct reconciliation</Button>}
                 {d.status !== "cancelled" && d.qb_status !== "reconciled" && <Button size="sm" variant="ghost" className="h-7 text-gray-400" onClick={() => onQb({ mode: "reconcile", ref: d.qb_ref, title: `Deposit invoice ${d.qb_invoice_number || ""} · ${money(d.invoiced)}` })}>Mark reconciled</Button>}
               </div>
             </td>
