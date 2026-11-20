@@ -59,6 +59,7 @@ export default function ScopeItemEditor({
       hours_min: le.hours_min ?? "",
       hours_max: le.hours_max ?? "",
       rate_snapshot: le.rate_snapshot || 0,
+      description: le.description || '',
     }))
   );
 
