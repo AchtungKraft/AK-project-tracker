@@ -7,7 +7,7 @@
  * GUARDRAILS:
  * - Must call getProjectInvoicesView
  * - Must export strictly from response.data.invoices
- * - Must NOT query entities directly, recompute totals, or use supply data
+ * - Must NOT recompute totals or use supply data (invoice records are read only for deposit export eligibility)
  * - Must validate line_total === qty * unit_retail_snapshot (±0.01 tolerance)
  * 
  * PRODUCTION HARDENING:
@@ -18,7 +18,26 @@
  * - Empty invoice guard
  */
 
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+
+// Deposit export eligibility (prevents creating a deposit invoice in QuickBooks twice).
+function exportBlock(r) {
+  if (r?.invoice_type !== 'deposit') return null;
+  if (r.recorded_from_quickbooks) return 'QUICKBOOKS_ORIGIN';
+  if (r.qb_export_status === 'exported') return 'ALREADY_EXPORTED';
+  if (r.qb_export_status === 'linked') return 'LINKED_IN_QUICKBOOKS';
+  return null;
+}
+function eligibilityVectors() {
+  const v = [
+    ['progress invoice exports (even if exported before)', { invoice_type: 'progress', qb_export_status: 'exported' }, null],
+    ['AK deposit not yet in QuickBooks exports', { invoice_type: 'deposit' }, null],
+    ['deposit recorded from QuickBooks excluded', { invoice_type: 'deposit', recorded_from_quickbooks: true }, 'QUICKBOOKS_ORIGIN'],
+    ['AK deposit already exported excluded', { invoice_type: 'deposit', qb_export_status: 'exported' }, 'ALREADY_EXPORTED'],
+    ['AK deposit linked to QuickBooks excluded', { invoice_type: 'deposit', qb_export_status: 'linked' }, 'LINKED_IN_QUICKBOOKS'],
+  ].map(([name, r, want]) => ({ name, pass: exportBlock(r) === want }));
+  return { function: 'exportProjectInvoicesToQuickBooks', mock_only: true, passed: v.filter((x) => x.pass).length, total: v.length, results: v };
+}
 
 Deno.serve(async (req) => {
   console.log("RUNNING EXPORT FUNCTION: QB_EXPORT_COST_V2");
@@ -44,7 +63,8 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const reqPayload = await req.json();
+    const reqPayload = await req.json().catch(() => ({}));
+    if (reqPayload.self_test) return Response.json(eligibilityVectors());
     const { project_id, invoice_ids, mode = 'all' } = reqPayload;
 
     if (!project_id) {
@@ -112,6 +132,27 @@ Deno.serve(async (req) => {
 
     // mode === 'all' → no filtering
     // No status filtering - all drafts, sent, paid, etc. included
+
+    // ============================================
+    // DEPOSIT EXPORT ELIGIBILITY (prevents creating a deposit invoice in QuickBooks twice)
+    // Excluded: deposits recorded from an existing QuickBooks invoice, and AK-created deposits already exported
+    // or linked to QuickBooks. Read from the invoice records themselves (metadata only, totals untouched).
+    // ============================================
+    const rawInvoices = await base44.asServiceRole.entities.ProjectInvoice.filter({ project_id });
+    const rawById = new Map(rawInvoices.map((r) => [r.id, r]));
+    const BLOCK_MSG = {
+      QUICKBOOKS_ORIGIN: 'recorded from an invoice that already exists in QuickBooks',
+      ALREADY_EXPORTED: 'already exported to QuickBooks',
+      LINKED_IN_QUICKBOOKS: 'already linked to an invoice in QuickBooks',
+    };
+    const excluded = exportInvoices.filter((i) => exportBlock(rawById.get(i.id))).map((i) => {
+      const r = rawById.get(i.id); const code = exportBlock(r);
+      return { invoice_id: i.id, qb_invoice_number: r.qb_invoice_number || null, code, reason: `Deposit invoice ${r.qb_invoice_number || i.id} is ${BLOCK_MSG[code]}.` };
+    });
+    exportInvoices = exportInvoices.filter((i) => !exportBlock(rawById.get(i.id)));
+    if (exportInvoices.length === 0 && excluded.length) {
+      return Response.json({ success: false, code: 'NOT_EXPORT_ELIGIBLE', excluded, error: `${excluded.map((e) => e.reason).join(' ')} It was not exported again, so it can't be duplicated in QuickBooks.` });
+    }
 
     // ============================================
     // HARD GUARD: No invoices to export
@@ -246,6 +287,15 @@ Deno.serve(async (req) => {
     // ============================================
     const lineCount = rows.length - 4; // Subtract header rows
 
+    // Issued AK-created deposit invoices in this file are now in QuickBooks' hands: mark them so they are never exported twice.
+    const marked = [];
+    for (const i of exportInvoices) {
+      const r = rawById.get(i.id);
+      if (r?.invoice_type !== 'deposit' || ['draft', 'cancelled', 'void'].includes(r.status)) continue;
+      await base44.asServiceRole.entities.ProjectInvoice.update(r.id, { qb_export_status: 'exported', qb_exported_at: exportTimestamp, qb_exported_by: user.email });
+      marked.push(r.id);
+    }
+
     return Response.json({
       success: true,
       export_version: "QB_EXPORT_COST_V2",
@@ -260,6 +310,8 @@ Deno.serve(async (req) => {
       export_timestamp: exportTimestamp,
       total_retail_sum: Number(totalRetailSum.toFixed(2)),
       total_cost_sum: Number(totalCostSum.toFixed(2)),
+      excluded_invoices: excluded,
+      deposits_marked_exported: marked,
     });
 
   } catch (error) {

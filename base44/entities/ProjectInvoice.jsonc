@@ -97,6 +97,51 @@
       "default": false,
       "description": "True when this deposit invoice was registered from an invoice that already exists in QuickBooks (Record Existing Down Payment). Must not be re-created in QuickBooks."
     },
+    "qb_export_status": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "exported",
+        "linked",
+        null
+      ],
+      "description": "AK-created invoice already in QuickBooks: exported = included in a QuickBooks export file; linked = admin confirmed it already exists in QuickBooks. Null = not yet in QuickBooks. Deposit invoices with a value here (or recorded_from_quickbooks) are excluded from new QuickBooks exports."
+    },
+    "qb_exported_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "qb_exported_by": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "qb_link_reference": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "QuickBooks reference the admin confirmed when linking"
+    },
+    "qb_linked_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "qb_linked_by": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "credit_idempotency_key": {
       "type": "string",
       "description": "Idempotency key for credit application (set at sent time)"

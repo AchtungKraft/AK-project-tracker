@@ -3,6 +3,7 @@ import { RefreshCw, FileText, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import BillingDesignationEditor from "./BillingDesignationEditor";
 import FinancialPositionStrip from "./FinancialPositionStrip";
+import DepositPositionLine from "./DepositPositionLine";
 
 // Always-visible financial header: Billable / Non-Billable control (admin, server-enforced), reports and summary.
 export default function FinancialHeader({ projectId, data, onExport, onRefresh, isFetching }) {
@@ -19,6 +20,7 @@ export default function FinancialHeader({ projectId, data, onExport, onRefresh, 
         </div>
       </div>
       <FinancialPositionStrip data={data} />
+      <DepositPositionLine deposits={data.deposits} />
       <p className="text-[11px] text-gray-500">Open figures use today's quantities and prices. Issued invoices are historical and never recalculated.</p>
     </div>
   );

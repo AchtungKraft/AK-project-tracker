@@ -9,16 +9,18 @@
         "apply",
         "apply_reversal",
         "refund",
-        "refund_reversal"
+        "refund_reversal",
+        "qb_reconcile"
       ],
       "enumColors": [
         "blue",
         "green",
         "yellow",
         "red",
-        "purple"
+        "purple",
+        "gray"
       ],
-      "description": "Append-only deposit journal entry. Corrections are new entries that reference reverses_transaction_id; entries are never edited or deleted."
+      "description": "Append-only deposit journal entry. Corrections are new entries that reference reverses_transaction_id; entries are never edited or deleted. Applications made when an invoice is sent use application_id send:{invoice}; credit returned when that invoice is cancelled uses cancel:{invoice}. qb_reconcile marks one item as entered in QuickBooks."
     },
     "project_id": {
       "type": "string"
@@ -64,6 +66,13 @@
         "null"
       ],
       "description": "Entry this corrective entry reverses"
+    },
+    "reconciles_ref": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "qb_reconcile only: the item marked as entered in QuickBooks (invoice:{id}, payment:{id}, payment_reversal:{id} or app:{application_id})"
     },
     "amount_cents": {
       "type": "integer",

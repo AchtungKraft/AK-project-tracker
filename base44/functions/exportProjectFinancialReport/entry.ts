@@ -59,6 +59,14 @@ const clientBreakdown = (o, s) => {
   return { rows, db: r2((s.billable ?? 0) - sum(rows, (r) => r.b)) };
 };
 
+// Deposit figures come straight from the canonical deposit position (via getProjectFinancialOverview).
+const depositRows = (t) => [
+  ['Deposit invoices issued', t.requested], ['Deposit payments received', t.received], ['Deposit credit applied', t.applied],
+  ['Deposit refunds', t.refunded], ['Available deposit balance', t.available_to_apply],
+  ...(t.reserved_by_drafts > 0 ? [['Reserved by draft invoices', t.reserved_by_drafts]] : []),
+  ['Outstanding project invoices', t.project_invoices_outstanding],
+];
+
 function buildModel(o, client) {
   const parts = o.lines.parts.filter((p) => !client || p.qty > 0);
   const services = o.lines.services;
@@ -368,6 +376,12 @@ function buildPdf(o, opts) {
     heading('Invoices', list.length <= 12 ? 30 + list.length * 17 : 60);
     if (!list.length) empty('No invoices recorded.');
     else table(['Invoice', 'Type', 'Status', 'Issue date', 'Total', 'Paid', 'Balance due'], list.map((i) => [i.number || i.id.slice(-6), i.type || '', i.status, i.issue_date || '', usd(i.total), usd(i.paid), i.balance_due == null ? '—' : usd(i.balance_due)]), { right: [4, 5, 6] });
+    const dt = o.deposits?.totals;
+    if (dt) {
+      heading('Project Deposits', 150);
+      table(['Client deposits (funding, not revenue)', 'Amount'], depositRows(dt).map(([k, v]) => [k, usd(v)]), { right: [1], widths: { 1: 110 } });
+      note('Deposits are client funding held as credit. Amounts applied to invoices are already inside those invoice totals and are not counted twice.');
+    }
   }
 
   // Final reconciliation
@@ -535,6 +549,10 @@ async function buildXlsx(o, opts) {
     ws.addRow({}); styleRow(ws.addRow({ n: 'Invoice position (Parts & Services only)' }), 'group');
     [['Finalized invoiced', s.finalized_invoiced], ['Paid', s.paid_amount], ['Outstanding', s.outstanding_balance], ['Allocated to drafts', s.allocated_to_drafts]].forEach(([n, v]) => ws.addRow({ n, tot: v }));
     if (!client) styleRow(ws.addRow({ n: 'Available to invoice', tot: s.available_to_invoice }), 'sub');
+    if (o.deposits?.totals) {
+      ws.addRow({}); styleRow(ws.addRow({ n: 'Project deposits (client funding, not revenue)' }), 'group');
+      depositRows(o.deposits.totals).forEach(([n, v]) => ws.addRow({ n, tot: v }));
+    }
   }
   const sb = !client && S.includes('scope_budget') ? o.scope_budget : null;
   if (sb) {

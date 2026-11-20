@@ -21,6 +21,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  */
 
 const STALE_MS = 120000;
+const DEPOSIT_LOGIC_VERSION = 'dep-v1';
+const norm = (s) => String(s || '').trim().toLowerCase();
 const METHODS = ['check', 'ach', 'wire', 'card', 'cash', 'other'];
 const OPEN = ['sent', 'partial', 'overdue'];
 const ISSUED = ['sent', 'partial', 'overdue', 'paid'];
@@ -189,6 +191,7 @@ async function reverse(db, a) {
   const [first] = await db.findTx({ application_id: a.application_id });
   if (!first) throw fail(404, 'NOT_FOUND', 'Deposit entry not found');
   if (!['apply', 'refund'].includes(first.type)) throw fail(400, 'NOT_REVERSIBLE', 'Only applications and refunds can be reversed.');
+  if (SYSTEM_APP.test(a.application_id)) throw fail(400, 'SEND_APPLICATION', 'Credit applied when an invoice was sent is returned to its original deposit by cancelling that invoice.');
   return withLock(db, first.project_id, `deprev_${a.application_id}`, async () => {
     const entries = (await db.findTx({ application_id: a.application_id })).filter((t) => t.type === first.type);
     const st = await loadState(db, first.project_id);
@@ -250,7 +253,9 @@ async function registerExisting(db, a) {
         ? `QuickBooks invoice ${a.qb_invoice_number} is already recorded on this project. Record the payment on that deposit invoice instead.`
         : `QuickBooks invoice ${a.qb_invoice_number} is already recorded on another project.`), { existing_invoice_id: dupInv.id });
     }
-    const dupPay = (await db.findPayments({ reference: a.payment.reference })).find((p) => !p.reversed_at);
+    // Payment references are unique per project (a QuickBooks invoice number is not a payment identifier).
+    const ref = norm(a.payment.reference);
+    const dupPay = ref && ref !== norm(a.qb_invoice_number) ? (await db.findPayments({ project_id: a.project_id })).find((p) => !p.reversed_at && norm(p.reference) === ref) : null;
     if (dupPay) throw fail(409, 'DUPLICATE_PAYMENT', `Payment reference ${a.payment.reference} is already recorded (invoice ${dupPay.invoice_id}). Nothing was created.`);
     const amount = a.invoice_amount_cents / 100;
     const inv = await db.createInvoice({
@@ -272,19 +277,34 @@ async function registerExisting(db, a) {
   return { success: true, invoice_id: invoice.id, payment: pay };
 }
 
+// QuickBooks status shown to admins. Nothing here posts to QuickBooks: AK PROJECTS only records what an admin confirms.
+const QB = { IN: 'in_quickbooks', NEEDS: 'needs_manual_entry', DONE: 'reconciled' };
+const SYSTEM_APP = /^(send|cancel):/; // applied at send / returned when that invoice was cancelled
+
 async function summary(db, project_id) {
   const st = await loadState(db, project_id);
   const active = (t) => !st.reversed.has(t.id);
+  const recon = new Map(st.txs.filter((t) => t.type === 'qb_reconcile').map((t) => [t.reconciles_ref, t]));
+  const qb = (ref, inQb) => {
+    const r = recon.get(ref);
+    return r ? { qb_ref: ref, qb_status: QB.DONE, qb_reference: r.reference || null, qb_reconciled_by: r.actor_email, qb_reconciled_at: r.recorded_at }
+      : { qb_ref: ref, qb_status: inQb ? QB.IN : QB.NEEDS };
+  };
   const deposits = st.invoices.filter((i) => i.invoice_type === 'deposit' && i.status !== 'draft').map((inv) => {
     const pays = st.payments.filter((p) => p.invoice_id === inv.id);
     const credit = st.credits.find((c) => c.payment_idempotency_key === `pay_credit:${inv.id}`) || st.credits.find((c) => c.source_invoice_id === inv.id && !c.reversed_from_invoice_id);
     const refundedC = st.txs.filter((t) => t.type === 'refund' && active(t) && t.credit_ledger_id === credit?.id).reduce((s, t) => s + t.amount_cents, 0);
     const creditC = cents(credit?.credit_amount); const remC = Math.max(0, cents(credit?.remaining_amount));
+    const fromQb = !!inv.recorded_from_quickbooks;
     return {
-      invoice_id: inv.id, qb_invoice_number: inv.qb_invoice_number || null, status: inv.status, issue_date: inv.issue_date || null, recorded_from_quickbooks: !!inv.recorded_from_quickbooks,
+      invoice_id: inv.id, qb_invoice_number: inv.qb_invoice_number || null, status: inv.status, issue_date: inv.issue_date || null, recorded_from_quickbooks: fromQb,
+      origin: fromQb ? 'quickbooks_existing' : 'ak_projects', qb_export_status: inv.qb_export_status || null, qb_link_reference: inv.qb_link_reference || null,
+      export_eligible: !fromQb && !inv.qb_export_status && inv.status !== 'cancelled',
       invoiced: cents(inv.subtotal) / 100, received: pays.filter((p) => !p.reversed_at).reduce((s, p) => s + p.amount_cents, 0) / 100,
+      payment_count: pays.filter((p) => !p.reversed_at).length,
       outstanding: OPEN.includes(inv.status) ? cents(inv.balance_due) / 100 : 0, credit_ledger_id: credit?.id || null,
       credit: creditC / 100, refunded: refundedC / 100, remaining: remC / 100, applied: Math.max(0, creditC - remC - refundedC) / 100,
+      ...qb(`invoice:${inv.id}`, fromQb || !!inv.qb_export_status),
     };
   });
   const issued = deposits.filter((d) => ISSUED.includes(d.status));
@@ -293,47 +313,90 @@ async function summary(db, project_id) {
   const allAvail = availability(st, 'all');
   const invById = new Map(st.invoices.map((i) => [i.id, i]));
   const depCreditIds = new Set(deposits.map((d) => d.credit_ledger_id).filter(Boolean));
+  const sendJournaled = new Set(st.txs.filter((t) => String(t.application_id).startsWith('send:')).map((t) => t.application_id));
 
   const history = [];
   for (const p of st.payments.filter((x) => st.depIds.has(x.invoice_id))) {
-    history.push({ key: `pay:${p.id}`, at: p.recorded_at || p.payment_date, date: p.payment_date, kind: 'received', amount: p.amount_cents / 100, deposit: label(invById.get(p.invoice_id)), detail: [p.method, p.reference].filter(Boolean).join(' · '), actor: p.recorded_by_email });
-    if (p.reversed_at) history.push({ key: `payrev:${p.id}`, at: p.reversed_at, date: p.reversed_at.slice(0, 10), kind: 'received_reversed', amount: -p.amount_cents / 100, deposit: label(invById.get(p.invoice_id)), detail: p.reversal_reason, actor: p.reversed_by_email });
+    history.push({ key: `pay:${p.id}`, at: p.recorded_at || p.payment_date, date: p.payment_date, kind: 'received', amount: p.amount_cents / 100, deposit: label(invById.get(p.invoice_id)), detail: [p.method, p.reference].filter(Boolean).join(' · '), actor: p.recorded_by_email, ...qb(`payment:${p.id}`, String(p.idempotency_key || '').startsWith('regpay:')) });
+    if (p.reversed_at) history.push({ key: `payrev:${p.id}`, at: p.reversed_at, date: p.reversed_at.slice(0, 10), kind: 'received_reversed', amount: -p.amount_cents / 100, deposit: label(invById.get(p.invoice_id)), detail: p.reversal_reason, actor: p.reversed_by_email, ...qb(`payment_reversal:${p.id}`, false) });
   }
-  for (const inv of st.invoices.filter((i) => i.status !== 'draft' && i.credit_plan_state === 'applied')) {
+  // Legacy sends made before send-time applications were journaled: shown from the invoice's own deduction journal.
+  for (const inv of st.invoices.filter((i) => i.status !== 'draft' && i.credit_plan_state === 'applied' && !sendJournaled.has(`send:${i.id}`))) {
     for (const step of (inv.credit_application_plan || []).filter((s) => depCreditIds.has(s.credit_id))) {
       const row = st.credits.find((c) => c.id === step.credit_id);
-      history.push({ key: `send:${inv.id}:${step.credit_id}`, at: inv.issue_date, date: inv.issue_date, kind: 'applied_at_send', amount: -cents(step.amount) / 100, deposit: label(invById.get(row?.source_invoice_id)), invoice: label(inv), invoice_status: inv.status });
+      history.push({ key: `send:${inv.id}:${step.credit_id}`, at: inv.issue_date, date: inv.issue_date, kind: 'applied_at_send', amount: -cents(step.amount) / 100, deposit: label(invById.get(row?.source_invoice_id)), invoice: label(inv), invoice_status: inv.status, ...qb(`app:send:${inv.id}`, false) });
     }
   }
   const groups = new Map();
-  for (const t of st.txs) { if (!groups.has(t.application_id)) groups.set(t.application_id, []); groups.get(t.application_id).push(t); }
+  for (const t of st.txs.filter((x) => x.type !== 'qb_reconcile')) { if (!groups.has(t.application_id)) groups.set(t.application_id, []); groups.get(t.application_id).push(t); }
   for (const [appId, ts] of groups) {
     const t = ts[0]; const amt = ts.reduce((s, x) => s + x.amount_cents, 0) / 100;
     const sign = { apply: -1, refund: -1, apply_reversal: 1, refund_reversal: 1, register_existing: 0 }[t.type];
+    const kind = appId.startsWith('send:') ? 'applied_at_send' : appId.startsWith('cancel:') ? 'restored_on_cancel' : t.type;
+    const target = t.target_invoice_id ? invById.get(t.target_invoice_id) : null;
     history.push({
-      key: `tx:${appId}:${t.type}`, application_id: appId, at: t.recorded_at, date: t.transaction_date || t.recorded_at?.slice(0, 10), kind: t.type,
+      key: `tx:${appId}:${t.type}`, application_id: appId, at: t.recorded_at, date: t.transaction_date || t.recorded_at?.slice(0, 10), kind,
       amount: sign === 0 ? amt : sign * amt, deposit: [...new Set(ts.map((x) => label(invById.get(x.source_invoice_id))))].join(', '),
-      invoice: t.target_invoice_id ? label(invById.get(t.target_invoice_id)) : null, detail: [t.method, t.reference, t.note].filter(Boolean).join(' · '), actor: t.actor_email,
-      reversible: ['apply', 'refund'].includes(t.type) && ts.every(active),
+      invoice: target ? label(target) : null, invoice_status: target?.status || null, detail: [t.method, t.reference, t.note].filter(Boolean).join(' · '), actor: t.actor_email,
+      reversible: ['apply', 'refund'].includes(t.type) && !SYSTEM_APP.test(appId) && ts.every(active),
+      ...qb(`app:${appId}`, t.type === 'register_existing'),
     });
   }
   history.sort((x, y) => String(y.at || '').localeCompare(String(x.at || '')));
+  const projectOpen = st.invoices.filter((i) => i.invoice_type !== 'deposit' && OPEN.includes(i.status) && outstandingC(i) > 0);
 
   return {
     success: true,
+    logic_version: DEPOSIT_LOGIC_VERSION,
     totals: {
       requested: sum(issued, 'invoiced'), received: sum(deposits, 'received'), credit_created: sum(deposits, 'credit'),
       applied: sum(deposits, 'applied'), refunded: sum(deposits, 'refunded'), remaining: sum(deposits, 'remaining'),
       deposit_invoices_outstanding: sum(issued, 'outstanding'), reserved_by_drafts: proposedC / 100,
       available_to_apply: availC / 100, available_all_credit: allAvail.availC / 100,
+      project_invoices_outstanding: projectOpen.reduce((s, i) => s + outstandingC(i), 0) / 100,
+      needs_qb_entry: [...deposits.filter((d) => d.status !== 'cancelled'), ...history].filter((x) => x.qb_status === QB.NEEDS).length,
     },
     deposits,
-    open_invoices: st.invoices.filter((i) => i.invoice_type !== 'deposit' && OPEN.includes(i.status) && outstandingC(i) > 0).map((i) => ({
+    open_invoices: projectOpen.map((i) => ({
       id: i.id, label: label(i), invoice_type: i.invoice_type, status: i.status, subtotal: cents(i.subtotal) / 100,
       credit_applied: cents(i.credit_applied) / 100, paid_amount: cents(i.paid_amount) / 100, outstanding: outstandingC(i) / 100,
     })),
     history,
   };
+}
+
+// Admin confirms an item was entered in QuickBooks. Append-only; one confirmation per item.
+async function qbReconcile(db, a) {
+  return withLock(db, a.project_id, `qbrec_${a.project_id}`, async () => {
+    const s = await summary(db, a.project_id);
+    const item = s.deposits.find((d) => d.qb_ref === a.ref) || s.history.find((h) => h.qb_ref === a.ref);
+    if (!item) throw fail(404, 'NOT_FOUND', 'That deposit item was not found on this project.');
+    if (item.qb_status === QB.DONE) return { success: true, idempotent: true, qb_status: QB.DONE };
+    await db.createTx([{
+      type: 'qb_reconcile', project_id: a.project_id, application_id: `qbrec:${a.ref}`, idempotency_key: `qbrec:${a.ref}`, reconciles_ref: a.ref,
+      amount_cents: Math.abs(cents(item.amount ?? item.invoiced)), reference: a.qb_reference, note: a.note || '', actor_email: a.user_email,
+      recorded_at: new Date().toISOString(), transaction_date: today(),
+    }]);
+    return { success: true, qb_status: QB.DONE };
+  });
+}
+
+// AK-created deposit invoice that already exists in QuickBooks (entered by hand): excluded from future exports.
+async function qbLink(db, a) {
+  const inv = await db.getInvoice(a.invoice_id);
+  if (!inv) throw fail(404, 'NOT_FOUND', 'Invoice not found');
+  if (inv.invoice_type !== 'deposit') throw fail(400, 'NOT_DEPOSIT', 'Only deposit invoices are linked here.');
+  if (inv.recorded_from_quickbooks) throw fail(400, 'FROM_QUICKBOOKS', 'This deposit was recorded from QuickBooks; it already exists there.');
+  if (['draft', 'cancelled', 'void'].includes(inv.status)) throw fail(409, 'NOT_ISSUED', `This deposit invoice is ${inv.status}.`);
+  return withLock(db, inv.project_id, `qblink_${inv.id}`, async () => {
+    const won = await db.invoiceCas({ id: inv.id, qb_export_status: null }, { qb_export_status: 'linked', qb_link_reference: a.qb_reference, qb_linked_at: new Date().toISOString(), qb_linked_by: a.user_email });
+    if (won !== 1) {
+      const fresh = await db.getInvoice(inv.id);
+      if (fresh?.qb_export_status) return { success: true, idempotent: true, qb_export_status: fresh.qb_export_status };
+      throw fail(409, 'INVOICE_CHANGED', 'Invoice changed. Reload and try again.');
+    }
+    return { success: true, qb_export_status: 'linked' };
+  });
 }
 
 function realDb(base44) {
@@ -514,6 +577,51 @@ async function runSelfTest() {
     const db = base(); const [s1, b1] = await reg(db, { qb_invoice_number: 'QB-D1', key: 'R2' }); const [s2, b2] = await reg(db, { key: 'R3', qb_invoice_number: 'QB-88', payment: { reference: 'CHK-1' } });
     return { pass: s1 === 409 && b1.code === 'DUPLICATE_INVOICE' && s2 === 409 && b2.code === 'DUPLICATE_PAYMENT' && db.T.invoices.size === 4 };
   });
+  await test('two partial payments on one deposit invoice: credit rises by each payment once', async () => {
+    const db = base();
+    await db.recordPayment({ invoice_id: 'd2', amount: 100, payment_date: '2026-11-03', reference: 'CHK-3', idempotency_key: 'p-a' });
+    await db.recordPayment({ invoice_id: 'd2', amount: 100, payment_date: '2026-11-04', reference: 'CHK-4', idempotency_key: 'p-b' });
+    await db.recordPayment({ invoice_id: 'd2', amount: 100, payment_date: '2026-11-04', reference: 'CHK-4', idempotency_key: 'p-b' });
+    const sm = await summary(db, 'p1'); const d2 = sm.deposits.find((d) => d.invoice_id === 'd2');
+    return { pass: d2.received === 400 && d2.credit === 400 && d2.remaining === 400 && d2.payment_count === 3 && d2.status === 'partial' && sm.totals.received === 700 && sm.totals.available_to_apply === 700, d2 };
+  });
+  await test('QuickBooks status: AK deposit needs entry, recorded-from-QuickBooks deposit and its payment exist there, reconcile is append-only', async () => {
+    const db = base(); const [, r] = await reg(db);
+    const s1 = await summary(db, 'p1');
+    const ak = s1.deposits.find((d) => d.invoice_id === 'd1'); const qbd = s1.deposits.find((d) => d.invoice_id === r.invoice_id);
+    const qbPay = s1.history.find((h) => h.kind === 'received' && h.deposit === 'QB-77');
+    const [s] = await run(qbReconcile(db, { project_id: 'p1', ref: 'invoice:d1', qb_reference: 'QB-D1', user_email: 't@x' }));
+    const [s2, b2] = await run(qbReconcile(db, { project_id: 'p1', ref: 'invoice:d1', qb_reference: 'QB-D1', user_email: 't@x' }));
+    const [s3] = await run(qbReconcile(db, { project_id: 'p1', ref: 'app:nope', qb_reference: 'X1', user_email: 't@x' }));
+    const s4 = await summary(db, 'p1');
+    return { pass: ak.qb_status === 'needs_manual_entry' && ak.export_eligible && qbd.qb_status === 'in_quickbooks' && !qbd.export_eligible && qbPay?.qb_status === 'in_quickbooks'
+      && s === 200 && s2 === 200 && b2.idempotent && s3 === 404 && s4.deposits.find((d) => d.invoice_id === 'd1').qb_status === 'reconciled'
+      && txs(db).filter((t) => t.type === 'qb_reconcile').length === 1 && s4.totals.remaining === s1.totals.remaining && s4.totals.received === s1.totals.received && unlocked(db) };
+  });
+  await test('link AK deposit to QuickBooks: excluded from export, idempotent; QuickBooks-origin deposit refused', async () => {
+    const db = base(); const [, r] = await reg(db);
+    const [s] = await run(qbLink(db, { invoice_id: 'd1', qb_reference: 'QB-D1', user_email: 't@x' }));
+    const [s2, b2] = await run(qbLink(db, { invoice_id: 'd1', qb_reference: 'QB-D1', user_email: 't@x' }));
+    const [s3] = await run(qbLink(db, { invoice_id: r.invoice_id, qb_reference: 'QB-77', user_email: 't@x' }));
+    const d1 = (await summary(db, 'p1')).deposits.find((d) => d.invoice_id === 'd1');
+    return { pass: s === 200 && s2 === 200 && b2.idempotent && s3 === 400 && d1.qb_export_status === 'linked' && !d1.export_eligible && d1.qb_status === 'in_quickbooks' };
+  });
+  await test('credit applied at send: shown once in history, keeps its deposit source, cannot be reversed here', async () => {
+    const db = base({ invoices: [{ id: 'i3', project_id: 'p1', invoice_type: 'progress', status: 'sent', subtotal: 400, credit_applied: 250, paid_amount: 0, balance_due: 150, qb_invoice_number: 'QB-3', credit_plan_state: 'applied', credit_application_plan: [{ credit_id: 'c1', amount: 250, before: 300, after: 50 }] }] });
+    db.T.credits.get('c1').remaining_amount = 50;
+    await db.createTx([{ type: 'apply', project_id: 'p1', application_id: 'send:i3', idempotency_key: 'send:i3:0', credit_ledger_id: 'c1', source_invoice_id: 'd1', target_invoice_id: 'i3', amount_cents: 25000, actor_email: 't@x', recorded_at: '2026-11-05T00:00:00Z' }]);
+    const sm = await summary(db, 'p1');
+    const sends = sm.history.filter((h) => h.kind === 'applied_at_send');
+    const [s, b] = await rv(db, 'send:i3');
+    return { pass: sends.length === 1 && sends[0].deposit === 'QB-D1' && sends[0].amount === -250 && !sends[0].reversible && sends[0].qb_status === 'needs_manual_entry' && s === 400 && b.code === 'SEND_APPLICATION'
+      && sm.deposits.find((d) => d.invoice_id === 'd1').applied === 250 && sm.totals.project_invoices_outstanding === 1300 };
+  });
+  await test('duplicate payment reference only blocks within the project; reference equal to the QuickBooks invoice number is not treated as unique', async () => {
+    const db = base(); db.T.payments.set('ppx', { id: 'ppx', project_id: 'p1', invoice_id: 'd1', amount_cents: 100, reference: 'QB-99' });
+    const [s] = await reg(db, { key: 'R9', qb_invoice_number: 'QB-99', payment: { reference: 'QB-99' } });
+    const [s2, b2] = await reg(db, { key: 'R10', qb_invoice_number: 'QB-100', payment: { reference: 'chk-1 ' } });
+    return { pass: s === 200 && s2 === 409 && b2.code === 'DUPLICATE_PAYMENT' };
+  });
   return { function: 'projectDepositAction', mock_only: true, passed: results.filter((r) => r.pass).length, total: results.length, results };
 }
 
@@ -564,6 +672,20 @@ Deno.serve(async (req) => {
             project_id: b.project_id, qb_invoice_number: qb, invoice_amount_cents: invC, invoice_date: b.invoice_date, notes: String(b.notes || '').slice(0, 1000),
             key: needKey(), user_email: user.email, payment: { amount_cents: payC, date: b.payment_date, method: b.payment_method || 'other', reference: ref.slice(0, 200), note: String(b.payment_note || '').slice(0, 500) },
           });
+        }
+        case 'qb_reconcile': {
+          const ref = String(b.ref || '');
+          const qbRef = String(b.qb_reference || '').trim();
+          if (!b.project_id) throw fail(400, 'NO_PROJECT', 'project_id required');
+          if (!/^(invoice|payment|payment_reversal|app):.+/.test(ref)) throw fail(400, 'BAD_REF', 'Unknown item');
+          if (qbRef.length < 2) throw fail(400, 'NO_REFERENCE', 'Enter the QuickBooks reference for this entry.');
+          return qbReconcile(db, { project_id: b.project_id, ref, qb_reference: qbRef.slice(0, 200), note: String(b.note || '').slice(0, 500), user_email: user.email });
+        }
+        case 'qb_link': {
+          const qbRef = String(b.qb_reference || '').trim();
+          if (!b.invoice_id) throw fail(400, 'NO_INVOICE', 'invoice_id required');
+          if (qbRef.length < 1) throw fail(400, 'NO_REFERENCE', 'Enter the QuickBooks invoice number.');
+          return qbLink(db, { invoice_id: b.invoice_id, qb_reference: qbRef.slice(0, 200), user_email: user.email });
         }
         default: throw fail(400, 'BAD_ACTION', 'Unknown action');
       }

@@ -30,7 +30,7 @@ export default function BillingAuthorizationPanel({ a, earned, projected, onGoTo
         <Stat label="Invoiced against authorization" value={formatCurrencyUSD(a.invoiced_net)} sub={`${formatCurrencyUSD(a.invoiced_gross)} issued − ${formatCurrencyUSD(a.credits_applied)} credits applied`} />
         <Stat label="On drafts" value={formatCurrencyUSD(a.drafts_net)} sub="Net of proposed credit" />
         <Stat label="Remaining authorization" value={money(a.remaining_authorization)} tone={a.remaining_authorization < 0 ? "text-red-400" : "text-emerald-400"} />
-        <Stat label="Deposits invoiced" value={formatCurrencyUSD(a.deposits.invoiced)} sub={`Credit applied ${formatCurrencyUSD(a.deposits.credit_applied)} · unused ${formatCurrencyUSD(a.deposits.credit_remaining)}`} />
+        <Stat label="Deposits invoiced" value={formatCurrencyUSD(a.deposits.invoiced)} sub="Received, applied and available: see Project Deposits" />
         <Stat label="All credits available" value={formatCurrencyUSD(a.credit_balance)} />
         <Stat label="Outstanding receivables" value={formatCurrencyUSD(a.receivables_outstanding)} />
         {earned && <Stat label="Earned work value" value={formatCurrencyUSD(earned.total)} sub={`Labor ${formatCurrencyUSD(earned.labor)} · received parts ${formatCurrencyUSD(earned.parts_received)} · services ${formatCurrencyUSD(earned.services)}`} />}

@@ -28,6 +28,7 @@ const usd = (c) => `$${(c / 100).toFixed(2)}`;
 const activeSumC = (ps) => ps.filter((p) => !p.reversed_at).reduce((s, p) => s + (p.amount_cents || 0), 0);
 const dueCents = (inv) => Math.max(0, cents(inv.subtotal) - cents(inv.credit_applied));
 const invLabel = (inv) => inv?.qb_invoice_number || inv?.id;
+const norm = (s) => String(s || '').trim().toLowerCase();
 
 async function acquireLock(db, projectId, owner) {
   const token = `${owner}_${crypto.randomUUID()}`;
@@ -159,6 +160,18 @@ async function recordPayment(db, args) {
     if (!payment) {
       if (fresh.status === 'paid') return [400, { error: 'Invoice is already fully paid.' }];
       if (!['sent', 'partial'].includes(fresh.status)) return [409, { code: 'INVOICE_CHANGED', error: `Invoice is now ${fresh.status}. Reload and try again.` }];
+      // A payment reference identifies one payment within the project. The QuickBooks invoice number is shared by
+      // every payment on that invoice, so it is never treated as a unique payment identifier.
+      const ref = norm(args.reference);
+      if (ref && ref !== norm(fresh.qb_invoice_number)) {
+        const dup = (await db.findPayments({ project_id: fresh.project_id })).find((p) => !p.reversed_at && norm(p.reference) === ref);
+        if (dup) return [409, { success: false, code: 'DUPLICATE_PAYMENT_REFERENCE', error: `Payment reference ${args.reference} is already recorded on this project${dup.invoice_id === invoice_id ? ' for this invoice' : ''}. Use the payment's own check or transaction number.` }];
+      }
+      const activeC = activeSumC(await db.listPayments(invoice_id));
+      const overC = activeC + args.amount_cents - dueCents(fresh);
+      if (overC > 0 && !args.allow_overpayment) {
+        return [409, { success: false, code: 'OVERPAYMENT_NOT_APPROVED', over_cents: overC, error: `This payment is ${usd(overC)} more than the ${usd(Math.max(0, dueCents(fresh) - activeC))} still due. Approve the overpayment to record the extra as client credit.` }];
+      }
       payment = await db.createPayment({
         invoice_id, project_id: fresh.project_id, amount_cents: args.amount_cents, payment_date: args.payment_date,
         method: args.method || 'other', reference: args.reference || '', note: args.note || '',
@@ -341,7 +354,8 @@ async function runSelfTest() {
     projects: [{ id: 'p1', billing_lock_token: extra.lockToken ?? null, billing_lock_at: extra.lockAt ?? null }],
   }, extra.faults);
   let k = 0;
-  const pay = (db, amount_cents, key = `k${++k}`) => recordPayment(db, { invoice_id: 'inv1', amount_cents, payment_date: '2026-11-13', idempotency_key: key, user_email: 't@x' }).catch((e) => [e.http || 500, { error: e.message }]);
+  // Existing scenarios approve overpayments explicitly; the approval rule itself is tested below.
+  const pay = (db, amount_cents, key = `k${++k}`, opt = {}) => recordPayment(db, { invoice_id: 'inv1', amount_cents, payment_date: '2026-11-13', idempotency_key: key, user_email: 't@x', allow_overpayment: true, ...opt }).catch((e) => [e.http || 500, { error: e.message }]);
   const rev = (db, payment_id, key = `r${++k}`) => reversePayment(db, { payment_id, idempotency_key: key, reason: 'entered in error', user_email: 'a@x' }).catch((e) => [e.http || 500, { error: e.message }]);
   const inv = (db) => db.T.invoices.get('inv1');
   const pc = (db) => db.T.commitments.get('pc1');
@@ -537,6 +551,40 @@ async function runSelfTest() {
     const [s] = await pay(db, 100); const [s2] = await rev(db, 'px');
     return { pass: s === 409 && s2 === 409 && db.T.payments.size === 1 && !db.T.payments.get('px').reversed_at && inv(db).status === 'sent' };
   });
+  await test('overpayment without approval refused (invoice and deposit); nothing recorded', async () => {
+    const a = seed(); const d = seed({ invoice_type: 'deposit', subtotal: 500 });
+    await pay(a, 90000, 'a1', { allow_overpayment: false }); const [s1, b1] = await pay(a, 20000, 'a2', { allow_overpayment: false });
+    const [s2, b2] = await pay(d, 50001, 'd1', { allow_overpayment: false });
+    return { pass: s1 === 409 && b1.code === 'OVERPAYMENT_NOT_APPROVED' && b1.over_cents === 10000 && a.T.payments.size === 1 && a.T.credits.size === 0 && s2 === 409 && d.T.payments.size === 0 && d.T.credits.size === 0 && unlocked(a) };
+  });
+  await test('several partial deposit payments referencing the same QuickBooks invoice number: all recorded, credit = total received', async () => {
+    const db = seed({ invoice_type: 'deposit', subtotal: 500, qb_invoice_number: 'QB-500' });
+    const r = [];
+    for (const [i, amt] of [10000, 15000, 25000].entries()) r.push(await pay(db, amt, `q${i}`, { reference: 'QB-500', allow_overpayment: false }));
+    const c = credits(db);
+    return { pass: r.every(([s]) => s === 200) && db.T.payments.size === 3 && inv(db).status === 'paid' && c.length === 1 && c[0].credit_amount === 500 && c[0].remaining_amount === 500 };
+  });
+  await test('duplicate unique payment reference refused within the project; retry with the same key is not a duplicate', async () => {
+    const db = seed({ invoice_type: 'deposit', subtotal: 500 });
+    await pay(db, 10000, 'r1', { reference: 'CHK-1001' });
+    const [s1, b1] = await pay(db, 10000, 'r2', { reference: ' chk-1001' });
+    const [s2] = await pay(db, 10000, 'r1', { reference: 'CHK-1001' });
+    return { pass: s1 === 409 && b1.code === 'DUPLICATE_PAYMENT_REFERENCE' && s2 === 200 && db.T.payments.size === 1 && credits(db)[0].credit_amount === 100 };
+  });
+  await test('reversed payment frees its reference; reversal reduces deposit credit once', async () => {
+    const db = seed({ invoice_type: 'deposit', subtotal: 500 });
+    const [, a] = await pay(db, 20000, 'x1', { reference: 'CHK-7' }); await pay(db, 10000, 'x2', { reference: 'CHK-8' });
+    await rev(db, a.payment_id); await rev(db, a.payment_id);
+    const [s] = await pay(db, 20000, 'x3', { reference: 'CHK-7' });
+    return { pass: s === 200 && credits(db)[0].credit_amount === 300 && credits(db)[0].remaining_amount === 300 && inv(db).paid_amount === 300 };
+  });
+  await test('5 concurrent partial deposit payments: credit equals exactly the payments recorded', async () => {
+    const db = seed({ invoice_type: 'deposit', subtotal: 500 });
+    const res = await Promise.all(Array.from({ length: 5 }, (_, i) => pay(db, 5000, `cc${i}`, { reference: `W-${i}`, allow_overpayment: false })));
+    const ok = res.filter(([s]) => s === 200).length;
+    const c = credits(db)[0];
+    return { pass: ok >= 1 && res.every(([s]) => s === 200 || s === 409) && db.T.payments.size === ok && cents(c?.credit_amount) === ok * 5000 && cents(c?.remaining_amount) === ok * 5000 && unlocked(db), ok };
+  });
   return { function: 'recordInvoicePayment', mock_only: true, passed: results.filter((r) => r.pass).length, total: results.length, results };
 }
 
@@ -571,7 +619,7 @@ Deno.serve(async (req) => {
 
     const [status, payload] = await recordPayment(realDb(base44), {
       invoice_id, amount_cents, payment_date, method, reference: String(reference || '').slice(0, 200),
-      note: String(note || '').slice(0, 1000), idempotency_key, user_email: user.email,
+      note: String(note || '').slice(0, 1000), idempotency_key, user_email: user.email, allow_overpayment: body.allow_overpayment === true,
     }).catch((e) => (e.http ? [e.http, { error: e.message }] : Promise.reject(e)));
     return Response.json(payload, { status });
   } catch (error) {

@@ -20,7 +20,7 @@ export default function FinancialSummaryCards({ summary: s }) {
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">
         <Stat label="Total current billable" value={money(s.total_current_billable)} sub={`P&S ${money(s.current_billable)} + labor ${money(s.labor_billable_to_date)}`} />
         <Stat label="Total projected billable" value={money(s.total_projected_billable)} sub={`Incl. ${money(s.labor_projected_remaining)} remaining labor`} />
-        <Stat label="Finalized invoiced" value={money(s.finalized_invoiced)} sub={`Drafts ${money(s.draft_invoice_amount)} not counted`} />
+        <Stat label="Finalized invoiced (work)" value={money(s.work_invoiced ?? s.finalized_invoiced)} sub={s.deposit_invoiced > 0 ? `Excl. ${money(s.deposit_invoiced)} deposit invoices` : `Drafts ${money(s.draft_invoice_amount)} not counted`} />
         <Stat label="Outstanding balance" value={money(s.outstanding_balance)} sub={`Paid ${money(s.paid_amount)}`} />
         <Stat label="Parts & Services available to invoice" value={money(s.available_to_invoice)} tone="text-green-400" sub={`Uninvoiced ${money(s.remaining_uninvoiced)}`} />
         <Stat label="Est. gross profit (P&S)" value={money(s.estimated_gross_profit)} sub={`${pct(s.estimated_gross_margin_pct)} margin${s.cost_complete ? "" : " · incomplete cost"}`}

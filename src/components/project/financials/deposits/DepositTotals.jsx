@@ -12,12 +12,16 @@ const Stat = ({ label, value, tone = "text-white", sub }) => (
 // Deposits are client funding, not earned revenue. Applied amounts are already inside invoice totals.
 export default function DepositTotals({ t }) {
   return (
-    <div className="flex flex-wrap gap-x-6 gap-y-3">
-      <Stat label="Deposit invoiced" value={t.requested} sub={t.deposit_invoices_outstanding > 0 ? `${money(t.deposit_invoices_outstanding)} not yet paid` : null} />
-      <Stat label="Received" value={t.received} tone="text-emerald-300" />
-      <Stat label="Applied to invoices" value={t.applied} tone="text-blue-300" />
-      {t.refunded > 0 && <Stat label="Refunded" value={t.refunded} tone="text-red-300" />}
-      <Stat label="Remaining credit" value={t.remaining} tone="text-amber-300" sub={t.reserved_by_drafts > 0 ? `${money(t.available_to_apply)} free · rest reserved by drafts` : null} />
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-x-6 gap-y-3">
+        <Stat label="Deposit invoices issued" value={t.requested} sub={t.deposit_invoices_outstanding > 0 ? `${money(t.deposit_invoices_outstanding)} not yet paid` : null} />
+        <Stat label="Payments received" value={t.received} tone="text-emerald-300" />
+        <Stat label="Credit applied" value={t.applied} tone="text-blue-300" />
+        <Stat label="Refunds" value={t.refunded} tone={t.refunded > 0 ? "text-red-300" : "text-white"} />
+        <Stat label="Available balance" value={t.available_to_apply} tone="text-amber-300" sub={t.reserved_by_drafts > 0 ? `${money(t.reserved_by_drafts)} reserved by drafts` : null} />
+        <Stat label="Outstanding project invoices" value={t.project_invoices_outstanding} />
+      </div>
+      {t.needs_qb_entry > 0 && <p className="text-xs text-amber-300">{t.needs_qb_entry} item{t.needs_qb_entry > 1 ? "s" : ""} recorded here still need a manual QuickBooks entry. Nothing is posted to QuickBooks automatically.</p>}
     </div>
   );
 }

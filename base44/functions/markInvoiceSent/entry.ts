@@ -76,8 +76,9 @@ async function reconcilePendingPlan(db, inv, key) {
 async function applyCredits(db, inv, key, journal) {
   const creditToApply = inv.credit_proposed ?? inv.credit_applied ?? 0;
   if (creditToApply <= 0) return { creditToApply, applied: 0 };
+  // Rows under half a cent are floating-point residue, not credit.
   const available = (await db.findCredits({ project_id: inv.project_id }))
-    .filter((c) => (c.remaining_amount ?? 0) > 0)
+    .filter((c) => (c.remaining_amount ?? 0) >= 0.005)
     .sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
   const plan = [];
   let remaining = creditToApply;
@@ -103,6 +104,26 @@ async function applyCredits(db, inv, key, journal) {
   return { creditToApply, applied };
 }
 
+// Deposit journal for credit applied at send: one 'apply' entry per ledger row, keyed send:{invoice}, each traceable
+// to its original receipt. Written after the send commits and idempotent, so a retry (or a later cancellation) heals it.
+const lc = (n) => Math.round((Number(n) || 0) * 100);
+async function journalSend(db, inv, plan, actor) {
+  if (!plan?.length) return 0;
+  const appId = `send:${inv.id}`;
+  if ((await db.findTx({ application_id: appId })).length) return 0;
+  const rows = [];
+  for (const [i, e] of plan.entries()) {
+    const c = await db.getCredit(e.credit_id);
+    rows.push({
+      type: 'apply', project_id: inv.project_id, application_id: appId, idempotency_key: `${appId}:${i}`, credit_ledger_id: e.credit_id,
+      source_invoice_id: c?.source_invoice_id || null, target_invoice_id: inv.id, amount_cents: lc(e.amount), ledger_before_cents: lc(e.before), ledger_after_cents: lc(e.after),
+      note: 'Applied when the invoice was sent', actor_email: actor || 'system', recorded_at: new Date().toISOString(), transaction_date: inv.issue_date || null,
+    });
+  }
+  await db.createTx(rows);
+  return rows.length;
+}
+
 async function rollbackSources(db, commitmentUpdates, serviceUpdates) {
   for (const u of commitmentUpdates) {
     try {
@@ -121,7 +142,11 @@ async function rollbackSources(db, commitmentUpdates, serviceUpdates) {
   }
 }
 
-async function markSent(db, { invoice_id, qb_invoice_number, issue_date, due_date }) {
+async function markSent(db, { invoice_id, qb_invoice_number, issue_date, due_date, actor_email }) {
+  const journaled = async (plan) => {
+    const inv = { id: invoice_id, project_id: (await db.getInvoice(invoice_id))?.project_id, issue_date };
+    return journalSend(db, inv, plan, actor_email).then(() => false).catch((e) => { console.error('[markInvoiceSent] deposit journal write failed', e.message); return true; });
+  };
   const invoice = await db.getInvoice(invoice_id);
   if (!invoice) return [404, { error: 'Invoice not found' }];
   if (invoice.status !== 'draft') return [400, { error: `Cannot mark as sent: invoice is ${invoice.status}, must be draft` }];
@@ -249,15 +274,17 @@ async function markSent(db, { invoice_id, qb_invoice_number, issue_date, due_dat
         credit_idempotency_key: key, credit_plan_state: journal.length ? 'applied' : null,
       });
       if (won !== 1) throw conflict('Invoice changed during send', 'INVOICE_CHANGED');
+      const journalPending = await journaled(journal);
       return [200, {
         success: true, invoice_id, status: 'sent', qb_invoice_number, issue_date, due_date,
         credit_proposed: creditToApply, credit_applied: actualCreditApplied, balance_due: balanceDue,
-        commitment_updates: commitmentUpdates.map(strip), service_updates: serviceUpdates,
+        commitment_updates: commitmentUpdates.map(strip), service_updates: serviceUpdates, deposit_journal_pending: journalPending,
       }];
     } catch (err) {
       // The final write may have committed before the error surfaced — never undo a completed send.
       const now = await db.getInvoice(invoice_id).catch(() => null);
       if (now?.status === 'sent' && now.credit_idempotency_key === key) {
+        await journaled(now.credit_application_plan || journal);
         return [200, {
           success: true, invoice_id, status: 'sent', qb_invoice_number, issue_date, due_date,
           credit_proposed: creditToApply, credit_applied: now.credit_applied, balance_due: now.balance_due,
@@ -293,6 +320,8 @@ function realDb(base44) {
     creditCas: async (q, set) => (await sr.ProjectCreditLedger.updateMany(q, { $set: set })).updated,
     getProject: (id) => sr.Project.get(id).catch((e) => (e.status === 404 ? null : Promise.reject(e))),
     projectCas: async (q, set) => (await sr.Project.updateMany(q, { $set: set })).updated,
+    findTx: (q) => sr.DepositTransaction.filter(q),
+    createTx: (rows) => sr.DepositTransaction.bulkCreate(rows),
     laborItems: async (project_id) => (await loadProjectLabor(base44, project_id)).items,
     budgetState: async (project_id) => {
       const d = (await base44.functions.invoke('billingAuthorizationCore', { project_id })).data;
@@ -321,7 +350,8 @@ async function loadProjectLabor(base44, project_id) {
 // ───────────── In-memory test harness (never touches real records) ─────────────
 function mockDb(seed, faults = {}) {
   const T = {};
-  for (const k of ['invoices', 'lines', 'commitments', 'services', 'credits', 'projects']) T[k] = new Map((seed[k] || []).map((r) => [r.id, structuredClone(r)]));
+  for (const k of ['invoices', 'lines', 'commitments', 'services', 'credits', 'projects', 'txs']) T[k] = new Map((seed[k] || []).map((r) => [r.id, structuredClone(r)]));
+  let txSeq = 0;
   const calls = {};
   const tick = () => new Promise((r) => setTimeout(r, 0));
   const hit = async (name) => {
@@ -356,6 +386,8 @@ function mockDb(seed, faults = {}) {
     creditCas: (q, set) => cas('creditCas', T.credits, q, set),
     getProject: async (id) => (await find('getProject', T.projects, { id }))[0] || null,
     projectCas: (q, set) => cas('projectCas', T.projects, q, set),
+    findTx: (q) => find('findTx', T.txs, q),
+    createTx: async (rows) => { await hit('createTx'); for (const r of rows) { const id = `tx${++txSeq}`; T.txs.set(id, { id, ...structuredClone(r) }); } },
     laborItems: async () => structuredClone(seed.labor || []),
     budgetState: async () => structuredClone(seed.budget || { budget: null, billed_final: 0 }),
   };
@@ -401,6 +433,22 @@ async function runSelfTest() {
     const db = seed();
     const [s, b] = await run(db);
     return { pass: s === 200 && b.credit_applied === 300 && sentOnce(db) && bal(db).c1 === 0 && bal(db).c2 === 50 && inv(db).credit_idempotency_key === 'inv_sent:inv1' && inv(db).credit_plan_state === 'applied', balances: bal(db) };
+  });
+  await test('send-time credit journaled once per ledger row with its source receipt', async () => {
+    const db = mockDb({
+      invoices: [{ id: 'inv1', project_id: 'p1', status: 'draft', invoice_type: 'progress', subtotal: 1000, credit_proposed: 300 }],
+      credits: [{ ...CREDITS[0], source_invoice_id: 'dep1' }, { ...CREDITS[1], source_invoice_id: 'dep2' }, { id: 'cr', project_id: 'p1', credit_amount: 1e-12, remaining_amount: 1e-12, created_date: '2025-06-01T00:00:00Z' }],
+      projects: [{ id: 'p1', billing_lock_token: null }],
+    });
+    const [s] = await run(db); await run(db);
+    const t = [...db.T.txs.values()];
+    return { pass: s === 200 && t.length === 2 && t.every((x) => x.type === 'apply' && x.application_id === 'send:inv1' && x.target_invoice_id === 'inv1') && t.map((x) => x.source_invoice_id).join() === 'dep1,dep2'
+      && t.reduce((a, x) => a + x.amount_cents, 0) === 30000 && db.T.credits.get('cr').remaining_amount === 1e-12, tx: t.length };
+  });
+  await test('deposit journal write fails: send still completes and reports the journal as pending', async () => {
+    const db = seed({}, { faults: { createTx: { throwOn: [1] } } });
+    const [s, b] = await run(db);
+    return { pass: s === 200 && b.deposit_journal_pending === true && sentOnce(db) };
   });
   await test('repeat after success: rejected, no second deduction', async () => {
     const db = seed();
@@ -621,7 +669,7 @@ Deno.serve(async (req) => {
     if (!issue_date) return Response.json({ error: 'issue_date required' }, { status: 400 });
     if (!due_date) return Response.json({ error: 'due_date required' }, { status: 400 });
 
-    const [status, payload] = await markSent(realDb(base44), { invoice_id, qb_invoice_number, issue_date, due_date });
+    const [status, payload] = await markSent(realDb(base44), { invoice_id, qb_invoice_number, issue_date, due_date, actor_email: user.email });
     return Response.json(payload, { status });
   } catch (error) {
     console.error('markInvoiceSent error:', error);

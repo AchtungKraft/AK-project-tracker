@@ -5,6 +5,7 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrencyUSD } from "@/components/supply/pricingHelpers";
@@ -29,7 +30,7 @@ export default function RecordPaymentDialog({ open, onOpenChange, invoice, onRec
     setSaving(true); setError("");
     const res = await base44.functions.invoke("recordInvoicePayment", {
       invoice_id: invoice.id, amount: amt, payment_date: form.date, method: form.method,
-      reference: form.reference, note: form.note, idempotency_key: form.key,
+      reference: form.reference, note: form.note, idempotency_key: form.key, allow_overpayment: over > 0 && !!form.approveOver,
     }).catch((e) => e.response || { data: { error: e.message } });
     setSaving(false);
     if (res.data?.success) { onRecorded(res.data); onOpenChange(false); } else setError(res.data?.error || "Could not record payment.");
@@ -50,12 +51,17 @@ export default function RecordPaymentDialog({ open, onOpenChange, invoice, onRec
             <div className="space-y-1"><Label>Reference</Label><Input value={form.reference || ""} onChange={set("reference")} placeholder="Check #, transaction ID" /></div>
           </div>
           <div className="space-y-1"><Label>Note</Label><Input value={form.note || ""} onChange={set("note")} /></div>
-          {over > 0 && <p className="text-xs text-amber-400">This is {formatCurrencyUSD(over)} more than is due. The extra becomes client credit.</p>}
+          {over > 0 && (
+            <label className="flex items-start gap-2 rounded-md border border-amber-900/50 bg-amber-950/20 p-2 text-xs text-amber-300">
+              <Checkbox checked={!!form.approveOver} onCheckedChange={(v) => setForm((f) => ({ ...f, approveOver: v === true }))} className="mt-0.5" />
+              <span>This is {formatCurrencyUSD(over)} more than is due. Approve the overpayment; the extra becomes client credit.</span>
+            </label>
+          )}
           {error && <p className="text-sm text-red-400">{error}</p>}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={submit} disabled={saving || !(amt > 0) || !form.date} className="bg-green-600 hover:bg-green-700">
+          <Button onClick={submit} disabled={saving || !(amt > 0) || !form.date || (over > 0 && !form.approveOver)} className="bg-green-600 hover:bg-green-700">
             {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Record payment
           </Button>
         </DialogFooter>

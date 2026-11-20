@@ -15,6 +15,7 @@ const FINAL = ['sent', 'partial', 'paid', 'overdue'];
 // │  This file keeps line-level scope value and cost detail for reconciliation and reports; it does not re-derive billing totals.
 const AUTH_LOGIC_VERSION = 'auth-v1';
 const BILLING_LOGIC_VERSION = 'v1.0';
+const DEPOSIT_LOGIC_VERSION = 'dep-v1';
 async function core(base44, name, payload, ok) {
   const d = (await base44.functions.invoke(name, payload)).data;
   if (!d?.success || !ok(d)) throw new Error(`${name} unavailable or version mismatch`);
@@ -43,7 +44,7 @@ Deno.serve(async (req) => {
     if (!project_id) return Response.json({ error: 'project_id is required' }, { status: 400 });
 
     const db = base44.asServiceRole.entities;
-    const [projects, commitments, services, invoices, authD, billD, timeEntries, tasks, taskStatuses] = await Promise.all([
+    const [projects, commitments, services, invoices, authD, billD, timeEntries, tasks, taskStatuses, depD] = await Promise.all([
       db.Project.filter({ id: project_id }),
       db.PartCommitment.filter({ project_id }),
       db.ServiceCommitment.filter({ project_id }),
@@ -53,6 +54,8 @@ Deno.serve(async (req) => {
       db.TaskTimeEntry.filter({ project_id }, '-created_date', 5000),
       db.Task.filter({ project_id }, '-created_date', 5000),
       db.StatusList.filter({ scope: 'Task' }),
+      // Canonical deposit position (Project Deposits): never re-derived here.
+      core(base44, 'projectDepositAction', { action: 'summary', project_id }, (d) => d.logic_version === DEPOSIT_LOGIC_VERSION),
     ]);
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
@@ -319,6 +322,9 @@ Deno.serve(async (req) => {
         estimated_gross_margin_pct: billable > 0 ? r2(((billable - estCost) / billable) * 100) : null,
         cost_complete: costComplete,
         finalized_invoiced: A.invoiced_gross,
+        // Deposit invoices are client funding, not work billed: kept out of the work invoiced figure.
+        deposit_invoiced: A.funding.by_type.deposit.invoiced,
+        work_invoiced: r2(A.invoiced_gross - A.funding.by_type.deposit.invoiced),
         draft_invoice_amount: A.drafts_gross,
         paid_amount: A.paid_total, outstanding_balance: A.receivables_outstanding, credits_applied: A.credits_applied,
         overdue_count: A.overdue_count, overdue_total: A.overdue_total, credit_balance: A.credit_balance,
@@ -335,6 +341,10 @@ Deno.serve(async (req) => {
       },
       position,
       authorization: { authorized: A.authorized, confirmed: A.confirmed, consumed: A.consumed, remaining_authorization: A.remaining_authorization, cancelled_history: A.cancelled_history },
+      deposits: {
+        totals: depD.totals,
+        invoices: depD.deposits.map((d) => ({ invoice_id: d.invoice_id, qb_invoice_number: d.qb_invoice_number, status: d.status, origin: d.origin, qb_status: d.qb_status, invoiced: d.invoiced, received: d.received, applied: d.applied, refunded: d.refunded, remaining: d.remaining })),
+      },
       labor_billing: {
         project_rate: projectRate, rate_set_by: project.labor_rate_set_by || null, rate_set_at: project.labor_rate_set_at || null,
         billing_designation: project.billing_designation === 'NON_BILLABLE' ? 'NON_BILLABLE' : 'BILLABLE',
