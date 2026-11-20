@@ -13,7 +13,9 @@ const STYLES = `
   .sl-bar { display: none !important; }
   @page { margin: 0.5in; }
   #scope-list-root { display: block !important; position: static !important; height: auto !important; min-height: 0 !important; overflow: visible !important; transform: none !important; padding: 0 !important; margin: 0 !important; box-shadow: none !important; max-width: none !important; }
-  #scope-list-root tr { break-inside: avoid; }
+  #scope-list-root tr { break-inside: avoid; page-break-inside: avoid; }
+  #scope-list-root .sl-status-heading { break-after: avoid; page-break-after: avoid; }
+  #scope-list-root td { overflow-wrap: anywhere; }
   #scope-list-root thead { display: table-header-group; }
   #scope-list-root * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 }
@@ -27,7 +29,7 @@ const STYLES = `
 #scope-list-root { font-family: 'Segoe UI', system-ui, sans-serif; color: #111827; font-size: 9pt; }
 #scope-list-root table { width: 100%; border-collapse: collapse; }
 #scope-list-root th { text-align: left; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .04em; color: #475569 !important; border-bottom: 2px solid #111827; padding: 5px 6px; }
-#scope-list-root td { padding: 5px 6px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+#scope-list-root td { padding: 6px 7px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
 #scope-list-root .num { text-align: right; white-space: nowrap; }
 #scope-list-root .hc { background: #fff7ed; }
 #scope-list-root .lab { background: #eff6ff; }

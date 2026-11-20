@@ -90,17 +90,20 @@ const PRINT_STYLES = `
     margin: 0.55in 0.6in 0.7in 0.6in;
     size: letter;
   }
-  .sp-page-break { page-break-before: always; }
+  .sp-page-break { display: none !important; } /* Categories flow naturally; no forced mostly-empty pages. */
   /* Keep header bands from being orphaned at page bottom — but allow content to flow */
-  .sp-keep-with-next { break-after: avoid; page-break-after: avoid; }
+  .sp-keep-with-next { break-inside: avoid !important; page-break-inside: avoid !important; break-after: auto; page-break-after: auto; }
   /* Keep short deliverables and their cost breakdown together; large ones can flow. */
-  .sp-deliverable { break-inside: avoid; page-break-inside: avoid; }
-  .sp-deliverable-details { break-inside: avoid; page-break-inside: avoid; }
-  .sp-deliverable-details > div { break-inside: avoid; page-break-inside: avoid; }
+  .sp-deliverable { break-inside: auto; page-break-inside: auto; orphans: 3; widows: 3; }
+  .sp-deliverable-details { break-inside: auto; page-break-inside: auto; }
+  .sp-deliverable-details > div { break-inside: auto; page-break-inside: auto; }
   /* Item header region (title + pricing) kept together, but full item may split */
-  .sp-item-header { break-inside: avoid; page-break-inside: avoid; }
+  .sp-item-header { break-inside: avoid; page-break-inside: avoid; break-after: avoid; page-break-after: avoid; }
   /* Images may move independently */
   .sp-item-images { break-inside: avoid; page-break-inside: avoid; }
+  .sp-cat-band, .sp-grp-band { display: block !important; height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; }
+  .sp-deliverable { border-top: 1px solid #e2e8f0; }
+  .sp-deliverable-details { background: #f8fafc !important; }
   /* Scope overview & notice kept together */
   .sp-avoid-break { break-inside: avoid; page-break-inside: avoid; }
 
@@ -510,15 +513,14 @@ export default function ScopeReviewPrintView({
           const catSummary = buildCatSummary(catRollups.get(cat.id));
           return (
             <div key={cat.id}>
-              {/* Page break before 2nd+ categories */}
-              {catIdx > 0 && <div className="sp-page-break" />}
+              {/* Categories flow naturally across pages; avoid forced breaks. */}
 
               {/* ── CATEGORY BAND — dark full-width header ── */}
               <div className="sp-keep-with-next sp-cat-band" style={{
                 marginTop: catIdx > 0 ? 0 : 12,
-                marginBottom: 16,
+                marginBottom: 10,
                 background: T.catBandBg,
-                padding: "12px 16px",
+                padding: "9px 13px",
                 borderRadius: 3,
               }}>
                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
@@ -552,10 +554,10 @@ export default function ScopeReviewPrintView({
                 const grpRollup = computeScopePricingRollup(grp.items, laborEstimates);
                 const gs = buildCatSummary(grpRollup);
                 return (
-                  <div key={grp.id} style={{ marginBottom: 22 }}>
+                  <div key={grp.id} style={{ marginBottom: 14 }}>
                     {/* GROUP BAND — light subsection with left accent */}
                     <div className="sp-keep-with-next sp-grp-band" style={{
-                      marginTop: grpIdx > 0 ? 18 : 0,
+                      marginTop: grpIdx > 0 ? 12 : 0,
                       background: T.grpBandBg,
                       borderLeft: `3px solid ${T.grpAccent}`,
                       padding: "7px 12px",
@@ -582,7 +584,7 @@ export default function ScopeReviewPrintView({
 
                         return (
                           <div key={item.id} className="sp-deliverable" style={{
-                            padding: "12px 10px 14px", marginBottom: 8, borderLeft: "2px solid #cbd5e1",
+                            padding: "9px 10px 11px", marginBottom: 5, borderLeft: "2px solid #cbd5e1",
                             borderBottom: isLast ? "none" : `1px solid ${T.itemDivider}`,
                           }}>
                             {/* ── Item header region — kept together ── */}
@@ -623,7 +625,7 @@ export default function ScopeReviewPrintView({
                             )}
 
                             {(item.hard_cost_lines?.length > 0 || (laborByItem.get(item.id) || []).some(l => l.description)) && (
-                              <div className="sp-deliverable-details" style={{ marginTop: 10, padding: '9px 12px', background: '#f8fafc', borderLeft: '2px solid #cbd5e1', fontSize: T.bodySize, lineHeight: 1.55 }}>
+                              <div className="sp-deliverable-details" style={{ marginTop: 8, padding: '7px 10px', background: '#f8fafc', borderLeft: '2px solid #cbd5e1', fontSize: T.bodySize, lineHeight: 1.45 }}>
                                 {item.hard_cost_lines?.length > 0 && <div style={{ marginBottom: 5 }}>
                                   <div style={{ fontWeight: 700, color: T.colorPrimary }}>Hard Costs</div>
                                   {item.hard_cost_lines.map((l,i) => <div key={i} style={{ display:'flex', justifyContent:'space-between', gap:12, marginTop:3 }}><span>{l.description || 'Cost'}</span><span style={{ whiteSpace:'nowrap' }}>{l.tbd ? 'TBD' : formatDollarRange(l.min,l.max)}</span></div>)}
