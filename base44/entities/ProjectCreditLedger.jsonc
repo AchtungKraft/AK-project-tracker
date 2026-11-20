@@ -57,17 +57,17 @@
     },
     "create": {
       "user_condition": {
-        "role": "admin"
+        "role": "credit_ledger_service_only"
       }
     },
     "update": {
       "user_condition": {
-        "role": "admin"
+        "role": "credit_ledger_service_only"
       }
     },
     "delete": {
       "user_condition": {
-        "role": "admin"
+        "role": "credit_ledger_service_only"
       }
     }
   }

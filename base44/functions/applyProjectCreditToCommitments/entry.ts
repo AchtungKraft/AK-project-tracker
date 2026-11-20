@@ -332,7 +332,7 @@ Deno.serve(async (req) => {
 
     for (const alloc of allocationPlan) {
       // Create CreditAllocation
-      const created = await base44.entities.CreditAllocation.create({
+      const created = await base44.asServiceRole.entities.CreditAllocation.create({
         project_id,
         credit_ledger_id: alloc.credit_ledger_id,
         commitment_id: alloc.commitment_id,
@@ -354,7 +354,7 @@ Deno.serve(async (req) => {
 
     // Update ProjectCreditLedger remaining_amount
     for (const update of ledgerUpdates) {
-      await base44.entities.ProjectCreditLedger.update(update.id, {
+      await base44.asServiceRole.entities.ProjectCreditLedger.update(update.id, {
         remaining_amount: update.new_remaining,
       });
     }

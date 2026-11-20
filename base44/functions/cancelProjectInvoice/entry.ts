@@ -118,6 +118,12 @@ Deno.serve(async (req) => {
       if (!fresh || fresh.status !== 'sent') {
         return Response.json({ success: false, code: 'INVOICE_CHANGED', error: `Invoice is now ${fresh?.status || 'missing'}; nothing was reversed. Refresh and try again.` }, { status: 409 });
       }
+      // Deposit applied after sending must be returned to its original receipt first (keeps the audit trail intact).
+      const depTx = await sr.DepositTransaction.filter({ target_invoice_id: invoice_id });
+      const reversedIds = new Set(depTx.filter((t) => t.reverses_transaction_id).map((t) => t.reverses_transaction_id));
+      if (depTx.some((t) => t.type === 'apply' && !reversedIds.has(t.id))) {
+        return Response.json({ success: false, code: 'DEPOSIT_APPLIED', error: 'A project deposit is applied to this invoice. Reverse the deposit application under Project Deposits first, then cancel.' }, { status: 409 });
+      }
 
       const lines = await base44.entities.ProjectInvoiceLine.filter({ invoice_id });
       const commitmentResults = [];

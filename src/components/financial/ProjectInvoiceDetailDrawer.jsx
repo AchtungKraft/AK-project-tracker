@@ -60,6 +60,7 @@ import { toast as uiToast } from "@/components/ui/use-toast";
 import InvoicePaymentHistory from "@/components/financial/payments/InvoicePaymentHistory";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import { invoiceKeys } from "@/components/financial/queryKeyFactories";
+import ApplyDepositDialog from "@/components/project/financials/deposits/ApplyDepositDialog";
 import { guardInvoiceMutation } from "@/components/dev/CanonicalArchitectureGuards";
 import { downloadClientDetailPDF } from "@/components/financial/ClientDetailPDFExport";
 
@@ -72,6 +73,7 @@ export default function ProjectInvoiceDetailDrawer({
   const queryClient = useQueryClient();
   const [showMarkSentModal, setShowMarkSentModal] = useState(false);
   const [showMarkPaidModal, setShowMarkPaidModal] = useState(false);
+  const [showApplyDeposit, setShowApplyDeposit] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteDraft, setShowDeleteDraft] = useState(false);
   const [showEditDraft, setShowEditDraft] = useState(false);
@@ -597,6 +599,11 @@ export default function ProjectInvoiceDetailDrawer({
                     Record Payment
                   </Button>
                 )}
+                {["sent", "partial", "overdue"].includes(invoice.status) && invoice.invoice_type !== "deposit" && currentUser?.role === "admin" && (
+                  <Button variant="outline" onClick={() => setShowApplyDeposit(true)} className="gap-2">
+                    Apply Available Deposit
+                  </Button>
+                )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button 
@@ -725,6 +732,16 @@ export default function ProjectInvoiceDetailDrawer({
         invoice={invoice}
         onRecorded={handlePaymentRecorded}
       />
+
+      {invoice?.project_id && (
+        <ApplyDepositDialog
+          open={showApplyDeposit}
+          onOpenChange={setShowApplyDeposit}
+          projectId={invoice.project_id}
+          invoiceId={invoice.id}
+          onDone={refreshAfterPaymentChange}
+        />
+      )}
     </>
   );
 }

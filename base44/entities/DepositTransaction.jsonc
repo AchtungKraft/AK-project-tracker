@@ -1,0 +1,147 @@
+{
+  "name": "DepositTransaction",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "register_existing",
+        "apply",
+        "apply_reversal",
+        "refund",
+        "refund_reversal"
+      ],
+      "enumColors": [
+        "blue",
+        "green",
+        "yellow",
+        "red",
+        "purple"
+      ],
+      "description": "Append-only deposit journal entry. Corrections are new entries that reference reverses_transaction_id; entries are never edited or deleted."
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "client_account_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "application_id": {
+      "type": "string",
+      "description": "Groups the per-receipt portions of one application, refund or reversal (the request key)"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "description": "Unique per entry"
+    },
+    "credit_ledger_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "ProjectCreditLedger row (the deposit credit) this entry draws from or restores"
+    },
+    "source_invoice_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Original deposit invoice behind the credit (traceability to the receipt)"
+    },
+    "target_invoice_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Invoice the deposit was applied to"
+    },
+    "reverses_transaction_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Entry this corrective entry reverses"
+    },
+    "amount_cents": {
+      "type": "integer",
+      "description": "Positive integer cents"
+    },
+    "ledger_before_cents": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "ledger_after_cents": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "method": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Refund method"
+    },
+    "reference": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "QuickBooks invoice/refund reference"
+    },
+    "transaction_date": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date"
+    },
+    "note": {
+      "type": "string"
+    },
+    "actor_email": {
+      "type": "string"
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "type",
+    "project_id",
+    "application_id",
+    "idempotency_key",
+    "amount_cents",
+    "actor_email",
+    "recorded_at"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "deposit_service_only"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "deposit_service_only"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "deposit_service_only"
+      }
+    }
+  }
+}

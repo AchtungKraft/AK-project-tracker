@@ -66,7 +66,7 @@
     "credit_applied": {
       "type": "number",
       "default": 0,
-      "description": "Actual credit deducted from ledger. Set ONLY by markInvoiceSent. Zero for drafts."
+      "description": "Credit deducted from the ledger: at send (markInvoiceSent) plus later deposit applications (projectDepositAction)."
     },
     "credit_preview": {
       "type": "number",
@@ -91,6 +91,11 @@
     "notes": {
       "type": "string",
       "description": "Invoice notes"
+    },
+    "recorded_from_quickbooks": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when this deposit invoice was registered from an invoice that already exists in QuickBooks (Record Existing Down Payment). Must not be re-created in QuickBooks."
     },
     "credit_idempotency_key": {
       "type": "string",

@@ -68,6 +68,7 @@ export default function CreateProjectInvoiceModal({
   onSuccess,
   onOpenDraft,
   preselectedProjectId = null,
+  initialInvoiceType = "progress",
   initialSelectedItems = [],
   preselectSourceIds = null,
 }) {
@@ -100,7 +101,7 @@ export default function CreateProjectInvoiceModal({
       const pid = normalizeProjectId(preselectedProjectId);
       setSelectedProjectId(pid ?? null);
       setSelectedParts(initialSelectedItems || []);
-      setInvoiceType("progress");
+      setInvoiceType(initialInvoiceType || "progress");
       setDepositAmount("");
       setNotes("");
       setManualLines([]);

@@ -44,10 +44,10 @@ async function acquireLock(db, projectId, owner) {
     .catch((e) => console.error('[recordInvoicePayment] lock release failed', e.message));
 }
 
-// Credit the active payments justify. Same rules as before: deposit → full paid amount once fully paid;
-// otherwise the overpayment above the amount due. (Deposit accounting rule unchanged; pending accounting review.)
-function expectedCreditC(inv, paidC, isPaid) {
-  if (inv.invoice_type === 'deposit') return isPaid && paidC > 0 ? paidC : 0;
+// Credit the active payments justify. Deposit → exactly the amount actually received (partial payments count);
+// otherwise the overpayment above the amount due.
+function expectedCreditC(inv, paidC, _isPaid) {
+  if (inv.invoice_type === 'deposit') return Math.max(0, paidC);
   return Math.max(0, paidC - dueCents(inv));
 }
 
@@ -196,7 +196,14 @@ async function recordPayment(db, args) {
     const newStatus = paidC > 0 ? 'partial' : 'sent';
     const won = await db.invoiceCas({ id: invoice_id, status: fresh.status }, { status: newStatus, paid_amount, balance_due });
     if (won !== 1) return [409, { code: 'INVOICE_CHANGED', error: 'Invoice changed while recording payment. Reload and try again.' }];
-    return [200, { success: true, idempotent: isRetry, status: newStatus, payment_id: payment.id, paid_amount, balance_due }];
+    // Deposit invoices: the amount received so far becomes available deposit credit (one row per invoice, key pay_credit:{id}).
+    let synced = null;
+    if (fresh.invoice_type === 'deposit') {
+      const credit = await findInvoiceCredit(db, fresh);
+      const expC = expectedCreditC(fresh, paidC, false);
+      synced = expC > cents(credit?.credit_amount) ? await syncCredit(db, fresh, credit, expC, 'deposit payment recorded') : null;
+    }
+    return [200, { success: true, idempotent: isRetry, status: newStatus, payment_id: payment.id, paid_amount, balance_due, credit_created: synced }];
   } finally {
     await release();
   }
@@ -360,12 +367,26 @@ async function runSelfTest() {
     const [, b] = await pay(db, 71801);
     return { pass: b.status === 'paid' && inv(db).balance_due === 0 && db.T.credits.size === 0 };
   });
-  await test('deposit paid in two parts: credit for full deposit once, at full payment (rule unchanged)', async () => {
+  await test('deposit paid in two parts: credit equals amount received after each payment, one credit row', async () => {
     const db = seed({ invoice_type: 'deposit', subtotal: 500 });
-    await pay(db, 20000); const mid = db.T.credits.size;
+    await pay(db, 20000); const mid = credits(db).map((c) => [c.credit_amount, c.remaining_amount]);
     await pay(db, 30000);
     const c = credits(db);
-    return { pass: mid === 0 && c.length === 1 && c[0].credit_amount === 500 };
+    return { pass: JSON.stringify(mid) === '[[200,200]]' && inv(db).status === 'paid' && c.length === 1 && c[0].credit_amount === 500 && c[0].remaining_amount === 500, mid };
+  });
+  await test('deposit partial payment retried with same key: credit not duplicated', async () => {
+    const db = seed({ invoice_type: 'deposit', subtotal: 500 });
+    await pay(db, 20000, 'dk'); await pay(db, 20000, 'dk');
+    const c = credits(db);
+    return { pass: db.T.payments.size === 1 && c.length === 1 && c[0].credit_amount === 200 && inv(db).status === 'partial' };
+  });
+  await test('partial deposit credit partly used: reversal blocked; unused part reversal allowed', async () => {
+    const db = seed({ invoice_type: 'deposit', subtotal: 500 });
+    const [, a] = await pay(db, 10000); const [, b] = await pay(db, 10000); // 200 credit
+    const c = credits(db)[0]; db.T.credits.get(c.id).remaining_amount = 120; // 80 used
+    const [s1] = await rev(db, b.payment_id); // take back 100 ≤ 120 → allowed
+    const [s2, r2] = await rev(db, a.payment_id); // take back 100 > 20 → blocked
+    return { pass: s1 === 200 && db.T.credits.get(c.id).credit_amount === 100 && db.T.credits.get(c.id).remaining_amount === 20 && s2 === 409 && r2.code === 'CREDIT_IN_USE' };
   });
   await test('4. reverse the only partial payment: back to sent, record kept with reason/admin/time', async () => {
     const db = seed();
@@ -417,12 +438,12 @@ async function runSelfTest() {
     const [s2, r2] = await rev(db, a.payment_id); // would take remaining 50 > 30 unused → blocked
     return { pass: s1 === 200 && mid.credit_amount === 50 && mid.remaining_amount === 30 && s2 === 409 && r2.code === 'CREDIT_IN_USE' && !db.T.payments.get(a.payment_id).reversed_at && inv(db).paid_amount === 1050, s1, mid, s2, r2, paid: inv(db).paid_amount };
   });
-  await test('deposit fully paid, credit unused: reversal back to partial removes the deposit credit amount (record kept)', async () => {
+  await test('deposit fully paid, credit unused: reversal back to partial keeps credit equal to amount still received', async () => {
     const db = seed({ invoice_type: 'deposit', subtotal: 500 });
     await pay(db, 20000); const [, b] = await pay(db, 30000);
     const [s, r] = await rev(db, b.payment_id);
     const c = credits(db);
-    return { pass: s === 200 && r.status === 'partial' && c.length === 1 && c[0].credit_amount === 0 && c[0].remaining_amount === 0 && /payment reversed/.test(c[0].notes) };
+    return { pass: s === 200 && r.status === 'partial' && c.length === 1 && c[0].credit_amount === 200 && c[0].remaining_amount === 200 && /payment reversed/.test(c[0].notes) };
   });
   await test('deposit credit already applied: reversal blocked', async () => {
     const db = seed({ invoice_type: 'deposit', subtotal: 500 });
