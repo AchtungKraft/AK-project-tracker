@@ -79,12 +79,13 @@ export default function ScopeItemCard({
 
         <ScopeItemWorkSection item={item} notes={notes} />
 
-        {!isLegacy && (
+        {/* A section renders only when it has at least one real line (TBD and description-only lines count). */}
+        {!isLegacy && hardRows.length > 0 && (
           <div className={SECTION}>
             <ScopeItemComponentSection title="Hard Costs" accent="text-cyan-400" kind="hard" rows={hardRows} subtotal={hardSubtotal} emptyLabel={emptyLabel} />
           </div>
         )}
-        {(!isLegacy || laborRows.length > 0) && (
+        {laborRows.length > 0 && (
           <div className={SECTION}>
             <ScopeItemComponentSection title="Ächtung Kraft Labor" accent="text-red-400" kind="labor" rows={laborRows}
               subtotalHours={laborHoursSubtotal} subtotal={laborSubtotal} emptyLabel={emptyLabel} />

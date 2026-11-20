@@ -2,8 +2,8 @@
  * Presentation helpers for a Scope Item card. Totals come from the canonical
  * computeScopeItemPricing — nothing here recalculates estimates.
  */
-import { formatDollarRange } from "./scopePricingHelpers";
-import { formatHardLine, formatLaborHours, formatLaborCost } from "./scopeEstimate";
+import { formatDollarRange } from "./scopePricingHelpers.js";
+import { formatHardLine, formatLaborHours, formatLaborCost } from "./scopeEstimate.js";
 
 /** Header total + pending reason. */
 export function getTotalDisplay(pricing) {
@@ -57,6 +57,17 @@ export function getLaborRows(laborEstimates) {
     tbd: !!le.hours_tbd,
     rate: le.rate_snapshot,
   }));
+}
+
+/**
+ * Component detail rows for print layouts: per-line hard costs (blank placeholder lines dropped)
+ * and every persisted labor operation. Empty arrays → no section. Legacy single hard costs stay in the notes path.
+ */
+export function getComponentDetailRows(item, laborEstimates) {
+  return {
+    hardRows: Array.isArray(item.hard_cost_lines) ? getHardCostRows(item) : [],
+    laborRows: getLaborRows(laborEstimates),
+  };
 }
 
 /** Legacy notes shown only when they add information not already in a row. */

@@ -6,7 +6,7 @@ import {
   computeScopePricingRollup,
   formatDollarRange,
 } from "./scopePricingHelpers";
-import { formatHardLine, formatLaborHours } from "./scopeEstimate";
+import { getComponentDetailRows } from "./scopeItemDisplay";
 
 /* ══════════════════════════════════════════════
    Utility helpers
@@ -623,18 +623,23 @@ export default function ScopeReviewPrintView({
                               </div>
                             )}
 
-                            {(item.hard_cost_lines?.length > 0 || (laborByItem.get(item.id) || []).some(l => l.description)) && (
-                              <div className="sp-deliverable-details" style={{ marginTop: 8, padding: '7px 10px', background: '#f8fafc', borderLeft: '2px solid #cbd5e1', fontSize: T.bodySize, lineHeight: 1.45 }}>
-                                {item.hard_cost_lines?.length > 0 && <div style={{ marginBottom: 5 }}>
-                                  <div style={{ fontWeight: 700, color: T.colorPrimary }}>Hard Costs</div>
-                                  {item.hard_cost_lines.map((l,i) => <div key={i} style={{ display:'flex', justifyContent:'space-between', gap:12, marginTop:3 }}><span style={{ whiteSpace:'pre-wrap' }}>{l.description || 'Cost'}</span><span style={{ whiteSpace:'nowrap' }}>{formatHardLine(l)}</span></div>)}
-                                </div>}
-                                {(laborByItem.get(item.id) || []).some(l => l.description) && <div>
-                                  <div style={{ fontWeight: 700, color: T.colorPrimary }}>Ächtung Kraft Labor</div>
-                                  {(laborByItem.get(item.id) || []).filter(l => l.description).map((l,i) => <div key={i} style={{ display:'flex', justifyContent:'space-between', gap:12, marginTop:3 }}><span style={{ whiteSpace:'pre-wrap' }}>{l.labor_group_name_snapshot} — {l.description}</span><span style={{ whiteSpace:'nowrap' }}>{formatLaborHours(l)}</span></div>)}
-                                </div>}
-                              </div>
-                            )}
+                            {(() => {
+                              const { hardRows, laborRows } = getComponentDetailRows(item, laborByItem.get(item.id) || []);
+                              if (!hardRows.length && !laborRows.length) return null;
+                              const row = { display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 3 };
+                              return (
+                                <div className="sp-deliverable-details" style={{ marginTop: 8, padding: '7px 10px', background: '#f8fafc', borderLeft: '2px solid #cbd5e1', fontSize: T.bodySize, lineHeight: 1.45 }}>
+                                  {hardRows.length > 0 && <div style={{ marginBottom: laborRows.length ? 5 : 0 }}>
+                                    <div style={{ fontWeight: 700, color: T.colorPrimary }}>Hard Costs</div>
+                                    {hardRows.map((r, i) => <div key={i} style={row}><span style={{ whiteSpace: 'pre-wrap' }}>{r.description}</span><span style={{ whiteSpace: 'nowrap' }}>{r.value}</span></div>)}
+                                  </div>}
+                                  {laborRows.length > 0 && <div>
+                                    <div style={{ fontWeight: 700, color: T.colorPrimary }}>Ächtung Kraft Labor</div>
+                                    {laborRows.map(r => <div key={r.key} style={row}><span style={{ whiteSpace: 'pre-wrap' }}>{r.description ? `${r.category} — ${r.description}` : r.category}</span><span style={{ whiteSpace: 'nowrap' }}>{r.hours}</span></div>)}
+                                  </div>}
+                                </div>
+                              );
+                            })()}
 
                             {/* Images — kept as block, may move independently */}
                             {item.images && item.images.length > 0 && (
