@@ -30,6 +30,10 @@
       "type": "number",
       "description": "Hourly rate at time of estimate creation \u2014 never silently updated"
     },
+    "description": {
+      "type": "string",
+      "description": "Client-facing operation or deliverable description"
+    },
     "sort_order": {
       "type": "number",
       "default": 0,
