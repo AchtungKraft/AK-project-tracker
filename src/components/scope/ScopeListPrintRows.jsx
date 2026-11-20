@@ -37,7 +37,8 @@ export default function ScopeListPrintRows({ hierarchy, laborEstimates, showStat
         </tr>
         {cat.groups.flatMap(g => g.items.map(item => {
           const p = computeScopeItemPricing(item, laborFor(item.id));
-          const note = [item.hard_cost_note, item.budget_note].filter(Boolean).join(" · ");
+          const note = [item.hard_cost_note, item.budget_note].filter(Boolean).filter((v,i,a) => a.indexOf(v) === i).join(' · ');
+          const detailLines = [...(item.hard_cost_lines?.length ? item.hard_cost_lines.map(l => 'Hard: ' + (l.description || 'Cost') + ' — ' + (l.tbd ? 'TBD' : formatDollarRange(l.min,l.max))) : []), ...laborFor(item.id).filter(l => l.description).map(l => 'Labor: ' + l.description)];
           const status = item.decision_status || "needs_review";
           const tones = { approved: ["#dcfce7","#166534"], needs_review: ["#fef9c3","#854d0e"], not_now: ["#e5e7eb","#374151"], request_changes: ["#ffedd5","#9a3412"], reapproval_required: ["#fee2e2","#991b1b"] };
           const tone = tones[status] || tones.needs_review;
@@ -46,7 +47,8 @@ export default function ScopeListPrintRows({ hierarchy, laborEstimates, showStat
             <tr key={item.id}>
               <td style={{ backgroundColor: tone[0], borderLeft: "3px solid " + tone[1] }}>
                 <div style={{ fontWeight: 600 }}>{item.title} <span style={{ color: tone[1], fontSize: "7pt", fontWeight: 700, marginLeft: 6, whiteSpace: "nowrap" }}>({statusText})</span></div>
-                <div style={{ color: "#6b7280", fontSize: "7.5pt" }}>{g.name}{note ? ` · ${note}` : ""}</div>
+                <div style={{ color: "#6b7280", fontSize: "7.5pt" }}>{g.name}{note ? ` · ${note}` : ''}</div>
+                {detailLines.map((line,i) => <div key={i} style={{color:'#475569',fontSize:'7.5pt',marginTop:2}}>{line}</div>)}
               </td>
               {showStatus && <td style={{ fontSize: "8pt", fontWeight: 700, color: tone[1] }}>{statusText}</td>}
               <td className="num hc">{hardCostLabel(p)}</td>
