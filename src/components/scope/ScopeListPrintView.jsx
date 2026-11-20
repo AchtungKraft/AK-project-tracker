@@ -14,8 +14,10 @@ const STYLES = `
   @page { margin: 0.5in; }
   #scope-list-root { display: block !important; position: static !important; height: auto !important; min-height: 0 !important; overflow: visible !important; transform: none !important; padding: 0 !important; margin: 0 !important; box-shadow: none !important; max-width: none !important; }
   #scope-list-root tr { break-inside: avoid; page-break-inside: avoid; }
-  #scope-list-root .sl-status-heading { break-after: avoid; page-break-after: avoid; }
-  #scope-list-root td { overflow-wrap: anywhere; }
+  #scope-list-root .sl-status-heading, #scope-list-root .sl-heading { break-after: avoid; page-break-after: avoid; }
+  #scope-list-root .sl-subtotal { break-before: avoid; page-break-before: avoid; }
+  #scope-list-root td { overflow-wrap: break-word; }
+  #scope-list-root td.num { overflow-wrap: normal; }
   #scope-list-root thead { display: table-header-group; }
   #scope-list-root * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 }
@@ -29,7 +31,7 @@ const STYLES = `
 #scope-list-root { font-family: 'Segoe UI', system-ui, sans-serif; color: #111827; font-size: 9pt; }
 #scope-list-root table { width: 100%; border-collapse: collapse; }
 #scope-list-root th { text-align: left; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .04em; color: #475569 !important; border-bottom: 2px solid #111827; padding: 5px 6px; }
-#scope-list-root td { padding: 6px 7px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+#scope-list-root td { padding: 4px 7px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
 #scope-list-root .num { text-align: right; white-space: nowrap; }
 #scope-list-root .hc { background: #fff7ed; }
 #scope-list-root .lab { background: #eff6ff; }
@@ -95,18 +97,18 @@ export default function ScopeListPrintView({ request, project, categories, group
               <React.Fragment key={group.status}>
                 <tr className="sl-status-heading"><td colSpan={filter === "all" ? 6 : 5} style={{ background: "#dbe4ee", borderTop: "2px solid #475569", fontWeight: 800, fontSize: "10pt", padding: "8px 6px" }}>{group.label} — {group.items.length} ITEM(S)</td></tr>
                 <ScopeListPrintRows hierarchy={group.hierarchy} laborEstimates={laborEstimates} showStatus={filter === "all"} statusLabels={DECISION_LABELS} />
-                <ScopeListPrintTotals totals={group.totals} showStatus={filter === "all"} label={`${group.label} SUBTOTAL`} asBody />
+                <ScopeListPrintTotals totals={group.totals} showStatus={filter === "all"} label={`${group.label} SUBTOTAL`} variant="decision" />
               </React.Fragment>
             ))}
-            <ScopeListPrintTotals totals={totals} showStatus={filter === "all"} label={filter === "all" ? "ALL SCOPE TOTAL" : "APPROVED SCOPE TOTAL"} />
+            <ScopeListPrintTotals totals={totals} showStatus={filter === "all"} label={filter === "all" ? "ALL SCOPE TOTAL" : "APPROVED SCOPE TOTAL"} variant="grand" />
           </tbody>
         </table>
         {filter === "all" && <div style={{ marginTop: 14, breakInside: "avoid" }}>
           <div style={{ fontWeight: 800, fontSize: "10pt", marginBottom: 5 }}>FINANCIAL SUMMARY BY DECISION</div>
           <table><tbody>
-            <ScopeListPrintTotals totals={approvedTotals} showStatus={false} label="APPROVED SCOPE" asBody />
-            <ScopeListPrintTotals totals={unapprovedTotals} showStatus={false} label="UNAPPROVED / DEFERRED SCOPE" asBody />
-            <ScopeListPrintTotals totals={totals} showStatus={false} label="ALL SCOPE" asBody />
+            <ScopeListPrintTotals totals={approvedTotals} showStatus={false} label="APPROVED SCOPE" />
+            <ScopeListPrintTotals totals={unapprovedTotals} showStatus={false} label="UNAPPROVED / DEFERRED SCOPE" />
+            <ScopeListPrintTotals totals={totals} showStatus={false} label="ALL SCOPE" variant="grand" />
           </tbody></table>
         </div>}
         <p style={{ color: "#6b7280", fontSize: "7.5pt", marginTop: 12 }}>

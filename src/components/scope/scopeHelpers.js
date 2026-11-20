@@ -3,7 +3,7 @@
  * Architecture: Category and Group are independent request-level entities.
  * Items reference both, and the display hierarchy is Category → Group → Item.
  */
-import { laborAgg, formatAgg } from "./scopeEstimate";
+import { laborAgg, formatAgg } from "./scopeEstimate.js";
 
 export const DECISION_LABELS = {
   needs_review: 'Needs Review',

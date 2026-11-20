@@ -1,66 +1,43 @@
 import React from "react";
-import { computeScopeItemPricing, computeScopePricingRollup, formatDollarRange } from "./scopePricingHelpers";
-import { getComponentDetailRows } from "./scopeItemDisplay";
+import { buildFinancialSummarySections } from "./scopeFinancialSummaryModel";
+import ScopeListPrintItemRow from "./ScopeListPrintItemRow";
+import ScopeListPrintTotals from "./ScopeListPrintTotals";
 
-const hardCostLabel = (p) => {
-  if (p.pricing_model === "legacy_estimate") return "—";
-  return p.hard_cost_label || "—";
-};
+const plural = (n) => `${n} deliverable${n === 1 ? "" : "s"}`;
+const DARK = { background: "#1e293b", color: "white", fontWeight: 700, fontSize: "9.5pt", padding: "5px 7px" };
+const LIGHT = { background: "#f1f5f9", color: "#1e293b", fontWeight: 700, fontSize: "8.5pt", padding: "4px 7px 4px 14px", borderBottom: "1px solid #cbd5e1" };
 
-const totalLabel = (p) => {
-  if (p.pricing_model === "legacy_estimate") {
-    if (p.legacy_budget_tbd) return "TBD";
-    const v = formatDollarRange(p.legacy_budget_min, p.legacy_budget_max);
-    return v ? `${v} (legacy)` : "—";
-  }
-  if (p.estimate_format === "legacy" && p.hard_cost_tbd) return "TBD";
-  return p.total_label || "—";
-};
-
-/** Category band + item rows for the scope list print. */
+/** Category → Group → deliverables, closed by group subtotals and (multi-group) category subtotals. */
 export default function ScopeListPrintRows({ hierarchy, laborEstimates, showStatus, statusLabels }) {
-  const laborFor = (id) => laborEstimates.filter(le => le.scope_item_id === id);
   const cols = showStatus ? 6 : 5;
-
-  return hierarchy.filter(cat => cat.allItems.length > 0).map(cat => {
-    const r = computeScopePricingRollup(cat.allItems, laborEstimates);
+  return buildFinancialSummarySections(hierarchy, laborEstimates).map(cat => {
+    const single = cat.groups.length === 1;
     return (
       <React.Fragment key={cat.id}>
-        <tr>
-          <td colSpan={cols} style={{ background: "#1e293b", color: "white", fontWeight: 700, fontSize: "9.5pt" }}>
-            {cat.name}
-            <span style={{ float: "right", fontWeight: 400, color: "#cbd5e1", fontSize: "8pt" }}>
-              Hard {r.hard_cost_label || "—"} · Labor {r.ak_labor_label || "—"}
-            </span>
+        <tr className="sl-heading">
+          <td colSpan={cols} style={DARK}>
+            {cat.name}{single && <span style={{ fontWeight: 400, color: "#cbd5e1" }}> · {cat.groups[0].name}</span>}
+            <span style={{ float: "right", fontWeight: 400, color: "#cbd5e1", fontSize: "8pt" }}>{plural(cat.count)}</span>
           </td>
         </tr>
-        {cat.groups.flatMap(g => g.items.map(item => {
-          const p = computeScopeItemPricing(item, laborFor(item.id));
-          const note = item.hard_cost_lines?.length ? '' : [item.hard_cost_note, item.budget_note].filter(Boolean).filter((v,i,a) => a.indexOf(v) === i).join(' · ');
-          const { hardRows, laborRows } = getComponentDetailRows(item, laborFor(item.id));
-          const detailLines = [
-            ...hardRows.map(r => 'Hard · ' + r.description + (r.value ? ': ' + r.value : '')),
-            ...laborRows.map(r => 'Labor · ' + (r.description || r.category) + (r.hours ? ' (' + r.hours + ')' : '')),
-          ];
-          const status = item.decision_status || "needs_review";
-          const tones = { approved: ["#dcfce7","#166534"], needs_review: ["#fef9c3","#854d0e"], not_now: ["#e5e7eb","#374151"], request_changes: ["#ffedd5","#9a3412"], reapproval_required: ["#fee2e2","#991b1b"] };
-          const tone = tones[status] || tones.needs_review;
-          const statusText = status === "needs_review" ? "Pending" : status === "not_now" ? "Later" : (statusLabels[status] || status);
-          return (
-            <tr key={item.id}>
-              <td style={{ backgroundColor: tone[0], borderLeft: "3px solid " + tone[1] }}>
-                <div style={{ fontWeight: 600 }}>{item.title} <span style={{ color: tone[1], fontSize: "7pt", fontWeight: 700, marginLeft: 6, whiteSpace: "nowrap" }}>({statusText})</span></div>
-                <div style={{ color: "#6b7280", fontSize: "7.5pt" }}>{g.name}{note ? ` · ${note}` : ''}</div>
-                {detailLines.length > 0 && <div style={{marginTop:5, paddingTop:5, borderTop:"1px solid #dbe2ea"}}>{detailLines.map((line,i) => <div key={i} style={{color:"#475569",fontSize:"7.5pt",marginTop:2,lineHeight:1.35,whiteSpace:"pre-wrap"}}>{line}</div>)}</div>}
-              </td>
-              {showStatus && <td style={{ fontSize: "8pt", fontWeight: 700, color: tone[1] }}>{statusText}</td>}
-              <td className="num hc">{hardCostLabel(p)}</td>
-              <td className="num lab">{p.ak_hours_label || "—"}</td>
-              <td className="num lab">{p.ak_labor_label || "—"}</td>
-              <td className="num" style={{ fontWeight: 600 }}>{totalLabel(p)}</td>
-            </tr>
-          );
-        }))}
+        {cat.groups.map(g => (
+          <React.Fragment key={g.id}>
+            {!single && (
+              <tr className="sl-heading">
+                <td colSpan={cols} style={LIGHT}>
+                  {g.name}<span style={{ float: "right", fontWeight: 400, color: "#64748b" }}>{plural(g.items.length)}</span>
+                </td>
+              </tr>
+            )}
+            {g.items.map(item => (
+              <ScopeListPrintItemRow key={item.id} item={item} laborEstimates={laborEstimates} showStatus={showStatus} statusLabels={statusLabels} />
+            ))}
+            <ScopeListPrintTotals totals={g.totals} showStatus={showStatus} variant="group" label={`${g.name} subtotal`} />
+          </React.Fragment>
+        ))}
+        {cat.showCategorySubtotal && (
+          <ScopeListPrintTotals totals={cat.totals} showStatus={showStatus} variant="category" label={`${cat.name.toUpperCase()} — CATEGORY SUBTOTAL`} />
+        )}
       </React.Fragment>
     );
   });
