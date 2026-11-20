@@ -94,7 +94,7 @@ function positionOf(c, st) {
   const draftQty = lh(Math.min(uninvoicedQty, st.draftQty.get(c.id) || 0));
   const eligibleQty = lh(Math.max(0, uninvoicedQty - draftQty));
   return { unitC, effReq, uninvoicedQty, draftQty, eligibleQty, eligibleC: Math.round(eligibleQty * unitC), legacyOpen,
-    grossC: Math.round(effReq * unitC), draftC: Math.round(draftQty * unitC), creditSettledC,
+    grossC: Math.round(effReq * unitC), draftC: Math.round(draftQty * unitC), creditSettledC, settledQty: lh(settledQty),
     invoiceBilledQty: lh(Math.max(0, invoicedQty - settledQty)), invoiceBilledC: Math.max(0, cents(c.invoiced_amount) - cents(c.credit_settled_amount)) };
 }
 
@@ -192,7 +192,7 @@ function buildPlan(st, { commitment_ids, mode, allocations: manual }) {
     return { commitment_id: e.c.id, part_id: e.c.part_id, part_name: part?.part_name || null, part_number: part?.vendor_part_number || null,
       required_total: e.pos.effReq, unit_price: e.pos.unitC / 100, gross: e.pos.grossC / 100,
       invoiced: e.pos.invoiceBilledC / 100, invoiced_qty: e.pos.invoiceBilledQty, on_drafts: e.pos.draftC / 100, draft_qty: e.pos.draftQty,
-      credit_settled_existing: e.pos.creditSettledC / 100, eligible: e.eligC / 100, eligible_qty: e.eligQ,
+      credit_settled_existing: e.pos.creditSettledC / 100, credit_settled_qty: e.pos.settledQty, eligible: e.eligC / 100, eligible_qty: e.eligQ,
       credit_applied_new: n.amountC / 100, qty_settled_new: n.qty, net: remC / 100,
       will_be_settled: n.amountC > 0 && remC === 0 && e.pos.draftQty <= TOL, ineligible_reason: e.reason };
   });
@@ -432,7 +432,7 @@ async function history(db, project_id) {
   const settlements = allocs.filter((a) => [SETTLE, 'legacy_settlement'].includes(kindOf(a))).sort((a, b) => when(b).localeCompare(when(a))).map((a) => {
     const c = cMap.get(a.commitment_id);
     const reversals = allocs.filter((r) => kindOf(r) === REVERSAL && r.reverses_allocation_id === a.id)
-      .map((r) => ({ id: r.id, amount: -cents(r.amount_applied) / 100, reason: r.reversal_reason, by: r.reversed_by || r.actor_email, at: r.reversed_at || r.recorded_at, state: r.settlement_state }));
+      .map((r) => ({ id: r.id, amount: -cents(r.amount_applied) / 100, qty: r.qty_settled != null ? -Number(r.qty_settled) : null, reason: r.reversal_reason, by: r.reversed_by || r.actor_email, at: r.reversed_at || r.recorded_at, state: r.settlement_state }));
     const probe = reversalCheck({ orig: a, allocs, c, row: rMap.get(a.credit_ledger_id), depIds, amountC: Number.MAX_SAFE_INTEGER });
     const netC = probe.netC ?? cents(a.amount_applied);
     const chk = netC > 0 ? reversalCheck({ orig: a, allocs, c, row: rMap.get(a.credit_ledger_id), depIds, amountC: netC }) : probe;

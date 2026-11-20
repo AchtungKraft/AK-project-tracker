@@ -14,11 +14,17 @@ const STATUS = {
 const fmt = (d) => (d ? format(new Date(d), "MMM d, yyyy h:mm a") : "");
 
 export default function SettlementHistoryRow({ s, onReverse }) {
+  const reversedQty = s.reversals.reduce((sum, r) => sum + (r.qty || 0), 0);
   return (
     <div className="p-2 rounded border border-gray-700 bg-gray-800/40 text-xs">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="text-sm text-gray-200 truncate">{s.part_name || "Part"}</p>
+          {s.qty != null && (
+            <p className="text-gray-400">
+              {s.qty} settled with credit{reversedQty > 0 ? ` · ${reversedQty} reversed (reopened, not invoiced) · ${Math.max(0, s.qty - reversedQty)} still settled` : ""}
+            </p>
+          )}
           <p className="text-gray-500">{fmt(s.recorded_at)}{s.actor_email ? ` · ${s.actor_email}` : ""}{s.legacy ? " · older record" : ""}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -33,7 +39,7 @@ export default function SettlementHistoryRow({ s, onReverse }) {
       {!s.reversible && s.block_reason && s.status !== "reversed" && <p className="mt-1 text-gray-500">{s.block_reason}</p>}
       {s.reversals.map((r) => (
         <p key={r.id} className="mt-1 text-amber-300/80">
-          Reversed {formatCurrencyUSD(r.amount)} on {fmt(r.at)} by {r.by}: {r.reason}
+          Reversed {formatCurrencyUSD(r.amount)}{r.qty ? ` (${r.qty} qty)` : ""} on {fmt(r.at)} by {r.by}: {r.reason}
         </p>
       ))}
     </div>

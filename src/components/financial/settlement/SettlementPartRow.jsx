@@ -12,6 +12,8 @@ const REASONS = {
   LEGACY_SETTLEMENT_REVIEW: "Older settlement needs review",
 };
 
+const q = (n) => Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 2 });
+
 function Cell({ label, value, className = "text-gray-300" }) {
   return (
     <div className="text-right">
@@ -46,6 +48,10 @@ export default function SettlementPartRow({ row }) {
         <Cell label="Eligible" value={row.eligible} className="text-blue-300" />
         <Cell label="Applying now" value={row.credit_applied_new} className="text-emerald-400" />
       </div>
+      <p className="mt-1.5 text-[11px] text-gray-400 break-words">
+        Qty: {q(row.required_total)} total · {q(row.invoiced_qty)} invoiced · {q(row.draft_qty)} on drafts · {q(row.credit_settled_qty)} settled with credit · <span className="text-blue-300">{q(row.eligible_qty)} eligible</span>
+        {row.qty_settled_new > 0 && <> · <span className="text-emerald-400">{q(row.qty_settled_new)} settling now</span></>}
+      </p>
     </div>
   );
 }

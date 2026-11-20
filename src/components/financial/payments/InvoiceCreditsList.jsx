@@ -16,7 +16,7 @@ export default function InvoiceCreditsList({ invoice }) {
       <h4 className="text-xs font-medium text-gray-400 mb-1">Client credits</h4>
       <div className="space-y-1 text-xs">
         {applied > 0 && (
-          <div className="flex justify-between text-gray-400"><span>Credit applied to this invoice when sent</span><span className="font-mono text-green-400">-{formatCurrencyUSD(applied)}</span></div>
+          <div className="flex justify-between text-gray-400"><span>Credit applied to this invoice (at and after send)</span><span className="font-mono text-green-400">-{formatCurrencyUSD(applied)}</span></div>
         )}
         {credits.map((c) => (
           <div key={c.id} className="flex justify-between gap-3 text-gray-400">
