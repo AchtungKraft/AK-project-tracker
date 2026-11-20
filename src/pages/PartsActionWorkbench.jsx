@@ -660,6 +660,17 @@ export default function PartsActionWorkbench() {
     staleTime: 0,
   });
 
+  // Canonical general credit available for parts settlement (net of draft reservations; deposit credit excluded)
+  const { data: generalCreditAvailable = 0 } = useQuery({
+    queryKey: ['creditAvailability', projectFilter],
+    queryFn: async () => {
+      const response = await base44.functions.invoke('projectDepositAction', { action: 'credit_availability', project_id: projectFilter });
+      return response.data?.available_general || 0;
+    },
+    enabled: projectFilter !== 'all',
+    staleTime: 0,
+  });
+
   // Get action groups and current tab config
   const actionGroups = queueData?.action_groups || [];
   const currentGroup = actionGroups.find(g => g.key === activeTab);
@@ -1004,7 +1015,7 @@ export default function PartsActionWorkbench() {
           onClearSelection={() => setSelectedIds(new Set())}
           onApplyCredit={() => setShowSettleCreditModal(true)}
           projectFilter={projectFilter}
-          availableCredit={billingData?.credit_summary?.available_credit || 0}
+          availableCredit={generalCreditAvailable}
         />
       )}
 
@@ -1038,9 +1049,10 @@ export default function PartsActionWorkbench() {
         projectId={projectFilter !== 'all' ? projectFilter : null}
         projectName={projects.find(p => p.id === projectFilter)?.name}
         selectedCommitmentIds={Array.from(selectedIds)}
-        availableCredit={billingData?.credit_summary?.available_credit || 0}
+        availableCredit={generalCreditAvailable}
         onSuccess={async () => {
           await forceAppRefresh(queryClient, { projectIds: [projectFilter] });
+          queryClient.invalidateQueries({ queryKey: ['creditAvailability', projectFilter] });
           setShowSettleCreditModal(false);
           setSelectedIds(new Set());
         }}

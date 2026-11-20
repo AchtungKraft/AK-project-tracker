@@ -84,7 +84,7 @@ export default function SettlePartsWithCreditModal({
       }
     },
     onError: (error) => {
-      toast.error(`Preview failed: ${error.message}`);
+      toast.error(`Preview failed: ${error.response?.data?.error || error.message}`);
     },
   });
 
@@ -128,7 +128,7 @@ export default function SettlePartsWithCreditModal({
       }
     },
     onError: (error) => {
-      toast.error(`Settlement failed: ${error.message}`);
+      toast.error(`Settlement failed: ${error.response?.data?.error || error.message}`);
     },
   });
 
@@ -201,6 +201,11 @@ export default function SettlePartsWithCreditModal({
                   <p className="text-lg font-bold text-green-400">
                     {formatCurrencyUSD(summary.credit_available || 0)}
                   </p>
+                  {(summary.credit_reserved_by_drafts || 0) > 0 && (
+                    <p className="text-[11px] text-gray-500">
+                      General credit only; {formatCurrencyUSD(summary.credit_reserved_by_drafts)} held for draft invoices
+                    </p>
+                  )}
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 uppercase">To Apply</p>
