@@ -108,7 +108,7 @@ export default function ScopeItemPricingDisplay({ item, laborEstimates = [], isC
           laborDisplay={laborDisplay}
           laborEstimates={laborEstimates}
           pricing={pricing}
-          laborOpen={laborOpen}
+          laborOpen={laborOpen && !(item.hard_cost_lines?.length || laborEstimates.some(l => l.description))}
           onToggleLabor={() => setLaborOpen(!laborOpen)}
           isMobile={isMobile}
         />
