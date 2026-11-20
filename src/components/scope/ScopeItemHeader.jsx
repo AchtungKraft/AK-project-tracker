@@ -16,7 +16,7 @@ export default function ScopeItemHeader({ item, pricing, status, isStaff, onStaf
   );
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-start gap-1.5 sm:gap-6">
+    <div className="flex flex-col md:flex-row md:items-start gap-2 md:gap-5">
       <div className="flex-1 min-w-0 space-y-1">
         <div className="flex items-start gap-2">
           <h4 className="flex-1 min-w-0 text-[15px] font-semibold text-white leading-snug break-words">{item.title}</h4>
@@ -24,9 +24,9 @@ export default function ScopeItemHeader({ item, pricing, status, isStaff, onStaf
         </div>
         {isStaff && <ScopeTaskConversionBadge itemId={item.id} onCreateTask={onCreateTask} />}
       </div>
-      <div className="flex items-center gap-x-3 gap-y-1 flex-wrap shrink-0">
+      <div className="flex items-center md:items-end gap-x-3 gap-y-1 flex-wrap md:flex-col md:gap-1 md:text-right md:min-w-[150px]">
         <Badge className={cn("text-[10px] px-1.5 py-0 h-5 border whitespace-nowrap", DECISION_COLORS[status])}>{DECISION_LABELS[status]}</Badge>
-        <div className="flex items-baseline gap-2 tabular-nums" title={pendingReason || undefined}>
+        <div className="flex items-baseline gap-2 md:flex-col md:items-end md:gap-0.5 tabular-nums" title={pendingReason || undefined}>
           {totalLabel
             ? <span className="text-base font-bold text-white">{totalLabel}</span>
             : <span className="text-sm font-medium text-amber-400/90">{isTbd ? 'TBD' : 'Pending'}</span>}

@@ -26,7 +26,7 @@ export default function ScopeItemComponentSection({ title, accent, kind = "hard"
 
   return (
     <div>
-      <div className={cn(grid, "items-baseline")}>
+      <div className={cn(grid, "items-baseline pb-1.5 border-b border-slate-700/40")}>
         <p className={cn("text-[10px] font-semibold uppercase tracking-widest", accent)}>{title}</p>
         {isLabor && <p className="hidden sm:block text-[11px] text-gray-500 tabular-nums text-right">{subtotalHours}</p>}
         <p className="text-[11px] text-gray-500 tabular-nums text-right">
@@ -35,9 +35,9 @@ export default function ScopeItemComponentSection({ title, accent, kind = "hard"
         </p>
       </div>
       {(
-        <div className="mt-0.5 divide-y divide-gray-700/30">
+        <div className="mt-1 divide-y divide-gray-700/40">
           {rows.map((r, i) => (
-            <div key={r.key ?? i} className={cn(grid, "items-baseline py-1")}>
+            <div key={r.key ?? i} className={cn(grid, "items-baseline py-2")}>
               <p className="text-[13px] text-gray-300 leading-snug break-words min-w-0">
                 {r.label && <span className={cn("font-semibold", accent)}>{r.label}</span>}
                 {r.label && r.description && <span className="text-gray-600"> — </span>}

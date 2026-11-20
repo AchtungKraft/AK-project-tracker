@@ -67,13 +67,13 @@ export default function ScopeItemCard({
   const pad = isMobile ? "px-3" : "px-4";
 
   return (
-    <article className={cn("rounded-lg border border-gray-600/50 border-l-[3px] bg-gray-900/80 shadow-sm shadow-black/40 overflow-hidden", STATUS_ACCENT[status])}>
-      <header className={cn(pad, "py-2.5 bg-gray-800/60 border-b border-gray-700/50")}>
+    <article className={cn("rounded-xl border border-gray-600/60 border-l-[3px] bg-gray-900/80 shadow-md shadow-black/30 overflow-hidden", STATUS_ACCENT[status])}>
+      <header className={cn(pad, "py-3 bg-slate-800/75 border-b border-gray-600/50")}>
         <ScopeItemHeader item={item} pricing={pricing} status={status} isStaff={isStaff} onCreateTask={onCreateTask}
           onStaffStatusChange={onStaffStatusChange} onStaffRequireReapproval={onStaffRequireReapproval} onEdit={onEdit} />
       </header>
 
-      <div className={cn(pad, "py-2.5 space-y-2.5")}>
+      <div className={cn(pad, "py-3 space-y-3")}>
         {status === "reapproval_required" && (
           <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-red-950/30 border border-red-700/30">
             <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
@@ -91,12 +91,12 @@ export default function ScopeItemCard({
         )}
 
         {detailsVisible && !isLegacy && (
-          <div className={SECTION}>
+          <div className={cn(SECTION, "rounded-md bg-slate-800/20 px-3 pb-2.5")}>
             <ScopeItemComponentSection title="Hard Costs" accent="text-cyan-400" kind="hard" rows={hardRows} subtotal={hardSubtotal} emptyLabel="Not estimated" />
           </div>
         )}
         {detailsVisible && (!isLegacy || laborRows.length > 0) && (
-          <div className={SECTION}>
+          <div className={cn(SECTION, "rounded-md bg-slate-800/20 px-3 pb-2.5")}>
             <ScopeItemComponentSection title="Ächtung Kraft Labor" accent="text-red-400" kind="labor" rows={laborRows}
               subtotalHours={laborHoursSubtotal} subtotal={laborSubtotal} emptyLabel="Not estimated" />
           </div>
@@ -106,7 +106,7 @@ export default function ScopeItemCard({
           <p className="text-[11px] text-amber-500/70 italic flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Pricing breakdown not yet classified</p>
         )}
 
-        <div className={cn(SECTION, "space-y-2")}>
+        <div className={cn(SECTION, "space-y-2 bg-slate-800/35 -mx-3 px-3 pb-2 pt-3 rounded-b-md")}>
           <ScopeItemDecisionFooter status={status} readOnly={readOnly} isStaff={isStaff} onDecision={handleDecision}
             onRequestChanges={() => { setShowComments(true); handleDecision("request_changes"); }}
             latestDecisionEntry={itemHistory.find(h => h.event_type === 'decision')}

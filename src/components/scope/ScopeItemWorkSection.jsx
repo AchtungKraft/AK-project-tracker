@@ -9,7 +9,8 @@ export default function ScopeItemWorkSection({ item, notes = [] }) {
   if (!item.description && !notes.length && !images.length) return null;
 
   return (
-    <div className="space-y-2">
+    <section className="space-y-2" aria-label="Scope of work">
+      <h5 className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Scope of Work</h5>
       {item.description && (
         <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-line break-words max-w-[72ch]">{item.description}</p>
       )}
@@ -30,6 +31,6 @@ export default function ScopeItemWorkSection({ item, notes = [] }) {
           <ImageModal isOpen={open} onClose={() => setOpen(false)} images={images} currentIndex={index} onNavigate={setIndex} />
         </div>
       )}
-    </div>
+    </section>
   );
 }
