@@ -93,6 +93,10 @@ const PRINT_STYLES = `
   .sp-page-break { page-break-before: always; }
   /* Keep header bands from being orphaned at page bottom — but allow content to flow */
   .sp-keep-with-next { break-after: avoid; page-break-after: avoid; }
+  /* Keep short deliverables and their cost breakdown together; large ones can flow. */
+  .sp-deliverable { break-inside: avoid; page-break-inside: avoid; }
+  .sp-deliverable-details { break-inside: avoid; page-break-inside: avoid; }
+  .sp-deliverable-details > div { break-inside: avoid; page-break-inside: avoid; }
   /* Item header region (title + pricing) kept together, but full item may split */
   .sp-item-header { break-inside: avoid; page-break-inside: avoid; }
   /* Images may move independently */
@@ -577,8 +581,8 @@ export default function ScopeReviewPrintView({
                         const isLast = itemIdx === grp.items.length - 1;
 
                         return (
-                          <div key={item.id} style={{
-                            padding: "8px 0 10px",
+                          <div key={item.id} className="sp-deliverable" style={{
+                            padding: "12px 10px 14px", marginBottom: 8, borderLeft: "2px solid #cbd5e1",
                             borderBottom: isLast ? "none" : `1px solid ${T.itemDivider}`,
                           }}>
                             {/* ── Item header region — kept together ── */}
@@ -619,7 +623,7 @@ export default function ScopeReviewPrintView({
                             )}
 
                             {(item.hard_cost_lines?.length > 0 || (laborByItem.get(item.id) || []).some(l => l.description)) && (
-                              <div style={{ marginTop: 8, padding: '7px 10px', background: '#f8fafc', borderLeft: '2px solid #cbd5e1', fontSize: T.bodySize }}>
+                              <div className="sp-deliverable-details" style={{ marginTop: 10, padding: '9px 12px', background: '#f8fafc', borderLeft: '2px solid #cbd5e1', fontSize: T.bodySize, lineHeight: 1.55 }}>
                                 {item.hard_cost_lines?.length > 0 && <div style={{ marginBottom: 5 }}>
                                   <div style={{ fontWeight: 700, color: T.colorPrimary }}>Hard Costs</div>
                                   {item.hard_cost_lines.map((l,i) => <div key={i} style={{ display:'flex', justifyContent:'space-between', gap:12, marginTop:3 }}><span>{l.description || 'Cost'}</span><span style={{ whiteSpace:'nowrap' }}>{l.tbd ? 'TBD' : formatDollarRange(l.min,l.max)}</span></div>)}
