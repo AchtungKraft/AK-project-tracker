@@ -210,6 +210,7 @@ export function computeMaterialHash(item, laborEstimates = []) {
     hard_cost_max: item.hard_cost_max ?? null,
     hard_cost_tbd: item.hard_cost_tbd || false,
     hard_cost_note: item.hard_cost_note || '',
+    ...(item.hard_cost_lines?.length ? { hard_cost_lines: item.hard_cost_lines } : {}),
     images: (item.images || []).slice().sort(),
     labor: itemLabor,
   };

@@ -123,6 +123,27 @@
     "material_hash": {
       "type": "string",
       "description": "Hash of material fields at time of last approval. Used for reapproval detection."
+    },
+    "hard_cost_lines": {
+      "type": "array",
+      "description": "Individual hard cost estimates belonging to one deliverable",
+      "items": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "min": {
+            "type": "number"
+          },
+          "max": {
+            "type": "number"
+          },
+          "tbd": {
+            "type": "boolean"
+          }
+        }
+      }
     }
   },
   "required": [
