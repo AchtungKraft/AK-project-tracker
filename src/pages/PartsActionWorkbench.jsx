@@ -67,6 +67,7 @@ import CoverageDiagnosticsDrawer from "@/components/lifecycle/CoverageDiagnostic
 import { useLifecycleAction, ACTION_TYPES, actionRequiresModal, getModalForAction } from "@/components/lifecycle/useLifecycleState";
 import CreateProjectInvoiceModal from "@/components/financial/CreateProjectInvoiceModal";
 import SettlePartsWithCreditModal from "@/components/financial/SettlePartsWithCreditModal";
+import SettlementHistoryPanel from "@/components/financial/settlement/SettlementHistoryPanel";
 import ReceiveInventoryModal from "@/components/receiving/ReceiveInventoryModal";
 import InstallPartModal from "@/components/project/InstallPartModal";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
@@ -509,6 +510,7 @@ function InvoiceSelectionPanel({
   onApplyCredit,
   projectFilter,
   availableCredit = 0,
+  reservedCredit = 0,
 }) {
   const selectedCount = selectedItems.length;
   const totalAmount = selectedItems.reduce((sum, item) => sum + (item.line_total || 0), 0);
@@ -547,8 +549,11 @@ function InvoiceSelectionPanel({
               {/* Credit indicator */}
               {hasCredit && projectFilter !== 'all' && (
                 <Badge className="bg-emerald-600/30 text-emerald-400 border border-emerald-600/50">
-                  Credit: {formatCurrencyUSD(availableCredit)}
+                  General credit: {formatCurrencyUSD(availableCredit)}
                 </Badge>
+              )}
+              {reservedCredit > 0 && projectFilter !== 'all' && (
+                <span className="text-xs text-gray-400">{formatCurrencyUSD(reservedCredit)} held for drafts</span>
               )}
             </div>
             
@@ -661,11 +666,11 @@ export default function PartsActionWorkbench() {
   });
 
   // Canonical general credit available for parts settlement (net of draft reservations; deposit credit excluded)
-  const { data: generalCreditAvailable = 0 } = useQuery({
+  const { data: creditAvailability } = useQuery({
     queryKey: ['creditAvailability', projectFilter],
     queryFn: async () => {
-      const response = await base44.functions.invoke('projectDepositAction', { action: 'credit_availability', project_id: projectFilter });
-      return response.data?.available_general || 0;
+      const d = (await base44.functions.invoke('projectDepositAction', { action: 'credit_availability', project_id: projectFilter })).data || {};
+      return { available: d.available_general || 0, reserved: Math.round(((d.reserved_general || 0) + (d.reserved_legacy || 0)) * 100) / 100 };
     },
     enabled: projectFilter !== 'all',
     staleTime: 0,
@@ -1006,6 +1011,16 @@ export default function PartsActionWorkbench() {
         </CardContent>
       </Card>
 
+      {projectFilter !== 'all' && (
+        <SettlementHistoryPanel
+          projectId={projectFilter}
+          onChanged={async () => {
+            await forceAppRefresh(queryClient, { projectIds: [projectFilter] });
+            queryClient.invalidateQueries({ queryKey: ['creditAvailability', projectFilter] });
+          }}
+        />
+      )}
+
       {/* Invoice Selection Panel - Forward model only */}
       {/* GOVERNANCE: Selection panel opens canonical modals only. No direct mutations. */}
       {currentTabConfig.allowSelection && currentTabConfig.selectionAction === 'invoice' && (
@@ -1015,7 +1030,8 @@ export default function PartsActionWorkbench() {
           onClearSelection={() => setSelectedIds(new Set())}
           onApplyCredit={() => setShowSettleCreditModal(true)}
           projectFilter={projectFilter}
-          availableCredit={generalCreditAvailable}
+          availableCredit={creditAvailability?.available || 0}
+          reservedCredit={creditAvailability?.reserved || 0}
         />
       )}
 
@@ -1049,7 +1065,6 @@ export default function PartsActionWorkbench() {
         projectId={projectFilter !== 'all' ? projectFilter : null}
         projectName={projects.find(p => p.id === projectFilter)?.name}
         selectedCommitmentIds={Array.from(selectedIds)}
-        availableCredit={generalCreditAvailable}
         onSuccess={async () => {
           await forceAppRefresh(queryClient, { projectIds: [projectFilter] });
           queryClient.invalidateQueries({ queryKey: ['creditAvailability', projectFilter] });
