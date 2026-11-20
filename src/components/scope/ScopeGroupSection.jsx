@@ -76,7 +76,7 @@ export default function ScopeGroupSection({
 
       {/* Items — compact spacing */}
       {!collapsed && (
-        <div className={cn("space-y-1.5", isMobile ? "pl-2" : "pl-3")}>
+        <div className={cn("space-y-3", isMobile ? "pl-0" : "pl-3")}>
           {filteredItems.map(item => (
             <ScopeItemCard
               key={item.id}
