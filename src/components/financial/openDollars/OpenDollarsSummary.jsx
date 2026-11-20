@@ -25,7 +25,8 @@ export default function OpenDollarsSummary({ totals }) {
         <CardContent className="p-4 space-y-1.5">
           <div className="flex items-center gap-2"><Wallet className="w-4 h-4 text-red-400" /><span className="text-xs text-gray-400 uppercase">Unbilled Project Value</span></div>
           <p className="text-xl font-bold text-white">{formatCurrencyUSD(totals.unbilled_total)}</p>
-          <Line label="Parts" value={totals.unbilled_parts} />
+          <Line label="Received parts" value={totals.unbilled_parts_received} />
+          <Line label="Unreceived parts" value={totals.unbilled_parts_unreceived} />
           <Line label="Services" value={totals.unbilled_services} />
           <Line label="Earned labor" value={totals.unbilled_labor} />
           <Line label="Of which on drafts" value={totals.on_drafts} muted />
@@ -35,7 +36,8 @@ export default function OpenDollarsSummary({ totals }) {
         <CardContent className="p-4 space-y-1">
           <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-purple-400" /><span className="text-xs text-gray-400 uppercase">Outstanding Invoiced</span></div>
           <p className="text-xl font-bold text-purple-300">{formatCurrencyUSD(totals.outstanding)}</p>
-          <p className="text-xs text-gray-500">Balance due on sent and partially paid invoices</p>
+          <p className="text-xs text-gray-500">Balance due on sent, partially paid and overdue invoices</p>
+          {totals.overdue_count > 0 && <p className="text-xs text-red-400">{totals.overdue_count} overdue · {formatCurrencyUSD(totals.overdue)}</p>}
         </CardContent>
       </Card>
       <Card className="bg-gray-900/30 border-dashed border-gray-700">

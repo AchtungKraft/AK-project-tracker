@@ -1,7 +1,6 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import BillingDesignationEditor from "../BillingDesignationEditor";
 
 const label = (d) => (d === "NON_BILLABLE" ? "Non-Billable" : "Billable");
 
@@ -13,9 +12,8 @@ export default function BillingStatusCard({ projectId, lb }) {
   });
   const history = data?.history || [];
   return (
-    <section className="rounded-lg border border-gray-800 bg-black/40 p-3 space-y-3 text-sm text-gray-200">
-      <h3 className="text-sm font-semibold text-white">Project billing status</h3>
-      <BillingDesignationEditor projectId={projectId} lb={lb} />
+    <section className="space-y-3 text-sm text-gray-200">
+      <p className="text-xs text-gray-400">Current: <span className={lb.billing_designation === "NON_BILLABLE" ? "text-amber-400" : "text-emerald-400"}>{label(lb.billing_designation)}</span>. Change it from the financial header.</p>
       {history[0]?.reason && <p className="text-xs text-gray-400">Reason: {history[0].reason}</p>}
       <div className="space-y-1">
         <p className="text-[11px] uppercase tracking-wide text-gray-500">Change history</p>

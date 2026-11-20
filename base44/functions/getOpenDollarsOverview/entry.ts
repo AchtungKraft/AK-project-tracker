@@ -26,7 +26,7 @@ async function laborCore(base44, payload) {
 }
 // └─────────────────────────────────────────────────────────────────────────
 
-const OUTSTANDING = ['sent', 'partial', 'overdue'];
+const AUTH_LOGIC_VERSION = 'auth-v1';
 
 async function all(entity, q) {
   let out = []; let cursor = null;
@@ -46,19 +46,21 @@ Deno.serve(async (req) => {
     if (user.role !== 'admin') return Response.json({ error: 'Forbidden' }, { status: 403 });
 
     const db = base44.asServiceRole.entities;
-    const [summaryRes, projects, invoices, laborData, plans] = await Promise.all([
+    const [summaryRes, projects, invoices, laborData, authRes] = await Promise.all([
       base44.functions.invoke('getProjectsBillingSummary', {}),
       all(db.Project, {}),
       all(db.ProjectInvoice, {}),
       laborCore(base44, { scope: 'all' }),
-      all(db.ScopeFundingPlan, {}),
+      base44.functions.invoke('billingAuthorizationCore', { scope: 'all' }),
     ]);
     const summary = summaryRes.data;
     if (!summary?.success) return Response.json({ error: 'Parts and services summary unavailable' }, { status: 502 });
+    // Outstanding, overdue and confirmed budgets come from the canonical invoice position (same as the project screens).
+    const auth = authRes.data;
+    if (!auth?.success || auth.logic_version !== AUTH_LOGIC_VERSION) return Response.json({ error: 'Invoice position unavailable or version mismatch' }, { status: 502 });
 
     const psByProject = new Map(summary.projects.map((p) => [p.project_id, p]));
     const invByProject = groupBy(invoices, 'project_id');
-    const planByProject = new Map(plans.map((p) => [p.project_id, p]));
 
     const rows = [];
     for (const project of projects) {
@@ -76,13 +78,13 @@ Deno.serve(async (req) => {
       const onDrafts = lr2((ps?.allocated_to_drafts ?? 0) + L.allocated_to_drafts);
       const drafts = pInvoices.filter((i) => i.status === 'draft');
       const draftFace = lr2(drafts.reduce((a, i) => a + (i.subtotal ?? i.total ?? 0), 0));
-      const outstandingInv = pInvoices.filter((i) => OUTSTANDING.includes(i.status));
-      const outstanding = lr2(outstandingInv.reduce((a, i) => a + (i.balance_due ?? Math.max(0, (i.total ?? 0) - (i.paid_amount ?? 0))), 0));
+      const A = auth.projects[project.id];
+      const outstanding = A?.receivables_outstanding ?? 0;
+      const outstandingCount = A?.outstanding_count ?? 0;
 
       // Separate, never in totals
       const projectedLabor = labor.projected.totals.remaining_amount;
-      const plan = planByProject.get(project.id);
-      const agreedBudget = plan?.agreed_budget_confirmed && plan.agreed_client_budget_cents != null ? lr2(plan.agreed_client_budget_cents / 100) : null;
+      const agreedBudget = A?.authorized ?? null;
 
       const flags = [];
       if (L.unpriced_hours > 0) flags.push({ code: 'LABOR_RATE_NOT_SET', message: `${L.unpriced_hours}h of billable labor on ${L.unpriced_tasks} task(s) have no billing rate and are not counted.` });
@@ -97,9 +99,9 @@ Deno.serve(async (req) => {
         labor_rate: project.labor_billing_rate ?? null, labor_unpriced_hours: L.unpriced_hours,
         billing_designation: nonBillable ? 'NON_BILLABLE' : 'BILLABLE',
         projected_labor_available: nonBillable ? 0 : labor.projected.totals.available_amount,
-        unbilled: nonBillable ? { parts: 0, services: 0, labor: 0, labor_hours: 0, total: 0 } : { parts: lr2(parts), services: lr2(services), labor: L.uninvoiced, labor_hours: L.uninvoiced_hours, total: unbilled },
+        unbilled: nonBillable ? { parts: 0, parts_received: 0, parts_unreceived: 0, services: 0, labor: 0, labor_hours: 0, total: 0 } : { parts: lr2(parts), parts_received: ps?.breakdown?.parts_received_total ?? 0, parts_unreceived: ps?.breakdown?.parts_unreceived_total ?? 0, services: lr2(services), labor: L.uninvoiced, labor_hours: L.uninvoiced_hours, total: unbilled },
         on_drafts: onDrafts, draft_count: drafts.length, draft_face_value: draftFace,
-        outstanding, outstanding_count: outstandingInv.length,
+        outstanding, outstanding_count: outstandingCount, overdue: A?.overdue_total ?? 0, overdue_count: A?.overdue_count ?? 0,
         total_open: total,
         future: { agreed_budget: agreedBudget, projected_labor_remaining: lr2(projectedLabor) },
         flags,
@@ -111,7 +113,8 @@ Deno.serve(async (req) => {
     return Response.json({
       success: true, generated_at: new Date().toISOString(),
       totals: {
-        unbilled_parts: sum((r) => r.unbilled.parts), unbilled_services: sum((r) => r.unbilled.services), unbilled_labor: sum((r) => r.unbilled.labor),
+        unbilled_parts: sum((r) => r.unbilled.parts), unbilled_parts_received: sum((r) => r.unbilled.parts_received), unbilled_parts_unreceived: sum((r) => r.unbilled.parts_unreceived),
+        overdue: sum((r) => r.overdue), overdue_count: rows.reduce((a, r) => a + r.overdue_count, 0), unbilled_services: sum((r) => r.unbilled.services), unbilled_labor: sum((r) => r.unbilled.labor),
         unbilled_total: sum((r) => r.unbilled.total), on_drafts: sum((r) => r.on_drafts), draft_face_value: sum((r) => r.draft_face_value),
         outstanding: sum((r) => r.outstanding), total_open: sum((r) => r.total_open),
         future_agreed_budget: sum((r) => r.future.agreed_budget ?? 0), future_projected_labor: sum((r) => r.future.projected_labor_remaining),

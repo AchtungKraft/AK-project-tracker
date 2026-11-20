@@ -151,7 +151,9 @@ Deno.serve(async (req) => {
       
       // Check overdue: sent + due_date < today
       let isOverdue = false;
-      if ((inv.status === 'sent' || inv.status === 'partial') && inv.due_date) {
+      // Same overdue rule as billingAuthorizationCore: explicit overdue status, or an open invoice past its due date.
+      if (inv.status === 'overdue') isOverdue = true;
+      else if ((inv.status === 'sent' || inv.status === 'partial') && inv.due_date) {
         const dueDate = new Date(inv.due_date);
         dueDate.setHours(0, 0, 0, 0);
         isOverdue = dueDate < today;
@@ -214,8 +216,8 @@ Deno.serve(async (req) => {
       // Same rule as getProjectFinancialOverview: balance_due is maintained by the canonical payment handler
       // (amount due after send-time credit, minus active payments).
       total_balance_due: invoices
-        .filter(i => i.status === 'sent' || i.status === 'partial')
-        .reduce((sum, i) => sum + (i.balance_due ?? Math.max(0, (i.total ?? i.subtotal ?? 0) - (i.paid_amount ?? 0))), 0),
+        .filter(i => i.status === 'sent' || i.status === 'partial' || i.status === 'overdue')
+        .reduce((sum, i) => sum + Math.max(0, i.balance_due ?? ((i.total ?? i.subtotal ?? 0) - (i.credit_applied ?? 0) - (i.paid_amount ?? 0))), 0),
     };
 
     // PERF: Timing log (dev only)

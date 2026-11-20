@@ -1,26 +1,18 @@
 import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import DataQualityIndicator from "./DataQualityIndicator";
 import { base44 } from "@/api/base44Client";
-import { Loader2, RefreshCw, FileText, FileSpreadsheet } from "lucide-react";
-import FinancialExportDialog from "./FinancialExportDialog";
-import { Button } from "@/components/ui/button";
-import FinancialWarnings from "./FinancialWarnings";
-import FinancialSummaryCards from "./FinancialSummaryCards";
-import FinancialCategoryBreakdown from "./FinancialCategoryBreakdown";
-import FinancialInvoiceSummary from "./FinancialInvoiceSummary";
-import FinancialLaborBilling from "./FinancialLaborBilling";
-import FinancialLineItems from "./FinancialLineItems";
-import ApprovedScopeBudgetSection from "./ApprovedScopeBudgetSection";
-import ScopeFundingSection from "./funding/ScopeFundingSection";
-import ProjectInvoicesPanel from "./invoices/ProjectInvoicesPanel";
-import BillingSetupTab from "./billing/BillingSetupTab";
+import { Loader2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import FinancialExportDialog from "./FinancialExportDialog";
+import FinancialHeader from "./FinancialHeader";
+import BudgetPlanningArea from "./areas/BudgetPlanningArea";
+import InvoicesPaymentsArea from "./areas/InvoicesPaymentsArea";
+import CostsReconciliationArea from "./areas/CostsReconciliationArea";
 
 export default function ProjectFinancialsTab({ projectId }) {
   const queryClient = useQueryClient();
   const [exportFormat, setExportFormat] = useState(null);
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState("budget");
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["projectFinancialOverview", projectId],
     queryFn: async () => (await base44.functions.invoke("getProjectFinancialOverview", { project_id: projectId })).data,
@@ -43,6 +35,11 @@ export default function ProjectFinancialsTab({ projectId }) {
     return () => { clearTimeout(timer); u1(); u2(); };
   }, [projectId, queryClient]);
 
+  const refreshAll = () => {
+    refetch();
+    ["billingAuthorization", "scopeFundingRecon", "scopeFundingPlan", "billableItems"].forEach((k) => queryClient.invalidateQueries({ queryKey: [k, projectId] }));
+  };
+
   if (isLoading) {
     return <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-red-500" /></div>;
   }
@@ -51,57 +48,18 @@ export default function ProjectFinancialsTab({ projectId }) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <p className="text-xs text-gray-500">
-          Current scope uses today's quantities and prices. Invoice figures are historical and never recalculated.
-        </p>
-        <div className="flex items-center gap-1 shrink-0">
-          <Button size="sm" variant="ghost" onClick={() => refetch()} className="text-gray-400">
-            <RefreshCw className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`} />
-          </Button>
-        </div>
-      </div>
+    <div className="space-y-4 min-w-0">
+      <FinancialHeader projectId={projectId} data={data} onExport={setExportFormat} onRefresh={refreshAll} isFetching={isFetching} />
       {exportFormat && <FinancialExportDialog projectId={projectId} format={exportFormat} onClose={() => setExportFormat(null)} />}
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="bg-gray-900 border border-gray-800 h-auto flex-wrap justify-start">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="billing">Billing Setup</TabsTrigger>
-          <TabsTrigger value="invoices">Invoices &amp; Payments</TabsTrigger>
-          <TabsTrigger value="funding">Funding &amp; Deposits</TabsTrigger>
-          <TabsTrigger value="costs">Cost Reconciliation</TabsTrigger>
-          <TabsTrigger value="reports">Reports</TabsTrigger>
+        <TabsList className="bg-gray-900 border border-gray-800 h-auto w-full sm:w-auto grid grid-cols-3 sm:inline-flex">
+          <TabsTrigger value="budget" className="text-xs sm:text-sm">Budget &amp; Planning</TabsTrigger>
+          <TabsTrigger value="invoices" className="text-xs sm:text-sm">Invoices &amp; Payments</TabsTrigger>
+          <TabsTrigger value="costs" className="text-xs sm:text-sm">Costs &amp; Reconciliation</TabsTrigger>
         </TabsList>
-        <TabsContent value="overview" className="space-y-4 mt-4">
-          <FinancialWarnings warnings={data.warnings} lines={data.lines} />
-          <DataQualityIndicator dataQuality={data.data_quality} lines={data.lines} />
-          <FinancialSummaryCards summary={data.summary} />
-          <FinancialCategoryBreakdown categories={data.categories} summary={data.summary} laborBilling={data.labor_billing} />
-          <FinancialLaborBilling projectId={projectId} lb={data.labor_billing} labor={data.labor} />
-        </TabsContent>
-        <TabsContent value="billing" className="mt-4">
-          <BillingSetupTab projectId={projectId} lb={data.labor_billing} onGoToFunding={() => setTab("funding")} />
-        </TabsContent>
-        <TabsContent value="invoices" className="space-y-4 mt-4">
-          <ProjectInvoicesPanel projectId={projectId} />
-          <FinancialInvoiceSummary invoices={data.invoices} summary={data.summary} />
-        </TabsContent>
-        <TabsContent value="funding" className="space-y-4 mt-4">
-          <ApprovedScopeBudgetSection projectId={projectId} />
-          <ScopeFundingSection projectId={projectId} />
-        </TabsContent>
-        <TabsContent value="costs" className="space-y-4 mt-4">
-          <FinancialLineItems lines={data.lines} laborBilling={data.labor_billing} />
-        </TabsContent>
-        <TabsContent value="reports" className="mt-4">
-          <div className="rounded-lg border border-red-900/30 bg-black/40 p-4 space-y-3">
-            <p className="text-sm text-gray-300">Internal financial report and client billing detail.</p>
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={() => setExportFormat("pdf")} className="h-8"><FileText className="w-4 h-4 mr-1" />Export PDF</Button>
-              <Button size="sm" variant="outline" onClick={() => setExportFormat("xlsx")} className="h-8"><FileSpreadsheet className="w-4 h-4 mr-1" />Export Excel</Button>
-            </div>
-          </div>
-        </TabsContent>
+        <TabsContent value="budget" className="mt-4"><BudgetPlanningArea projectId={projectId} data={data} /></TabsContent>
+        <TabsContent value="invoices" className="mt-4"><InvoicesPaymentsArea projectId={projectId} data={data} /></TabsContent>
+        <TabsContent value="costs" className="mt-4"><CostsReconciliationArea projectId={projectId} data={data} /></TabsContent>
       </Tabs>
     </div>
   );

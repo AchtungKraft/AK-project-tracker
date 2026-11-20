@@ -8,7 +8,19 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.54';
  */
 
 const r2 = (n) => Math.round((n || 0) * 100) / 100;
-const FINAL = ['sent', 'partial', 'paid'];
+const FINAL = ['sent', 'partial', 'paid', 'overdue'];
+
+// ┌─ CANONICAL BILLING POSITION — invoice/payment/credit figures come only from billingAuthorizationCore and the
+// │  billing opportunity (received/unreceived parts, services, earned labor, drafts) only from resolveProjectBillableItems.
+// │  This file keeps line-level scope value and cost detail for reconciliation and reports; it does not re-derive billing totals.
+const AUTH_LOGIC_VERSION = 'auth-v1';
+const BILLING_LOGIC_VERSION = 'v1.0';
+async function core(base44, name, payload, ok) {
+  const d = (await base44.functions.invoke(name, payload)).data;
+  if (!d?.success || !ok(d)) throw new Error(`${name} unavailable or version mismatch`);
+  return d;
+}
+// └─────────────────────────────────────────────────────────────────────────
 
 // ┌─ CANONICAL LABOR BILLING — calculated only in laborBillingCore (regression vectors run via its self_test).
 // │  This file pins the logic version and fails closed if the core is unavailable or has changed.
@@ -31,12 +43,13 @@ Deno.serve(async (req) => {
     if (!project_id) return Response.json({ error: 'project_id is required' }, { status: 400 });
 
     const db = base44.asServiceRole.entities;
-    const [projects, commitments, services, invoices, credits, timeEntries, tasks, taskStatuses] = await Promise.all([
+    const [projects, commitments, services, invoices, authD, billD, timeEntries, tasks, taskStatuses] = await Promise.all([
       db.Project.filter({ id: project_id }),
       db.PartCommitment.filter({ project_id }),
       db.ServiceCommitment.filter({ project_id }),
       db.ProjectInvoice.filter({ project_id }),
-      db.CreditAllocation.filter({ project_id, is_reversed: false }).catch(() => []),
+      core(base44, 'billingAuthorizationCore', { project_id }, (d) => d.logic_version === AUTH_LOGIC_VERSION),
+      core(base44, 'resolveProjectBillableItems', { project_id }, (d) => d.BILLING_LOGIC_VERSION === BILLING_LOGIC_VERSION),
       db.TaskTimeEntry.filter({ project_id }, '-created_date', 5000),
       db.Task.filter({ project_id }, '-created_date', 5000),
       db.StatusList.filter({ scope: 'Task' }),
@@ -167,19 +180,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── INVOICES (historical) ──
-    const inv = { draft: { count: 0, total: 0 }, sent: { count: 0, total: 0 }, partial: { count: 0, total: 0 }, paid: { count: 0, total: 0 }, cancelled: { count: 0, total: 0 } };
-    let paidAmount = 0; let outstanding = 0;
-    for (const i of invoices) {
-      const t = i.total ?? i.subtotal ?? 0;
-      const k = inv[i.status] ? i.status : (i.status === 'void' ? 'cancelled' : null);
-      if (!k) continue;
-      inv[k].count++; inv[k].total += t;
-      if (FINAL.includes(i.status)) {
-        paidAmount += i.paid_amount ?? 0;
-        if (i.status === 'sent' || i.status === 'partial') outstanding += i.balance_due ?? Math.max(0, t - (i.paid_amount ?? 0));
-      }
-    }
+    // ── INVOICES (historical) ── canonical position from billingAuthorizationCore
+    const A = authD.authorization;
     const lineSplit = { final: { part: 0, service: 0, labor: 0, other: 0 }, draft: { part: 0, service: 0, labor: 0, other: 0 } };
     for (const l of lines) {
       const st = invById.get(l.invoice_id)?.status;
@@ -188,7 +190,6 @@ Deno.serve(async (req) => {
       const key = l.type === 'part' ? 'part' : l.type === 'service' ? 'service' : l.type === 'labor' ? 'labor' : 'other';
       lineSplit[bucket][key] += l.line_total ?? (l.qty || 0) * (l.unit_price || 0);
     }
-    const creditsApplied = credits.reduce((a, c) => a + (c.amount_applied ?? 0), 0);
 
     // ── LABOR (informational) ──
     // Live from current time entries + tasks (same rules as the workflow resolver; never the stored snapshot).
@@ -275,8 +276,33 @@ Deno.serve(async (req) => {
     const billable = P.billable + S.billable;
     const estCost = P.est_cost + S.est_cost;
     const costComplete = P.missing_cost + S.missing_cost === 0;
-    const remaining = P.uninvoiced + S.uninvoiced;
-    const allocated = P.allocated + S.allocated;
+
+    // ── BILLING POSITION ── one classification for every screen. Received / unreceived describes purchasing;
+    // both are inside the billing opportunity (an unreceived part can still be advance-billed). Never double counted.
+    const B = billD.summary;
+    const bItems = billD.items || [];
+    const add = (rows, f = (i) => i.line_total) => r2(rows.reduce((s, i) => s + (Number(f(i)) || 0), 0));
+    const nonBillable = billD.billing_designation === 'NON_BILLABLE';
+    const onDrafts = (t) => add((billD.allocated_items || []).filter((i) => i.type === t), (i) => i.allocated_amount);
+    const billedWork = r2(lineSplit.final.part + lineSplit.final.service + lineSplit.final.labor);
+    const projectedLaborAvailable = nonBillable ? 0 : r2(laborInvoicing.projected.totals.available_amount);
+    const position = {
+      parts_received: add(bItems.filter((i) => i.type === 'part' && i.metadata?.part_basis === 'current')),
+      parts_unreceived: add(bItems.filter((i) => i.type === 'part' && i.metadata?.part_basis === 'projected')),
+      services: add(bItems.filter((i) => i.type === 'service')),
+      labor_earned: add(bItems.filter((i) => i.type === 'labor' && i.metadata?.labor_basis !== 'projected')),
+      on_drafts: r2(B.allocated_to_drafts_total), available_now: r2(B.available_total),
+      opportunity: r2(B.uninvoiced_total), excluded: r2(B.excluded_total),
+      billed_work: billedWork, projected_labor_available: projectedLaborAvailable,
+      labor_projected_remaining: r2(LB.remAmt), labor_earned_to_date: r2(LB.toDate),
+      projected_total: r2(billedWork + B.uninvoiced_total + projectedLaborAvailable),
+      non_billable: nonBillable,
+    };
+    // Reconciles the line-level scope value (reports) with the canonical position; any difference is flagged, never hidden.
+    const scopeTotal = r2(billable + LB.toDate);
+    dataQuality.position_check = { scope_value: scopeTotal, billed_plus_open: r2(billedWork + B.uninvoiced_total + B.excluded_total), difference: r2(scopeTotal - (billedWork + B.uninvoiced_total + B.excluded_total)) };
+    const psAvail = r2(B.available_total - position.labor_earned);
+    const psAlloc = r2(onDrafts('part') + onDrafts('service'));
 
     return Response.json({
       success: true,
@@ -288,11 +314,12 @@ Deno.serve(async (req) => {
         estimated_gross_profit: r2(billable - estCost),
         estimated_gross_margin_pct: billable > 0 ? r2(((billable - estCost) / billable) * 100) : null,
         cost_complete: costComplete,
-        finalized_invoiced: r2(inv.sent.total + inv.paid.total),
-        draft_invoice_amount: r2(inv.draft.total),
-        paid_amount: r2(paidAmount), outstanding_balance: r2(outstanding), credits_applied: r2(creditsApplied),
-        remaining_uninvoiced: r2(remaining), allocated_to_drafts: r2(allocated),
-        available_to_invoice: r2(Math.max(0, remaining - allocated)),
+        finalized_invoiced: A.invoiced_gross,
+        draft_invoice_amount: A.drafts_gross,
+        paid_amount: A.paid_total, outstanding_balance: A.receivables_outstanding, credits_applied: A.credits_applied,
+        overdue_count: A.overdue_count, overdue_total: A.overdue_total, credit_balance: A.credit_balance,
+        remaining_uninvoiced: r2(psAvail + psAlloc), allocated_to_drafts: psAlloc,
+        available_to_invoice: psAvail,
         // Parts & Services figures above are unchanged; labor is additive and kept separate.
         labor_billable_to_date: r2(LB.toDate), labor_projected_remaining: r2(LB.remAmt),
         total_current_billable: r2(billable + LB.toDate),
@@ -302,6 +329,8 @@ Deno.serve(async (req) => {
         labor_invoiced: laborInvoicing.totals.invoiced_amount, labor_uninvoiced: laborInvoicing.totals.uninvoiced,
         labor_allocated_to_drafts: laborInvoicing.totals.allocated_to_drafts, labor_available_to_invoice: laborInvoicing.totals.available,
       },
+      position,
+      authorization: { authorized: A.authorized, confirmed: A.confirmed, consumed: A.consumed, remaining_authorization: A.remaining_authorization, cancelled_history: A.cancelled_history },
       labor_billing: {
         project_rate: projectRate, rate_set_by: project.labor_rate_set_by || null, rate_set_at: project.labor_rate_set_at || null,
         billing_designation: project.billing_designation === 'NON_BILLABLE' ? 'NON_BILLABLE' : 'BILLABLE',
@@ -318,7 +347,7 @@ Deno.serve(async (req) => {
         services: { billable: r2(S.billable), estimated_cost: r2(S.est_cost), actual_cost: S.actual_known ? r2(S.actual_cost) : null, actual_cost_lines: S.actual_known, estimated_only_lines: S.estimated_only, zero_cost_legit_lines: 0, remaining_uninvoiced: r2(S.uninvoiced), allocated_to_drafts: r2(S.allocated), lines: services.length, missing_cost: S.missing_cost },
       },
       invoices: {
-        by_status: Object.fromEntries(Object.entries(inv).map(([k, v]) => [k, { count: v.count, total: r2(v.total) }])),
+        by_status: A.by_status,
         line_split: { final: { part: r2(lineSplit.final.part), service: r2(lineSplit.final.service), labor: r2(lineSplit.final.labor), other: r2(lineSplit.final.other) }, draft: { part: r2(lineSplit.draft.part), service: r2(lineSplit.draft.service), labor: r2(lineSplit.draft.labor), other: r2(lineSplit.draft.other) } },
       },
       // Definitions: hours_logged = sum of TaskTimeEntry.hours; hours_estimated = sum of estimates on non-cancelled tasks;

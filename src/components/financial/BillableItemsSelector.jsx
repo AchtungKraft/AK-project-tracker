@@ -146,9 +146,9 @@ export default function BillableItemsSelector({ projectId, selectedItems, onSele
   return (
     <div className={cn("space-y-3", className)}>
       <div className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-800/50 rounded-lg text-sm">
-        <span className="text-gray-400 text-xs sm:text-sm">Current items {formatCurrencyUSD(sumTotal(defaultItems))} · projected items are optional</span>
+        <span className="text-gray-400 text-xs sm:text-sm">Received parts, services and earned labor {formatCurrencyUSD(sumTotal(defaultItems))} · unreceived parts and projected labor are optional</span>
         <Button variant="ghost" size="sm" onClick={allSelected ? () => onSelectionChange([]) : () => sel.selectGroup(defaultItems)} className="h-6 px-2 text-xs gap-1 shrink-0">
-          <CheckSquare className="w-3 h-3" />{allSelected ? "Deselect All" : "Select All Current"}
+          <CheckSquare className="w-3 h-3" />{allSelected ? "Deselect All" : "Select received & earned"}
         </Button>
       </div>
 
@@ -163,16 +163,16 @@ export default function BillableItemsSelector({ projectId, selectedItems, onSele
       <Input placeholder="Search items..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="bg-gray-800 border-gray-700" />
 
       <div className="space-y-4 max-h-[440px] overflow-y-auto pr-1">
-        <BillableSection title="Current / Earned Labor" count={labor.length} total={sumTotal(labor)}>
+        <BillableSection title="Earned Labor" count={labor.length} total={sumTotal(labor)} hint="Logged billable hours.">
           <BillableLaborGroup {...laborGroupProps(labor, "__labor__")} />
         </BillableSection>
-        <BillableSection title="Projected / Unearned Labor" count={projectedLabor.length} total={sumTotal(projectedLabor)} hint="Advance billing against task estimates. Applied first against hours logged later.">
+        <BillableSection title="Projected Labor (advance billing)" count={projectedLabor.length} total={sumTotal(projectedLabor)} hint="Advance billing against task estimates. Applied first against hours logged later.">
           <BillableLaborGroup projected {...laborGroupProps(projectedLabor, "__projected__")} />
         </BillableSection>
-        <BillableSection title="Current Billable Parts" count={currentParts.length} total={sumTotal(currentParts)} hint="Received from stock or installed.">
+        <BillableSection title="Received Parts" count={currentParts.length} total={sumTotal(currentParts)} hint="In stock or installed.">
           <div className="space-y-2"><BillablePartsGroup groups={currentGroups} expandedGroups={expandedGroups} toggleGroup={toggleGroup} keyPrefix="current" sel={sel} /></div>
         </BillableSection>
-        <BillableSection title="Projected / Unpurchased Parts" count={projectedParts.length} total={sumTotal(projectedParts)} hint="Not yet purchased or received. Billed at the estimated selling-price snapshot; purchasing and inventory are not changed, and receiving later never re-opens invoiced qty.">
+        <BillableSection title="Unreceived Parts (advance billing)" count={projectedParts.length} total={sumTotal(projectedParts)} hint="Ordered or not yet purchased; still billable in advance. Billed at the estimated selling-price snapshot; purchasing and inventory are not changed, and receiving later never re-opens invoiced qty.">
           <div className="space-y-2"><BillablePartsGroup groups={projectedGroups} expandedGroups={expandedGroups} toggleGroup={toggleGroup} keyPrefix="projected" sel={sel} /></div>
         </BillableSection>
         <BillableSection title="Services & Approved Allowances" count={services.length} total={sumTotal(services)}>

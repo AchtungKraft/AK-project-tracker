@@ -14,9 +14,11 @@ const STATUS_STYLE = {
 };
 
 // One invoice row; opens the existing invoice detail panel.
-export default function InvoiceListRow({ invoice, onOpen }) {
+export default function InvoiceListRow({ invoice, onOpen, isTest = false }) {
   const isOpen = ["sent", "partial", "overdue"].includes(invoice.status);
-  const balance = Math.max(0, (invoice.total ?? invoice.subtotal ?? 0) - (invoice.paid_amount ?? 0));
+  const closed = ["cancelled", "void"].includes(invoice.status);
+  const neverIssued = closed && !invoice.issue_date && !invoice.qb_invoice_number;
+  const balance = Math.max(0, invoice.balance_due ?? ((invoice.total ?? invoice.subtotal ?? 0) - (invoice.credit_applied ?? 0) - (invoice.paid_amount ?? 0)));
   return (
     <button
       onClick={() => onOpen(invoice.id)}
@@ -26,10 +28,12 @@ export default function InvoiceListRow({ invoice, onOpen }) {
       <div className="min-w-0 flex-1">
         <div className="text-white truncate capitalize">
           {invoice.invoice_type} invoice{invoice.qb_invoice_number ? ` · QB #${invoice.qb_invoice_number}` : ""}
+          {isTest && <Badge className="ml-2 bg-gray-800 text-gray-300 normal-case">Test · never sent</Badge>}
         </div>
         <div className="text-xs text-gray-500">
           {invoice.line_count} line(s){invoice.issue_date ? ` · issued ${invoice.issue_date}` : ""}{invoice.due_date ? ` · due ${invoice.due_date}` : ""}
           {invoice.flags?.overdue && <span className="text-red-400"> · overdue</span>}
+          {neverIssued && <span> · never issued, no credits or payments</span>}
           {invoice.flags?.missing_qb_fields && <span className="text-amber-400"> · missing QB info</span>}
         </div>
       </div>

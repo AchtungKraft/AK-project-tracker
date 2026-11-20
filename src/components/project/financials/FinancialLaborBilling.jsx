@@ -4,7 +4,6 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { ListChecks } from "lucide-react";
 import { money, hrs } from "./finFormat";
 import LaborRateEditor from "./LaborRateEditor";
-import BillingDesignationEditor from "./BillingDesignationEditor";
 import LaborTaskClassifier from "./LaborTaskClassifier";
 
 const Row = ({ label, value, muted }) => (
@@ -26,7 +25,6 @@ export default function FinancialLaborBilling({ projectId, lb, labor }) {
           <ListChecks className="w-4 h-4 mr-1" />Manage task classification{needs > 0 && <span className="ml-1 text-amber-400">({needs})</span>}
         </Button>
       </div>
-      <div className="rounded border border-gray-800 bg-gray-900/50 p-2"><BillingDesignationEditor projectId={projectId} lb={lb} /></div>
       <div className="rounded border border-gray-800 bg-gray-900/50 p-2"><LaborRateEditor projectId={projectId} lb={lb} /></div>
       {lb.project_rate != null && h.logged > 0 && h.unclassified >= h.logged && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-gray-700 bg-gray-900/60 p-2 text-xs text-gray-300">

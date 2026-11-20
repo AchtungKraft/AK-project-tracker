@@ -9,7 +9,8 @@ import InvoiceGroup from "./InvoiceGroup";
 import { money } from "../finFormat";
 
 // Project-scoped view of the existing invoice workflow. All actions go through the existing windows.
-export default function ProjectInvoicesPanel({ projectId }) {
+export default function ProjectInvoicesPanel({ projectId, history = [] }) {
+  const testIds = new Set(history.filter((h) => h.is_test).map((h) => h.id));
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
@@ -19,6 +20,7 @@ export default function ProjectInvoicesPanel({ projectId }) {
     refetch();
     queryClient.invalidateQueries({ queryKey: ["projectFinancialOverview", projectId] });
     queryClient.invalidateQueries({ queryKey: ["scopeFundingRecon", projectId] });
+    queryClient.invalidateQueries({ queryKey: ["billingAuthorization", projectId] });
   };
 
   const drafts = invoices.filter((i) => i.status === "draft");
@@ -39,7 +41,7 @@ export default function ProjectInvoicesPanel({ projectId }) {
       {isLoading ? <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-red-500" /></div> : <>
         <InvoiceGroup title="Draft invoices" invoices={drafts} onOpen={setSelectedId} emptyText="No draft invoices." />
         <InvoiceGroup title="Finalized invoices" invoices={finalized} onOpen={setSelectedId} emptyText="No sent or paid invoices yet." />
-        <InvoiceGroup title="Cancelled" invoices={closed} onOpen={setSelectedId} collapsible />
+        <InvoiceGroup title="Cancelled · history only, not in totals" invoices={closed} onOpen={setSelectedId} collapsible testIds={testIds} />
       </>}
       {showCreate && (
         <CreateProjectInvoiceModal

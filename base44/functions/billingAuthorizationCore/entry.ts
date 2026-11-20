@@ -19,11 +19,20 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.54';
 
 const AUTH_LOGIC_VERSION = 'auth-v1';
 const LABOR_LOGIC_VERSION = 'labor-v2';
+// CANONICAL INVOICE POSITION — every financial screen reads issued, paid, outstanding, overdue and credit figures here.
+// Issued = sent, partial, paid, overdue. Overdue stays issued and outstanding until paid, credited or cancelled.
+// Overdue = status 'overdue' OR an open invoice whose due date has passed.
 const FINAL = ['sent', 'partial', 'paid', 'overdue'];
+const OPEN = ['sent', 'partial', 'overdue'];
+const CLOSED = ['cancelled', 'void'];
 const r2 = (n) => Math.round((n || 0) * 100) / 100;
 const sum = (rows, f) => r2(rows.reduce((s, x) => s + (Number(f(x)) || 0), 0));
+const balanceOf = (i) => Math.max(0, i.balance_due ?? ((i.total ?? i.subtotal ?? 0) - (i.credit_applied ?? 0) - (i.paid_amount ?? 0)));
+const isOverdue = (i, today) => OPEN.includes(i.status) && (i.status === 'overdue' || (!!i.due_date && i.due_date < today) ) && balanceOf(i) > 0.005;
+// A cancelled record that was never issued and carries a regression-test line is audit history only.
+const isTestRecord = (i) => CLOSED.includes(i.status) && !i.issue_date && !i.qb_invoice_number && /regression test/i.test(`${i.cancellation_reason || ''} ${i.notes || ''}`);
 
-function computeAuthorization({ plan, versions = [], invoices = [], credits = [] }) {
+function computeAuthorization({ plan, versions = [], invoices = [], credits = [], today = new Date().toISOString().slice(0, 10) }) {
   const authorized = plan?.agreed_budget_confirmed && plan.agreed_client_budget_cents != null ? r2(plan.agreed_client_budget_cents / 100) : null;
   // Confirmed amounts over time, from the funding plan's saved versions (originals are never overwritten).
   const revisions = []; let last = null;
@@ -42,6 +51,8 @@ function computeAuthorization({ plan, versions = [], invoices = [], credits = []
   const invoicedNet = r2(invoicedGross - creditsApplied);
   const draftsNet = r2(draftsGross - draftsCredit);
   const consumed = r2(invoicedNet + draftsNet);
+  const open = invoices.filter((i) => OPEN.includes(i.status));
+  const overdue = open.filter((i) => isOverdue(i, today));
   const depositIds = new Set(final.filter((i) => i.invoice_type === 'deposit').map((i) => i.id));
   const depCredits = credits.filter((c) => depositIds.has(c.source_invoice_id));
   return {
@@ -57,7 +68,20 @@ function computeAuthorization({ plan, versions = [], invoices = [], credits = []
       credit_remaining: sum(depCredits, (c) => c.remaining_amount),
     },
     credit_balance: sum(credits, (c) => c.remaining_amount),
-    receivables_outstanding: sum(final.filter((i) => i.status !== 'paid'), (i) => Math.max(0, i.balance_due ?? 0)), // balance_due is already net of payments (recordInvoicePayment)
+    // balance_due is already net of send-time credit and payments (recordInvoicePayment)
+    receivables_outstanding: sum(open, balanceOf),
+    issued_count: final.length, paid_total: sum(final, (i) => i.paid_amount),
+    outstanding_count: open.filter((i) => balanceOf(i) > 0.005).length,
+    overdue_count: overdue.length, overdue_total: sum(overdue, balanceOf),
+    by_status: Object.fromEntries(['draft', 'sent', 'partial', 'overdue', 'paid', 'cancelled'].map((k) => {
+      const rows = invoices.filter((i) => (k === 'cancelled' ? CLOSED.includes(i.status) : i.status === k));
+      return [k, { count: rows.length, total: sum(rows, (i) => i.total ?? i.subtotal) }];
+    })),
+    // Audit history only: never in issued, draft, receivable or allocation figures.
+    cancelled_history: invoices.filter((i) => CLOSED.includes(i.status)).map((i) => ({
+      id: i.id, invoice_type: i.invoice_type, status: i.status, total: r2(i.total ?? i.subtotal), cancelled_at: i.cancelled_at || null,
+      never_issued: !i.issue_date && !i.qb_invoice_number, is_test: isTestRecord(i),
+    })),
   };
 }
 
@@ -88,6 +112,16 @@ function runVectors() {
   ck('paid deposit not yet applied still consumes its own amount once', [b.consumed, b.deposits.credit_remaining], [3000, 3000]);
   const c = computeAuthorization({ plan: { agreed_budget_confirmed: false, agreed_client_budget_cents: 500000 }, invoices: inv });
   ck('unconfirmed amount is never an authorization', [c.authorized, c.remaining_authorization], [null, null]);
+  // Overdue: past-due sent invoice and an explicit overdue status both stay issued and outstanding.
+  const od = computeAuthorization({ plan, today: '2026-11-20', invoices: [
+    { id: 'o1', status: 'sent', subtotal: 1000, total: 1000, balance_due: 1000, due_date: '2026-11-01' },
+    { id: 'o2', status: 'overdue', subtotal: 400, total: 400, balance_due: 250, paid_amount: 150 },
+    { id: 'o3', status: 'sent', subtotal: 300, total: 300, balance_due: 300, due_date: '2026-12-01' },
+    { id: 't1', status: 'cancelled', invoice_type: 'final', total: 652.5, cancellation_reason: 'DRAFT_DELETED: {"lines":[{"description":"Regression test: over-limit labor"}]}' },
+    { id: 'c1', status: 'cancelled', invoice_type: 'progress', total: 6964, cancellation_reason: 'DRAFT_DELETED: {}' },
+  ] });
+  ck('overdue invoices remain issued and outstanding', [od.invoiced_gross, od.receivables_outstanding, od.overdue_count, od.overdue_total, od.paid_total], [1700, 1550, 2, 1250, 150]);
+  ck('cancelled records stay in history only; test record identified', [od.consumed, od.drafts_net, od.cancelled_history.map((h) => h.is_test)], [1700, 0, [true, false]]);
   return { pass: checks.every((x) => x.pass), checks };
 }
 
@@ -141,9 +175,23 @@ Deno.serve(async (req) => {
     if (user.role !== 'admin') return Response.json({ error: 'Forbidden' }, { status: 403 });
     const body = await req.json().catch(() => ({}));
     if (body.self_test) { const v = runVectors(); return Response.json({ success: v.pass, logic_version: AUTH_LOGIC_VERSION, vectors: v }); }
+    const db = base44.asServiceRole.entities;
+    // Portfolio mode (Open Dollars): one invoice position per project. Revisions are only loaded per project.
+    if (body.scope === 'all') {
+      const [plans, invoices, credits] = await Promise.all([all(db.ScopeFundingPlan, {}), all(db.ProjectInvoice, {}), all(db.ProjectCreditLedger, {})]);
+      const group = (rows) => { const m = new Map(); for (const r of rows) { if (!m.has(r.project_id)) m.set(r.project_id, []); m.get(r.project_id).push(r); } return m; };
+      const invBy = group(invoices); const crBy = group(credits); const planBy = new Map(plans.map((p) => [p.project_id, p]));
+      const ids = new Set([...invBy.keys(), ...crBy.keys(), ...planBy.keys()]);
+      const projects = {};
+      for (const pid of ids) {
+        const a = computeAuthorization({ plan: planBy.get(pid), invoices: invBy.get(pid) || [], credits: crBy.get(pid) || [] });
+        delete a.cancelled_history; delete a.revisions;
+        projects[pid] = a;
+      }
+      return Response.json({ success: true, logic_version: AUTH_LOGIC_VERSION, projects });
+    }
     const { project_id } = body;
     if (typeof project_id !== 'string' || !project_id) return Response.json({ error: 'project_id is required' }, { status: 400 });
-    const db = base44.asServiceRole.entities;
     const [plans, invoices, credits] = await Promise.all([db.ScopeFundingPlan.filter({ project_id }), all(db.ProjectInvoice, { project_id }), all(db.ProjectCreditLedger, { project_id })]);
     const plan = plans[0] || null;
     const versions = plan ? await all(db.ScopeFundingPlanVersion, { plan_id: plan.id }) : [];

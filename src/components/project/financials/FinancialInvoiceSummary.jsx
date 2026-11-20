@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { money } from "./finFormat";
 
-const LABELS = { draft: "Draft", sent: "Sent", partial: "Partially paid", paid: "Paid", cancelled: "Cancelled" };
+const LABELS = { draft: "Draft", sent: "Sent", partial: "Partially paid", overdue: "Overdue", paid: "Paid", cancelled: "Cancelled (history)" };
 
 // Compact historical invoice summary; line split behind a toggle.
 export default function FinancialInvoiceSummary({ invoices, summary }) {
@@ -13,7 +13,7 @@ export default function FinancialInvoiceSummary({ invoices, summary }) {
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
         <span className="font-medium text-white">Invoices (historical)</span>
         {Object.entries(LABELS).map(([k, label]) => (
-          <span key={k} className="text-gray-300 text-xs">{label} ({by_status[k].count}) <span className="tabular-nums text-white">{money(by_status[k].total)}</span></span>
+          <span key={k} className="text-gray-300 text-xs">{label} ({by_status[k]?.count ?? 0}) <span className="tabular-nums text-white">{money(by_status[k]?.total ?? 0)}</span></span>
         ))}
         <button onClick={() => setOpen((o) => !o)} className="ml-auto flex items-center text-xs text-gray-500 hover:text-gray-300">
           {open ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />} Details

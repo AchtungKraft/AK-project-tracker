@@ -172,6 +172,9 @@ function ProjectBillableRow({ project, onCreateInvoice }) {
             {formatCurrencyUSD(project.allocated_to_drafts)} on {project.open_draft_count} draft{project.open_draft_count !== 1 ? "s" : ""}
           </p>
         )}
+        {breakdown.parts_unreceived_total > 0 && (
+          <p className="text-[10px] text-violet-300">incl. {formatCurrencyUSD(breakdown.parts_unreceived_total)} unreceived parts</p>
+        )}
         {project.excluded_amount > 0 && (
           <p className="text-[10px] text-gray-400">{formatCurrencyUSD(project.excluded_amount)} excluded</p>
         )}

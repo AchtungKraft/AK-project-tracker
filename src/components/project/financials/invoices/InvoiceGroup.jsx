@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import InvoiceListRow from "./InvoiceListRow";
 
-export default function InvoiceGroup({ title, invoices, onOpen, emptyText, collapsible = false }) {
+export default function InvoiceGroup({ title, invoices, onOpen, emptyText, collapsible = false, testIds }) {
   const [open, setOpen] = useState(!collapsible);
   if (collapsible && invoices.length === 0) return null;
   return (
@@ -16,7 +16,7 @@ export default function InvoiceGroup({ title, invoices, onOpen, emptyText, colla
       </button>
       {open && (invoices.length === 0
         ? <p className="px-3 py-3 text-xs text-gray-500">{emptyText}</p>
-        : invoices.map((inv) => <InvoiceListRow key={inv.id} invoice={inv} onOpen={onOpen} />))}
+        : invoices.map((inv) => <InvoiceListRow key={inv.id} invoice={inv} onOpen={onOpen} isTest={!!testIds?.has(inv.id)} />))}
     </div>
   );
 }

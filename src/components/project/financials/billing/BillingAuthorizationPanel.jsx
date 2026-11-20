@@ -12,7 +12,7 @@ const Stat = ({ label, value, tone = "text-white", sub }) => (
 const money = (v) => (v == null ? "Not set" : formatCurrencyUSD(v));
 
 // Read-only view of the confirmed client-agreed billing budget and what has been billed against it.
-// The budget itself is entered and confirmed in the funding plan (Funding & Deposits); originals are never overwritten.
+// The budget itself is entered and confirmed in the funding plan (Budget & Planning); originals are never overwritten.
 export default function BillingAuthorizationPanel({ a, earned, projected, onGoToFunding }) {
   return (
     <section className="rounded-lg border border-gray-800 bg-black/40 p-3 space-y-3">
@@ -34,8 +34,8 @@ export default function BillingAuthorizationPanel({ a, earned, projected, onGoTo
         <Stat label="All credits available" value={formatCurrencyUSD(a.credit_balance)} />
         <Stat label="Outstanding receivables" value={formatCurrencyUSD(a.receivables_outstanding)} />
         {earned && <Stat label="Earned work value" value={formatCurrencyUSD(earned.total)} sub={`Labor ${formatCurrencyUSD(earned.labor)} · received parts ${formatCurrencyUSD(earned.parts_received)} · services ${formatCurrencyUSD(earned.services)}`} />}
-        {projected && <Stat label="Projected labor available" value={formatCurrencyUSD(projected.labor)} tone="text-violet-300" />}
-        {projected && <Stat label="Projected parts available" value={formatCurrencyUSD(projected.parts)} tone="text-violet-300" />}
+        {projected && <Stat label="Projected labor available" value={formatCurrencyUSD(projected.labor)} tone="text-violet-300" sub="Advance billing, optional" />}
+        {projected && <Stat label="Unreceived parts" value={formatCurrencyUSD(projected.parts)} tone="text-violet-300" sub="In billing opportunity; advance-billable" />}
       </div>
       {a.revisions.length > 0 && (
         <div className="space-y-1">

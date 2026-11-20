@@ -294,11 +294,25 @@ Deno.serve(async (req) => {
       const totalCost = items.reduce((s, i) => s + (i.cost_total ?? 0), 0);
       let allocatedAmount = 0;
       let availableCount = 0;
+      // Received / unreceived split — SAME RULE as resolveProjectBillableItems ("Current vs projected parts"):
+      // after drafts, invoiced and draft qty apply first against received qty (reserved + installed); the rest is unreceived.
+      // Purchasing status only: both stay inside the uninvoiced total.
+      let partsReceived = 0;
+      let partsUnreceived = 0;
+      const cById = new Map(projectCommitments.map((c) => [c.id, c]));
       for (const i of items) {
         const dq = draftQtyBySource.get(i.source_id) ?? 0;
         const allocQty = Math.min(i.qty_available_to_bill, dq);
         allocatedAmount += allocQty * i.unit_price;
         if (i.qty_available_to_bill - allocQty > 1e-9) availableCount++;
+        if (i.type === 'part') {
+          const c = cById.get(i.source_id) || {};
+          const avail = Math.max(0, i.qty_available_to_bill - allocQty);
+          const physical = Math.min(i.effective_required ?? 0, (c.reserved_from_stock ?? 0) + (c.qty_installed ?? 0));
+          const recQ = Math.max(0, Math.min(avail, physical - (i.invoiced_qty ?? 0) - allocQty));
+          partsReceived += recQ * i.unit_price;
+          partsUnreceived += (avail - recQ) * i.unit_price;
+        }
       }
       const r2 = (n) => Math.round(n * 100) / 100;
 
@@ -336,6 +350,8 @@ Deno.serve(async (req) => {
           services_count: serviceItems.length,
           parts_total: Math.round(partItems.reduce((s, i) => s + i.line_total, 0) * 100) / 100,
           services_total: Math.round(serviceItems.reduce((s, i) => s + i.line_total, 0) * 100) / 100,
+          parts_received_total: r2(partsReceived),
+          parts_unreceived_total: r2(partsUnreceived),
         },
       });
     }
