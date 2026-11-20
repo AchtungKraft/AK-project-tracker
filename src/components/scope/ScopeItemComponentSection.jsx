@@ -1,9 +1,10 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 
+// Small phones: hard costs keep description | cost; labor stacks the numbers under the operation.
 const GRID = {
-  hard: "sm:grid-cols-[minmax(0,1fr)_8.5rem]",
-  labor: "sm:grid-cols-[minmax(0,1fr)_5.5rem_8.5rem]",
+  hard: "grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_8.5rem]",
+  labor: "grid-cols-1 sm:grid-cols-[minmax(0,1fr)_5.5rem_8.5rem]",
 };
 
 /**
@@ -22,22 +23,23 @@ export default function ScopeItemComponentSection({ title, accent, kind = "hard"
     );
   }
   const isLabor = kind === "labor";
-  const grid = cn("grid grid-cols-[minmax(0,1fr)_auto] gap-x-4", GRID[kind]);
+  const grid = cn("grid gap-x-4", GRID[kind]);
+  const numAlign = isLabor ? "text-left sm:text-right" : "text-right";
 
   return (
     <div>
-      <div className={cn(grid, "items-baseline pb-1.5 border-b border-slate-700/40")}>
+      <div className={cn(grid, "items-baseline pb-1 border-b border-slate-700/40")}>
         <p className={cn("text-[10px] font-semibold uppercase tracking-widest", accent)}>{title}</p>
         {isLabor && <p className="hidden sm:block text-[11px] text-gray-500 tabular-nums text-right">{subtotalHours}</p>}
-        <p className="text-[11px] text-gray-500 tabular-nums text-right">
+        <p className={cn("text-[11px] text-gray-500 tabular-nums", numAlign)}>
           {isLabor && subtotalHours && <span className="sm:hidden">{subtotalHours}{subtotal ? ' · ' : ''}</span>}
           {subtotal}
         </p>
       </div>
       {(
-        <div className="mt-1 divide-y divide-gray-700/40">
+        <div className="divide-y divide-gray-700/30">
           {rows.map((r, i) => (
-            <div key={r.key ?? i} className={cn(grid, "items-baseline py-2")}>
+            <div key={r.key ?? i} className={cn(grid, "items-baseline py-1.5")}>
               <p className="text-[13px] text-gray-300 leading-snug break-words min-w-0">
                 {r.label && <span className={cn("font-semibold", accent)}>{r.label}</span>}
                 {r.label && r.description && <span className="text-gray-600"> — </span>}
@@ -46,7 +48,7 @@ export default function ScopeItemComponentSection({ title, accent, kind = "hard"
               {isLabor && (
                 <p className="hidden sm:block text-[13px] text-gray-200 tabular-nums text-right whitespace-nowrap">{r.hours}</p>
               )}
-              <div className="text-right whitespace-nowrap">
+              <div className={cn(numAlign, "whitespace-nowrap")}>
                 {isLabor && <span className="sm:hidden text-[13px] text-gray-200 tabular-nums">{r.hours}{r.value ? ' · ' : ''}</span>}
                 {r.value && <span className={cn("text-[13px] tabular-nums", r.tbd ? "text-amber-400" : "text-gray-200")}>{r.value}</span>}
                 {r.sub && <span className="block text-[10px] text-gray-500 tabular-nums">{r.sub}</span>}

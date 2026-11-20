@@ -9,10 +9,14 @@ export default function ScopeItemWorkSection({ item, notes = [] }) {
   if (!item.description && !notes.length && !images.length) return null;
 
   return (
-    <section className="space-y-2" aria-label="Scope of work">
+    <section className="space-y-1.5" aria-label="Scope of work">
       <h5 className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Scope of Work</h5>
       {item.description && (
-        <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-line break-words max-w-[72ch]">{item.description}</p>
+        <div className="space-y-2 max-w-[80ch]">
+          {item.description.replace(/\r\n/g, '\n').split(/\n[ \t]*\n+/).map((para, i) => (
+            <p key={i} className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap break-words">{para.replace(/^\n+|\s+$/g, '')}</p>
+          ))}
+        </div>
       )}
       {notes.map((n, i) => (
         <p key={i} className="text-xs text-gray-500 italic leading-relaxed max-w-[72ch] break-words">{n}</p>
