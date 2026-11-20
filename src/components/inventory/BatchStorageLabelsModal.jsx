@@ -116,7 +116,7 @@ export default function BatchStorageLabelsModal({ onClose }) {
           </div>
           <label className="text-xs text-gray-400 block">Print format
             <Select value={format} onValueChange={setFormat}><SelectTrigger className="mt-1"><SelectValue/></SelectTrigger>
-              <SelectContent><SelectItem value="thermal">4 × 3 in thermal (one per page)</SelectItem><SelectItem value="letter">US Letter (multi-label sheet)</SelectItem></SelectContent>
+              <SelectContent><SelectItem value="thermal">4 × 3 in thermal (one per page)</SelectItem><SelectItem value="letter">US Letter (2 full-width labels per page)</SelectItem></SelectContent>
             </Select>
           </label>
           <Button onClick={print} className="w-full"><Printer className="w-4 h-4 mr-2"/> Open Print Layout</Button>

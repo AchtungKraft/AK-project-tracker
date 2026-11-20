@@ -1,5 +1,6 @@
 import { renderQRSVGString } from "./QRCodeSVG";
 import { renderBarcodeSVGString } from "./Code128SVG";
+import { buildLetterLabelSheet } from "./letterStorageLabels";
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => (
@@ -17,7 +18,12 @@ export function printStorageLabelBatch(labels, { format = 'thermal', batchCode =
   const valid = labels.every(c => /^AK_CTR:[a-f0-9]{24}$/i.test(c.qr_code_value || '') && c.short_code);
   if (!valid) throw new Error('Some labels have not been assigned permanent QR identities');
 
-  const sheet = format === 'letter';
+  if (format === 'letter') {
+    const { css, body } = buildLetterLabelSheet(labels, batchCode, escapeHtml);
+    return openPrintWindow(css, body);
+  }
+
+  const sheet = false;
   const pages = labels.map((c) => {
     const code = escapeHtml(c.short_code);
     const type = escapeHtml(c.container_type || 'box');
@@ -59,10 +65,14 @@ export function printStorageLabelBatch(labels, { format = 'thermal', batchCode =
     footer{font-size:8px;font-family:monospace;display:flex;justify-content:space-between}
     @media screen{body{background:#eee;padding:12px}.label{background:white;margin:0 auto 10px;max-width:4in}}
   `;
-  const w = window.open('','_blank','width=800,height=720');
+  return openPrintWindow(css, pages);
+}
+
+function openPrintWindow(css, body) {
+  const w = window.open('','_blank','width=900,height=760');
   if (!w) return false;
   w.document.open();
-  w.document.write(`<!doctype html><html><head><title>AK Storage Labels</title><meta charset="utf-8"><style>${css}</style></head><body><main>${pages}</main></body></html>`);
+  w.document.write(`<!doctype html><html><head><title>AK Storage Labels</title><meta charset="utf-8"><style>${css}</style></head><body><main>${body}</main></body></html>`);
   w.document.close();
   w.onload = () => { w.focus(); w.print(); };
   return true;
