@@ -348,12 +348,29 @@
     "invoiced_qty": {
       "type": "number",
       "default": 0,
-      "description": "PHASE 10: Quantity invoiced to client via ProjectInvoice system"
+      "description": "PHASE 10: Quantity billed to client: sent invoices plus general-credit parts settlements (credit_settled_qty). Every billable-quantity calculation subtracts it."
     },
     "invoiced_amount": {
       "type": "number",
       "default": 0,
-      "description": "PHASE 10: Total amount invoiced to client via ProjectInvoice system"
+      "description": "PHASE 10: Total amount billed to client: sent invoices plus credit_settled_amount"
+    },
+    "credit_settled_qty": {
+      "type": "number",
+      "default": 0,
+      "description": "Portion of invoiced_qty covered by general-credit parts settlements (no invoice). Written only by applyProjectCreditToCommitments."
+    },
+    "credit_settled_amount": {
+      "type": "number",
+      "default": 0,
+      "description": "Portion of invoiced_amount covered by general-credit parts settlements"
+    },
+    "credit_settlement_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Settlement and reversal ids already reflected in this commitment's billing quantities (makes recovery idempotent)"
     },
     "billed_qty_total": {
       "type": "number",

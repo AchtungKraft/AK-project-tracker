@@ -24,7 +24,84 @@
     },
     "amount_applied": {
       "type": "number",
-      "description": "Amount of credit applied (positive value)"
+      "description": "Amount of credit applied. Positive for settlements; negative for a settlement_reversal compensating entry, so sums are always net."
+    },
+    "allocation_kind": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "part_removal",
+        "parts_settlement",
+        "settlement_reversal",
+        null
+      ],
+      "enumColors": [
+        "gray",
+        "green",
+        "yellow",
+        "gray"
+      ],
+      "description": "parts_settlement = general credit applied to a part without an invoice; settlement_reversal = compensating entry that returns part of a settlement to its original credit row. Null on older records."
+    },
+    "settlement_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Groups the entries of one settlement or one reversal (request key). Recorded on the part commitment once its billing quantities reflect it."
+    },
+    "settlement_state": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "pending_commitment",
+        "completed",
+        null
+      ],
+      "enumColors": [
+        "yellow",
+        "green",
+        "gray"
+      ],
+      "description": "pending_commitment = credit moved but the part's billing quantities are not yet updated (invoicing for the project is blocked until finished); completed = fully recorded."
+    },
+    "qty_settled": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "Part quantity this entry covers (negative on reversals)"
+    },
+    "unit_retail_at_settlement": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "Part unit retail when settled"
+    },
+    "reverses_allocation_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "settlement_reversal: the settlement entry it compensates"
+    },
+    "actor_email": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "recorded_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
     },
     "allocation_mode": {
       "type": "string",
@@ -42,7 +119,7 @@
     "is_reversed": {
       "type": "boolean",
       "default": false,
-      "description": "Whether this allocation has been reversed"
+      "description": "Whether this allocation has been reversed (legacy flag; settlement reversals use compensating entries instead)"
     },
     "reversed_at": {
       "type": "string",

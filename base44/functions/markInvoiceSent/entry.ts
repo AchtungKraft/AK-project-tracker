@@ -85,9 +85,10 @@ async function planCredits(db, inv) {
   if (creditToApply <= 0) return { creditToApply, plan: [] };
   const depIds = new Set((await db.findInvoices({ project_id: inv.project_id })).filter((i) => i.invoice_type === 'deposit').map((i) => i.id));
   const kindOf = (c) => (!c.reversed_from_invoice_id && depIds.has(c.source_invoice_id) ? 'deposit' : 'general');
-  // Rows under half a cent are floating-point residue, not credit.
+  // Same rule as the shared credit availability (projectDepositAction): a row counts when it rounds to at least one cent.
+  // Rows under half a cent are floating-point residue, not credit. Draws below use the raw balance, so nothing is created.
   const available = (await db.findCredits({ project_id: inv.project_id }))
-    .filter((c) => (c.remaining_amount ?? 0) >= 0.005)
+    .filter((c) => Math.round((c.remaining_amount ?? 0) * 100) >= 1)
     .sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
   const plan = [];
   for (const [kind, amount] of want) {
@@ -182,6 +183,11 @@ async function markSent(db, { invoice_id, qb_invoice_number, issue_date, due_dat
       if (await reconcilePendingPlan(db, fresh, key)) fresh = await db.getInvoice(invoice_id);
     } catch (e) {
       return [409, { success: false, error: e.message, code: e.code, ambiguous: e.ambiguous }];
+    }
+
+    // An interrupted parts credit settlement has moved credit but not yet updated its parts' billed quantities.
+    if ((await db.pendingSettlements(invoice.project_id)).length) {
+      return [409, { success: false, code: 'SETTLEMENT_INCOMPLETE', error: 'A parts credit settlement for this project did not finish. Finish it in Parts Action Workbench before sending invoices.' }];
     }
 
     const lines = await db.listLines(invoice_id);
@@ -345,6 +351,7 @@ function realDb(base44) {
     projectCas: async (q, set) => (await sr.Project.updateMany(q, { $set: set })).updated,
     findTx: (q) => sr.DepositTransaction.filter(q),
     createTx: (rows) => sr.DepositTransaction.bulkCreate(rows),
+    pendingSettlements: (project_id) => sr.CreditAllocation.filter({ project_id, settlement_state: 'pending_commitment' }),
     laborItems: async (project_id) => (await loadProjectLabor(base44, project_id)).items,
     budgetState: async (project_id) => {
       const d = (await base44.functions.invoke('billingAuthorizationCore', { project_id })).data;
@@ -412,6 +419,7 @@ function mockDb(seed, faults = {}) {
     projectCas: (q, set) => cas('projectCas', T.projects, q, set),
     findTx: (q) => find('findTx', T.txs, q),
     createTx: async (rows) => { await hit('createTx'); for (const r of rows) { const id = `tx${++txSeq}`; T.txs.set(id, { id, ...structuredClone(r) }); } },
+    pendingSettlements: async (pid) => (seed.pending_settlements || []).filter((a) => a.project_id === pid),
     laborItems: async () => structuredClone(seed.labor || []),
     budgetState: async () => structuredClone(seed.budget || { budget: null, billed_final: 0 }),
   };
@@ -435,6 +443,7 @@ async function runSelfTest() {
     services: [{ id: 'sc1', is_billed: false, invoice_id: null, status: 'completed' }],
     credits: extra.credits || CREDITS,
     projects: [{ id: 'p1', billing_lock_token: extra.lockToken ?? null, billing_lock_at: extra.lockAt ?? null }],
+    pending_settlements: extra.pending || [],
   }, extra.faults);
   const run = (db, args = {}) => markSent(db, { ...ARGS, ...args }).catch((e) => [500, { error: e.message }]);
   const bal = (db) => Object.fromEntries([...db.T.credits.values()].map((c) => [c.id, c.remaining_amount]));
@@ -690,6 +699,23 @@ async function runSelfTest() {
     return { pass: r.filter(([s]) => s === 200).length === 1 && db.T.credits.get('cd').remaining_amount === 200 && db.T.credits.get('cg').remaining_amount === 80 && [...db.T.txs.values()].length === 2 };
   });
 
+  await test('interrupted parts credit settlement on the project blocks the send; nothing changes', async () => {
+    const db2 = seed({}, { pending: [{ id: 'a1', project_id: 'p1', settlement_state: 'pending_commitment' }] });
+    const [s, b] = await run(db2);
+    return { pass: s === 409 && b.code === 'SETTLEMENT_INCOMPLETE' && cleanDraft(db2) };
+  });
+  await test('fractional-cent residue: same usable-credit rule as shared availability; nothing created', async () => {
+    const credits = [
+      { id: 'r1', project_id: 'p1', credit_amount: 5, remaining_amount: 0.0000000000018, created_date: '2025-01-01T00:00:00Z' },
+      { id: 'r2', project_id: 'p1', credit_amount: 5, remaining_amount: 0.004, created_date: '2025-01-02T00:00:00Z' },
+      { id: 'r3', project_id: 'p1', credit_amount: 400, remaining_amount: 300.005, created_date: '2025-01-03T00:00:00Z' },
+    ];
+    const db = seed({}, { credits });
+    const [s] = await run(db);
+    const r3 = db.T.credits.get('r3').remaining_amount;
+    return { pass: s === 200 && db.T.credits.get('r1').remaining_amount === 0.0000000000018 && db.T.credits.get('r2').remaining_amount === 0.004
+      && Math.abs(r3 - 0.005) < 1e-9 && inv(db).credit_applied === 300, r3 };
+  });
   return { function: 'markInvoiceSent', mock_only: true, passed: results.filter((r) => r.pass).length, total: results.length, results };
 }
 

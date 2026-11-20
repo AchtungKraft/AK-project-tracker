@@ -223,6 +223,12 @@ async function handleDraft(base44, user, payload) {
       return Response.json({ success: false, code: 'PROJECT_NON_BILLABLE', error: 'This project is marked Non-Billable. Change it to Billable before invoicing.' }, { status: 409 });
     }
 
+    // ── INTERRUPTED PARTS CREDIT SETTLEMENT ── credit moved but part billed qty not yet updated: never draft over it.
+    const pendingSettle = await base44.asServiceRole.entities.CreditAllocation.filter({ project_id, settlement_state: 'pending_commitment' });
+    if (pendingSettle.length) {
+      return Response.json({ success: false, code: 'SETTLEMENT_INCOMPLETE', error: 'A parts credit settlement for this project did not finish. Finish it in Parts Action Workbench before invoicing.' }, { status: 409 });
+    }
+
     // ── APPEND TARGET ── must be an untouched draft on this project (re-read under the billing lock).
     let target = null;
     if (appending) {
@@ -1028,6 +1034,13 @@ async function runSelfTest() {
     const m = seedProject();
     const r = await call(m, { check_only: true, lines: [lab(2), part('c1', 1, 'current', { unit_price: 250, price_override: { reason: 'Loyalty discount' } })] });
     return { pass: r.success && r.check_only && r.would_add.length === 2 && linesOf(m).length === 1 && draft(m).subtotal === 300 && !(m.tables.ActivityLog || []).length && unlocked(m) };
+  });
+  await t('interrupted parts credit settlement blocks new draft lines; nothing written', async () => {
+    const m = seedProject();
+    m.tables.CreditAllocation = [{ id: 'a1', project_id: 'P', settlement_state: 'pending_commitment' }];
+    const before = linesOf(m).length;
+    const r = await call(m, { lines: [part('c1', 1, 'current')] });
+    return { pass: r.code === 'SETTLEMENT_INCOMPLETE' && linesOf(m).length === before && draft(m).subtotal === 300 && unlocked(m) };
   });
   await t('non-billable project: rejected', async () => {
     const m = seedProject({ designation: 'NON_BILLABLE' });

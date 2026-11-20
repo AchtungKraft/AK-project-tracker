@@ -457,7 +457,8 @@ async function getBillingAndProcurementStates(base44, filters = {}) {
 
     // PHASE 3: Calculate gross and net exposure with credit
     const grossLineTotal = assignedQty * unitRetail;
-    const invoicedAmount = commitment.invoiced_amount || 0;
+    // Invoice-billed amount only: credit-settled amount is also in invoiced_amount and is counted via creditAppliedLine.
+    const invoicedAmount = Math.max(0, (commitment.invoiced_amount || 0) - (commitment.credit_settled_amount || 0));
     const creditAppliedLine = creditByCommitment[commitment.id] || 0;
     const netLineTotal = Math.max(0, grossLineTotal - invoicedAmount - creditAppliedLine);
     
