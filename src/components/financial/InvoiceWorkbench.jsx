@@ -522,11 +522,8 @@ function BatchHistoryPanel({ onBatchClick }) {
 // ============================================
 
 function BatchDetailModal({ batch, isOpen, onClose }) {
-  const queryClient = useQueryClient();
-  
   // DETERMINISTIC: Normalize IDs - null if invalid
   const normalizedBatchId = batch?.id ? String(batch.id) : null;
-  const normalizedProjectIdLocal = normalizeProjectId(batch?.project_id);
   
   // PHASE 1: Use ProjectInvoiceLine instead of InvoiceBatchLine
   const { data: lines = [], isLoading } = useQuery({
@@ -535,25 +532,7 @@ function BatchDetailModal({ batch, isOpen, onClose }) {
     enabled: isOpen && Boolean(normalizedBatchId),
   });
 
-  const exportMutation = useMutation({
-    mutationFn: async () => {
-      const response = await base44.functions.invoke('exportProjectInvoicesToQB', { invoice_id: normalizedBatchId });
-      return response.data;
-    },
-    onSuccess: () => {
-      toast.success('Invoice exported successfully');
-      queryClient.invalidateQueries({ queryKey: ['projectInvoicesRecent'] });
-      if (normalizedBatchId) {
-        queryClient.invalidateQueries({ queryKey: ['invoiceLines', normalizedBatchId] });
-      }
-      if (normalizedProjectIdLocal) {
-        queryClient.invalidateQueries({ queryKey: invoiceKeys.view(normalizedProjectIdLocal) });
-      }
-    },
-    onError: (error) => {
-      toast.error(error.message || 'Export failed');
-    },
-  });
+  // QuickBooks export is done only from Project Financials → QuickBooks exports (canonical, tracked export files).
 
   if (!batch) return null;
 
@@ -613,16 +592,6 @@ function BatchDetailModal({ batch, isOpen, onClose }) {
         
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Close</Button>
-          {batch.status === 'draft' && (
-            <Button 
-              onClick={() => exportMutation.mutate()}
-              disabled={exportMutation.isPending}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              {exportMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
-              Export to QuickBooks
-            </Button>
-          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
