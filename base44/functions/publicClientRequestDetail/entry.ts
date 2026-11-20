@@ -547,8 +547,9 @@ Deno.serve(async (req) => {
                 labor_group_name: le.labor_group_name_snapshot || 'Labor',
                 labor_group_name_snapshot: le.labor_group_name_snapshot || null,
                 description: le.description || '',
-                hours_min: le.hours_min || 0,
-                hours_max: le.hours_max || 0,
+                hours_min: le.hours_min ?? null,
+                hours_max: le.hours_max ?? null,
+                hours_tbd: !!le.hours_tbd,
                 sort_order: le.sort_order || 0,
             })),
             // Canonical scope item pricing — server-computed safe aggregates
@@ -565,10 +566,14 @@ Deno.serve(async (req) => {
                     const itemLabor = laborByItem.get(item.id) || [];
                     let akHoursMin = 0, akHoursMax = 0, akLaborMin = 0, akLaborMax = 0;
                     for (const le of itemLabor) {
-                        akHoursMin += le.hours_min || 0;
-                        akHoursMax += le.hours_max || 0;
-                        akLaborMin += (le.hours_min || 0) * (le.rate_snapshot || 0);
-                        akLaborMax += (le.hours_max || 0) * (le.rate_snapshot || 0);
+                        // Legacy portal contract: exact (low only) counts as low for both bounds; TBD / blank add nothing.
+                        // The canonical flexible interpretation is served by clientScopeReview.
+                        const hMin = le.hours_tbd ? 0 : (le.hours_min || 0);
+                        const hMax = le.hours_tbd ? 0 : (le.hours_max ?? le.hours_min ?? 0);
+                        akHoursMin += hMin;
+                        akHoursMax += hMax;
+                        akLaborMin += hMin * (le.rate_snapshot || 0);
+                        akLaborMax += hMax * (le.rate_snapshot || 0);
                     }
                     const laborEstimated = itemLabor.length > 0 && (akHoursMin > 0 || akHoursMax > 0);
 

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { computeRollup, formatHoursRange } from "./scopeHelpers";
+import { computeRollup } from "./scopeHelpers";
 import { computeScopePricingRollup, formatDollarCompact } from "./scopePricingHelpers";
 import ScopeGroupSection from "./ScopeGroupSection";
 
@@ -38,13 +38,8 @@ export default function ScopeCategorySection({
   // Compute the total label for the category
   const totalLabel = pricingRollup.all_classified && !pricingRollup.has_incomplete && pricingRollup.hard_cost_tbd_count === 0
     ? formatDollarCompact(pricingRollup.total_estimate_min, pricingRollup.total_estimate_max)
-    : formatDollarCompact(
-        pricingRollup.legacy_budget_min + pricingRollup.hard_cost_min + pricingRollup.ak_labor_min,
-        pricingRollup.legacy_budget_max + pricingRollup.hard_cost_max + pricingRollup.ak_labor_max
-      );
-  const hoursLabel = pricingRollup.ak_hours_max > 0
-    ? formatHoursRange(pricingRollup.ak_hours_min, pricingRollup.ak_hours_max)?.replace(/ hrs$/, '')
-    : null;
+    : pricingRollup.combined_compact_label;
+  const hoursLabel = pricingRollup.ak_hours_label?.replace(/ hrs$/, '').replace(/ hrs \+ TBD$/, ' + TBD') || null;
 
   const canEdit = !isClientView;
 

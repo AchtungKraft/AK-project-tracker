@@ -15,6 +15,7 @@ export function hoursText(min, max) {
   const lo = typeof min === "number" && min > 0 ? min : null;
   const hi = typeof max === "number" && max > 0 ? max : null;
   if (lo == null && hi == null) return "TBD";
+  if (min == null && hi != null) return `Up to ${fmt(hi)} hrs`;
   if (lo != null && hi != null && lo !== hi) return `${fmt(lo)}–${fmt(hi)} hrs`;
   return `${fmt(lo ?? hi)} hrs`;
 }

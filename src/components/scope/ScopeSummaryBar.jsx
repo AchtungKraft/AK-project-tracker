@@ -2,16 +2,16 @@ import React, { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { CheckCircle2, Clock, MessageSquare, XCircle, AlertTriangle, PauseCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatHoursRange } from "./scopeHelpers";
-import { computeScopePricingRollup, formatDollarRange } from "./scopePricingHelpers";
+import { computeScopePricingRollup } from "./scopePricingHelpers";
 
 function DispositionCard({ icon: Icon, label, items, laborEstimates, colorScheme, isMobile, isClientView }) {
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   if (!items || items.length === 0) return null;
 
   const rollup = computeScopePricingRollup(items, laborEstimates);
-  const hasLabor = rollup.ak_hours_min > 0 || rollup.ak_hours_max > 0;
-  const hoursLabel = hasLabor ? formatHoursRange(rollup.ak_hours_min, rollup.ak_hours_max) : null;
+  const hoursLabel = rollup.ak_hours_label;
+  const laborLabel = rollup.ak_labor_label;
+  const laborTbd = rollup.labor_tbd_count > 0 ? { label: 'AK Labor TBD', value: `${rollup.labor_tbd_count} item${rollup.labor_tbd_count > 1 ? 's' : ''}` } : null;
 
   // Primary: total estimate
   let primaryLabel = null;
@@ -19,25 +19,22 @@ function DispositionCard({ icon: Icon, label, items, laborEstimates, colorScheme
 
   if (rollup.classified_count > 0 && rollup.legacy_count === 0) {
     if (!rollup.has_incomplete && rollup.hard_cost_tbd_count === 0) {
-      primaryLabel = formatDollarRange(rollup.total_estimate_min, rollup.total_estimate_max);
-      const hc = formatDollarRange(rollup.hard_cost_min, rollup.hard_cost_max);
-      if (hc) secondaryLines.push({ label: 'Hard Cost', value: hc });
-      if (hasLabor) secondaryLines.push({ label: 'AK Labor', value: formatDollarRange(rollup.ak_labor_min, rollup.ak_labor_max) });
+      primaryLabel = rollup.total_label;
+      if (rollup.hard_cost_label) secondaryLines.push({ label: 'Hard Cost', value: rollup.hard_cost_label });
+      if (laborLabel) secondaryLines.push({ label: 'AK Labor', value: laborLabel });
     } else {
-      const hc = formatDollarRange(rollup.hard_cost_min, rollup.hard_cost_max);
-      if (hc) secondaryLines.push({ label: 'Hard Cost', value: hc });
+      if (rollup.hard_cost_label) secondaryLines.push({ label: 'Hard Cost', value: rollup.hard_cost_label });
       if (rollup.hard_cost_tbd_count > 0) secondaryLines.push({ label: 'Hard Cost TBD', value: `${rollup.hard_cost_tbd_count} item${rollup.hard_cost_tbd_count > 1 ? 's' : ''}` });
-      if (hasLabor) secondaryLines.push({ label: 'AK Labor', value: formatDollarRange(rollup.ak_labor_min, rollup.ak_labor_max) });
+      if (laborLabel) secondaryLines.push({ label: 'AK Labor', value: laborLabel });
+      if (laborTbd) secondaryLines.push(laborTbd);
     }
   } else if (rollup.legacy_count > 0 && rollup.classified_count === 0) {
-    primaryLabel = formatDollarRange(rollup.legacy_budget_min, rollup.legacy_budget_max);
-    if (hasLabor) secondaryLines.push({ label: 'AK Labor', value: formatDollarRange(rollup.ak_labor_min, rollup.ak_labor_max) });
+    primaryLabel = rollup.legacy_budget_label;
+    if (laborLabel) secondaryLines.push({ label: 'AK Labor', value: laborLabel });
   } else {
-    const totalClassified = formatDollarRange(rollup.total_estimate_min, rollup.total_estimate_max);
-    const totalLegacy = formatDollarRange(rollup.legacy_budget_min, rollup.legacy_budget_max);
-    if (totalClassified) secondaryLines.push({ label: 'Classified', value: totalClassified });
-    if (totalLegacy) secondaryLines.push({ label: 'Legacy', value: totalLegacy });
-    if (hasLabor) secondaryLines.push({ label: 'AK Labor', value: formatDollarRange(rollup.ak_labor_min, rollup.ak_labor_max) });
+    if (rollup.total_label) secondaryLines.push({ label: 'Classified', value: rollup.total_label });
+    if (rollup.legacy_budget_label) secondaryLines.push({ label: 'Legacy', value: rollup.legacy_budget_label });
+    if (laborLabel) secondaryLines.push({ label: 'AK Labor', value: laborLabel });
   }
 
   const hasBreakdown = secondaryLines.length > 0;

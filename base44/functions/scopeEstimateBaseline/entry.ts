@@ -156,7 +156,7 @@ async function byIds(E, ids, opts = {}) {
 // Must match src/components/scope/scopeHelpers.js computeMaterialHash exactly (key order matters).
 function materialHash(item, labor) {
   const itemLabor = labor
-    .map((le) => ({ gid: le.labor_group_id || '', hmin: le.hours_min, hmax: le.hours_max, rate: le.rate_snapshot }))
+    .map((le) => ({ gid: le.labor_group_id || '', hmin: le.hours_min, hmax: le.hours_max, rate: le.rate_snapshot, ...(le.hours_tbd ? { tbd: true } : {}) }))
     .sort((a, b) => (a.gid || '').localeCompare(b.gid || ''));
   return JSON.stringify({
     title: item.title || '',
@@ -187,7 +187,8 @@ function approvedSnapshot(item, labor) {
 
 function buildBaselineValues({ item, snap, groupNames, catName, grpName, request }) {
   const lines = snap.labor.map((l) => {
-    const hmin = Number(l.hmin) || 0, hmax = Number(l.hmax) || 0, rate = Number(l.rate) || 0;
+    // Exact estimate (low only) = low for both bounds; "Up to" keeps its 0 planning floor.
+    const hmin = Number(l.hmin) || 0, hmax = l.hmax == null && l.hmin != null ? hmin : Number(l.hmax) || 0, rate = Number(l.rate) || 0;
     return { labor_group_id: l.gid || '', labor_group_name: groupNames.get(l.gid) || 'Labor', rate, hours_min: hmin, hours_max: hmax, dollars_min: r2(hmin * rate), dollars_max: r2(hmax * rate) };
   });
   const sum = (k) => r2(lines.reduce((s, l) => s + l[k], 0));

@@ -6,6 +6,7 @@ import {
   computeScopePricingRollup,
   formatDollarRange,
 } from "./scopePricingHelpers";
+import { formatHardLine, formatLaborHours } from "./scopeEstimate";
 
 /* ══════════════════════════════════════════════
    Utility helpers
@@ -31,18 +32,16 @@ const DECISION_BADGE_STYLES = {
 
 /* Helper: build category rollup summary text parts */
 function buildCatSummary(rollup) {
-  const { count, total_estimate_min, total_estimate_max, has_incomplete, hard_cost_tbd_count,
-    ak_hours_min, ak_hours_max, legacy_count, classified_count,
-    legacy_budget_min, legacy_budget_max, legacy_budget_tbd_count } = rollup;
+  const { count, has_incomplete, hard_cost_tbd_count, legacy_count, classified_count, legacy_budget_tbd_count } = rollup;
 
-  const hoursLabel = formatHoursRange(ak_hours_min, ak_hours_max);
+  const hoursLabel = rollup.ak_hours_label;
   const incompleteCount = (has_incomplete ? 1 : 0) + hard_cost_tbd_count + legacy_budget_tbd_count;
 
   let totalLabel = null;
   if (classified_count > 0 && legacy_count === 0 && !has_incomplete && hard_cost_tbd_count === 0) {
-    totalLabel = formatDollarRange(total_estimate_min, total_estimate_max);
+    totalLabel = rollup.total_label;
   } else if (legacy_count > 0 && classified_count === 0 && legacy_budget_tbd_count === 0) {
-    totalLabel = formatDollarRange(legacy_budget_min, legacy_budget_max);
+    totalLabel = rollup.legacy_budget_label;
   }
 
   return { count, totalLabel, incompleteCount, hoursLabel };
@@ -478,13 +477,13 @@ export default function ScopeReviewPrintView({
                 const entry = selectionSummary[status];
                 if (!entry) return null;
                 const r = entry.rollup;
-                const hoursLabel = formatHoursRange(r.ak_hours_min, r.ak_hours_max);
+                const hoursLabel = r.ak_hours_label;
                 const c = DECISION_BADGE_STYLES[status];
                 let dollarLabel = null;
                 if (r.classified_count > 0 && r.legacy_count === 0 && !r.has_incomplete && r.hard_cost_tbd_count === 0) {
-                  dollarLabel = formatDollarRange(r.total_estimate_min, r.total_estimate_max);
+                  dollarLabel = r.total_label;
                 } else if (r.legacy_count > 0 && r.classified_count === 0) {
-                  dollarLabel = formatDollarRange(r.legacy_budget_min, r.legacy_budget_max);
+                  dollarLabel = r.legacy_budget_label;
                 }
                 return (
                   <div key={status} style={{
@@ -628,11 +627,11 @@ export default function ScopeReviewPrintView({
                               <div className="sp-deliverable-details" style={{ marginTop: 8, padding: '7px 10px', background: '#f8fafc', borderLeft: '2px solid #cbd5e1', fontSize: T.bodySize, lineHeight: 1.45 }}>
                                 {item.hard_cost_lines?.length > 0 && <div style={{ marginBottom: 5 }}>
                                   <div style={{ fontWeight: 700, color: T.colorPrimary }}>Hard Costs</div>
-                                  {item.hard_cost_lines.map((l,i) => <div key={i} style={{ display:'flex', justifyContent:'space-between', gap:12, marginTop:3 }}><span style={{ whiteSpace:'pre-wrap' }}>{l.description || 'Cost'}</span><span style={{ whiteSpace:'nowrap' }}>{l.tbd ? 'TBD' : formatDollarRange(l.min,l.max)}</span></div>)}
+                                  {item.hard_cost_lines.map((l,i) => <div key={i} style={{ display:'flex', justifyContent:'space-between', gap:12, marginTop:3 }}><span style={{ whiteSpace:'pre-wrap' }}>{l.description || 'Cost'}</span><span style={{ whiteSpace:'nowrap' }}>{formatHardLine(l)}</span></div>)}
                                 </div>}
                                 {(laborByItem.get(item.id) || []).some(l => l.description) && <div>
                                   <div style={{ fontWeight: 700, color: T.colorPrimary }}>Ächtung Kraft Labor</div>
-                                  {(laborByItem.get(item.id) || []).filter(l => l.description).map((l,i) => <div key={i} style={{ display:'flex', justifyContent:'space-between', gap:12, marginTop:3 }}><span style={{ whiteSpace:'pre-wrap' }}>{l.labor_group_name_snapshot} — {l.description}</span><span style={{ whiteSpace:'nowrap' }}>{l.hours_min}–{l.hours_max} hrs</span></div>)}
+                                  {(laborByItem.get(item.id) || []).filter(l => l.description).map((l,i) => <div key={i} style={{ display:'flex', justifyContent:'space-between', gap:12, marginTop:3 }}><span style={{ whiteSpace:'pre-wrap' }}>{l.labor_group_name_snapshot} — {l.description}</span><span style={{ whiteSpace:'nowrap' }}>{formatLaborHours(l)}</span></div>)}
                                 </div>}
                               </div>
                             )}
@@ -734,14 +733,12 @@ export default function ScopeReviewPrintView({
    ══════════════════════════════════════════════ */
 
 function ItemPricing({ pricing, T }) {
-  const { pricing_model, total_estimate_min, total_estimate_max, estimate_complete,
-    hard_cost_min, hard_cost_max, hard_cost_tbd,
-    ak_labor_min, ak_labor_max, ak_hours_min, ak_hours_max, labor_estimated,
+  const { pricing_model, estimate_complete, estimate_partial, labor_estimated,
     legacy_budget_min, legacy_budget_max, legacy_budget_tbd } = pricing;
 
   if (pricing_model === "legacy_estimate") {
     const budgetLabel = legacy_budget_tbd ? "TBD" : formatDollarRange(legacy_budget_min, legacy_budget_max);
-    const hoursLabel = formatHoursRange(ak_hours_min, ak_hours_max);
+    const hoursLabel = pricing.ak_hours_label;
     return (
       <div style={{ display: "flex", gap: 32, flexWrap: "wrap", marginTop: 6 }}>
         {budgetLabel && (
@@ -760,10 +757,11 @@ function ItemPricing({ pricing, T }) {
     );
   }
 
-  const totalLabel = estimate_complete ? formatDollarRange(total_estimate_min, total_estimate_max) : null;
-  const hcLabel = hard_cost_tbd ? "TBD" : formatDollarRange(hard_cost_min, hard_cost_max);
-  const laborLabel = labor_estimated ? formatDollarRange(ak_labor_min, ak_labor_max) : null;
-  const hoursLabel = formatHoursRange(ak_hours_min, ak_hours_max);
+  // Partial totals (known amounts + TBD components) keep their "+ TBD" marker.
+  const totalLabel = estimate_complete || estimate_partial ? pricing.total_label : null;
+  const hcLabel = pricing.hard_cost_label;
+  const laborLabel = pricing.ak_labor_label;
+  const hoursLabel = pricing.ak_hours_label;
 
   return (
     <div style={{ marginTop: 6 }}>

@@ -1,8 +1,7 @@
 import React, { useState } from "react";
 import { AlertTriangle, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatHoursRange } from "./scopeHelpers";
-import { computeScopeItemPricing, formatDollarRange } from "./scopePricingHelpers";
+import { computeScopeItemPricing } from "./scopePricingHelpers";
 import { getHardCostRows, getLaborRows, getExtraNotes } from "./scopeItemDisplay";
 import ScopeItemHeader from "./ScopeItemHeader";
 import ScopeItemWorkSection from "./ScopeItemWorkSection";
@@ -38,12 +37,14 @@ export default function ScopeItemCard({
   const notes = getExtraNotes(item, hardRows);
   const laborRows = getLaborRows(laborEstimates).map(r => ({
     key: r.key, label: r.category, description: r.description, hours: r.hours,
-    value: isStaff ? r.cost : null, sub: isStaff && r.rate ? `$${r.rate}/hr` : null,
+    value: isStaff && !r.tbd ? r.cost : null, sub: isStaff && r.rate ? `$${r.rate}/hr` : null, tbd: r.tbd,
   }));
   const showLaborDollars = isStaff || !isLegacy;
-  const hardSubtotal = hardRows.length > 1 ? (pricing.hard_cost_tbd ? 'TBD' : formatDollarRange(pricing.hard_cost_min, pricing.hard_cost_max)) : null;
-  const laborCostTotal = showLaborDollars && pricing.labor_estimated ? formatDollarRange(pricing.ak_labor_min, pricing.ak_labor_max) : null;
-  const laborHoursSubtotal = laborRows.length > 1 ? formatHoursRange(pricing.ak_hours_min, pricing.ak_hours_max) : null;
+  const flexible = pricing.estimate_format === 'flexible';
+  const emptyLabel = flexible ? null : "Not estimated";
+  const hardSubtotal = hardRows.length > 1 ? pricing.hard_cost_label : null;
+  const laborCostTotal = showLaborDollars ? pricing.ak_labor_label : null;
+  const laborHoursSubtotal = laborRows.length > 1 ? pricing.ak_hours_label : null;
   // Clients don't see per-line labor cost, so they get the labor total even for a single line.
   const laborSubtotal = laborRows.length > 1 || !isStaff ? laborCostTotal : null;
 
@@ -80,13 +81,13 @@ export default function ScopeItemCard({
 
         {!isLegacy && (
           <div className={SECTION}>
-            <ScopeItemComponentSection title="Hard Costs" accent="text-cyan-400" kind="hard" rows={hardRows} subtotal={hardSubtotal} emptyLabel="Not estimated" />
+            <ScopeItemComponentSection title="Hard Costs" accent="text-cyan-400" kind="hard" rows={hardRows} subtotal={hardSubtotal} emptyLabel={emptyLabel} />
           </div>
         )}
         {(!isLegacy || laborRows.length > 0) && (
           <div className={SECTION}>
             <ScopeItemComponentSection title="Ächtung Kraft Labor" accent="text-red-400" kind="labor" rows={laborRows}
-              subtotalHours={laborHoursSubtotal} subtotal={laborSubtotal} emptyLabel="Not estimated" />
+              subtotalHours={laborHoursSubtotal} subtotal={laborSubtotal} emptyLabel={emptyLabel} />
           </div>
         )}
 

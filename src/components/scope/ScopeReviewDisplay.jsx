@@ -188,7 +188,8 @@ export default function ScopeReviewDisplay({
       approved_ak_hours_max: approvedRollup.ak_hours_max,
       approved_total_estimate_min: approvedRollup.total_estimate_min,
       approved_total_estimate_max: approvedRollup.total_estimate_max,
-      approved_estimate_complete: !approvedRollup.has_incomplete && approvedRollup.hard_cost_tbd_count === 0 && approvedRollup.classified_count > 0 && approvedRollup.legacy_count === 0,
+      approved_estimate_complete: !approvedRollup.has_incomplete && approvedRollup.hard_cost_tbd_count === 0 && approvedRollup.labor_tbd_count === 0 && approvedRollup.classified_count > 0 && approvedRollup.legacy_count === 0,
+      approved_labor_tbd_count: approvedRollup.labor_tbd_count,
       // Legacy compat — kept for existing code that reads these
       approved_budget_min: approvedBudgetMin,
       approved_budget_max: approvedBudgetMax,
@@ -408,7 +409,8 @@ export default function ScopeReviewDisplay({
           await Promise.all(existingLabor.map(le => base44.entities.ScopeItemLaborEstimate.delete(le.id)));
         }
         // Create new ones
-        const validLabor = laborData.filter(ld => ld.labor_group_id && ld.hours_min !== "" && ld.hours_max !== "");
+        // laborData is normalized by the editor: blank hours are null (never 0), TBD clears hours.
+        const validLabor = laborData.filter(ld => ld.labor_group_id);
         if (validLabor.length > 0) {
           await base44.entities.ScopeItemLaborEstimate.bulkCreate(
             validLabor.map((ld, idx) => ({
@@ -416,8 +418,9 @@ export default function ScopeReviewDisplay({
               scope_item_id: itemId,
               labor_group_id: ld.labor_group_id,
               labor_group_name_snapshot: ld.labor_group_name_snapshot || '',
-              hours_min: Number(ld.hours_min) || 0,
-              hours_max: Number(ld.hours_max) || 0,
+              hours_min: ld.hours_min ?? null,
+              hours_max: ld.hours_max ?? null,
+              ...(ld.hours_tbd ? { hours_tbd: true } : {}),
               rate_snapshot: ld.rate_snapshot || 0,
               description: (ld.description || '').trim(),
               sort_order: idx,

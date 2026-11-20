@@ -47,59 +47,127 @@ const fail = (status, code, message) => reply({ success: false, error: { code, m
 const rows = (r) => (Array.isArray(r) ? r : Array.isArray(r?.items) ? r.items : []);
 const bySort = (a, b) => (a.sort_order || 0) - (b.sort_order || 0);
 
+// ── Canonical estimate engine — MUST MATCH src/components/scope/scopeEstimate.js + scopePricingHelpers.js ──
+// Line state: tbd | exact (low only) | up_to (high only) | range | none (description only). Blank is never 0.
+const toNum = (v) => (v === '' || v == null || Number.isNaN(Number(v)) ? null : Number(v));
+function classify(low, high, tbd) {
+  if (tbd) return { state: 'tbd', low: null, high: null };
+  const lo = toNum(low), hi = toNum(high);
+  if (lo != null && hi != null) return { state: 'range', low: lo, high: hi };
+  if (lo != null) return { state: 'exact', low: lo, high: lo };
+  if (hi != null) return { state: 'up_to', low: null, high: hi };
+  return { state: 'none', low: null, high: null };
+}
+const scale = (e, f) => ({ state: e.state, low: e.low == null ? null : e.low * f, high: e.high == null ? null : e.high * f });
+const emptyAgg = () => ({ lo: 0, hi: 0, lower_open: false, numeric_count: 0, tbd_count: 0 });
+function addE(a, e) {
+  if (e.state === 'tbd') a.tbd_count++;
+  else if (e.state !== 'none') { a.numeric_count++; a.hi += e.high; if (e.low == null) a.lower_open = true; else a.lo += e.low; }
+  return a;
+}
+function merge(...aggs) {
+  const r = emptyAgg();
+  for (const a of aggs) { if (!a) continue; r.lo += a.lo; r.hi += a.hi; r.numeric_count += a.numeric_count; r.tbd_count += a.tbd_count; r.lower_open = r.lower_open || a.lower_open; }
+  return r;
+}
+const bounds = (a) => (!a.numeric_count ? { min: null, max: null } : { min: a.lower_open ? null : a.lo, max: a.hi });
+const money = (v) => '$' + Math.round(v).toLocaleString('en-US');
+const hrs = (v) => (Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100));
+function fmtBounds(min, max, kind) {
+  const f = kind === 'hours' ? hrs : money, unit = kind === 'hours' ? ' hrs' : '';
+  if (min == null) return `Up to ${f(max)}${unit}`;
+  if (min === max) return `${f(min)}${unit}`;
+  return `${f(min)}–${f(max)}${unit}`;
+}
+const fmtE = (e, kind = 'money') => (e.state === 'tbd' ? 'TBD' : e.state === 'none' ? null : fmtBounds(e.low, e.high, kind));
+function fmtAgg(a, kind = 'money') {
+  if (!a.numeric_count) return a.tbd_count ? 'TBD' : null;
+  const b = bounds(a);
+  const base = fmtBounds(b.min, b.max, kind);
+  return a.tbd_count ? `${base} + TBD` : base;
+}
+function fmtRange(min, max) {
+  if (min == null && max == null) return null;
+  if (min != null && max != null) return min === max ? money(min) : `${money(min)}–${money(max)}`;
+  return min != null ? `From ${money(min)}` : `Up to ${money(max)}`;
+}
+const isFlexible = (item) => Array.isArray(item.hard_cost_lines);
+
+/** Returns { pricing (client-safe), _agg (internal, never sent) }. */
 function itemPricing(item, labor) {
-  let hMin = 0, hMax = 0, lMin = 0, lMax = 0;
-  for (const le of labor) {
-    hMin += le.hours_min || 0; hMax += le.hours_max || 0;
-    lMin += (le.hours_min || 0) * (le.rate_snapshot || 0);
-    lMax += (le.hours_max || 0) * (le.rate_snapshot || 0);
-  }
-  const laborEstimated = labor.length > 0 && (hMin > 0 || hMax > 0);
-  const base = { ak_hours_min: hMin, ak_hours_max: hMax, ak_labor_min: lMin, ak_labor_max: lMax, labor_estimated: laborEstimated };
+  const hours = emptyAgg(), dollars = emptyAgg();
+  for (const le of labor) { const e = classify(le.hours_min, le.hours_max, le.hours_tbd); addE(hours, e); addE(dollars, scale(e, le.rate_snapshot || 0)); }
+  const hb = bounds(hours), db = bounds(dollars);
+  const laborEstimated = hours.numeric_count > 0;
+  const base = { ak_hours_min: hb.min, ak_hours_max: hb.max, ak_labor_min: db.min, ak_labor_max: db.max, labor_estimated: laborEstimated,
+    labor_tbd_count: hours.tbd_count, ak_hours_label: fmtAgg(hours, 'hours'), ak_labor_label: fmtAgg(dollars) };
+  const none = { estimate_partial: false, estimate_none: false };
   if ((item.pricing_model || 'legacy_estimate') !== 'hard_cost_plus_labor') {
-    return { pricing_model: 'legacy_estimate', legacy_budget_min: item.budget_min ?? null, legacy_budget_max: item.budget_max ?? null, legacy_budget_tbd: !!item.budget_tbd,
-      hard_cost_min: null, hard_cost_max: null, hard_cost_tbd: false, ...base, total_estimate_min: null, total_estimate_max: null, estimate_complete: false };
+    return { _agg: { hard: emptyAgg(), legacy: addE(emptyAgg(), classify(item.budget_min, item.budget_max, item.budget_tbd)), hours, dollars, total: emptyAgg() },
+      pricing: { pricing_model: 'legacy_estimate', estimate_format: 'legacy', legacy_budget_min: item.budget_min ?? null, legacy_budget_max: item.budget_max ?? null, legacy_budget_tbd: !!item.budget_tbd,
+        hard_cost_min: null, hard_cost_max: null, hard_cost_tbd: false, hard_cost_label: null, ...base, total_estimate_min: null, total_estimate_max: null, total_label: null, estimate_complete: false, ...none } };
   }
+  if (isFlexible(item)) {
+    const hard = emptyAgg();
+    for (const l of item.hard_cost_lines) addE(hard, classify(l.min, l.max, l.tbd));
+    const total = merge(hard, dollars), hcb = bounds(hard), tb = bounds(total);
+    const tbd = hard.tbd_count + hours.tbd_count, numeric = total.numeric_count > 0;
+    return { _agg: { hard, legacy: emptyAgg(), hours, dollars, total },
+      pricing: { pricing_model: 'hard_cost_plus_labor', estimate_format: 'flexible', legacy_budget_min: null, legacy_budget_max: null, legacy_budget_tbd: false,
+        hard_cost_min: hcb.min, hard_cost_max: hcb.max, hard_cost_tbd: hard.tbd_count > 0, hard_cost_label: fmtAgg(hard), ...base,
+        total_estimate_min: tb.min, total_estimate_max: tb.max, total_label: fmtAgg({ ...total, tbd_count: tbd }), total_lower_open: total.lower_open,
+        estimate_complete: numeric && tbd === 0, estimate_partial: numeric && tbd > 0, estimate_none: !numeric && tbd === 0 } };
+  }
+  // Legacy single hard cost — unchanged rules
   const hcMin = item.hard_cost_min ?? null, hcMax = item.hard_cost_max ?? null, hcTbd = !!item.hard_cost_tbd;
-  const complete = !hcTbd && hcMin != null && hcMax != null && laborEstimated;
-  return { pricing_model: 'hard_cost_plus_labor', legacy_budget_min: null, legacy_budget_max: null, legacy_budget_tbd: false,
-    hard_cost_min: hcMin, hard_cost_max: hcMax, hard_cost_tbd: hcTbd, ...base,
-    total_estimate_min: complete ? (hcMin || 0) + lMin : null, total_estimate_max: complete ? (hcMax || 0) + lMax : null, estimate_complete: complete };
+  const complete = !hcTbd && hcMin != null && hcMax != null && laborEstimated && hours.tbd_count === 0;
+  const hard = addE(emptyAgg(), classify(hcMin, hcMax, hcTbd));
+  const total = complete ? merge(hard, dollars) : emptyAgg(), tb = bounds(total);
+  return { _agg: { hard, legacy: emptyAgg(), hours, dollars, total },
+    pricing: { pricing_model: 'hard_cost_plus_labor', estimate_format: 'legacy', legacy_budget_min: null, legacy_budget_max: null, legacy_budget_tbd: false,
+      hard_cost_min: hcMin, hard_cost_max: hcMax, hard_cost_tbd: hcTbd, hard_cost_label: hcTbd ? 'TBD' : fmtRange(hcMin, hcMax), ...base,
+      total_estimate_min: tb.min, total_estimate_max: tb.max, total_label: complete ? fmtAgg(total) : null, estimate_complete: complete, ...none } };
 }
 
-/** complete | partial | hard_cost_tbd | pending | legacy | legacy_tbd — same rules as the Scope Review header. */
+/** complete | partial | hard_cost_tbd | pending | description_only | legacy | legacy_tbd */
 function estimateStatus(p) {
   if (p.pricing_model === 'legacy_estimate') return p.legacy_budget_tbd ? 'legacy_tbd' : 'legacy';
   if (p.estimate_complete) return 'complete';
+  if (p.estimate_format === 'flexible') return p.estimate_partial ? 'partial' : p.estimate_none ? 'description_only' : 'pending';
   if (p.labor_estimated) return p.hard_cost_tbd ? 'hard_cost_tbd' : 'partial';
   return 'pending';
 }
 
-function rollup(pricings) {
-  const r = { count: pricings.length, hard_cost_min: 0, hard_cost_max: 0, hard_cost_tbd_count: 0, ak_labor_min: 0, ak_labor_max: 0, ak_hours_min: 0, ak_hours_max: 0,
-    total_estimate_min: 0, total_estimate_max: 0, legacy_budget_min: 0, legacy_budget_max: 0, legacy_budget_tbd_count: 0, legacy_count: 0, classified_count: 0, all_classified: true, has_incomplete: false };
-  for (const p of pricings) {
-    if (p.pricing_model === 'legacy_estimate') {
-      r.legacy_count++; r.all_classified = false;
-      if (p.legacy_budget_tbd) r.legacy_budget_tbd_count++;
-      else { if (p.legacy_budget_min != null) r.legacy_budget_min += p.legacy_budget_min; if (p.legacy_budget_max != null) r.legacy_budget_max += p.legacy_budget_max; }
-    } else {
+function rollup(entries) {
+  const r = { count: entries.length, hard_cost_tbd_count: 0, labor_tbd_count: 0, legacy_budget_tbd_count: 0, legacy_count: 0, classified_count: 0, all_classified: true, has_incomplete: false };
+  let hard = emptyAgg(), legacy = emptyAgg(), hours = emptyAgg(), dollars = emptyAgg(), total = emptyAgg();
+  for (const { pricing: p, _agg: a } of entries) {
+    if (p.pricing_model === 'legacy_estimate') { r.legacy_count++; r.all_classified = false; if (p.legacy_budget_tbd) r.legacy_budget_tbd_count++; legacy = merge(legacy, a.legacy); }
+    else {
       r.classified_count++;
-      if (p.hard_cost_tbd) r.hard_cost_tbd_count++; else { r.hard_cost_min += p.hard_cost_min || 0; r.hard_cost_max += p.hard_cost_max || 0; }
-      if (p.estimate_complete) { r.total_estimate_min += p.total_estimate_min || 0; r.total_estimate_max += p.total_estimate_max || 0; } else r.has_incomplete = true;
+      if (p.hard_cost_tbd) r.hard_cost_tbd_count++;
+      hard = merge(hard, a.hard);
+      if (p.estimate_complete) total = merge(total, a.total); else if (!p.estimate_none) r.has_incomplete = true;
     }
-    r.ak_labor_min += p.ak_labor_min; r.ak_labor_max += p.ak_labor_max; r.ak_hours_min += p.ak_hours_min; r.ak_hours_max += p.ak_hours_max;
+    if (p.labor_tbd_count) r.labor_tbd_count++;
+    hours = merge(hours, a.hours); dollars = merge(dollars, a.dollars);
   }
-  return r;
+  const z = (b) => (b.max == null ? { min: 0, max: 0 } : b);
+  const hb = z(bounds(hard)), lb = z(bounds(legacy)), hrb = z(bounds(hours)), db = z(bounds(dollars)), tb = z(bounds(total));
+  return { ...r, hard_cost_min: hb.min, hard_cost_max: hb.max, legacy_budget_min: lb.min, legacy_budget_max: lb.max, ak_hours_min: hrb.min, ak_hours_max: hrb.max,
+    ak_labor_min: db.min, ak_labor_max: db.max, total_estimate_min: tb.min, total_estimate_max: tb.max,
+    hard_cost_label: fmtAgg(hard), legacy_budget_label: fmtAgg(legacy), ak_hours_label: fmtAgg(hours, 'hours'), ak_labor_label: fmtAgg(dollars),
+    total_label: total.numeric_count ? fmtAgg(total) : null, combined_label: fmtAgg(merge(legacy, hard, dollars)) };
 }
 
 function hardCostLines(item) {
   if (item.pricing_model !== 'hard_cost_plus_labor') return [];
-  if (Array.isArray(item.hard_cost_lines) && item.hard_cost_lines.length) {
-    return item.hard_cost_lines.map(l => ({ description: l.description || '', min: l.min ?? null, max: l.max ?? null, tbd: !!l.tbd }));
+  if (isFlexible(item)) {
+    return item.hard_cost_lines.map(l => { const e = classify(l.min, l.max, l.tbd); return { description: l.description || '', min: l.min ?? null, max: l.max ?? null, tbd: !!l.tbd, estimate_state: e.state, display: fmtE(e) }; });
   }
   if (!item.hard_cost_tbd && item.hard_cost_min == null && item.hard_cost_max == null) return [];
-  return [{ description: item.hard_cost_note || '', min: item.hard_cost_min ?? null, max: item.hard_cost_max ?? null, tbd: !!item.hard_cost_tbd }];
+  return [{ description: item.hard_cost_note || '', min: item.hard_cost_min ?? null, max: item.hard_cost_max ?? null, tbd: !!item.hard_cost_tbd,
+    estimate_state: 'legacy', display: item.hard_cost_tbd ? 'TBD' : fmtRange(item.hard_cost_min ?? null, item.hard_cost_max ?? null) }];
 }
 
 const deny = () => fail(403, 'ACCESS_DENIED', 'Access denied');
@@ -213,9 +281,12 @@ async function handle(req) {
     const commentsByItem = new Map();
     for (const c of comments) { if (!commentsByItem.has(c.scope_item_id)) commentsByItem.set(c.scope_item_id, []); commentsByItem.get(c.scope_item_id).push(c); }
 
+    const aggById = new Map(); // internal aggregates for rollups; never sent
     const allItems = items.filter(i => i.request_id === requestId).sort(bySort).map(item => {
       const itemLabor = (laborByItem.get(item.id) || []).sort(bySort);
-      const pricing = itemPricing(item, itemLabor);
+      const priced = itemPricing(item, itemLabor);
+      const pricing = priced.pricing;
+      aggById.set(item.id, priced._agg);
       const status = item.decision_status || 'needs_review';
       return {
         id: item.id, project_id: request.project_id, request_id: requestId,
@@ -226,7 +297,9 @@ async function handle(req) {
         hard_costs: hardCostLines(item),
         hard_cost_lines: Array.isArray(item.hard_cost_lines) ? item.hard_cost_lines.map(l => ({ description: l.description || '', min: l.min ?? null, max: l.max ?? null, tbd: !!l.tbd })) : [],
         hard_cost_note: item.hard_cost_note || '', budget_note: item.budget_note || '',
-        labor_lines: itemLabor.map(le => ({ id: le.id, labor_category: le.labor_group_name_snapshot || 'Labor', description: le.description || '', hours_min: le.hours_min || 0, hours_max: le.hours_max || 0, sort_order: le.sort_order || 0 })),
+        labor_lines: itemLabor.map(le => ({ id: le.id, labor_category: le.labor_group_name_snapshot || 'Labor', description: le.description || '', hours_min: le.hours_min ?? null, hours_max: le.hours_max ?? null, hours_tbd: !!le.hours_tbd,
+          estimate_state: classify(le.hours_min, le.hours_max, le.hours_tbd).state, hours_display: fmtE(classify(le.hours_min, le.hours_max, le.hours_tbd), 'hours'), sort_order: le.sort_order || 0 })),
+        estimate_format: pricing.estimate_format,
         pricing, estimate_status: estimateStatus(pricing),
         decision_status: status, decision_at: item.decision_at || null, reapproval_required: status === 'reapproval_required',
         comments: (commentsByItem.get(item.id) || []).map(c => ({ id: c.id, author_type: c.author_type, author_name: c.author_name || null, body: c.body || '', posted_at: c.posted_at || c.created_date })),
@@ -241,11 +314,11 @@ async function handle(req) {
     const approvedIds = allItems.filter(i => i.decision_status === 'approved').map(i => i.id).sort();
     const snapIds = (latest?.approved_item_ids || []).slice().sort();
     const confirmationStale = !!latest && (approvedIds.length !== snapIds.length || approvedIds.some((id, i) => id !== snapIds[i]));
-    const sum = (list) => rollup(list.map(i => i.pricing));
+    const sum = (list) => rollup(list.map(i => ({ pricing: i.pricing, _agg: aggById.get(i.id) })));
 
     return reply({
       success: true,
-      contract_version: '1.1',
+      contract_version: '1.2',
       access: { access_role: access.access_role || 'viewer', can_decide: access.access_role === 'approver' },
       request: { id: request.id, title: request.title, body: request.body || '', status: request.status, posted_at: request.posted_at || null, created_date: request.created_date, project_id: request.project_id },
       project: project ? { id: project.id, name: project.name, client_name: project.client_name || null } : null,

@@ -3,8 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Loader2, Shield, AlertTriangle, PauseCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatHoursRange } from "./scopeHelpers";
-import { computeScopePricingRollup, formatDollarRange } from "./scopePricingHelpers";
+import { computeScopePricingRollup } from "./scopePricingHelpers";
 import HistoricalConfirmationDisplay from "./HistoricalConfirmationDisplay";
 
 function isConfirmationStale(lastConfirmation, items) {
@@ -21,33 +20,24 @@ function isConfirmationStale(lastConfirmation, items) {
 function ConfirmDispositionSummary({ icon: Icon, title, items, laborEstimates, colorClasses, isClientView }) {
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const rollup = computeScopePricingRollup(items, laborEstimates);
-  const hoursLabel = formatHoursRange(rollup.ak_hours_min, rollup.ak_hours_max);
+  const hoursLabel = rollup.ak_hours_label;
 
   // Primary: total estimate if all classified & complete
   let primaryLabel = null;
   let secondaryLines = [];
+  const hc = rollup.hard_cost_label;
+  const labor = rollup.ak_labor_label;
 
   if (rollup.classified_count > 0 && rollup.legacy_count === 0 && !rollup.has_incomplete && rollup.hard_cost_tbd_count === 0) {
-    primaryLabel = formatDollarRange(rollup.total_estimate_min, rollup.total_estimate_max);
-    const hc = formatDollarRange(rollup.hard_cost_min, rollup.hard_cost_max);
+    primaryLabel = rollup.total_label;
     if (hc) secondaryLines.push({ label: 'Hard Cost', value: hc });
-    if (!isClientView) {
-      const labor = formatDollarRange(rollup.ak_labor_min, rollup.ak_labor_max);
-      if (labor) secondaryLines.push({ label: 'AK Labor', value: labor });
-    }
+    if (!isClientView && labor) secondaryLines.push({ label: 'AK Labor', value: labor });
   } else {
-    if (rollup.classified_count > 0) {
-      const hc = formatDollarRange(rollup.hard_cost_min, rollup.hard_cost_max);
-      if (hc) secondaryLines.push({ label: 'Hard Cost', value: hc });
+    if (rollup.classified_count > 0 && hc) secondaryLines.push({ label: 'Hard Cost', value: hc });
+    if (rollup.legacy_count > 0 && rollup.legacy_budget_label) {
+      secondaryLines.push({ label: rollup.classified_count > 0 ? 'Legacy Estimate' : 'Estimate', value: rollup.legacy_budget_label });
     }
-    if (rollup.legacy_count > 0) {
-      const leg = formatDollarRange(rollup.legacy_budget_min, rollup.legacy_budget_max);
-      if (leg) secondaryLines.push({ label: rollup.classified_count > 0 ? 'Legacy Estimate' : 'Estimate', value: leg });
-    }
-    if (!isClientView) {
-      const labor = formatDollarRange(rollup.ak_labor_min, rollup.ak_labor_max);
-      if (labor) secondaryLines.push({ label: 'AK Labor', value: labor });
-    }
+    if (!isClientView && labor) secondaryLines.push({ label: 'AK Labor', value: labor });
   }
 
   const hasBreakdown = secondaryLines.length > 0;

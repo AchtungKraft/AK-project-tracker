@@ -3,6 +3,7 @@
  * Architecture: Category and Group are independent request-level entities.
  * Items reference both, and the display hierarchy is Category → Group → Item.
  */
+import { laborAgg, formatAgg } from "./scopeEstimate";
 
 export const DECISION_LABELS = {
   needs_review: 'Needs Review',
@@ -156,16 +157,13 @@ export function computeLaborBreakdown(items, laborEstimates = []) {
   const byGroup = new Map();
   for (const le of relevant) {
     const key = le.labor_group_id;
-    if (!byGroup.has(key)) {
-      byGroup.set(key, { labor_group_id: key, name: le.labor_group_name_snapshot || 'Unknown', hours_min: 0, hours_max: 0, cost_min: 0, cost_max: 0 });
-    }
-    const g = byGroup.get(key);
-    g.hours_min += le.hours_min || 0;
-    g.hours_max += le.hours_max || 0;
-    g.cost_min += (le.hours_min || 0) * (le.rate_snapshot || 0);
-    g.cost_max += (le.hours_max || 0) * (le.rate_snapshot || 0);
+    if (!byGroup.has(key)) byGroup.set(key, { labor_group_id: key, name: le.labor_group_name_snapshot || 'Unknown', lines: [] });
+    byGroup.get(key).lines.push(le);
   }
-  return Array.from(byGroup.values()).sort((a, b) => a.name.localeCompare(b.name));
+  return Array.from(byGroup.values()).map(g => {
+    const agg = laborAgg(g.lines);
+    return { labor_group_id: g.labor_group_id, name: g.name, agg, hours_label: formatAgg(agg.hours, 'hours'), cost_label: formatAgg(agg.dollars) };
+  }).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**
@@ -188,7 +186,7 @@ export function formatHoursRange(min, max) {
   const fmt = v => Number.isInteger(v) ? v.toString() : v.toFixed(1);
   if (min != null && max != null && min !== max) return `${fmt(min)}–${fmt(max)} hrs`;
   if (min != null) return `${fmt(min)} hrs`;
-  return `${fmt(max)} hrs`;
+  return `Up to ${fmt(max)} hrs`;
 }
 
 /**
@@ -198,7 +196,7 @@ export function formatHoursRange(min, max) {
 export function computeMaterialHash(item, laborEstimates = []) {
   const itemLabor = laborEstimates
     .filter(le => le.scope_item_id === item.id)
-    .map(le => ({ gid: le.labor_group_id || '', hmin: le.hours_min, hmax: le.hours_max, rate: le.rate_snapshot, ...(le.description ? { description: le.description } : {}) }))
+    .map(le => ({ gid: le.labor_group_id || '', hmin: le.hours_min, hmax: le.hours_max, rate: le.rate_snapshot, ...(le.description ? { description: le.description } : {}), ...(le.hours_tbd ? { tbd: true } : {}) }))
     .sort((a, b) => (a.gid || '').localeCompare(b.gid || ''));
   const fields = {
     title: item.title || '',

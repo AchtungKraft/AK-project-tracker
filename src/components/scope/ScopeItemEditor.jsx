@@ -4,11 +4,25 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Save, X, Upload, Loader2, ArrowRight, Plus, Trash2 } from "lucide-react";
+import { Save, X, Upload, Loader2, ArrowRight, Plus } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { cn } from "@/lib/utils";
 import LaborEstimateEditor from "./LaborEstimateEditor";
-import { formatDollarRange } from "./scopePricingHelpers";
+import { formatDollarRange, isFlexibleEstimate } from "./scopePricingHelpers";
+import { hardLinesAgg, laborAgg, mergeAgg, formatAgg } from "./scopeEstimate";
+import HardCostLineEditor from "./HardCostLineEditor";
+
+const toNumOrNull = (v) => (v === '' || v == null ? null : Number(v));
+/** Returns an error message for negative values or High below Low, else null. */
+function estimateProblem(rows) {
+  for (const [lo, hi, tbd] of rows) {
+    if (tbd) continue;
+    const a = toNumOrNull(lo), b = toNumOrNull(hi);
+    if ((a != null && a < 0) || (b != null && b < 0)) return 'Estimates cannot be negative.';
+    if (a != null && b != null && b < a) return 'High must be greater than or equal to Low.';
+  }
+  return null;
+}
 
 /**
  * Scope Item editor — used for both creating and editing items.
@@ -46,7 +60,7 @@ export default function ScopeItemEditor({
   // Hard cost fields
   const [hardCostLines, setHardCostLines] = useState(() => editItem?.hard_cost_lines?.length ? editItem.hard_cost_lines.map(l => ({...l, min: l.min ?? '', max: l.max ?? ''})) : [{ description: editItem?.hard_cost_note || '', min: editItem?.hard_cost_min ?? '', max: editItem?.hard_cost_max ?? '', tbd: !!editItem?.hard_cost_tbd }]);
   const updateHardLine = (idx, field, value) => setHardCostLines(lines => lines.map((l,i) => i === idx ? {...l, [field]: value} : l));
-  const hardSummary = useMemo(() => ({ min: hardCostLines.reduce((n,l) => n + (l.tbd ? 0 : Number(l.min)||0), 0), max: hardCostLines.reduce((n,l) => n + (l.tbd ? 0 : Number(l.max)||0), 0), tbd: hardCostLines.some(l => l.tbd) }), [hardCostLines]);
+  const hardAgg = useMemo(() => hardLinesAgg(hardCostLines), [hardCostLines]);
   const [hardCostMin, setHardCostMin] = useState(editItem?.hard_cost_min ?? "");
   const [hardCostMax, setHardCostMax] = useState(editItem?.hard_cost_max ?? "");
   const [hardCostTbd, setHardCostTbd] = useState(editItem?.hard_cost_tbd || false);
@@ -61,6 +75,7 @@ export default function ScopeItemEditor({
       labor_group_name_snapshot: le.labor_group_name_snapshot || '',
       hours_min: le.hours_min ?? "",
       hours_max: le.hours_max ?? "",
+      hours_tbd: !!le.hours_tbd,
       rate_snapshot: le.rate_snapshot || 0,
       description: le.description || '',
     }))
@@ -69,33 +84,12 @@ export default function ScopeItemEditor({
   const sortedCategories = [...categories].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   const sortedGroups = [...groups].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
-  // Compute live labor totals
-  const laborTotals = useMemo(() => {
-    let hMin = 0, hMax = 0, cMin = 0, cMax = 0;
-    for (const e of labor) {
-      const h1 = Number(e.hours_min) || 0;
-      const h2 = Number(e.hours_max) || 0;
-      hMin += h1;
-      hMax += h2;
-      cMin += h1 * (e.rate_snapshot || 0);
-      cMax += h2 * (e.rate_snapshot || 0);
-    }
-    return { hMin, hMax, cMin, cMax };
-  }, [labor]);
-
-  // Compute live total estimate
-  const totalEstimate = useMemo(() => {
+  // Live total estimate — same canonical aggregation the Scope Review uses
+  const totalLabel = useMemo(() => {
     if (pricingModel !== 'hard_cost_plus_labor') return null;
-    const hcMin = hardSummary.min;
-    const hcMax = hardSummary.max;
-    if (hardSummary.tbd) return null;
-    if (!hcMin && !hcMax && !laborTotals.cMin && !laborTotals.cMax) return null;
-    return {
-      min: hcMin + laborTotals.cMin,
-      max: hcMax + laborTotals.cMax,
-      complete: (hcMin > 0 || hcMax > 0) && (laborTotals.cMin > 0 || laborTotals.cMax > 0),
-    };
-  }, [pricingModel, hardSummary, laborTotals]);
+    return formatAgg(mergeAgg(hardAgg, laborAgg(labor).dollars));
+  }, [pricingModel, hardAgg, labor]);
+  const [error, setError] = useState(null);
 
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -140,12 +134,21 @@ export default function ScopeItemEditor({
       images: images.length > 0 ? images : null,
     };
 
+    const problem = estimateProblem(hardCostLines.map(l => [l.min, l.max, l.tbd])) || estimateProblem(labor.map(l => [l.hours_min, l.hours_max, l.hours_tbd]));
+    if (problem) { setError(problem); setSaving(false); return; }
+    setError(null);
+
     if (pricingModel === 'hard_cost_plus_labor') {
-      if (hardCostLines.some(l => !l.tbd && (Number(l.min) < 0 || Number(l.max) < Number(l.min)))) { setSaving(false); return; }
-      data.hard_cost_lines = hardCostLines.map(l => ({description: (l.description || '').trim(), min: l.tbd || l.min === '' ? null : Number(l.min), max: l.tbd || l.max === '' ? null : Number(l.max), tbd: !!l.tbd}));
-      data.hard_cost_min = hardSummary.min;
-      data.hard_cost_max = hardSummary.max;
-      data.hard_cost_tbd = hardSummary.tbd;
+      // Blank stays null (never 0). TBD clears both numbers.
+      data.hard_cost_lines = hardCostLines
+        .map(l => ({ description: (l.description || '').trim(), min: l.tbd ? null : toNumOrNull(l.min), max: l.tbd ? null : toNumOrNull(l.max), tbd: !!l.tbd }))
+        .filter(l => l.description || l.tbd || l.min != null || l.max != null);
+      // Item-level fields keep their existing meaning for project planning (approved budget, baselines):
+      // known lows / highs summed, "Up to" contributes 0 to the floor. Scope Review displays read the lines.
+      const agg = hardLinesAgg(data.hard_cost_lines);
+      data.hard_cost_min = agg.lo;
+      data.hard_cost_max = agg.hi;
+      data.hard_cost_tbd = hardAgg.tbd_count > 0;
       data.hard_cost_note = hardCostNote.trim() || null;
       data.budget_note = hardCostNote.trim() || null; // Keep synced for client display
       // Clear legacy budget fields
@@ -159,7 +162,10 @@ export default function ScopeItemEditor({
       data.budget_tbd = budgetTbd;
     }
 
-    await onSave(data, editItem?.id, labor);
+    const laborOut = labor
+      .map(e => ({ ...e, hours_tbd: !!e.hours_tbd, hours_min: e.hours_tbd ? null : toNumOrNull(e.hours_min), hours_max: e.hours_tbd ? null : toNumOrNull(e.hours_max), description: (e.description || '').trim() }))
+      .filter(e => e.hours_tbd || e.hours_min != null || e.hours_max != null || e.description);
+    await onSave(data, editItem?.id, laborOut);
     setSaving(false);
   };
 
@@ -241,20 +247,15 @@ export default function ScopeItemEditor({
         <div className="space-y-2 p-3 bg-gray-800/30 border border-gray-700/30 rounded-lg">
           <label className="text-[10px] text-cyan-400 uppercase tracking-wide font-semibold">Hard Cost</label>
           <p className="text-[10px] text-gray-500">Parts, materials, outside services — non-AK-labor cost</p>
+          {isEdit && !isFlexibleEstimate(editItem) && existingModel === 'hard_cost_plus_labor' && (
+            <p className="text-[10px] text-amber-400/80">Saved before flexible estimates. On save: Low only = exact, High only = "Up to", blank = description only. Check TBD if the cost is still unknown.</p>
+          )}
           {hardCostLines.map((line, idx) => (
-            <div key={idx} className="p-2 border border-gray-700/50 rounded-md space-y-2">
-              <div className="flex gap-2 items-center">
-                <Input value={line.description || ''} onChange={e => updateHardLine(idx, 'description', e.target.value)} placeholder="Part, material, service or deliverable" className="h-8 flex-1 bg-gray-800 border-gray-700 text-white text-xs" />
-                <Button type="button" variant="ghost" size="sm" onClick={() => setHardCostLines(lines => lines.filter((_, i) => i !== idx))}><Trash2 className="w-4 h-4" /></Button>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Checkbox checked={!!line.tbd} onCheckedChange={v => updateHardLine(idx, 'tbd', !!v)} /> <span className="text-xs text-gray-400">TBD</span>
-                {!line.tbd && <><Input type="number" min="0" value={line.min ?? ''} onChange={e => updateHardLine(idx, 'min', e.target.value)} placeholder="Min $" className="h-8 w-28 bg-gray-800 border-gray-700 text-white text-xs" /><span>–</span><Input type="number" min="0" value={line.max ?? ''} onChange={e => updateHardLine(idx, 'max', e.target.value)} placeholder="Max $" className="h-8 w-28 bg-gray-800 border-gray-700 text-white text-xs" /></>}
-              </div>
-            </div>
+            <HardCostLineEditor key={idx} line={line} onChange={(field, value) => updateHardLine(idx, field, value)}
+              onRemove={() => setHardCostLines(lines => lines.filter((_, i) => i !== idx))} />
           ))}
           <Button type="button" size="sm" variant="ghost" onClick={() => setHardCostLines(lines => [...lines, {description:'', min:'', max:'', tbd:false}])} className="text-cyan-400"><Plus className="w-3 h-3 mr-1" /> Add Hard Cost</Button>
-          <p className="text-xs text-gray-400">Hard cost subtotal: {formatDollarRange(hardSummary.min, hardSummary.max)}{hardSummary.tbd ? ' + TBD lines' : ''}</p>
+          <p className="text-xs text-gray-400">Hard cost subtotal: {formatAgg(hardAgg) || '—'}</p>
         </div>
       )}
 
@@ -266,14 +267,10 @@ export default function ScopeItemEditor({
         <div className="p-2 bg-gray-900/60 border border-gray-700/30 rounded-md">
           <div className="flex items-center gap-4 text-[11px]">
             <span className="text-gray-500 uppercase font-medium">Total Estimate</span>
-            {totalEstimate?.complete ? (
-              <span className="text-white font-bold text-sm">{formatDollarRange(totalEstimate.min, totalEstimate.max)}</span>
-            ) : hardSummary.tbd ? (
-              <span className="text-gray-400 italic">TBD</span>
-            ) : laborTotals.cMin === 0 && laborTotals.cMax === 0 ? (
-              <span className="text-gray-400 italic">Pending AK labor</span>
+            {totalLabel ? (
+              <span className={totalLabel === 'TBD' ? "text-gray-400 italic" : "text-white font-bold text-sm"}>{totalLabel}</span>
             ) : (
-              <span className="text-white font-bold text-sm">{formatDollarRange((hardSummary.min) + laborTotals.cMin, (hardSummary.max) + laborTotals.cMax)}</span>
+              <span className="text-gray-400 italic">No priced lines</span>
             )}
           </div>
         </div>
@@ -297,6 +294,8 @@ export default function ScopeItemEditor({
           </div>
         ))}
       </div>
+
+      {error && <p className="text-xs text-red-400">{error}</p>}
 
       {/* Action buttons — sticky footer in drawer */}
       <div className={cn(

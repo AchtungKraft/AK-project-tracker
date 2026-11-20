@@ -10,7 +10,7 @@ async function materialHash(base44, item) {
   // Include labor estimates and hard cost fields in hash for reapproval detection
   const laborEst = await base44.asServiceRole.entities.ScopeItemLaborEstimate.filter({ scope_item_id: item.id });
   const labor = laborEst
-    .map(le => ({ gid: le.labor_group_id, hmin: le.hours_min, hmax: le.hours_max, rate: le.rate_snapshot }))
+    .map(le => ({ gid: le.labor_group_id, hmin: le.hours_min, hmax: le.hours_max, rate: le.rate_snapshot, ...(le.hours_tbd ? { tbd: true } : {}) }))
     .sort((a, b) => a.gid.localeCompare(b.gid));
   return JSON.stringify({
     title: item.title || '',

@@ -110,7 +110,7 @@ export default function ScopeListPrintView({ request, project, categories, group
           </tbody></table>
         </div>}
         <p style={{ color: "#6b7280", fontSize: "7.5pt", marginTop: 12 }}>
-          Estimates are ranges. Hard cost covers parts, materials and outside services; labor is Ächtung Kraft shop time. TBD items are not included in totals.
+          Estimates are exact amounts, upper limits ("Up to") or ranges. Hard cost covers parts, materials and outside services; labor is Ächtung Kraft shop time. TBD items are not included in totals.
         </p>
       </div>
     </>

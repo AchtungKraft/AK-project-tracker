@@ -1,7 +1,7 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { DECISION_LABELS, DECISION_COLORS, formatHoursRange } from "./scopeHelpers";
+import { DECISION_LABELS, DECISION_COLORS } from "./scopeHelpers";
 import StaffStatusOverrideMenu from "./StaffStatusOverrideMenu";
 import ScopeTaskConversionBadge from "./ScopeTaskConversionBadge";
 import { getTotalDisplay } from "./scopeItemDisplay";
@@ -9,9 +9,9 @@ import { getTotalDisplay } from "./scopeItemDisplay";
 /** Compact deliverable header: title + task link left; status, total, hours, menu on one right-aligned line. */
 export default function ScopeItemHeader({ item, pricing, status, isStaff, onStaffStatusChange, onStaffRequireReapproval, onEdit, onCreateTask }) {
   const { totalLabel, pendingReason } = getTotalDisplay(pricing);
-  const isTbd = pricing.hard_cost_tbd || pricing.legacy_budget_tbd;
+  const isTbd = pricing.hard_cost_tbd || pricing.legacy_budget_tbd || pricing.labor_tbd_count > 0;
   const isPartial = !!totalLabel && !!pendingReason;
-  const hours = formatHoursRange(pricing.ak_hours_min, pricing.ak_hours_max);
+  const hours = pricing.ak_hours_label;
   const menu = isStaff && (
     <StaffStatusOverrideMenu item={item} onStatusChange={onStaffStatusChange} onRequireReapproval={onStaffRequireReapproval} onEdit={onEdit} />
   );

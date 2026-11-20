@@ -41,10 +41,7 @@ export default function ScopeGroupSection({
     const pricingRollup = computeScopePricingRollup(allItems, laborEstimates);
     compactTotal = pricingRollup.all_classified && !pricingRollup.has_incomplete && pricingRollup.hard_cost_tbd_count === 0
       ? formatDollarCompact(pricingRollup.total_estimate_min, pricingRollup.total_estimate_max)
-      : formatDollarCompact(
-          pricingRollup.legacy_budget_min + pricingRollup.hard_cost_min + pricingRollup.ak_labor_min,
-          pricingRollup.legacy_budget_max + pricingRollup.hard_cost_max + pricingRollup.ak_labor_max
-        );
+      : pricingRollup.combined_compact_label;
   }
 
   return (

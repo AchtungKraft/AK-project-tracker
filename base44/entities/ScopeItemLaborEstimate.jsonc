@@ -19,12 +19,23 @@
       "description": "Snapshot of the labor group name at time of estimate creation"
     },
     "hours_min": {
-      "type": "number",
-      "description": "Minimum estimated hours (supports decimals e.g. 0.5, 1.5)"
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "Low hours (decimals ok). Low only = exact; null with hours_max = 'Up to'; both null and not TBD = description only. Null is never 0."
     },
     "hours_max": {
-      "type": "number",
-      "description": "Maximum estimated hours (supports decimals)"
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "High hours (decimals ok). Null with hours_min set = exact estimate."
+    },
+    "hours_tbd": {
+      "type": "boolean",
+      "default": false,
+      "description": "Explicit TBD: hours not yet estimated. Hours are cleared when set."
     },
     "rate_snapshot": {
       "type": "number",
@@ -44,8 +55,6 @@
     "request_id",
     "scope_item_id",
     "labor_group_id",
-    "hours_min",
-    "hours_max",
     "rate_snapshot"
   ]
 }
