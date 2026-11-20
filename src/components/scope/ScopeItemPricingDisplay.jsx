@@ -114,18 +114,6 @@ export default function ScopeItemPricingDisplay({ item, laborEstimates = [], isC
         />
       )}
 
-      {(item.hard_cost_lines?.length > 0 || laborEstimates.some(l => l.description)) && (
-        <div className="text-[11px] text-gray-400 space-y-1 mt-2 text-left">
-          {(item.hard_cost_lines || []).map((line,i) => <div key={'h'+i}>Hard · {line.description || 'Cost'}: {line.tbd ? 'TBD' : formatDollarRange(line.min,line.max)}</div>)}
-          {laborEstimates.filter(l => l.description).map((line,i) => <div key={'l'+i}>Labor · {line.description} ({line.hours_min}–{line.hours_max} hrs)</div>)}
-        </div>
-      )}
-
-      {/* Hard cost note */}
-      {pricing.hard_cost_note && (
-        <p className="text-[10px] text-gray-500 italic">{pricing.hard_cost_note}</p>
-      )}
-
       {/* Unclassified warning — internal only */}
       {!isClientView && pricing.pricing_model !== 'hard_cost_plus_labor' && (
         <p className="text-[10px] text-amber-500/60 italic flex items-center gap-1">

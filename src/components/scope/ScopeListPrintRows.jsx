@@ -37,8 +37,8 @@ export default function ScopeListPrintRows({ hierarchy, laborEstimates, showStat
         </tr>
         {cat.groups.flatMap(g => g.items.map(item => {
           const p = computeScopeItemPricing(item, laborFor(item.id));
-          const note = [item.hard_cost_note, item.budget_note].filter(Boolean).filter((v,i,a) => a.indexOf(v) === i).join(' · ');
-          const detailLines = [...(item.hard_cost_lines?.length ? item.hard_cost_lines.map(l => 'Hard: ' + (l.description || 'Cost') + ' — ' + (l.tbd ? 'TBD' : formatDollarRange(l.min,l.max))) : []), ...laborFor(item.id).filter(l => l.description).map(l => 'Labor: ' + l.description)];
+          const note = item.hard_cost_lines?.length ? '' : [item.hard_cost_note, item.budget_note].filter(Boolean).filter((v,i,a) => a.indexOf(v) === i).join(' · ');
+          const detailLines = [...(item.hard_cost_lines?.length ? item.hard_cost_lines.map(l => 'Hard · ' + (l.description || 'Cost') + ': ' + (l.tbd ? 'TBD' : formatDollarRange(l.min,l.max))) : []), ...laborFor(item.id).filter(l => l.description).map(l => 'Labor · ' + l.description)];
           const status = item.decision_status || "needs_review";
           const tones = { approved: ["#dcfce7","#166534"], needs_review: ["#fef9c3","#854d0e"], not_now: ["#e5e7eb","#374151"], request_changes: ["#ffedd5","#9a3412"], reapproval_required: ["#fee2e2","#991b1b"] };
           const tone = tones[status] || tones.needs_review;

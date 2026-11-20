@@ -607,14 +607,27 @@ export default function ScopeReviewPrintView({
                             )}
 
                             {/* Client-facing notes */}
-                            {item.budget_note && (
+                            {item.budget_note && !item.hard_cost_lines?.length && (
                               <div style={{ marginTop: 5, fontStyle: "italic", fontSize: T.bodySize, color: T.colorMuted }}>
                                 {item.budget_note}
                               </div>
                             )}
-                            {item.hard_cost_note && !item.budget_note && (
+                            {item.hard_cost_note && !item.budget_note && !item.hard_cost_lines?.length && (
                               <div style={{ marginTop: 5, fontStyle: "italic", fontSize: T.bodySize, color: T.colorMuted }}>
                                 {item.hard_cost_note}
+                              </div>
+                            )}
+
+                            {(item.hard_cost_lines?.length > 0 || (laborByItem.get(item.id) || []).some(l => l.description)) && (
+                              <div style={{ marginTop: 8, padding: '7px 10px', background: '#f8fafc', borderLeft: '2px solid #cbd5e1', fontSize: T.bodySize }}>
+                                {item.hard_cost_lines?.length > 0 && <div style={{ marginBottom: 5 }}>
+                                  <div style={{ fontWeight: 700, color: T.colorPrimary }}>Hard Costs</div>
+                                  {item.hard_cost_lines.map((l,i) => <div key={i} style={{ display:'flex', justifyContent:'space-between', gap:12, marginTop:3 }}><span>{l.description || 'Cost'}</span><span style={{ whiteSpace:'nowrap' }}>{l.tbd ? 'TBD' : formatDollarRange(l.min,l.max)}</span></div>)}
+                                </div>}
+                                {(laborByItem.get(item.id) || []).some(l => l.description) && <div>
+                                  <div style={{ fontWeight: 700, color: T.colorPrimary }}>Ächtung Kraft Labor</div>
+                                  {(laborByItem.get(item.id) || []).filter(l => l.description).map((l,i) => <div key={i} style={{ display:'flex', justifyContent:'space-between', gap:12, marginTop:3 }}><span>{l.labor_group_name_snapshot} — {l.description}</span><span style={{ whiteSpace:'nowrap' }}>{l.hours_min}–{l.hours_max} hrs</span></div>)}
+                                </div>}
                               </div>
                             )}
 

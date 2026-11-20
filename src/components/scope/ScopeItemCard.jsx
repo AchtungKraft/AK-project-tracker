@@ -10,6 +10,7 @@ import ScopeItemPricingDisplay from "./ScopeItemPricingDisplay";
 import ImageModal from "@/components/ui/ImageModal";
 import ScopeTaskConversionBadge from "./ScopeTaskConversionBadge";
 import { format } from "date-fns";
+import { formatDollarRange } from "./scopePricingHelpers";
 
 export default function ScopeItemCard({
   item,
@@ -154,6 +155,19 @@ export default function ScopeItemCard({
               </div>
             )}
           </>
+        )}
+
+        {(item.hard_cost_lines?.length > 0 || laborEstimates.some(l => l.description)) && (
+          <div className="mt-2 border-t border-gray-700/40 pt-2 space-y-2 text-left">
+            {item.hard_cost_lines?.length > 0 && <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-cyan-400 mb-1">Hard Costs</p>
+              {item.hard_cost_lines.map((l,i) => <div key={i} className="flex justify-between gap-3 text-xs text-gray-400 py-0.5"><span className="min-w-0">{l.description || 'Cost'}</span><span className="shrink-0 tabular-nums">{l.tbd ? 'TBD' : formatDollarRange(l.min,l.max)}</span></div>)}
+            </div>}
+            {laborEstimates.some(l => l.description) && <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-red-400 mb-1">Ächtung Kraft Labor</p>
+              {laborEstimates.filter(l => l.description).map((l,i) => <div key={l.id || i} className="flex justify-between gap-3 text-xs text-gray-400 py-0.5"><span className="min-w-0">{l.labor_group_name_snapshot ? l.labor_group_name_snapshot + ' — ' : ''}{l.description}</span><span className="shrink-0 tabular-nums">{l.hours_min}–{l.hours_max} hrs</span></div>)}
+            </div>}
+          </div>
         )}
 
         {/* Lightbox */}
