@@ -45,7 +45,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
+import CreateProjectInvoiceModal from "./CreateProjectInvoiceModal";
 import { forceAppRefresh } from "@/components/supply/forceAppRefresh";
 import CreditSummaryStrip from "./CreditSummaryStrip";
 import ApplyCreditModal from "./ApplyCreditModal";
@@ -428,42 +429,9 @@ function BatchBuilderPanel({
             </div>
             
             {isInvoiceAction && (
-              <div className="flex flex-wrap items-center gap-4 mt-3">
-                <RadioGroup value={batchMode} onValueChange={setBatchMode} className="flex gap-4">
-                  {Object.entries(BATCH_MODES).map(([mode, config]) => {
-                    const Icon = config.icon;
-                    return (
-                      <div key={mode} className="flex items-center gap-2">
-                        <RadioGroupItem value={mode} id={mode} />
-                        <Label htmlFor={mode} className="flex items-center gap-1 text-gray-300 cursor-pointer">
-                          <Icon className="w-4 h-4" />
-                          {config.label}
-                        </Label>
-                      </div>
-                    );
-                  })}
-                </RadioGroup>
-                
-                {/* Phase 6.2: Draft Invoice Accumulation */}
-                {draftBatches.length > 0 && setTargetDraftBatchId && (
-                  <div className="flex items-center gap-2 ml-4 pl-4 border-l border-gray-600">
-                    <Label className="text-gray-400 text-sm">Target:</Label>
-                    <Select value={targetDraftBatchId} onValueChange={setTargetDraftBatchId}>
-                      <SelectTrigger className="w-48 h-8 bg-gray-800/50 border-gray-600 text-sm">
-                        <SelectValue placeholder="New Invoice" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="new">➕ Create New Invoice</SelectItem>
-                        {draftBatches.map(batch => (
-                          <SelectItem key={batch.id} value={batch.id}>
-                            📄 {batch.invoice_number || batch.batch_name} ({formatCurrencyUSD(batch.total_amount || 0)})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </div>
+              <p className="text-xs text-gray-400 mt-2">
+                Opens the invoice builder for this project with these parts ticked. Prices, overrides and limits are checked there and on the server.
+              </p>
             )}
           </div>
           
@@ -483,7 +451,7 @@ function BatchBuilderPanel({
               {isCreating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : (
                 isInvoiceAction ? <FileText className="w-4 h-4 mr-2" /> : <ShoppingCart className="w-4 h-4 mr-2" />
               )}
-              {isInvoiceAction ? `Create Invoice Batch (${readyCount})` : 'Create Purchase Order'}
+              {isInvoiceAction ? `Review & Create Invoice (${readyCount})` : 'Create Purchase Order'}
             </Button>
           </div>
         </div>
@@ -738,70 +706,9 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
     staleTime: 30000,
   });
 
-  // UNIFIED: Create invoice using source_entity/source_id contract
-  const createBatchMutation = useMutation({
-    mutationFn: async (items) => {
-      // Build lines using unified contract
-      const lines = items.map(item => ({
-        type: item.type || 'part',
-        source_entity: item.type === 'service' ? 'ServiceCommitment' : 'PartCommitment',
-        source_id: item.commitment_id || item.source_id,
-        description: item.part_name || item.description || 'Unknown',
-        qty: item.assigned_qty || item.required_total || 1,
-        // No price sent: the server bills parts at the canonical selling price and services at their stored amount.
-      }));
-      
-      const response = await base44.functions.invoke('createProjectInvoiceDraft', {
-        project_id: projectFilter !== 'all' ? projectFilter : items[0]?.project_id,
-        invoice_type: 'progress',
-        lines,
-      });
-      return response.data;
-    },
-    onSuccess: async (data) => {
-      if (data.success) {
-        toast.success(data.message || `Created ${data.batches_created} batch(es) with ${data.lines_created} lines`);
-        
-        // Show warning if some items were blocked
-        if (data.blocked_items?.length > 0) {
-          toast.warning(`${data.blocked_items.length} item(s) could not be invoiced`, {
-            description: data.blocked_items.slice(0, 3).map(b => `${b.part_name}: ${b.reasons.join(', ')}`).join('\n'),
-          });
-        }
-        
-        setSelectedIds(new Set());
-        
-        // DETERMINISTIC: Invalidate using factory keys
-        const projectIds = [...new Set(selectedItems.map(i => normalizeProjectId(i.project_id)).filter(id => id !== null))];
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: [...billingKeys.states(normalizedProjectFilter), financialRoleFilter] }),
-          queryClient.invalidateQueries({ queryKey: ['draftProjectInvoices', normalizedProjectFilter ?? 'all'] }),
-          ...projectIds.map(pid => queryClient.invalidateQueries({ queryKey: invoiceKeys.view(pid) })),
-        ]);
-        
-        // Call onSuccess prop if modal usage
-        if (onSuccess) {
-          onSuccess(data);
-        }
-      } else {
-        toast.error(data.message || 'Batch creation failed');
-      }
-    },
-    onError: (error) => {
-      console.error("Create batch error:", error);
-      const errorData = error.response?.data || error;
-      
-      if (errorData.blocked_items?.length > 0) {
-        toast.error(errorData.message || 'Some items cannot be invoiced', {
-          description: errorData.blocked_items.slice(0, 3).map(b => 
-            `${b.part_name}: ${b.reasons?.join(', ') || 'Unknown reason'}`
-          ).join('\n'),
-        });
-      } else {
-        toast.error(errorData.message || error.message || 'Failed to create batch');
-      }
-    },
-  });
+  // Invoices are built in the shared invoice builder (same selection, pricing, override and server rules as
+  // Project Financials). This screen only hands over the project and the parts the user ticked.
+  const [invoiceHandoff, setInvoiceHandoff] = useState(null);
 
   // Get current tab config
   const currentTabConfig = Object.values(LIFECYCLE_TABS).find(t => t.key === activeTab) || LIFECYCLE_TABS.UNBILLED;
@@ -862,27 +769,25 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
       return;
     }
     
-    // CANONICAL: Send only required payload fields to backend
-    const payload = selectedItems.map(item => {
-      if (!item.commitment_id) {
-        console.error('[CANONICAL VIOLATION] Item missing commitment_id:', item);
-      }
-      
-      return {
-        commitment_id: item.commitment_id,
-        project_id: item.project_id,
-        part_id: item.part_id,
-        part_name: item.part_name,
-        project_name: item.project_name,
-        unit_retail: item.unit_retail,
-        unit_price: item.unit_retail || item.unit_price,
-        line_total: item.line_total,
-        required_total: item.required_total || item.assigned_qty || 0,
-        assigned_qty: item.required_total || item.assigned_qty || 0,
-      };
-    });
-    
-    createBatchMutation.mutate(payload);
+    const projectIds = [...new Set(selectedItems.map(i => normalizeProjectId(i.project_id)).filter(Boolean))];
+    if (projectIds.length !== 1) {
+      toast.error('Select parts from one project at a time. Each invoice belongs to a single project.');
+      return;
+    }
+    setInvoiceHandoff({ projectId: projectIds[0], sourceIds: selectedItems.map(i => i.commitment_id).filter(Boolean) });
+  };
+
+  const handleInvoiceCreated = async () => {
+    const pid = invoiceHandoff?.projectId;
+    setInvoiceHandoff(null);
+    setSelectedIds(new Set());
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: [...billingKeys.states(normalizedProjectFilter), financialRoleFilter] }),
+      queryClient.invalidateQueries({ queryKey: ['draftProjectInvoices', normalizedProjectFilter ?? 'all'] }),
+      queryClient.invalidateQueries({ queryKey: ['projectInvoicesRecent'] }),
+      pid ? queryClient.invalidateQueries({ queryKey: invoiceKeys.view(pid) }) : null,
+    ]);
+    onSuccess?.();
   };
 
   // Clear selection when changing tabs
@@ -1088,12 +993,18 @@ export default function InvoiceWorkbench({ projectId, onClose, onSuccess, onRowC
           setBatchMode={setBatchMode}
           onCreateBatch={handleCreateBatch}
           onClearSelection={() => setSelectedIds(new Set())}
-          isCreating={createBatchMutation.isPending}
+          isCreating={false}
           actionType={currentTabConfig.selectionAction}
-          // Phase 6.2: Draft invoice accumulation
-          draftBatches={draftBatches}
-          targetDraftBatchId={targetDraftBatchId}
-          setTargetDraftBatchId={setTargetDraftBatchId}
+        />
+      )}
+
+      {invoiceHandoff && (
+        <CreateProjectInvoiceModal
+          open
+          onClose={() => setInvoiceHandoff(null)}
+          onSuccess={handleInvoiceCreated}
+          preselectedProjectId={invoiceHandoff.projectId}
+          preselectSourceIds={invoiceHandoff.sourceIds}
         />
       )}
 

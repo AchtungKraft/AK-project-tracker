@@ -45,7 +45,7 @@ function byVendor(parts) {
   return Object.values(groups).sort((a, b) => (a.vendor_name === "Unknown Vendor" ? 1 : b.vendor_name === "Unknown Vendor" ? -1 : a.vendor_name.localeCompare(b.vendor_name)));
 }
 
-export default function BillableItemsSelector({ projectId, selectedItems, onSelectionChange, className, autoSelect = true }) {
+export default function BillableItemsSelector({ projectId, selectedItems, onSelectionChange, className, autoSelect = true, preselectSourceIds = null }) {
   const [expandedGroups, setExpandedGroups] = useState({});
   const [expandedServices, setExpandedServices] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
@@ -88,15 +88,23 @@ export default function BillableItemsSelector({ projectId, selectedItems, onSele
   }), []);
 
   // Auto-select current/earned items only, small datasets (<50), once per project.
+  // When a caller hands in specific source ids (e.g. the parts workbench), select exactly those billable rows instead.
   useEffect(() => {
+    if (preselectSourceIds?.length && allItems.length > 0 && selectedItems.length === 0 && !hasAutoSelected) {
+      const ids = new Set(preselectSourceIds);
+      const seen = new Set();
+      onSelectionChange(allItems.filter((i) => ids.has(i.source_id) && !seen.has(i.source_id) && seen.add(i.source_id)).map(buildPayload));
+      setHasAutoSelected(true);
+      return;
+    }
     if (defaultItems.length > 0 && selectedItems.length === 0 && !hasAutoSelected) {
-      if (autoSelect && defaultItems.length < 50) {
+      if (autoSelect && !preselectSourceIds?.length && defaultItems.length < 50) {
         const seen = new Set();
         onSelectionChange(defaultItems.filter((i) => !seen.has(keyOf(i)) && seen.add(keyOf(i))).map(buildPayload));
       }
       setHasAutoSelected(true);
     }
-  }, [defaultItems, autoSelect, hasAutoSelected, selectedItems.length, buildPayload, onSelectionChange]);
+  }, [allItems, defaultItems, autoSelect, preselectSourceIds, hasAutoSelected, selectedItems.length, buildPayload, onSelectionChange]);
 
   useEffect(() => { setHasAutoSelected(false); setExpandedGroups({}); setExpandedServices({}); }, [projectId]);
 

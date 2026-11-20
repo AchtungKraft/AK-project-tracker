@@ -173,6 +173,16 @@ Deno.serve(async (req) => {
     }
 
     const payload = await req.json();
+    if (payload?.self_test) return Response.json(await runSelfTest());
+    return await handleDraft(base44, user, payload);
+  } catch (error) {
+    console.error('createProjectInvoiceDraft error:', error);
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+});
+
+// The whole validation + write path. `base44` is the real client, or the in-memory mock used by self_test.
+async function handleDraft(base44, user, payload) {
     const {
       project_id,
       invoice_type,
@@ -836,8 +846,164 @@ Deno.serve(async (req) => {
     } finally {
       await release();
     }
-  } catch (error) {
-    console.error('createProjectInvoiceDraft error:', error);
-    return Response.json({ error: error.message }, { status: 500 });
-  }
-});
+}
+
+// ── SELF TEST ── { self_test: true } (admin only). Runs Add Lines scenarios through handleDraft against an in-memory
+// database. Never reads or writes real records.
+function mockDb(seed) {
+  let n = 0;
+  const tables = {};
+  for (const [k, rows] of Object.entries(seed)) tables[k] = rows.map((r) => ({ ...r }));
+  const match = (row, q) => Object.entries(q).every(([k, v]) => (v && typeof v === 'object' && '$in' in v) ? v.$in.includes(row[k]) : (row[k] ?? null) === v);
+  const api = (name) => {
+    const rows = (tables[name] ||= []);
+    return {
+      filter: async (q = {}) => rows.filter((r) => match(r, q)).map((r) => ({ ...r })),
+      list: async () => rows.map((r) => ({ ...r })),
+      get: async (id) => { const r = rows.find((x) => x.id === id); if (!r) throw Object.assign(new Error('not found'), { status: 404 }); return { ...r }; },
+      create: async (d) => { const r = { id: `${name}_${++n}`, created_date: new Date().toISOString(), ...d }; rows.push(r); return { ...r }; },
+      updateMany: async (q, { $set }) => { const hit = rows.filter((r) => match(r, q)); hit.forEach((r) => Object.assign(r, $set)); return { updated: hit.length }; },
+      delete: async (id) => { const i = rows.findIndex((x) => x.id === id); if (i >= 0) rows.splice(i, 1); },
+    };
+  };
+  const entities = new Proxy({}, { get: (_, name) => api(String(name)) });
+  // Labor availability and budget consumption are derived from the mock rows, like the real cores derive them.
+  const functions = { invoke: async (fn, p) => {
+    if (fn === 'laborBillingCore') {
+      const pid = p.project_ids[0];
+      const drafts = tables.ProjectInvoice.filter((i) => i.project_id === pid && !['cancelled', 'void'].includes(i.status)).map((i) => i.id);
+      const onDraft = (tid, basis) => (tables.ProjectInvoiceLine || []).filter((l) => drafts.includes(l.invoice_id) && l.type === 'labor' && l.source_id === tid && (l.metadata?.labor_basis || 'earned') === basis).reduce((s, l) => s + l.qty, 0);
+      const items = (tables.LaborFixture || []).filter((t) => t.project_id === pid).map((t) => ({ task_id: t.id, task_name: t.name, rate: t.rate, hours_logged: t.earned, estimated_hours: t.earned + t.projected,
+        invoiced_hours: 0, draft_hours: onDraft(t.id, 'earned'), earned_available_hours: Math.max(0, t.earned - onDraft(t.id, 'earned')), projected_available_hours: Math.max(0, t.projected - onDraft(t.id, 'projected')) }));
+      return { data: { success: true, logic_version: LABOR_LOGIC_VERSION, projects: { [pid]: { items } } } };
+    }
+    if (fn === 'billingAuthorizationCore') {
+      const pr = tables.Project.find((x) => x.id === p.project_id);
+      const consumed = lr2(tables.ProjectInvoice.filter((i) => i.project_id === p.project_id && !['cancelled', 'void'].includes(i.status)).reduce((s, i) => s + (i.subtotal || 0) - (i.credit_proposed || 0), 0));
+      return { data: { success: true, logic_version: AUTH_LOGIC_VERSION, authorization: { authorized: pr.budget ?? null, consumed } } };
+    }
+    throw new Error(`unexpected invoke ${fn}`);
+  } };
+  return { base44: { entities, asServiceRole: { entities }, functions }, tables };
+}
+
+function seedProject({ budget = 5000, designation = null } = {}) {
+  return mockDb({
+    Project: [{ id: 'P', name: 'Test', budget, billing_designation: designation, billing_lock_token: null }, { id: 'P2', name: 'Other', billing_lock_token: null }],
+    ProjectInvoice: [{ id: 'D', project_id: 'P', invoice_type: 'progress', status: 'draft', subtotal: 300, total: 300, balance_due: 300, credit_proposed: 0 },
+      { id: 'S', project_id: 'P', invoice_type: 'final', status: 'sent', subtotal: 0 }, { id: 'D2', project_id: 'P2', invoice_type: 'progress', status: 'draft', subtotal: 0 }],
+    ProjectInvoiceLine: [{ id: 'L0', invoice_id: 'D', type: 'part', source_entity: 'PartCommitment', source_id: 'c1', description: 'Existing part', qty: 1, unit_price: 300, line_total: 300, sort_order: 0, metadata: { part_basis: 'current' } }],
+    PartCommitment: [
+      { id: 'c1', project_id: 'P', part_id: 'p1', required_total: 3, reserved_from_stock: 3, unit_retail_snapshot: 300, unit_cost_snapshot: 150, invoiced_qty: 0 },
+      { id: 'c2', project_id: 'P', part_id: 'p2', required_total: 2, reserved_from_stock: 0, covered_from_po: 2, unit_retail_snapshot: 100, unit_cost_snapshot: 60, invoiced_qty: 0 },
+    ],
+    ServiceCommitment: [{ id: 's1', project_id: 'P', service_id: 'sv', description: 'Plating', total_billable: 500, total_cost: 300, status: 'completed' }],
+    ServiceLineItem: [{ id: 'sl1', service_commitment_id: 's1', description: 'Vendor', type: 'vendor_cost', cost: 100, billing_rate: 200, quantity: 1, sort_order: 0 },
+      { id: 'sl2', service_commitment_id: 's1', description: 'Labor', type: 'labor', cost: 100, billing_rate: 150, quantity: 2, sort_order: 1 }],
+    LaborFixture: [{ id: 't1', project_id: 'P', name: 'Task', rate: 120, earned: 5, projected: 3 }],
+  });
+}
+
+async function runSelfTest() {
+  const user = { email: 'selftest@local', role: 'admin' };
+  const call = async (m, body) => { const r = await handleDraft(m.base44, user, { project_id: 'P', append_to_invoice_id: 'D', ...body }); return { status: r.status, ...(await r.json()) }; };
+  const lab = (qty, basis = 'earned') => ({ type: 'labor', source_entity: 'Task', source_id: 't1', description: 'Labor', qty, labor_basis: basis });
+  const part = (id, qty, basis, extra = {}) => ({ type: 'part', source_entity: 'PartCommitment', source_id: id, description: id, qty, part_basis: basis, ...extra });
+  const svc = { type: 'service', source_entity: 'ServiceCommitment', source_id: 's1', description: 'Plating', expanded_lines: [{ id: 'sl1', amount: 1 }] };
+  const linesOf = (m, inv = 'D') => m.tables.ProjectInvoiceLine.filter((l) => l.invoice_id === inv);
+  const draft = (m) => m.tables.ProjectInvoice.find((i) => i.id === 'D');
+  const unlocked = (m) => m.tables.Project.every((p) => p.billing_lock_token == null);
+  const results = [];
+  const t = async (name, fn) => { try { const detail = await fn(); results.push({ name, pass: detail.pass === true, detail }); } catch (e) { results.push({ name, pass: false, detail: e.message }); } };
+
+  await t('append earned labor, projected labor, received part, unreceived part and service: all added at server prices', async () => {
+    const m = seedProject();
+    const r = await call(m, { lines: [lab(2), lab(1, 'projected'), part('c1', 1, 'current'), part('c2', 2, 'projected'), svc] });
+    const L = linesOf(m); const L0 = L.find((l) => l.id === 'L0');
+    const svcLines = L.filter((l) => l.type === 'service');
+    return { pass: r.success && r.lines_added === 6 && draft(m).subtotal === 1660 && L0.unit_price === 300 && L0.qty === 1 && svcLines.length === 2 && lr2(svcLines.reduce((s, l) => s + l.line_total, 0)) === 500
+      && L.find((l) => l.metadata?.labor_basis === 'projected')?.unit_price === 120 && L.find((l) => l.source_id === 'c2')?.metadata?.part_basis === 'projected' && unlocked(m)
+      && m.tables.PartCommitment.every((c) => c.invoiced_qty === 0), subtotal: draft(m).subtotal, added: r.lines_added };
+  });
+  await t('partial quantities: 1 of 2 received parts and 2 of 5 earned hours, remainder still available', async () => {
+    const m = seedProject();
+    await call(m, { lines: [part('c1', 1, 'current'), lab(2)] });
+    const again = await call(m, { lines: [part('c1', 1, 'current'), lab(3)] });
+    return { pass: again.success && linesOf(m).filter((l) => l.source_id === 'c1').reduce((s, l) => s + l.qty, 0) === 3 && linesOf(m).filter((l) => l.type === 'labor').reduce((s, l) => s + l.qty, 0) === 5 };
+  });
+  await t('administrator price override with reason: added, audit metadata and activity log written', async () => {
+    const m = seedProject();
+    const r = await call(m, { lines: [part('c1', 1, 'current', { unit_price: 250, price_override: { reason: 'Loyalty discount' } })] });
+    const l = linesOf(m).find((x) => x.id !== 'L0'); const o = l?.metadata?.price_override;
+    const log = (m.tables.ActivityLog || []).find((a) => a.action === 'Invoice Line Price Override');
+    return { pass: r.success && l.unit_price === 250 && o?.original_unit_price === 300 && o?.override_unit_price === 250 && o?.reason === 'Loyalty discount' && o?.margin_pct === 40 && o?.by === user.email && !!log
+      && m.tables.PartCommitment.find((c) => c.id === 'c1').unit_retail_snapshot === 300 && r.warnings?.some((w) => w.code === 'PRICE_OVERRIDDEN') };
+  });
+  await t('standard price sent explicitly or omitted: no override recorded', async () => {
+    const m = seedProject();
+    const r = await call(m, { lines: [part('c1', 1, 'current', { unit_price: 300 }), part('c2', 1, 'projected')] });
+    return { pass: r.success && linesOf(m).every((l) => !l.metadata?.price_override) && !(m.tables.ActivityLog || []).some((a) => a.action === 'Invoice Line Price Override') };
+  });
+  await t('override without reason, below cost without approval, bad cents: rejected, nothing written', async () => {
+    const m = seedProject();
+    const a = await call(m, { lines: [part('c1', 1, 'current', { unit_price: 250 })] });
+    const b = await call(m, { lines: [part('c1', 1, 'current', { unit_price: 100, price_override: { reason: 'Clearance' } })] });
+    const c = await call(m, { lines: [part('c1', 1, 'current', { unit_price: 250.005, price_override: { reason: 'Clearance' } })] });
+    return { pass: a.code === 'PRICE_OVERRIDE_INVALID' && b.price_rejections?.[0]?.code === 'BELOW_COST_APPROVAL_REQUIRED' && c.price_rejections?.[0]?.code === 'PRICE_PRECISION' && linesOf(m).length === 1 && draft(m).subtotal === 300 && unlocked(m) };
+  });
+  await t('below cost with explicit approval: added with below-cost warning', async () => {
+    const m = seedProject();
+    const r = await call(m, { lines: [part('c1', 1, 'current', { unit_price: 100, price_override: { reason: 'Warranty goodwill', below_cost_approved: true } })] });
+    return { pass: r.success && r.warnings?.some((w) => w.code === 'BELOW_COST_OVERRIDE') && linesOf(m).find((l) => l.id !== 'L0')?.metadata?.price_override?.below_cost === true };
+  });
+  await t('duplicate allocations after a successful add: part, service, earned and projected labor all rejected', async () => {
+    const m = seedProject();
+    await call(m, { lines: [part('c1', 2, 'current'), part('c2', 2, 'projected'), svc, lab(5), lab(3, 'projected')] });
+    const before = linesOf(m).length; const sub = draft(m).subtotal;
+    const p = await call(m, { lines: [part('c1', 1, 'current')] });
+    const s = await call(m, { lines: [svc] });
+    const e = await call(m, { lines: [lab(1)] });
+    const j = await call(m, { lines: [lab(1, 'projected')] });
+    return { pass: !p.success && !s.success && s.blocked_lines?.[0]?.reason === 'ALLOCATED_TO_OTHER_DRAFT' && e.code === 'LABOR_HOURS_EXCEEDED' && j.code === 'LABOR_HOURS_EXCEEDED' && linesOf(m).length === before && draft(m).subtotal === sub,
+      codes: [p.blocked_lines?.[0]?.reason, s.blocked_lines?.[0]?.reason, e.code, j.code] };
+  });
+  await t('over-request is never capped: 3 received when 2 available rejects the whole request', async () => {
+    const m = seedProject();
+    const r = await call(m, { lines: [part('c1', 3, 'current'), lab(1)] });
+    return { pass: r.code === 'PART_QTY_EXCEEDED' && linesOf(m).length === 1 };
+  });
+  await t('budget limit: projected labor beyond remaining authorization rejected, nothing written', async () => {
+    const m = seedProject({ budget: 400 });
+    const r = await call(m, { lines: [lab(1, 'projected')] });
+    const ok = await call(m, { lines: [lab(0.5, 'projected')] });
+    return { pass: r.code === 'BUDGET_EXCEEDED' && ok.success && draft(m).subtotal === 360, after: draft(m).subtotal };
+  });
+  await t('projected labor without a confirmed budget: rejected', async () => {
+    const m = seedProject({ budget: null });
+    const r = await call(m, { lines: [lab(1, 'projected')] });
+    return { pass: r.code === 'BUDGET_NOT_CONFIRMED' && linesOf(m).length === 1 };
+  });
+  await t('3 concurrent adds of the same hour: one wins, others told to retry, hours added once', async () => {
+    const m = seedProject();
+    const rs = await Promise.all([1, 2, 3].map(() => call(m, { lines: [lab(1)] })));
+    return { pass: rs.filter((r) => r.success).length === 1 && rs.filter((r) => r.code === 'BILLING_LOCKED').length === 2 && linesOf(m).filter((l) => l.type === 'labor').length === 1 && draft(m).subtotal === 420 && unlocked(m),
+      codes: rs.map((r) => r.code || 'ok') };
+  });
+  await t('append target must be a draft on this project', async () => {
+    const m = seedProject();
+    const sent = await call(m, { append_to_invoice_id: 'S', lines: [lab(1)] });
+    const other = await call(m, { append_to_invoice_id: 'D2', lines: [lab(1)] });
+    return { pass: sent.code === 'APPEND_BLOCKED' && other.code === 'APPEND_BLOCKED' && unlocked(m) };
+  });
+  await t('check_only append validates and writes nothing', async () => {
+    const m = seedProject();
+    const r = await call(m, { check_only: true, lines: [lab(2), part('c1', 1, 'current', { unit_price: 250, price_override: { reason: 'Loyalty discount' } })] });
+    return { pass: r.success && r.check_only && r.would_add.length === 2 && linesOf(m).length === 1 && draft(m).subtotal === 300 && !(m.tables.ActivityLog || []).length && unlocked(m) };
+  });
+  await t('non-billable project: rejected', async () => {
+    const m = seedProject({ designation: 'NON_BILLABLE' });
+    const r = await call(m, { lines: [lab(1)] });
+    return { pass: r.code === 'PROJECT_NON_BILLABLE' && linesOf(m).length === 1 && unlocked(m) };
+  });
+  return { function: 'createProjectInvoiceDraft', mock_only: true, passed: results.filter((r) => r.pass).length, total: results.length, results };
+}

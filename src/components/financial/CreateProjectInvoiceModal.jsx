@@ -69,6 +69,7 @@ export default function CreateProjectInvoiceModal({
   onOpenDraft,
   preselectedProjectId = null,
   initialSelectedItems = [],
+  preselectSourceIds = null,
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -449,6 +450,7 @@ export default function CreateProjectInvoiceModal({
                 projectId={selectedProjectId}
                 selectedItems={selectedParts}
                 onSelectionChange={setSelectedParts}
+                preselectSourceIds={selectedProjectId === normalizeProjectId(preselectedProjectId) ? preselectSourceIds : null}
               />
 
               <ManualLinesSection
