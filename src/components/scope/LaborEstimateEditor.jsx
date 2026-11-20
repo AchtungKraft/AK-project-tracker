@@ -12,8 +12,7 @@ import { cn } from "@/lib/utils";
  * onChange: called with updated array.
  */
 export default function LaborEstimateEditor({ laborGroups = [], estimates = [], onChange, isMobile = false }) {
-  const usedGroupIds = new Set(estimates.map(e => e.labor_group_id));
-  const available = laborGroups.filter(g => g.is_active && !usedGroupIds.has(g.id));
+  const available = laborGroups.filter(g => g.is_active);
 
   const update = (idx, field, value) => {
     const next = estimates.map((e, i) => i === idx ? { ...e, [field]: value } : e);
@@ -29,6 +28,7 @@ export default function LaborEstimateEditor({ laborGroups = [], estimates = [], 
       hours_min: "",
       hours_max: "",
       rate_snapshot: g.hourly_rate,
+      description: '',
     }]);
   };
 
@@ -72,8 +72,6 @@ export default function LaborEstimateEditor({ laborGroups = [], estimates = [], 
       {estimates.map((est, idx) => {
         const costMin = (Number(est.hours_min) || 0) * (est.rate_snapshot || 0);
         const costMax = (Number(est.hours_max) || 0) * (est.rate_snapshot || 0);
-        // Available groups for this row: current + unselected
-        const rowAvailable = laborGroups.filter(g => g.is_active && (g.id === est.labor_group_id || !usedGroupIds.has(g.id) || estimates[idx].labor_group_id === g.id));
 
         return (
           <div key={idx} className={cn("flex items-center gap-2 flex-wrap bg-gray-800/40 rounded-md p-2 border border-gray-700/30", isMobile && "flex-col items-stretch")}>
@@ -83,7 +81,7 @@ export default function LaborEstimateEditor({ laborGroups = [], estimates = [], 
               </SelectTrigger>
               <SelectContent>
                 {laborGroups.filter(g => g.is_active).map(g => (
-                  <SelectItem key={g.id} value={g.id} disabled={usedGroupIds.has(g.id) && g.id !== est.labor_group_id}>
+                  <SelectItem key={g.id} value={g.id} >
                     {g.name}
                   </SelectItem>
                 ))}
@@ -107,6 +105,7 @@ export default function LaborEstimateEditor({ laborGroups = [], estimates = [], 
               </span>
             )}
 
+            <Input value={est.description || ''} onChange={e => update(idx, 'description', e.target.value)} placeholder="Operation / deliverable description" className="h-8 w-full bg-gray-800 border-gray-700 text-white text-xs" />
             <Button type="button" size="sm" variant="ghost" onClick={() => removeRow(idx)} className="h-6 w-6 p-0 text-gray-600 hover:text-red-400 ml-auto">
               <Trash2 className="w-3 h-3" />
             </Button>
