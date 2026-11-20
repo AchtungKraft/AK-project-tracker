@@ -40,7 +40,7 @@ export default function ScopeItemComponentSection({ title, accent, kind = "hard"
         <div className="divide-y divide-gray-700/30">
           {rows.map((r, i) => (
             <div key={r.key ?? i} className={cn(grid, "items-baseline py-1.5")}>
-              <p className="text-[13px] text-gray-300 leading-snug break-words min-w-0">
+              <p className="text-[13px] text-gray-300 leading-snug break-words whitespace-pre-wrap min-w-0">
                 {r.label && <span className={cn("font-semibold", accent)}>{r.label}</span>}
                 {r.label && r.description && <span className="text-gray-600"> — </span>}
                 {r.description}

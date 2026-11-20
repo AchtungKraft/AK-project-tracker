@@ -545,6 +545,8 @@ Deno.serve(async (req) => {
                 id: le.id,
                 scope_item_id: le.scope_item_id,
                 labor_group_name: le.labor_group_name_snapshot || 'Labor',
+                labor_group_name_snapshot: le.labor_group_name_snapshot || null,
+                description: le.description || '',
                 hours_min: le.hours_min || 0,
                 hours_max: le.hours_max || 0,
                 sort_order: le.sort_order || 0,

@@ -43,7 +43,7 @@ export function getHardCostRows(item) {
 export function getLaborRows(laborEstimates) {
   return laborEstimates.slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)).map((le, i) => ({
     key: le.id || i,
-    category: le.labor_group_name_snapshot || 'Labor',
+    category: le.labor_group_name_snapshot || le.labor_group_name || 'Labor',
     description: le.description?.trim() || '',
     hours: formatHoursRange(le.hours_min, le.hours_max) || '—',
     cost: formatDollarRange((le.hours_min || 0) * (le.rate_snapshot || 0), (le.hours_max || 0) * (le.rate_snapshot || 0)),
