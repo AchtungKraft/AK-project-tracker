@@ -551,7 +551,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
         containers={containers} locations={locations} projects={projects} isAdmin={isAdmin}
         onChooseBox={chooseBoxToDocument} onScan={scanBoxFromPicker}
         onPrintLabels={labelsFromPicker} onClose={() => setDocumentBoxPickerOpen(false)} />}
-      {isAdmin && batchLabelsOpen && <BatchStorageLabelsModal onClose={() => setBatchLabelsOpen(false)} />}
+      {isAdmin && batchLabelsOpen && <BatchStorageLabelsModal containers={containers} onClose={() => setBatchLabelsOpen(false)} />}
       {assignLocationOpen && <ShopAssignLocation
         locations={locations} inventoryItems={inventoryItems} parts={parts} containers={containers}
         initialPartId={assignPartId} initialSourceId={selectedLocationId} onClose={() => setAssignLocationOpen(false)}

@@ -308,7 +308,7 @@ export default function QRCodeSVG({ value, size = 120, className = "" }) {
 }
 
 /** Render QR as an SVG string (for print windows) */
-export function renderQRSVGString(value, size = 120) {
+export function renderQRSVGString(value, size = 120, color = 'black') {
   if (!value) return '';
   const qr = generateQRMatrix(value);
   const cellSize = size / (qr.size + 8);
@@ -317,7 +317,7 @@ export function renderQRSVGString(value, size = 120) {
   qr.matrix.forEach((row, r) => {
     row.forEach((cell, c) => {
       if (cell) {
-        rects += `<rect x="${offset + c * cellSize}" y="${offset + r * cellSize}" width="${cellSize}" height="${cellSize}" fill="black"/>`;
+        rects += `<rect x="${offset + c * cellSize}" y="${offset + r * cellSize}" width="${cellSize}" height="${cellSize}" fill="${color}"/>`;
       }
     });
   });

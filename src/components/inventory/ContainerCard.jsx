@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowRightLeft, Printer, ChevronRight, Home, StickyNote } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getContainerTypeConfig } from "./containerTypeConfig";
-import { printContainerQRLabel } from "./containerQRLabel";
+import ToteLabelPrintButton from "./labels/ToteLabelPrintButton";
 
 export default function ContainerCard({
   container, itemCount, location, homeLocation, project, locations = [],
@@ -18,10 +18,6 @@ export default function ContainerCard({
   // a box "Empty" solely because it has no Part / InventoryItem records.
   const noStockParts = itemCount === 0;
 
-  const handlePrintQR = (e) => {
-    e.stopPropagation();
-    printContainerQRLabel(container, { locations });
-  };
 
   return (
     <div
@@ -116,14 +112,7 @@ export default function ContainerCard({
             <ArrowRightLeft className="w-4 h-4" />
           </Button>
         )}
-        <Button
-          size="icon" variant="ghost"
-          onClick={handlePrintQR}
-          className="h-8 w-8 text-gray-500 hover:text-white"
-          title="Print Label"
-        >
-          <Printer className="w-4 h-4" />
-        </Button>
+        <ToteLabelPrintButton container={container} locations={locations} className="h-8 w-8 text-gray-500 hover:text-white" />
         <ChevronRight className="w-4 h-4 text-gray-600" />
       </div>
     </div>

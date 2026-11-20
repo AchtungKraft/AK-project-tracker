@@ -87,6 +87,39 @@ Deno.serve(async(req)=>{
       }))});
     }
 
+    if(action==='save_label_settings'){
+      // Explicit save from the tote label print dialog: name and storage category only.
+      // Never touches contents, inventory, location or QR identity.
+      const items=input.items;
+      if(!Array.isArray(items)||items.length<1||items.length>50) return reply({error:'1 to 50 containers required'},400);
+      const cats=await db.entities.StorageLabelCategory.list('sort_order',200);
+      const activeCats=new Set(cats.filter(c=>c.active!==false).map(c=>c.id));
+      const plan=[];
+      for(const it of items){
+        if(typeof it?.container_id!=='string') return reply({error:'container_id required'},400);
+        const patch={};
+        if(it.name!==undefined){
+          const n=typeof it.name==='string'?it.name.trim().slice(0,100):'';
+          if(!n) return reply({error:'Container name cannot be blank'},400);
+          patch.name=n;
+        }
+        if(it.storage_category_id!==undefined){
+          if(it.storage_category_id!==null&&!activeCats.has(it.storage_category_id)) return reply({error:'Unknown storage category'},400);
+          patch.storage_category_id=it.storage_category_id;
+        }
+        if(!Object.keys(patch).length) continue;
+        const [c]=await db.entities.StorageContainer.filter({id:it.container_id});
+        if(!c||c.active===false||c.status==='archived') return reply({error:'Container unavailable: '+it.container_id},404);
+        plan.push({id:c.id,patch});
+      }
+      const saved=[];
+      for(const p of plan){
+        const u=await db.entities.StorageContainer.update(p.id,p.patch);
+        saved.push({id:u.id,name:u.name,storage_category_id:u.storage_category_id||null});
+      }
+      return reply({success:true,saved});
+    }
+
     if(action==='list_clients'){
       // Used only by internal AK staff during label activation; do not expose
       // client contacts, emails or client-portal data through this endpoint.

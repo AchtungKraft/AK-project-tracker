@@ -1,6 +1,5 @@
 import { renderQRSVGString } from "./QRCodeSVG";
 import { renderBarcodeSVGString } from "./Code128SVG";
-import { buildLetterLabelSheet } from "./letterStorageLabels";
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => (
@@ -18,11 +17,9 @@ export function printStorageLabelBatch(labels, { format = 'thermal', batchCode =
   const valid = labels.every(c => /^AK_CTR:[a-f0-9]{24}$/i.test(c.qr_code_value || '') && c.short_code);
   if (!valid) throw new Error('Some labels have not been assigned permanent QR identities');
 
-  if (format === 'letter') {
-    const { css, body } = buildLetterLabelSheet(labels, batchCode, escapeHtml);
-    return openPrintWindow(css, body);
-  }
-
+  // US Letter labels use the canonical Tote Label V2 renderer (labels/toteLabelDocument).
+  // This function keeps only the existing 4 × 3 in thermal format.
+  if (format !== 'thermal') throw new Error('Use the Tote Label V2 renderer for US Letter labels');
   const sheet = false;
   const pages = labels.map((c) => {
     const code = escapeHtml(c.short_code);

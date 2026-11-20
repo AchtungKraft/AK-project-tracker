@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { getContainerTypeOptions, generateContainerNumber } from "./containerTypeConfig";
-import { printContainerQRLabel } from "./containerQRLabel";
+import ToteLabelPrintButton from "./labels/ToteLabelPrintButton";
 
 export default function CreateContainerModal({ onClose, preselectedLocationId, preselectedProjectId, locations = [], projects = [] }) {
   const queryClient = useQueryClient();
@@ -93,9 +93,9 @@ export default function CreateContainerModal({ onClose, preselectedLocationId, p
               )}
             </div>
             <div className="flex gap-2 justify-center">
-              <Button onClick={() => printContainerQRLabel(createdContainer, { locations })} className="gap-2">
+              <ToteLabelPrintButton container={createdContainer} locations={locations} size="default" variant="default" className="gap-2">
                 <Printer className="w-4 h-4" /> Print QR Label
-              </Button>
+              </ToteLabelPrintButton>
               <Button variant="outline" onClick={onClose}>Done</Button>
             </div>
           </div>

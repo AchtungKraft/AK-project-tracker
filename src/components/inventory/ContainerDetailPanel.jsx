@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/use-toast";
 import { getContainerTypeConfig } from "./containerTypeConfig";
-import { printContainerQRLabel } from "./containerQRLabel";
+import ToteLabelPrintButton from "./labels/ToteLabelPrintButton";
 import LocationBreadcrumb from "./LocationBreadcrumb";
 import StoragePartRow from "./StoragePartRow";
 import ContainerStoredProperty, { fetchStoredPropertyForContainer } from "./ContainerStoredProperty";
@@ -138,9 +138,7 @@ export default function ContainerDetailPanel({
             <Home className="w-4 h-4" /> Return Home
           </Button>
         )}
-        <Button size="icon" variant="ghost" onClick={() => printContainerQRLabel(container, { locations })} className="h-9 w-9 text-gray-400 hover:text-white" title="Print Label">
-          <Printer className="w-4 h-4" />
-        </Button>
+        <ToteLabelPrintButton container={container} locations={locations} className="h-9 w-9 text-gray-400 hover:text-white" />
         <div className="flex-1" />
         {onAddParts && (
           <Button size="sm" variant="ghost" onClick={() => onAddParts(container)} className="gap-1.5 h-9 text-sm text-gray-400 hover:text-white">

@@ -79,6 +79,13 @@
       "default": "#6366F1",
       "description": "Hex color for visual identification"
     },
+    "storage_category_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "StorageLabelCategory for tote label printing. Null = General Storage. Saved only via storageLabels save_label_settings."
+    },
     "qr_code_value": {
       "type": "string",
       "description": "QR code value for scanning"

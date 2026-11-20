@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Package, ArrowRightLeft, Printer, Home, Plus, Trash2, ExternalLink, X, MapPin, Box } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getContainerTypeConfig } from "./containerTypeConfig";
-import { printContainerQRLabel } from "./containerQRLabel";
+import ToteLabelPrintButton from "./labels/ToteLabelPrintButton";
 import LocationBreadcrumb from "./LocationBreadcrumb";
 import ContainerStoredProperty from "./ContainerStoredProperty";
 
@@ -108,9 +108,9 @@ function ContainerInspector({ container, locations, inventoryItems, parts, proje
             <Home className="w-3 h-3" /> Return
           </Button>
         )}
-        <Button size="sm" variant="ghost" onClick={() => printContainerQRLabel(container, { locations })} className="h-7 w-7 p-0 text-gray-500 hover:text-white" title="Print QR">
+        <ToteLabelPrintButton container={container} locations={locations} size="sm" className="h-7 w-7 p-0 text-gray-500 hover:text-white" title="Print QR">
           <Printer className="w-3 h-3" />
-        </Button>
+        </ToteLabelPrintButton>
         {containedParts.length > 0 && onMoveFromContainer && (
           <Button size="sm" variant="outline" onClick={() => onMoveFromContainer(container)} className="gap-1 h-7 text-[10px] border-gray-700 text-gray-300">
             <Package className="w-3 h-3" /> Move Items
