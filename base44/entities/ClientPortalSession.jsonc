@@ -25,5 +25,27 @@
     "client_contact_id",
     "session_token_hash",
     "expires_at"
-  ]
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "client_session_service_only"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "client_session_service_only"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "client_session_service_only"
+      }
+    }
+  }
 }
