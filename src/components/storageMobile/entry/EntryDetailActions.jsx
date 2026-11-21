@@ -1,27 +1,13 @@
-import { Button } from "@/components/ui/button";
-import { ArrowRightLeft, BadgeCheck, Camera, Pencil, Split } from "lucide-react";
+import { itemActions } from "../actions/storageActions";
+import ActionButtons from "../actions/ActionButtons";
 
-/** Contextual actions for one item. Tracked inventory keeps only read-only details. */
+/** Item actions from the shared definitions, so they match every other entry point. */
 export default function EntryDetailActions({ item, onAction }) {
-  const tracked = item.inventory_linked;
-  const actions = [
-    { key: 'capture', label: 'Add Photos', icon: Camera, show: !tracked },
-    { key: 'details', label: 'Edit Details', icon: Pencil, show: true },
-    { key: 'identify', label: item.identified ? 'Change Part Match' : 'Identify as Part', icon: BadgeCheck, show: !tracked },
-    { key: 'separate', label: 'Separate Photos', icon: Split, show: !tracked && item.photo_count > 1 },
-    { key: 'move', label: 'Move to Another Tote', icon: ArrowRightLeft, show: !tracked },
-  ].filter((a) => a.show);
+  const actions = itemActions({ size: item.photo_count, identified: item.identified, tracked: item.inventory_linked });
   return (
     <div className="space-y-1.5">
-      <div className="grid grid-cols-2 gap-1.5">
-        {actions.map(({ key, label, icon: Icon }) => (
-          <Button key={key} variant="outline" onClick={() => onAction(key)}
-            className={`h-11 gap-1.5 text-xs justify-start border-gray-700 text-gray-100 ${key === 'move' ? 'col-span-2 justify-center' : ''}`}>
-            <Icon className="w-4 h-4 shrink-0" /><span className="truncate">{label}</span>
-          </Button>
-        ))}
-      </div>
-      {tracked && <p className="text-[11px] text-amber-300">This item is tracked inventory. Move or change its stock from Parts Tracker.</p>}
+      <ActionButtons actions={actions} onAction={onAction} size="lg" />
+      {item.inventory_linked && <p className="text-[11px] text-amber-300">This item is tracked inventory. Move or change its stock from Parts Tracker.</p>}
     </div>
   );
 }

@@ -2,7 +2,9 @@ import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { moveContents } from "@/lib/contentMoveApi";
 
-/** Runs one content move and refreshes both totes. */
+const PER_TOTE = ['storagePhotoGrid', 'storedPropertyContainer', 'storageMobileContainer', 'storageLastOrganize', 'storageContentMoves', 'storageUnsortedPhotos'];
+
+/** Runs one content move, then waits for both totes (and search) to reload before reporting success. */
 export function useContentMove(sourceId) {
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
@@ -11,14 +13,10 @@ export function useContentMove(sourceId) {
     setBusy(true); setError(null);
     try {
       const r = await moveContents({ opKey, sourceId, destinationId, entryIds, photoIds });
-      for (const id of [sourceId, destinationId]) {
-        qc.invalidateQueries({ queryKey: ['storagePhotoGrid', id] });
-        qc.invalidateQueries({ queryKey: ['storedPropertyContainer', id] });
-        qc.invalidateQueries({ queryKey: ['storageMobileContainer', id] });
-        qc.invalidateQueries({ queryKey: ['storageLastOrganize', id] });
-        qc.invalidateQueries({ queryKey: ['storageContentMoves', id] });
-        qc.invalidateQueries({ queryKey: ['storageUnsortedPhotos', id] });
-      }
+      await Promise.all([
+        ...[sourceId, destinationId].flatMap((id) => PER_TOTE.map((k) => qc.invalidateQueries({ queryKey: [k, id] }))),
+        qc.invalidateQueries({ queryKey: ['storageMobileSearch'] }),
+      ]).catch(() => {});
       return r;
     } catch (e) {
       setError(e.message);

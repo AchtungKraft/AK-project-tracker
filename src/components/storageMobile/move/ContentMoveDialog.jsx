@@ -42,7 +42,7 @@ export default function ContentMoveDialog({ source, entries, photos, onClose, on
 
   if (scanning) return <div className="fixed inset-0 z-[90] bg-black"><QRScanner onScan={onScan} onClose={() => setScanning(false)} className="h-full" /></div>;
   return (
-    <OrganizeSheet title="Move Selected Contents" description={dest ? null : `${description} from ${source.short_code || source.name}`}
+    <OrganizeSheet title="Move to Another Tote" description={dest ? null : `${description} from ${source.short_code || source.name}`}
       busy={busy} onClose={onClose}>
       {!dest ? (
         <>

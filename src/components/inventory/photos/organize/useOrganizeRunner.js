@@ -11,6 +11,8 @@ export function useOrganizeRunner(containerId, onDone) {
     qc.invalidateQueries({ queryKey: ['storagePhotoGrid', containerId] }),
     qc.invalidateQueries({ queryKey: ['storedPropertyContainer', containerId] }),
     qc.invalidateQueries({ queryKey: ['storageLastOrganize', containerId] }),
+    qc.invalidateQueries({ queryKey: ['storageMobileContainer', containerId] }),
+    qc.invalidateQueries({ queryKey: ['storageMobileSearch'] }),
   ]).catch(() => {}), [qc, containerId]);
   const run = useCallback(async (fn, message) => {
     setBusy(true); setError(null);

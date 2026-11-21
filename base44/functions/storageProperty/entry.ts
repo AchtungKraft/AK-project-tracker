@@ -67,6 +67,7 @@ function formatPhoto(p, t, partName, thumb) {
     id: p.id, group_id: g?.id || null, group_name: g?.name || null,
     group_quantity: g?.quantity_known ? g.quantity : null, group_description: g?.description || null,
     identified: !!g?.catalog_part_id, part_name: g?.catalog_part_id ? partName.get(g.catalog_part_id) || null : null,
+    inventory_linked: !!g?.converted_inventory_item_id,
     group_index: idx, group_size: size, caption: p.caption || null,
     captured_at: p.captured_at || p.created_date || null, thumb_url: thumb,
     needs_preview: !p.thumbnail_uri && !p.thumbnail_unavailable, preview_unavailable: !!p.thumbnail_unavailable,

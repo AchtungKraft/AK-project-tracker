@@ -4,7 +4,7 @@ export function selectionInfo(photos) {
   let unsorted = 0;
   for (const p of photos) {
     if (!p.group_id) { unsorted++; continue; }
-    const g = groups.get(p.group_id) || { id: p.group_id, name: p.group_name, size: p.group_size || 0, identified: p.identified, part_name: p.part_name, selected: 0 };
+    const g = groups.get(p.group_id) || { id: p.group_id, name: p.group_name, size: p.group_size || 0, identified: p.identified, part_name: p.part_name, tracked: !!p.inventory_linked, selected: 0 };
     g.selected++;
     groups.set(p.group_id, g);
   }

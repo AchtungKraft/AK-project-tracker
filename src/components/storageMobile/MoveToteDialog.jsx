@@ -19,5 +19,5 @@ export default function MoveToteDialog({ tote, onClose, onMoved }) {
       </div>
     );
   }
-  return <MoveContainerModal container={tote} locations={locations} allowScan onMoved={onMoved} onClose={onClose} />;
+  return <MoveContainerModal container={tote} locations={locations} allowScan title="Move Tote" onMoved={onMoved} onClose={onClose} />;
 }

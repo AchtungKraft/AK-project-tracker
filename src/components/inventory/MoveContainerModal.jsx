@@ -7,13 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Loader2, ArrowRight, Home, Star, Search, ScanLine } from "lucide-react";
 import QRScanner from "./QRScanner";
 import { resolveStorageScan } from "@/lib/resolveStorageScan";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { getContainerTypeConfig } from "./containerTypeConfig";
 import { cn } from "@/lib/utils";
 import useLocationFavorites from "./useLocationFavorites";
 import { getLocationTypeConfig } from "./locationTypeConfig";
 
-export default function MoveContainerModal({ container, onClose, locations = [], inventoryItems = [], returnHome = false, allowScan = false, onMoved }) {
+export default function MoveContainerModal({ container, onClose, locations = [], inventoryItems = [], returnHome = false, allowScan = false, onMoved, title }) {
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState('');
   const queryClient = useQueryClient();
@@ -124,7 +124,7 @@ export default function MoveContainerModal({ container, onClose, locations = [],
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-sm max-h-[85vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>{returnHome ? 'Return Container Home' : 'Move Container'}</DialogTitle>
+          <DialogTitle>{title || (returnHome ? 'Return Container Home' : 'Move Container')}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3 flex-1 overflow-y-auto min-h-0">
           {/* Container info */}

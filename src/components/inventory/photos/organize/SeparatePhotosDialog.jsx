@@ -13,7 +13,7 @@ export default function SeparatePhotosDialog({ info, busy, onSubmit, onClose }) 
   ];
   const note = choice === 'unsort' && info.unsorted ? `${info.unsorted} already unsorted ${info.unsorted === 1 ? 'photo is' : 'photos are'} left as is.` : null;
   return (
-    <OrganizeSheet title="Separate" description={`${info.count} ${info.count === 1 ? 'photo' : 'photos'} selected.`}
+    <OrganizeSheet title={info.grouped ? 'Separate Photos' : 'Separate into Items'} description={`${info.count} ${info.count === 1 ? 'photo' : 'photos'} selected.`}
       busy={busy} confirmLabel={choice === 'unsort' ? 'Return to Unsorted' : 'Create Items'}
       confirmDisabled={isBlocked(info)} onConfirm={() => onSubmit({ operation: choice })} onClose={onClose}>
       <div className="space-y-2" role="radiogroup">

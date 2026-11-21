@@ -2,18 +2,19 @@ import { useCallback, useMemo, useState } from "react";
 import { useTotePhotos } from "./useTotePhotos";
 import { useLocalPreference } from "./useLocalPreference";
 import PhotoToolbar from "./PhotoToolbar";
-import PhotoSelectionBar from "./PhotoSelectionBar";
 import PhotoCollection from "./PhotoCollection";
 import PhotoViewer from "./PhotoViewer";
-import PhotoOrganizeActions from "./organize/PhotoOrganizeActions";
-import PhotoOrganizeDialogs from "./organize/PhotoOrganizeDialogs";
 import OrganizeUndoBar from "./organize/OrganizeUndoBar";
 import { selectionInfo } from "./organize/selectionInfo";
+import SelectionToolbar from "@/components/storageMobile/actions/SelectionToolbar";
+import SelectionDialogs from "@/components/storageMobile/actions/SelectionDialogs";
+import { selectionActions } from "@/components/storageMobile/actions/storageActions";
 
-const FILTER_LABEL = { all: 'All photos', unsorted: 'Unsorted photos', identified: 'Identified photos' };
+const FILTER_LABEL = { all: 'all photos', unsorted: 'unsorted photos', identified: 'identified photos' };
+const seedFromPhoto = (p) => ({ name: p.group_name, photo_count: p.group_size, identified: p.identified, part_name: p.part_name, inventory_linked: p.inventory_linked, quantity: p.group_quantity });
 
-/** Primary tote contents view: one unified, paged photo collection for this tote only. */
-export default function TotePhotoSection({ container }) {
+/** Every photo of one tote, paged. onOpenItem (Storage Mobile) adds item detail and content moves. */
+export default function TotePhotoSection({ container, onOpenItem }) {
   const [filter, setFilter] = useState('all');
   const [view, setView] = useLocalPreference('ak_storage_photo_view', 'grid', ['grid', 'list']);
   const [selecting, setSelecting] = useState(false);
@@ -24,6 +25,8 @@ export default function TotePhotoSection({ container }) {
   const { photos, counts } = query;
   const selectedPhotos = useMemo(() => photos.filter((p) => selected.has(p.id)), [photos, selected]);
   const info = useMemo(() => selectionInfo(selectedPhotos), [selectedPhotos]);
+  const mobile = !!onOpenItem;
+  const actions = useMemo(() => selectionActions(info, { photoLevel: true, canOpen: mobile, canMove: mobile }), [info, mobile]);
 
   const toggle = useCallback((id) => setSelected((s) => {
     const n = new Set(s);
@@ -32,28 +35,36 @@ export default function TotePhotoSection({ container }) {
   }), []);
   const changeFilter = (f) => { setFilter(f); setSelected(new Set()); setViewerIndex(null); };
   const endSelect = useCallback(() => { setSelecting(false); setSelected(new Set()); setDialog(null); }, []);
+  const onAction = (key) => {
+    if (key === 'view') return setViewerIndex(photos.indexOf(selectedPhotos[0]));
+    if (key === 'open' || key === 'capture') {
+      const p = selectedPhotos[0];
+      onOpenItem(p.group_id, seedFromPhoto(p), key === 'capture' ? 'capture' : null);
+      return endSelect();
+    }
+    setDialog(key);
+  };
+  const moveEntries = info.groups.map((g) => ({ id: g.id, name: g.name, photo_count: g.size }));
+  const movePhotos = selectedPhotos.filter((p) => !p.group_id);
 
   return (
-    <section className="space-y-3 mb-5 pb-4 border-b border-gray-800" aria-label="Tote photos">
+    <section className={mobile ? "space-y-2" : "space-y-3 mb-5 pb-4 border-b border-gray-800"} aria-label="Tote photos">
       <PhotoToolbar counts={counts} filter={filter} onFilter={changeFilter} view={view} onView={setView}
         selecting={selecting} onSelect={() => setSelecting(true)} />
-      {selecting ? (
-        <PhotoSelectionBar count={selected.size} loaded={photos.length} total={query.filteredTotal ?? photos.length}
-          filterLabel={FILTER_LABEL[filter]} onSelectAll={() => setSelected(new Set(photos.map((p) => p.id)))}
-          onClear={() => setSelected(new Set())} onCancel={endSelect}>
-          <PhotoOrganizeActions info={info} onAction={setDialog} />
-        </PhotoSelectionBar>
-      ) : <OrganizeUndoBar containerId={container.id} />}
+      {!selecting && <OrganizeUndoBar containerId={container.id} />}
       <PhotoCollection query={query} photos={photos} filter={filter} view={view}
         selecting={selecting} selected={selected} onOpen={setViewerIndex} onToggle={toggle} />
-      {viewerIndex != null && (
+      {selecting && (
+        <SelectionToolbar count={selected.size} loaded={photos.length} total={query.filteredTotal ?? photos.length}
+          scopeLabel={FILTER_LABEL[filter]} onSelectAll={() => setSelected(new Set(photos.map((p) => p.id)))}
+          onClear={() => setSelected(new Set())} onCancel={endSelect} actions={actions} onAction={onAction} hint="Tap photos to select them." />
+      )}
+      {viewerIndex != null && viewerIndex >= 0 && (
         <PhotoViewer photos={photos} index={viewerIndex} total={query.filteredTotal} hasMore={!!query.hasNextPage}
           loadMore={() => query.fetchNextPage()} onIndex={setViewerIndex} onClose={() => setViewerIndex(null)} />
       )}
-      {dialog && selectedPhotos.length > 0 && (
-        <PhotoOrganizeDialogs key={dialog} containerId={container.id} dialog={dialog} photos={selectedPhotos}
-          onClose={() => setDialog(null)} onDone={endSelect} />
-      )}
+      <SelectionDialogs tote={container} dialog={dialog} photos={selectedPhotos} moveEntries={moveEntries} movePhotos={movePhotos}
+        onClose={() => setDialog(null)} onDone={endSelect} />
     </section>
   );
 }
