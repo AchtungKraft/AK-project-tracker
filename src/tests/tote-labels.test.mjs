@@ -56,6 +56,18 @@ test('geometry: 3 × 3.25 in labels + gaps fit inside a 10.5 in printable Letter
   const qr = num(/\.tl \.qr svg\{width:([\d.]+)in/);
   assert.ok(qr + 0.08 + header + write + 0.05 <= h, 'QR fits the body without clipping');
 });
+test('V2.3: 3 / 6 / 9 reserved labels → 1 / 2 / 3 full sheets, unique QR, no duplicates or blank pages', () => {
+  for (const [n, pages] of [[3, 1], [6, 2], [9, 3]]) {
+    const reserved = Array.from({ length: n }, (_, i) => ({ id: `r${n}_${i}`, short_code: `TOTE-ZZV23-${n}-${String(i + 1).padStart(3, '0')}`, qr_code_value: `AK_CTR:${n}${String(i).padStart(23, '0')}`, container_type: 'tote' }));
+    const labels = reserved.map((r, i) => L.toPrintLabel({ ...L.draftFromReserved(r), category_id: cats[i % cats.length].id }, cats));
+    const html = L.buildToteLabelDocument(labels);
+    assert.equal(count(html, /class="sheet"/g), pages, `${n} labels → ${pages} pages`);
+    assert.equal(count(html, /<section class="tl"/g), n, `exactly ${n} labels`);
+    assert.equal(new Set(labels.map(l => l.qr_code_value)).size, n, 'unique identifiers');
+    for (const r of reserved) assert.equal(count(html, new RegExp(`>${r.short_code}<`, 'g')), 1, 'each label once');
+    assert.ok(html.includes('STORAGE — INTERIOR') && html.includes('STORAGE — EXTERIOR'), 'category names print');
+  }
+});
 test('saved test totes: single and batch print produce identical labels; 3 → 1 page, 4 → 2 pages', () => {
   // Saved values read back from the isolated V2.2 test totes (category later deactivated).
   const liveCats = [...cats, { id: 'zz', name: 'ZZ Test Sticker Renamed', color: '#0d9488', active: false }];

@@ -36,7 +36,7 @@ Deno.serve(async(req)=>{
       const count=input.count;
       const type=input.container_type||'box';
       const requestKey=input.request_key;
-      if(!Number.isInteger(count)||count<1||count>50) return reply({error:'Count must be 1 to 50'},400);
+      if(![3,6,9].includes(count)) return reply({error:'Count must be 3, 6 or 9 labels'},400);
       if(!Object.prototype.hasOwnProperty.call(TYPES,type)) return reply({error:'Invalid container type'},400);
       if(typeof requestKey!=='string'||!/^[a-zA-Z0-9_-]{12,100}$/.test(requestKey)) return reply({error:'Valid request key required'},400);
 

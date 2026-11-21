@@ -10,6 +10,7 @@ import { draftFromContainer, draftFromReserved } from "./labels/labelDrafts";
 import { useStorageCategories } from "./labels/useStorageCategories";
 import ToteLabelStudio from "./labels/ToteLabelStudio";
 import ContainerLabelPicker from "./labels/ContainerLabelPicker";
+import LabelQuantitySelector from "./labels/LabelQuantitySelector";
 
 const key = () => crypto.randomUUID().replace(/-/g,'');
 const unwrap = (r) => r?.data || r;
@@ -18,7 +19,7 @@ export default function BatchStorageLabelsModal({ containers = [], onClose }) {
   const { toast } = useToast();
   const notifyError = (title, e) => toast({ title, description: e?.message, variant: 'destructive' });
   const { data: categories = [] } = useStorageCategories();
-  const [count,setCount] = useState('10');
+  const [count,setCount] = useState(3);
   const [containerType,setContainerType] = useState('box');
   const [busy,setBusy] = useState(false);
   const [historyBusy,setHistoryBusy] = useState(true);
@@ -45,7 +46,7 @@ export default function BatchStorageLabelsModal({ containers = [], onClose }) {
     try {
       const res = unwrap(await base44.functions.invoke('storageLabels',{
         action:'generate',request_key:requestKey.current,
-        count:Number(count),container_type:containerType,
+        count,container_type:containerType,
       }));
       if (res.error || !res.success || !Array.isArray(res.labels)) throw new Error(res.error || 'Could not reserve labels');
       showReserved(res.labels, res.batch_code);
@@ -83,13 +84,10 @@ export default function BatchStorageLabelsModal({ containers = [], onClose }) {
             <ShieldCheck className="w-4 h-4 text-green-400 shrink-0"/>
             Reserve permanent QR labels before packing. They are not counted as occupied storage until activated by scanning.
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="text-xs text-gray-400">Labels per batch
-              <Select value={count} onValueChange={setCount}><SelectTrigger className="mt-1"><SelectValue/></SelectTrigger>
-                <SelectContent>{['10','25','50'].map(n=><SelectItem key={n} value={n}>{n} labels</SelectItem>)}</SelectContent>
-              </Select>
-            </label>
-            <label className="text-xs text-gray-400">Container type
+          <LabelQuantitySelector value={count} onChange={(n)=>{ setCount(n); requestKey.current=key(); }} disabled={busy} />
+          <div>
+            <p className="text-sm font-semibold mb-2">New totes</p>
+            <label className="text-xs text-gray-400 block">Container type
               <Select value={containerType} onValueChange={setContainerType}><SelectTrigger className="mt-1"><SelectValue/></SelectTrigger>
                 <SelectContent>{['box','tote','bin','crate'].map(t=><SelectItem key={t} value={t}>{t[0].toUpperCase()+t.slice(1)}</SelectItem>)}</SelectContent>
               </Select>
@@ -97,11 +95,11 @@ export default function BatchStorageLabelsModal({ containers = [], onClose }) {
           </div>
           <Button onClick={create} disabled={busy} className="w-full">
             {busy?<Loader2 className="w-4 h-4 animate-spin mr-2"/>:<Printer className="w-4 h-4 mr-2"/>}
-            Reserve {count} labels
+            Reserve {count} new labels
           </Button>
           <div className="border-t border-gray-700 pt-3">
             <p className="text-sm font-semibold mb-2">Print existing containers</p>
-            <ContainerLabelPicker containers={containers} onContinue={list => { setLabels([]); setBatchCode(''); setDrafts(list.map(draftFromContainer)); }} />
+            <ContainerLabelPicker key={count} containers={containers} quantity={count} onContinue={list => { setLabels([]); setBatchCode(''); setDrafts(list.map(draftFromContainer)); }} />
           </div>
           <div className="border-t border-gray-700 pt-3">
             <p className="text-sm font-semibold mb-2">Previous batches</p>
