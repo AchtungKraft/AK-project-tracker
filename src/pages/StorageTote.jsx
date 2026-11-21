@@ -7,7 +7,7 @@ import { useToast } from "@/components/ui/use-toast";
 import StorageGate from "@/components/storageMobile/StorageGate";
 import ToteHeader from "@/components/storageMobile/ToteHeader";
 import MoveToteDialog from "@/components/storageMobile/MoveToteDialog";
-import TotePhotoSection from "@/components/inventory/photos/TotePhotoSection";
+import ToteContentsSection from "@/components/storageMobile/ToteContentsSection";
 import QuickCaptureDialog from "@/components/inventory/capture/QuickCaptureDialog";
 import { storageMobile, rememberTote } from "@/lib/storageMobileApi";
 
@@ -44,15 +44,15 @@ function ToteScreen({ search }) {
     ) : (
       <>
         <ToteHeader tote={tote} />
-        <div className="grid grid-cols-2 gap-2">
-          <Button onClick={() => setOpen('capture')} className="h-12 text-base gap-2 bg-red-600 hover:bg-red-700 text-white">
+        <div className="flex gap-2">
+          <Button onClick={() => setOpen('capture')} className="flex-1 h-11 text-base gap-2 bg-red-600 hover:bg-red-700 text-white">
             <Camera className="w-5 h-5" /> Capture
           </Button>
-          <Button variant="outline" onClick={() => setOpen('move')} className="h-12 text-base gap-2">
-            <ArrowRightLeft className="w-5 h-5" /> Move
+          <Button variant="outline" onClick={() => setOpen('move')} className="h-11 px-3 text-sm gap-1.5">
+            <ArrowRightLeft className="w-4 h-4" /> Move Tote
           </Button>
         </div>
-        <TotePhotoSection key={tote.id} container={tote} />
+        <ToteContentsSection key={tote.id} tote={tote} />
         {open === 'capture' && <QuickCaptureDialog container={tote} onClose={() => { setOpen(null); refetch(); }} />}
         {open === 'move' && (
           <MoveToteDialog tote={tote} onClose={() => setOpen(null)}
@@ -63,7 +63,7 @@ function ToteScreen({ search }) {
 
   return (
     <StorageGate>
-      <div className="mx-auto w-full max-w-3xl space-y-3 pb-4 min-w-0">{body}</div>
+      <div className="mx-auto w-full max-w-3xl space-y-2.5 pb-4 min-w-0">{body}</div>
     </StorageGate>
   );
 }

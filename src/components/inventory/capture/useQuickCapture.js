@@ -42,13 +42,15 @@ export function useQuickCapture(containerId) {
     savingRef.current = true; setSaving(true);
     const queue = itemsRef.current.filter(i => i.status === 'pending' || i.status === 'failed');
     let saved = 0, failed = 0;
+    const ids = [];
     const worker = async () => {
       while (queue.length) {
         const item = queue.shift();
         if (!caches.current.has(item.key)) caches.current.set(item.key, {});
         patch(item.key, { status: 'uploading', error: null });
         try {
-          await saveQuickCapturePhoto({ item, cache: caches.current.get(item.key), containerId, onStage: s => patch(item.key, { status: s }) });
+          const photo = await saveQuickCapturePhoto({ item, cache: caches.current.get(item.key), containerId, onStage: s => patch(item.key, { status: s }) });
+          if (photo?.id) ids.push(photo.id);
           patch(item.key, { status: 'saved' }); saved++;
         } catch (e) {
           patch(item.key, { status: 'failed', error: e.message }); failed++;
@@ -62,7 +64,7 @@ export function useQuickCapture(containerId) {
     }));
     batchId.current = newKey();
     savingRef.current = false; setSaving(false);
-    return { saved, failed };
+    return { saved, failed, ids };
   }, [containerId]);
 
   const unsaved = items.filter(i => i.status !== 'saved').length;

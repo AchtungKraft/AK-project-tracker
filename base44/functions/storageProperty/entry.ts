@@ -7,10 +7,8 @@ import { Image } from 'npm:imagescript@1.3.0';
 const GRID_FILTERS = new Set(['all','unsorted','identified']);
 const sortKey = (p) => `${p.captured_at || p.created_date || ''}|${p.id}`;
 
-async function listTotePhotos(db, container, body) {
-  const filter = GRID_FILTERS.has(body.filter) ? body.filter : 'all';
-  const limit = Math.min(Math.max(parseInt(body.limit) || 30, 1), 60);
-  const cursor = typeof body.cursor === 'string' ? body.cursor.slice(0, 200) : null;
+/** Active entries + every active photo of this tote, each photo exactly once, newest first. */
+async function loadTote(db, container) {
   const groups = (await db.entities.StoredProperty.filter({ container_id: container.id }, '-created_date', 500))
     .filter((g) => g.status === 'in_storage');
   const groupById = new Map(groups.map((g) => [g.id, g]));
@@ -37,41 +35,98 @@ async function listTotePhotos(db, container, body) {
     list.forEach((p, i) => groupPos.set(p.id, [i + 1, list.length]));
   }
   const isIdentified = (p) => !!groupById.get(p.stored_property_id)?.catalog_part_id;
-  const matches = filter === 'unsorted' ? all.filter((p) => !p.stored_property_id)
-    : filter === 'identified' ? all.filter(isIdentified) : all;
-  const start = cursor ? matches.findIndex((p) => sortKey(p) < cursor) : 0;
-  const page = start < 0 ? [] : matches.slice(start, start + limit);
-  const partIds = [...new Set(page.map((p) => groupById.get(p.stored_property_id)?.catalog_part_id).filter(Boolean))];
-  const parts = partIds.length ? await db.entities.Part.filter({ id: { $in: partIds } }) : [];
-  const partName = new Map(parts.map((p) => [p.id, p.part_name || p.vendor_part_number || null]));
-  const signThumb = async (p) => {
-    if (!p.thumbnail_uri) return null;
+  const counts = {
+    photos: all.length, unsorted_photos: all.filter((p) => !p.stored_property_id).length,
+    identified_photos: all.filter(isIdentified).length,
+    entries: groups.length, identified_entries: groups.filter((g) => g.catalog_part_id).length,
+  };
+  counts.items = counts.entries + counts.unsorted_photos;
+  return { groups, groupById, all, perGroup, groupPos, isIdentified, counts };
+}
+
+async function partNames(db, groups) {
+  const ids = [...new Set(groups.map((g) => g?.catalog_part_id).filter(Boolean))];
+  const parts = ids.length ? await db.entities.Part.filter({ id: { $in: ids } }) : [];
+  return new Map(parts.map((p) => [p.id, p.part_name || p.vendor_part_number || null]));
+}
+
+async function signThumbs(db, photos) {
+  const sign = async (p) => {
+    if (!p?.thumbnail_uri) return null;
     try { return (await db.integrations.Core.CreateFileSignedUrl({ file_uri: p.thumbnail_uri, expires_in: 3600 })).signed_url; } catch (_) { return null; }
   };
-  const thumbs = [];
-  for (let i = 0; i < page.length; i += 6) thumbs.push(...await Promise.all(page.slice(i, i + 6).map(signThumb)));
-  const photos = page.map((p, i) => {
-    const g = groupById.get(p.stored_property_id);
-    const [idx, size] = groupPos.get(p.id) || [null, null];
+  const out = [];
+  for (let i = 0; i < photos.length; i += 6) out.push(...await Promise.all(photos.slice(i, i + 6).map(sign)));
+  return out;
+}
+
+function formatPhoto(p, t, partName, thumb) {
+  const g = t.groupById.get(p.stored_property_id);
+  const [idx, size] = t.groupPos.get(p.id) || [null, null];
+  return {
+    id: p.id, group_id: g?.id || null, group_name: g?.name || null,
+    group_quantity: g?.quantity_known ? g.quantity : null, group_description: g?.description || null,
+    identified: !!g?.catalog_part_id, part_name: g?.catalog_part_id ? partName.get(g.catalog_part_id) || null : null,
+    group_index: idx, group_size: size, caption: p.caption || null,
+    captured_at: p.captured_at || p.created_date || null, thumb_url: thumb,
+    needs_preview: !p.thumbnail_uri && !p.thumbnail_unavailable, preview_unavailable: !!p.thumbnail_unavailable,
+  };
+}
+
+async function listTotePhotos(db, container, body) {
+  const t = await loadTote(db, container);
+  // One item's photos, in item order (used by the item detail screen).
+  if (body.filter === 'entry') {
+    if (!idOk(body.entry_id) || !t.groupById.has(body.entry_id)) return { success: false, error: 'That item is no longer in this tote', status: 404 };
+    const page = (t.perGroup.get(body.entry_id) || []).slice(0, 200);
+    const [names, thumbs] = await Promise.all([partNames(db, [t.groupById.get(body.entry_id)]), signThumbs(db, page)]);
+    return { success: true, filter: 'entry', photos: page.map((p, i) => formatPhoto(p, t, names, thumbs[i])), next_cursor: null, filtered_total: page.length, counts: t.counts };
+  }
+  const filter = GRID_FILTERS.has(body.filter) ? body.filter : 'all';
+  const limit = Math.min(Math.max(parseInt(body.limit) || 30, 1), 60);
+  const cursor = typeof body.cursor === 'string' ? body.cursor.slice(0, 200) : null;
+  const matches = filter === 'unsorted' ? t.all.filter((p) => !p.stored_property_id)
+    : filter === 'identified' ? t.all.filter(t.isIdentified) : t.all;
+  const start = cursor ? matches.findIndex((p) => sortKey(p) < cursor) : 0;
+  const page = start < 0 ? [] : matches.slice(start, start + limit);
+  const [names, thumbs] = await Promise.all([partNames(db, page.map((p) => t.groupById.get(p.stored_property_id))), signThumbs(db, page)]);
+  const photos = page.map((p, i) => formatPhoto(p, t, names, thumbs[i]));
+  const last = page[page.length - 1];
+  const more = start >= 0 && start + limit < matches.length;
+  return { success: true, filter, photos, next_cursor: more && last ? sortKey(last) : null, filtered_total: matches.length, counts: t.counts };
+}
+
+/* ── Phase E.1 contents read model: one entry per physical thing in the tote ──
+   Each active content entry is ONE item (cover = its first photo); each unsorted photo is one item. */
+async function listToteContents(db, container, body) {
+  const t = await loadTote(db, container);
+  const limit = Math.min(Math.max(parseInt(body.limit) || 30, 1), 60);
+  const cursor = typeof body.cursor === 'string' ? body.cursor.slice(0, 200) : null;
+  const items = [
+    ...t.groups.map((g) => {
+      const photos = t.perGroup.get(g.id) || [];
+      const newest = photos.reduce((m, p) => { const k = p.captured_at || p.created_date || ''; return k > m ? k : m; }, g.created_date || '');
+      return { kind: 'entry', id: g.id, g, cover: photos[0] || null, photo_count: photos.length, key: `${newest}|${g.id}` };
+    }),
+    ...t.all.filter((p) => !p.stored_property_id).map((p) => ({ kind: 'photo', id: p.id, cover: p, photo_count: 1, key: sortKey(p) })),
+  ].sort((a, b) => (a.key < b.key ? 1 : -1));
+  const start = cursor ? items.findIndex((i) => i.key < cursor) : 0;
+  const page = start < 0 ? [] : items.slice(start, start + limit);
+  const [names, thumbs] = await Promise.all([partNames(db, page.map((i) => i.g)), signThumbs(db, page.map((i) => i.cover))]);
+  const out = page.map((i, n) => {
+    const cover = i.cover ? formatPhoto(i.cover, t, names, thumbs[n]) : null;
+    if (i.kind === 'photo') return { kind: 'photo', id: i.id, photo_count: 1, cover };
+    const g = i.g;
     return {
-      id: p.id, group_id: g?.id || null, group_name: g?.name || null,
-      group_quantity: g?.quantity_known ? g.quantity : null, group_description: g?.description || null,
-      identified: !!g?.catalog_part_id, part_name: g?.catalog_part_id ? partName.get(g.catalog_part_id) || null : null,
-      group_index: idx, group_size: size, caption: p.caption || null,
-      captured_at: p.captured_at || p.created_date || null, thumb_url: thumbs[i],
-      needs_preview: !p.thumbnail_uri && !p.thumbnail_unavailable, preview_unavailable: !!p.thumbnail_unavailable,
+      kind: 'entry', id: g.id, name: g.name, photo_count: i.photo_count, cover,
+      quantity: g.quantity_known ? g.quantity : null, description: g.description || null, notes: g.notes || null,
+      identified: !!g.catalog_part_id, part_name: g.catalog_part_id ? names.get(g.catalog_part_id) || 'Catalog part' : null,
+      inventory_linked: !!g.converted_inventory_item_id,
     };
   });
   const last = page[page.length - 1];
-  const more = start >= 0 && start + limit < matches.length;
-  return {
-    success: true, filter, photos, next_cursor: more && last ? sortKey(last) : null, filtered_total: matches.length,
-    counts: {
-      photos: all.length, unsorted_photos: all.filter((p) => !p.stored_property_id).length,
-      identified_photos: all.filter(isIdentified).length,
-      entries: groups.length, identified_entries: groups.filter((g) => g.catalog_part_id).length,
-    },
-  };
+  const more = start >= 0 && start + limit < items.length;
+  return { success: true, items: out, next_cursor: more && last ? last.key : null, total: items.length, counts: t.counts };
 }
 
 /** Reads the EXIF orientation tag of a JPEG (1 when absent). */
@@ -220,7 +275,7 @@ Deno.serve(async (req)=>{
     if(!staff) return respond({error:'AK staff only'},403);
     const body=await req.json();
     const action=body?.action;
-    if(!['list_container','create_group','add_photo','get_photos','update_group','find_by_part','add_unsorted_photo','unsorted_summary','list_photos','photo_original','make_preview'].includes(action)){
+    if(!['list_container','create_group','add_photo','get_photos','update_group','find_by_part','add_unsorted_photo','unsorted_summary','list_photos','list_contents','photo_original','make_preview'].includes(action)){
       return respond({error:'Unsupported storage property operation'},400);
     }
 
@@ -286,7 +341,8 @@ Deno.serve(async (req)=>{
       return respond({error:'Active container not found'},404);
     }
 
-    if(action==='list_photos') return respond(await listTotePhotos(db,container,body));
+    if(action==='list_photos'){ const r=await listTotePhotos(db,container,body); return respond(r,r.status||200); }
+    if(action==='list_contents') return respond(await listToteContents(db,container,body));
 
     if(action==='unsorted_summary'){
       const rows=await db.entities.StoredPropertyPhoto.filter({container_id:container.id,archived:false},'-created_date',2000);

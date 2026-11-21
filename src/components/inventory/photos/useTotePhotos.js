@@ -7,10 +7,10 @@ const RESIGN_AFTER = 45 * 60_000;
 const BROKEN_RETRY_GAP = 2 * 60_000;
 
 /** Paged, tote-scoped photo collection. Each photo appears once (deduped by id). */
-export function useTotePhotos(containerId, filter) {
+export function useTotePhotos(containerId, filter, entryId = null) {
   const query = useInfiniteQuery({
-    queryKey: ['storagePhotoGrid', containerId, filter],
-    queryFn: ({ pageParam }) => fetchTotePhotoPage({ containerId, filter, cursor: pageParam }),
+    queryKey: ['storagePhotoGrid', containerId, filter, ...(entryId ? [entryId] : [])],
+    queryFn: ({ pageParam }) => fetchTotePhotoPage({ containerId, filter, cursor: pageParam, entryId }),
     initialPageParam: null,
     getNextPageParam: (last) => last.next_cursor || undefined,
     staleTime: 5 * 60_000,

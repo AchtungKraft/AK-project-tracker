@@ -9,7 +9,7 @@ import { useQuickCapture } from "./useQuickCapture";
 import CaptureThumb from "./CaptureThumb";
 
 /** Photo-first capture: photos are saved straight to the box as unsorted photos. */
-export default function QuickCaptureDialog({ container, onClose }) {
+export default function QuickCaptureDialog({ container, onClose, onSaved, subtitle }) {
   const qc = useQueryClient();
   const { items, saving, unsaved, addFiles, remove, saveAll } = useQuickCapture(container.id);
   const cameraRef = useRef(null);
@@ -27,7 +27,8 @@ export default function QuickCaptureDialog({ container, onClose }) {
   const pick = (e) => { addFiles(e.target.files); e.target.value = ''; };
 
   const run = async (keepOpen) => {
-    const { saved, failed } = await saveAll();
+    const { saved, failed, ids } = await saveAll();
+    if (ids?.length) onSaved?.(ids);
     if (saved) {
       qc.invalidateQueries({ queryKey: ['storageUnsortedPhotos', container.id] });
       qc.invalidateQueries({ queryKey: ['storagePhotoGrid', container.id] });
@@ -49,7 +50,7 @@ export default function QuickCaptureDialog({ container, onClose }) {
         onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle className="text-left">Capture Photos</DialogTitle>
-          <p className="text-xs text-gray-400 text-left">{container.short_code || container.name} · no details needed</p>
+          <p className="text-xs text-gray-400 text-left">{subtitle || `${container.short_code || container.name} · no details needed`}</p>
         </DialogHeader>
 
         <input ref={cameraRef} hidden type="file" accept="image/*" capture="environment" onChange={pick} />

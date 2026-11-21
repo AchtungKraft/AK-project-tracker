@@ -10,8 +10,12 @@ const call = async (payload) => {
 
 export const PHOTO_PAGE_SIZE = 30;
 
-export const fetchTotePhotoPage = ({ containerId, filter, cursor }) =>
-  call({ action: 'list_photos', container_id: containerId, filter, cursor, limit: PHOTO_PAGE_SIZE });
+export const fetchTotePhotoPage = ({ containerId, filter, cursor, entryId }) =>
+  call({ action: 'list_photos', container_id: containerId, filter, cursor, entry_id: entryId, limit: PHOTO_PAGE_SIZE });
+
+/** Contents view: one item per content entry plus one per unsorted photo. */
+export const fetchToteContentsPage = ({ containerId, cursor }) =>
+  call({ action: 'list_contents', container_id: containerId, cursor, limit: PHOTO_PAGE_SIZE });
 
 export const fetchPhotoOriginal = async (photoId) =>
   (await call({ action: 'photo_original', photo_id: photoId })).signed_url;
