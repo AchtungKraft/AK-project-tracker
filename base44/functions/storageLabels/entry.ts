@@ -95,6 +95,7 @@ Deno.serve(async(req)=>{
       if(batch&&(batch.requested_count!==count||batch.container_type!==type)) {
         return reply({error:'Request key already used for a different batch'},409);
       }
+      if(batch?.status==='voided') return reply({error:'This batch has been retired'},409);
       if(batch&&batch.seq_start===undefined) return reply({error:'This is a pre-V2.4 batch. Reprint it from Previous batches.'},409);
       if(!batch&&(await db.entities.StorageIdentifierCounter.filter({key:COUNTER_KEY})).length!==1){
         return reply({error:'Container numbering is not initialized yet. An admin must review the identifier audit and approve initialization.',code:'NUMBERING_NOT_INITIALIZED'},409);
@@ -198,7 +199,8 @@ Deno.serve(async(req)=>{
 
     if(action==='list_batches'){
       if(!isAdmin) return reply({error:'Admin permission required'},403);
-      const batches=await db.entities.StorageLabelBatch.list('-created_date',20);
+      // Voided batches are retired: hidden from Previous batches and not reprintable.
+      const batches=(await db.entities.StorageLabelBatch.list('-created_date',40)).filter(b=>b.status!=='voided').slice(0,20);
       return reply({success:true,batches:batches.map(b=>({
         id:b.id,batch_code:b.batch_code,requested_count:b.requested_count,
         status:b.status,container_type:b.container_type,generated_at:b.generated_at,
@@ -299,6 +301,7 @@ Deno.serve(async(req)=>{
       if(typeof input.batch_id!=='string') return reply({error:'batch_id required'},400);
       const [batch]=await db.entities.StorageLabelBatch.filter({id:input.batch_id});
       if(!batch) return reply({error:'Batch not found'},404);
+      if(batch.status==='voided') return reply({error:'This batch has been retired and cannot be reprinted'},409);
       const labels=await db.entities.StorageLabel.filter({batch_id:batch.id});
       return reply({success:true,batch_id:batch.id,batch_code:batch.batch_code,
         labels:labels.filter(l=>l.status!=='voided').sort((a,b)=>a.sequence-b.sequence)
