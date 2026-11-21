@@ -5,7 +5,7 @@ import PhotoThumb from "./PhotoThumb";
 import { groupColor, photoDate, photoStatus } from "./photoStatus";
 
 /** Compact list row; stacks cleanly on phones, no table. */
-function PhotoListRow({ photo, index, selecting, selected, onOpen, onToggle }) {
+function PhotoListRow({ photo, index, selecting, selected, onOpen, onToggle, onBroken }) {
   const status = photoStatus(photo);
   const details = [
     photo.group_quantity != null ? `Qty ${photo.group_quantity}` : null,
@@ -24,7 +24,7 @@ function PhotoListRow({ photo, index, selecting, selected, onOpen, onToggle }) {
         </span>
       )}
       <span className="relative w-14 h-14 shrink-0 overflow-hidden rounded bg-gray-900">
-        <PhotoThumb photo={photo} iconClass="w-4 h-4" />
+        <PhotoThumb photo={photo} iconClass="w-4 h-4" onBroken={onBroken} />
         {photo.group_size > 1 && <span className={cn("absolute bottom-0 inset-x-0 h-1", groupColor(photo.group_id))} />}
       </span>
       <span className="flex-1 min-w-0">

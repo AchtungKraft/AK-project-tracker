@@ -5,7 +5,7 @@ import PhotoThumb from "./PhotoThumb";
 import { groupColor, photoStatus } from "./photoStatus";
 
 /** Square image tile: image first, status as small markers only. */
-function PhotoGridTile({ photo, index, selecting, selected, onOpen, onToggle }) {
+function PhotoGridTile({ photo, index, selecting, selected, onOpen, onToggle, onBroken }) {
   const status = photoStatus(photo);
   const grouped = photo.group_size > 1;
   return (
@@ -14,7 +14,7 @@ function PhotoGridTile({ photo, index, selecting, selected, onOpen, onToggle }) 
       aria-label={`${photo.group_name || 'Unsorted photo'}${selected ? ', selected' : ''}`}
       className={cn("relative aspect-square w-full overflow-hidden rounded-md border bg-gray-900 text-left",
         selected ? "border-red-500 ring-2 ring-red-500" : "border-gray-800 hover:border-gray-600")}>
-      <PhotoThumb photo={photo} />
+      <PhotoThumb photo={photo} onBroken={onBroken} />
       {grouped && (
         <span className={cn("absolute top-1 left-1 flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] font-semibold text-white", groupColor(photo.group_id))}>
           <Layers className="w-3 h-3" />{photo.group_index}/{photo.group_size}

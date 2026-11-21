@@ -111,21 +111,50 @@ function orient(img, o) {
   return out;
 }
 
+/** HEIF/HEIC brands in the ISO-BMFF ftyp box. */
+function isHeic(b) {
+  if (b.length < 12 || String.fromCharCode(b[4], b[5], b[6], b[7]) !== 'ftyp') return false;
+  return ['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'mif1', 'msf1'].includes(String.fromCharCode(b[8], b[9], b[10], b[11]));
+}
+
+/** Decodes HEIC with libheif (loaded only when a HEIC original is seen). */
+async function decodeHeic(bytes) {
+  const { default: decode } = await import('npm:heic-decode@2.0.0');
+  const { width, height, data } = await decode({ buffer: bytes });
+  const img = new Image(width, height);
+  img.bitmap.set(data);
+  return img;
+}
+
 /** Builds a missing ~480px preview from the original. The original is never modified. */
 async function makePreview(db, req, photo) {
   const sign = async (uri, s) => (await db.integrations.Core.CreateFileSignedUrl({ file_uri: uri, expires_in: s })).signed_url;
   if (photo.thumbnail_uri) return { success: true, thumb_url: await sign(photo.thumbnail_uri, 3600) };
   if (photo.thumbnail_unavailable) return { success: true, unavailable: true };
-  const res = await fetch(await sign(photo.file_uri, 120), { signal: AbortSignal.timeout(30000) });
-  if (!res.ok) return { success: false, error: 'Original unavailable' };
-  const bytes = new Uint8Array(await res.arrayBuffer());
+  // Bounded retries: transient failures are counted; after 3 the placeholder becomes permanent.
+  const transient = async (error) => {
+    const attempts = (photo.preview_attempts || 0) + 1;
+    await db.entities.StoredPropertyPhoto.update(photo.id, attempts >= 3 ? { preview_attempts: attempts, thumbnail_unavailable: true } : { preview_attempts: attempts });
+    return attempts >= 3 ? { success: true, unavailable: true } : { success: false, error };
+  };
+  let bytes;
+  try {
+    const res = await fetch(await sign(photo.file_uri, 120), { signal: AbortSignal.timeout(30000) });
+    if (!res.ok) return await transient('Original unavailable');
+    bytes = new Uint8Array(await res.arrayBuffer());
+  } catch (_e) { return await transient('Original could not be read'); }
   let thumb;
   try {
     if (bytes.length > 30 * 1024 * 1024) throw new Error('too large');
-    let img = await Image.decode(bytes);
+    let img, rotate = true;
+    try { img = await Image.decode(bytes); } catch (e) {
+      if (!isHeic(bytes)) throw e;
+      img = await decodeHeic(bytes);  // libheif already applies the stored rotation
+      rotate = false;
+    }
     const scale = Math.min(1, 480 / Math.max(img.width, img.height));
     img = img.resize(Math.max(1, Math.round(img.width * scale)), Math.max(1, Math.round(img.height * scale)));
-    thumb = await orient(img, exifOrientation(bytes)).encodeJPEG(75);
+    thumb = await (rotate ? orient(img, exifOrientation(bytes)) : img).encodeJPEG(75);
   } catch (_e) {
     await db.entities.StoredPropertyPhoto.update(photo.id, { thumbnail_unavailable: true });
     return { success: true, unavailable: true };
@@ -133,8 +162,8 @@ async function makePreview(db, req, photo) {
   const base = (photo.original_file_name || 'photo').replace(/\.[^.]+$/, '').slice(0, 80);
   // Platform limitation: the SDK's server-side file upload leaves the worker unable to make
   // further calls, so the same private upload endpoint is called directly with fetch.
-  const uri = await uploadPrivateDirect(req, new File([thumb], `${base}-thumb.jpg`, { type: 'image/jpeg' }));
-  if (!uri) return { success: false, error: 'Preview upload failed' };
+  const uri = await uploadPrivateDirect(req, new File([thumb], `${base}-thumb.jpg`, { type: 'image/jpeg' })).catch(() => null);
+  if (!uri) return await transient('Preview upload failed');
   await db.entities.StoredPropertyPhoto.update(photo.id, { thumbnail_uri: uri });
   return { success: true, generated: true, thumb_url: await sign(uri, 3600) };
 }

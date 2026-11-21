@@ -7,11 +7,11 @@
         "string",
         "null"
       ],
-      "description": "Content entry this photo belongs to. Null = unsorted photo saved directly to the container (quick capture)."
+      "description": "Content entry this photo belongs to. Null = unsorted photo saved directly to the container (quick capture). Changed only by storagePhotoOrganize (group / separate / undo)."
     },
     "file_uri": {
       "type": "string",
-      "description": "Private Base44 file URI of the original upload; never a public or signed URL"
+      "description": "Private Base44 file URI of the original upload; never a public or signed URL. Never changed by organizing."
     },
     "thumbnail_uri": {
       "type": [
@@ -25,7 +25,14 @@
         "boolean",
         "null"
       ],
-      "description": "True when the server could not build a preview from the original (e.g. HEIC). The grid shows a placeholder; the original still opens in the viewer."
+      "description": "True when the server could not build a preview from the original. The grid shows a placeholder; the original still opens in the viewer."
+    },
+    "preview_attempts": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "Failed server preview attempts (network/storage errors). After 3 the photo is marked thumbnail_unavailable so retries stay bounded."
     },
     "capture_key": {
       "type": [

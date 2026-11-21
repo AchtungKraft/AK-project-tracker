@@ -18,9 +18,12 @@
         "remove",
         "convert_to_inventory",
         "owner_change",
-        "correct"
+        "correct",
+        "photo_group",
+        "photo_separate",
+        "photo_undo"
       ],
-      "description": "Physical custody event; informational and non-inventory"
+      "description": "Physical custody event; informational and non-inventory. photo_group / photo_separate / photo_undo record tote photo organizing: details holds operation, state (pending|completed), moves [{photo_id, from, from_sort, to, to_sort}], source/destination/created/retired entry ids and undone_by."
     },
     "stored_property_id": {
       "type": "string"

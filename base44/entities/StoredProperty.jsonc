@@ -79,9 +79,39 @@
         "removed",
         "installed",
         "disposed",
-        "converted_to_inventory"
+        "converted_to_inventory",
+        "retired"
       ],
-      "default": "in_storage"
+      "enumColors": [
+        "green",
+        "blue",
+        "gray",
+        "purple",
+        "red",
+        "yellow",
+        "gray"
+      ],
+      "default": "in_storage",
+      "description": "retired = entry left with no photos after photo organizing. Kept (never deleted) so Undo and history can restore it."
+    },
+    "retired_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "retired_by": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "retired_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "description": {
       "type": "string"

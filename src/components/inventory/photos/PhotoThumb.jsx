@@ -6,7 +6,7 @@ import { requestPreview } from "@/lib/totePhotoApi";
  * Renders the small preview only, never the original. A missing preview is built on the
  * server once the tile scrolls into view; until then a placeholder is shown.
  */
-export default function PhotoThumb({ photo, iconClass = "w-6 h-6" }) {
+export default function PhotoThumb({ photo, iconClass = "w-6 h-6", onBroken }) {
   const [url, setUrl] = useState(photo.thumb_url);
   const [pending, setPending] = useState(false);
   const [broken, setBroken] = useState(false);
@@ -29,7 +29,7 @@ export default function PhotoThumb({ photo, iconClass = "w-6 h-6" }) {
 
   if (url && !broken) {
     return <img src={url} alt={photo.group_name || 'Tote photo'} loading="lazy" decoding="async"
-      onError={() => setBroken(true)} className="w-full h-full object-cover" />;
+      onError={() => { setBroken(true); onBroken?.(); }} className="w-full h-full object-cover" />;
   }
   return (
     <div ref={ref} className="w-full h-full flex flex-col items-center justify-center gap-1 bg-gray-800/70 text-gray-500">

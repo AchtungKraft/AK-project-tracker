@@ -32,7 +32,7 @@ export default function PhotoCollection({ query, photos, filter, view, selecting
   return (
     <div className="space-y-3">
       <div className={view === 'list' ? "space-y-1.5" : GRID}>
-        {photos.map((p, i) => <Item key={p.id} photo={p} index={i} selecting={selecting} selected={selected.has(p.id)} onOpen={onOpen} onToggle={onToggle} />)}
+        {photos.map((p, i) => <Item key={p.id} photo={p} index={i} selecting={selecting} selected={selected.has(p.id)} onOpen={onOpen} onToggle={onToggle} onBroken={query.refreshLinks} />)}
       </div>
       {hasNextPage && (
         <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage} className="w-full h-11 gap-2 border-gray-700 text-gray-200">
