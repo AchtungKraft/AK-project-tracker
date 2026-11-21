@@ -28,7 +28,10 @@ export default function QuickCaptureDialog({ container, onClose }) {
 
   const run = async (keepOpen) => {
     const { saved, failed } = await saveAll();
-    if (saved) qc.invalidateQueries({ queryKey: ['storageUnsortedPhotos', container.id] });
+    if (saved) {
+      qc.invalidateQueries({ queryKey: ['storageUnsortedPhotos', container.id] });
+      qc.invalidateQueries({ queryKey: ['storagePhotoGrid', container.id] });
+    }
     if (failed) toast.error(`${failed} photo${failed === 1 ? '' : 's'} failed. ${saved} saved. Tap Retry Failed to try again.`);
     else if (saved) toast.success(`${saved} photo${saved === 1 ? '' : 's'} saved to ${container.short_code || container.name}`);
     if (!failed && !keepOpen) onClose();

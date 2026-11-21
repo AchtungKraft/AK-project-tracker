@@ -20,6 +20,13 @@
       ],
       "description": "Private file URI of a separately generated preview image. The original file is never replaced."
     },
+    "thumbnail_unavailable": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "True when the server could not build a preview from the original (e.g. HEIC). The grid shows a placeholder; the original still opens in the viewer."
+    },
     "capture_key": {
       "type": [
         "string",

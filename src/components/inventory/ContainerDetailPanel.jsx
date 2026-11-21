@@ -16,6 +16,7 @@ import LocationBreadcrumb from "./LocationBreadcrumb";
 import StoragePartRow from "./StoragePartRow";
 import ContainerStoredProperty, { fetchStoredPropertyForContainer } from "./ContainerStoredProperty";
 import CapturePhotosAction, { UnsortedPhotoBadge } from "./capture/CapturePhotosAction";
+import TotePhotoSection from "./photos/TotePhotoSection";
 
 export default function ContainerDetailPanel({
   container, locations, inventoryItems, parts, projects, vendors,
@@ -177,6 +178,7 @@ export default function ContainerDetailPanel({
 
       {/* Physical property is independent of inventory, reservations, and stock totals. */}
       <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 sm:p-5">
+        <TotePhotoSection key={`photos-${container.id}`} container={container} />
         <ContainerStoredProperty key={container.id} container={container} parts={parts} wide={workspaceMode} />
         {containedParts.length === 0 ? (
           <div className="rounded-lg border border-dashed border-gray-800 bg-gray-900/20 p-3 sm:p-4">
@@ -286,6 +288,10 @@ export default function ContainerDetailPanel({
               )}
             </div>
           )}
+        </div>
+        {/* Thumb-reachable capture on phones */}
+        <div className="md:hidden sticky bottom-0 -mx-3 mt-4 px-3 pt-3 pb-2 bg-gradient-to-t from-gray-950 via-gray-950/95 to-transparent">
+          <CapturePhotosAction container={container} label="Capture More Photos" className="w-full h-12 text-base" />
         </div>
       </div>
     </div>

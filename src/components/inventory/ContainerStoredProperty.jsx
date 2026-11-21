@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Camera, ChevronDown, ChevronRight, Image as ImageIcon, Link2, Loader2, Package, Pencil, Search } from "lucide-react";
+import { Camera, Image as ImageIcon, Link2, Loader2, Package, Pencil, Search } from "lucide-react";
 import { toast } from "@/lib/notify";
 import PropertyIntakeModal from "./PropertyIntakeModal";
 
@@ -14,9 +14,8 @@ export async function fetchStoredPropertyForContainer(containerId) {
   return result.items||[];
 }
 
-function StoredPropertyRow({item,container,parts,onChanged,autoPreview=false}){
+function StoredPropertyRow({item,container,parts,onChanged}){
   const queryClient=useQueryClient();
-  const [showPhotos,setShowPhotos]=useState(autoPreview && item.photo_count>0);
   const [linking,setLinking]=useState(false);
   const [search,setSearch]=useState('');
   const [linkBusy,setLinkBusy]=useState(false);
@@ -27,16 +26,6 @@ function StoredPropertyRow({item,container,parts,onChanged,autoPreview=false}){
     if(needle.length<2)return [];
     return parts.filter(p=>(p.part_name||'').toLowerCase().includes(needle)||(p.vendor_part_number||'').toLowerCase().includes(needle)).slice(0,12);
   },[parts,search]);
-  const {data:photos=[],isLoading:loadingPhotos,error:photoError}=useQuery({
-    queryKey:['storedPropertyPhotos',item.id],
-    enabled:showPhotos,
-    queryFn:async()=>{
-      const result=unwrap(await base44.functions.invoke('storageProperty',{action:'get_photos',property_id:item.id}));
-      if(result.error||!result.success)throw new Error(result.error||'Unable to load private photos');
-      return result.photos||[];
-    },
-    staleTime:90_000,refetchOnWindowFocus:false,
-  });
   const updateLink=async partId=>{
     setLinkBusy(true);
     try{
@@ -72,30 +61,13 @@ function StoredPropertyRow({item,container,parts,onChanged,autoPreview=false}){
       <Button size="sm" variant="outline" onClick={()=>setEditingContents(true)} className="h-9 gap-1.5 text-xs border-indigo-800 text-indigo-200">
         <Pencil className="w-3.5 h-3.5"/> Edit Contents &amp; Photos
       </Button>
-      {(item.photo_count||0)>0&&<Button size="sm" variant="outline" onClick={()=>setShowPhotos(v=>!v)} className="h-9 gap-1 text-xs border-gray-700">
-        {showPhotos?<ChevronDown className="w-3 h-3"/>:<ChevronRight className="w-3 h-3"/>}
-        <ImageIcon className="w-3 h-3"/> {item.photo_count} {item.photo_count===1?"photo":"photos"}
-      </Button>}
+      {(item.photo_count||0)>0&&<span className="inline-flex items-center gap-1 text-xs text-gray-400">
+        <ImageIcon className="w-3 h-3"/> {item.photo_count} {item.photo_count===1?"photo":"photos"} in grid above
+      </span>}
       <Button size="sm" variant="ghost" onClick={()=>setLinking(v=>!v)} className="h-8 gap-1 text-xs text-gray-400">
         <Link2 className="w-3 h-3"/> {catalog?'Change catalog match':'Identify as Part'}
       </Button>
     </div>
-    {showPhotos&&<div className="space-y-2">
-      {loadingPhotos&&<p className="text-xs text-gray-500">Loading private photos…</p>}
-      {photoError&&<p className="text-xs text-red-400">Cannot load photographs. {photoError.message}</p>}
-      {!loadingPhotos&&!photoError&&photos.length===0&&<p className="text-xs text-gray-500">No photographs saved yet.</p>}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        {photos.map(p=><div key={p.id} className="space-y-1">
-          {p.signed_url?
-            <a href={p.signed_url} target="_blank" rel="noreferrer" title="Open private photo">
-              <img src={p.signed_url} alt={p.caption||item.name} loading="lazy" className="w-full aspect-square object-cover rounded border border-gray-700"/>
-            </a>
-            :<div className="aspect-square bg-gray-800 border border-gray-700 flex items-center justify-center text-xs text-gray-500">Unavailable</div>}
-          {p.caption&&<p className="text-[11px] text-gray-400 truncate">{p.caption}</p>}
-        </div>)}
-      </div>
-      <p className="text-[10px] text-gray-600">Photo links expire automatically and can be refreshed by reopening this section.</p>
-    </div>}
     {editingContents&&<PropertyIntakeModal container={container} existingGroup={item}
       onClose={()=>setEditingContents(false)} onSaved={()=>{
         onChanged?.();
@@ -133,6 +105,7 @@ export default function ContainerStoredProperty({container,parts=[],wide=false})
   });
   const refresh=()=>{
     client.invalidateQueries({queryKey:['storedPropertyContainer',container.id]});
+    client.invalidateQueries({queryKey:['storagePhotoGrid',container.id]});
   };
   const active=items.filter(i=>i.status==='in_storage');
   return <section className="space-y-3 mb-5 pb-4 border-b border-gray-800">
@@ -148,8 +121,8 @@ export default function ContainerStoredProperty({container,parts=[],wide=false})
     {isLoading?<p className="text-xs text-gray-500">Loading property…</p>:
       error?<p className="text-xs text-red-400">Stored Property unavailable: {error.message}</p>:
         !active.length?<p className="text-sm text-gray-500 rounded-lg border border-dashed border-gray-800 p-4">No stored property documented yet. Select Add Contents to photograph or list client items, take-offs, or miscellaneous parts.</p>:
-          <div className={wide?"grid grid-cols-1 lg:grid-cols-2 gap-3 items-start":"space-y-2"}>{active.map((i,index)=>
-            <StoredPropertyRow key={i.id} item={i} container={container} parts={parts} onChanged={refresh} autoPreview={wide&&index<4}/>)}</div>}
+          <div className={wide?"grid grid-cols-1 lg:grid-cols-2 gap-3 items-start":"space-y-2"}>{active.map(i=>
+            <StoredPropertyRow key={i.id} item={i} container={container} parts={parts} onChanged={refresh}/>)}</div>}
     {intakeOpen&&<PropertyIntakeModal container={container} onClose={()=>setIntakeOpen(false)} onSaved={refresh}/>}
   </section>;
 }

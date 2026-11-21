@@ -14,12 +14,12 @@ export function useUnsortedPhotoCount(containerId) {
 }
 
 /** Primary tote action: opens photo-first capture for this box only. */
-export default function CapturePhotosAction({ container }) {
+export default function CapturePhotosAction({ container, label = 'Capture Photos', className = 'h-9 text-sm' }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)} className="gap-1.5 h-9 text-sm bg-red-600 hover:bg-red-700 text-white">
-        <Camera className="w-4 h-4" /> Capture Photos
+      <Button size="sm" onClick={() => setOpen(true)} className={`gap-1.5 bg-red-600 hover:bg-red-700 text-white ${className}`}>
+        <Camera className="w-4 h-4" /> {label}
       </Button>
       {open && <QuickCaptureDialog container={container} onClose={() => setOpen(false)} />}
     </>

@@ -1,4 +1,157 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.44';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.54';
+import { Image } from 'npm:imagescript@1.3.0';
+
+/* ── Phase C read model: one unified, paged photo collection per tote ──
+   Unsorted photos (no content entry) + photos of the tote's active content entries.
+   Only the requested page is signed; originals are signed only on demand. */
+const GRID_FILTERS = new Set(['all','unsorted','identified']);
+const sortKey = (p) => `${p.captured_at || p.created_date || ''}|${p.id}`;
+
+async function listTotePhotos(db, container, body) {
+  const filter = GRID_FILTERS.has(body.filter) ? body.filter : 'all';
+  const limit = Math.min(Math.max(parseInt(body.limit) || 30, 1), 60);
+  const cursor = typeof body.cursor === 'string' ? body.cursor.slice(0, 200) : null;
+  const groups = (await db.entities.StoredProperty.filter({ container_id: container.id }, '-created_date', 500))
+    .filter((g) => g.status === 'in_storage');
+  const groupById = new Map(groups.map((g) => [g.id, g]));
+  const [boxRows, groupRows] = await Promise.all([
+    db.entities.StoredPropertyPhoto.filter({ container_id: container.id, archived: false }, '-created_date', 5000),
+    groups.length ? db.entities.StoredPropertyPhoto.filter({ stored_property_id: { $in: [...groupById.keys()] }, archived: false }, '-created_date', 5000) : [],
+  ]);
+  // Exactly once: dedupe by id; photos of inactive entries are excluded.
+  const byId = new Map();
+  for (const p of [...boxRows, ...groupRows]) {
+    if (p.archived) continue;
+    if (p.stored_property_id && !groupById.has(p.stored_property_id)) continue;
+    byId.set(p.id, p);
+  }
+  const all = [...byId.values()].sort((a, b) => (sortKey(a) < sortKey(b) ? 1 : -1));
+  const perGroup = new Map();
+  for (const p of all) if (p.stored_property_id) {
+    if (!perGroup.has(p.stored_property_id)) perGroup.set(p.stored_property_id, []);
+    perGroup.get(p.stored_property_id).push(p);
+  }
+  const groupPos = new Map();
+  for (const list of perGroup.values()) {
+    list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || String(a.created_date).localeCompare(String(b.created_date)));
+    list.forEach((p, i) => groupPos.set(p.id, [i + 1, list.length]));
+  }
+  const isIdentified = (p) => !!groupById.get(p.stored_property_id)?.catalog_part_id;
+  const matches = filter === 'unsorted' ? all.filter((p) => !p.stored_property_id)
+    : filter === 'identified' ? all.filter(isIdentified) : all;
+  const start = cursor ? matches.findIndex((p) => sortKey(p) < cursor) : 0;
+  const page = start < 0 ? [] : matches.slice(start, start + limit);
+  const partIds = [...new Set(page.map((p) => groupById.get(p.stored_property_id)?.catalog_part_id).filter(Boolean))];
+  const parts = partIds.length ? await db.entities.Part.filter({ id: { $in: partIds } }) : [];
+  const partName = new Map(parts.map((p) => [p.id, p.part_name || p.vendor_part_number || null]));
+  const signThumb = async (p) => {
+    if (!p.thumbnail_uri) return null;
+    try { return (await db.integrations.Core.CreateFileSignedUrl({ file_uri: p.thumbnail_uri, expires_in: 3600 })).signed_url; } catch (_) { return null; }
+  };
+  const thumbs = [];
+  for (let i = 0; i < page.length; i += 6) thumbs.push(...await Promise.all(page.slice(i, i + 6).map(signThumb)));
+  const photos = page.map((p, i) => {
+    const g = groupById.get(p.stored_property_id);
+    const [idx, size] = groupPos.get(p.id) || [null, null];
+    return {
+      id: p.id, group_id: g?.id || null, group_name: g?.name || null,
+      group_quantity: g?.quantity_known ? g.quantity : null, group_description: g?.description || null,
+      identified: !!g?.catalog_part_id, part_name: g?.catalog_part_id ? partName.get(g.catalog_part_id) || null : null,
+      group_index: idx, group_size: size, caption: p.caption || null,
+      captured_at: p.captured_at || p.created_date || null, thumb_url: thumbs[i],
+      needs_preview: !p.thumbnail_uri && !p.thumbnail_unavailable, preview_unavailable: !!p.thumbnail_unavailable,
+    };
+  });
+  const last = page[page.length - 1];
+  const more = start >= 0 && start + limit < matches.length;
+  return {
+    success: true, filter, photos, next_cursor: more && last ? sortKey(last) : null, filtered_total: matches.length,
+    counts: {
+      photos: all.length, unsorted_photos: all.filter((p) => !p.stored_property_id).length,
+      identified_photos: all.filter(isIdentified).length,
+      entries: groups.length, identified_entries: groups.filter((g) => g.catalog_part_id).length,
+    },
+  };
+}
+
+/** Reads the EXIF orientation tag of a JPEG (1 when absent). */
+function exifOrientation(b) {
+  if (b[0] !== 0xff || b[1] !== 0xd8) return 1;
+  let o = 2;
+  while (o + 10 < b.length) {
+    if (b[o] !== 0xff) return 1;
+    const marker = b[o + 1], len = (b[o + 2] << 8) | b[o + 3];
+    if (marker === 0xe1 && b[o + 4] === 0x45 && b[o + 5] === 0x78 && b[o + 6] === 0x69 && b[o + 7] === 0x66) {
+      const t = o + 10, le = b[t] === 0x49;
+      const u16 = (p) => (le ? b[p] | (b[p + 1] << 8) : (b[p] << 8) | b[p + 1]);
+      const u32 = (p) => (le ? (b[p] | (b[p + 1] << 8) | (b[p + 2] << 16) | (b[p + 3] << 24)) >>> 0 : ((b[p] << 24) | (b[p + 1] << 16) | (b[p + 2] << 8) | b[p + 3]) >>> 0);
+      const ifd = t + u32(t + 4);
+      const n = u16(ifd);
+      for (let i = 0; i < n; i++) { const e = ifd + 2 + i * 12; if (u16(e) === 0x0112) return u16(e + 8); }
+      return 1;
+    }
+    if (marker === 0xda) return 1;
+    o += 2 + len;
+  }
+  return 1;
+}
+
+/** Pixel-exact rotation for EXIF orientations 3, 6, 8. */
+function orient(img, o) {
+  if (![3, 6, 8].includes(o)) return img;
+  const w = img.width, h = img.height;
+  const out = o === 3 ? new Image(w, h) : new Image(h, w);
+  const s = img.bitmap, d = out.bitmap, W = out.width;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const dx = o === 3 ? w - 1 - x : o === 6 ? h - 1 - y : y;
+    const dy = o === 3 ? h - 1 - y : o === 6 ? x : w - 1 - x;
+    const si = (y * w + x) * 4, di = (dy * W + dx) * 4;
+    d[di] = s[si]; d[di + 1] = s[si + 1]; d[di + 2] = s[si + 2]; d[di + 3] = s[si + 3];
+  }
+  return out;
+}
+
+/** Builds a missing ~480px preview from the original. The original is never modified. */
+async function makePreview(db, req, photo) {
+  const sign = async (uri, s) => (await db.integrations.Core.CreateFileSignedUrl({ file_uri: uri, expires_in: s })).signed_url;
+  if (photo.thumbnail_uri) return { success: true, thumb_url: await sign(photo.thumbnail_uri, 3600) };
+  if (photo.thumbnail_unavailable) return { success: true, unavailable: true };
+  const res = await fetch(await sign(photo.file_uri, 120), { signal: AbortSignal.timeout(30000) });
+  if (!res.ok) return { success: false, error: 'Original unavailable' };
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  let thumb;
+  try {
+    if (bytes.length > 30 * 1024 * 1024) throw new Error('too large');
+    let img = await Image.decode(bytes);
+    const scale = Math.min(1, 480 / Math.max(img.width, img.height));
+    img = img.resize(Math.max(1, Math.round(img.width * scale)), Math.max(1, Math.round(img.height * scale)));
+    thumb = await orient(img, exifOrientation(bytes)).encodeJPEG(75);
+  } catch (_e) {
+    await db.entities.StoredPropertyPhoto.update(photo.id, { thumbnail_unavailable: true });
+    return { success: true, unavailable: true };
+  }
+  const base = (photo.original_file_name || 'photo').replace(/\.[^.]+$/, '').slice(0, 80);
+  // Platform limitation: the SDK's server-side file upload leaves the worker unable to make
+  // further calls, so the same private upload endpoint is called directly with fetch.
+  const uri = await uploadPrivateDirect(req, new File([thumb], `${base}-thumb.jpg`, { type: 'image/jpeg' }));
+  if (!uri) return { success: false, error: 'Preview upload failed' };
+  await db.entities.StoredPropertyPhoto.update(photo.id, { thumbnail_uri: uri });
+  return { success: true, generated: true, thumb_url: await sign(uri, 3600) };
+}
+
+async function uploadPrivateDirect(req, file) {
+  const h = (n) => req.headers.get(n);
+  const api = h('Base44-Api-Url') || 'https://base44.app', appId = h('Base44-App-Id');
+  const headers = { 'X-App-Id': appId, Authorization: h('Base44-Service-Authorization') };
+  if (h('Authorization')) headers['on-behalf-of'] = h('Authorization');
+  if (h('Base44-State')) headers['Base44-State'] = h('Base44-State');
+  if (['dev', 'prod'].includes(h('X-Data-Env'))) headers['X-Data-Env'] = h('X-Data-Env');
+  const form = new FormData();
+  form.append('file', file, file.name);
+  const res = await fetch(`${api}/api/apps/${appId}/integration-endpoints/Core/UploadPrivateFile`, { method: 'POST', headers, body: form, signal: AbortSignal.timeout(30000) });
+  const data = await res.json().catch(() => null);
+  return res.ok ? data?.file_uri || null : null;
+}
 
 /**
  * Photo-first physical property: intentionally separate from Part / InventoryItem.
@@ -38,8 +191,17 @@ Deno.serve(async (req)=>{
     if(!staff) return respond({error:'AK staff only'},403);
     const body=await req.json();
     const action=body?.action;
-    if(!['list_container','create_group','add_photo','get_photos','update_group','find_by_part','add_unsorted_photo','unsorted_summary'].includes(action)){
+    if(!['list_container','create_group','add_photo','get_photos','update_group','find_by_part','add_unsorted_photo','unsorted_summary','list_photos','photo_original','make_preview'].includes(action)){
       return respond({error:'Unsupported storage property operation'},400);
+    }
+
+    if(action==='photo_original'||action==='make_preview'){
+      if(!idOk(body.photo_id)) return respond({error:'Valid photo_id required'},400);
+      const [photo]=await db.entities.StoredPropertyPhoto.filter({id:body.photo_id});
+      if(!photo||photo.archived) return respond({error:'Photo not found'},404);
+      if(action==='make_preview') return respond(await makePreview(db,req,photo));
+      const signed=await db.integrations.Core.CreateFileSignedUrl({file_uri:photo.file_uri,expires_in:900});
+      return respond({success:true,photo_id:photo.id,signed_url:signed.signed_url});
     }
 
     if(action==='find_by_part'){
@@ -94,6 +256,8 @@ Deno.serve(async (req)=>{
     if(!container||container.active===false||container.status==='archived'||container.status==='reserved'){
       return respond({error:'Active container not found'},404);
     }
+
+    if(action==='list_photos') return respond(await listTotePhotos(db,container,body));
 
     if(action==='unsorted_summary'){
       const rows=await db.entities.StoredPropertyPhoto.filter({container_id:container.id,archived:false},'-created_date',2000);
