@@ -245,7 +245,7 @@ function applyMaskAndFormat(grid, size) {
   });
 }
 
-function generateQRMatrix(text) {
+export function generateQRMatrix(text) {
   const { version, size, dataCW, ecc } = encodeData(text);
   const grid = createMatrix(size * size);
 
