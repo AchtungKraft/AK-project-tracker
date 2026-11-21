@@ -21,10 +21,20 @@ export function nameFontPt(name) {
   return n <= 14 ? 42 : n <= 17 ? 36 : n <= 21 ? 30 : n <= 42 ? 27 : n <= 54 ? 22 : 17;
 }
 
+// Identifier size: 26pt fits 24 monospace characters on one line; longer legacy codes shrink to fit.
+export function numberFontPt(code) {
+  const n = String(code || '').length;
+  return n <= 24 ? 26 : Math.max(14, Math.floor((26 * 24) / n));
+}
+
 export function renderToteLabel(label) {
   const panel = inkFor(label.category.color, PANEL_MIN_CONTRAST);
   const qrInk = inkFor(label.category.color, QR_MIN_CONTRAST);
-  const name = String(label.name || '').trim();
+  const code = String(label.short_code || '');
+  // Activation stores the number as the name when none was typed; that is not a human name, so the
+  // NAME line stays blank to be written in (the stored record is unchanged).
+  const rawName = String(label.name || '').trim();
+  const name = rawName === code ? '' : rawName;
   const headline = name
     ? `<div class="name" style="font-size:${nameFontPt(name)}pt">${esc(name)}</div>`
     : `<div class="name-blank"><b>NAME:</b><span></span></div>`;
@@ -34,7 +44,7 @@ export function renderToteLabel(label) {
       <div class="qr">${renderQRSVGString(toteQrPayload(label.qr_code_value), QR_RENDER_SIZE, qrInk)}</div>
       <div class="ident">
         ${headline}
-        <div class="number">${esc(label.short_code)}</div>
+        <div class="number" style="font-size:${numberFontPt(code)}pt">${esc(code)}</div>
         <div class="scan">SCAN TO DOCUMENT CONTENTS</div>
       </div>
     </div>
@@ -57,10 +67,13 @@ export const TOTE_LABEL_CSS = `
   .tl .qr{width:2in;flex:none;background:#fff;padding:.04in;display:flex;align-items:center;justify-content:center}
   .tl .qr svg{width:1.88in;height:1.88in;display:block}
   .tl .ident{flex:1;min-width:0;background:var(--panel);color:#fff;padding:.08in .18in;display:flex;flex-direction:column;justify-content:center;gap:.06in;overflow:hidden}
-  .tl .name{font-weight:900;line-height:1.05;text-transform:uppercase;overflow-wrap:anywhere}
+  .tl .name{flex:0 1 auto;min-height:0;font-weight:900;line-height:1.05;text-transform:uppercase;overflow-wrap:anywhere;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3}
   .tl .name-blank{display:flex;align-items:flex-end;gap:.1in;font-size:14pt}
   .tl .name-blank span{flex:1;height:.36in;border-bottom:2px solid #fff}
-  .tl .number{align-self:flex-start;max-width:100%;background:#fff;color:var(--panel);font-family:'Courier New',monospace;font-weight:900;font-size:26pt;line-height:1;padding:.05in .12in;border-radius:3px;white-space:nowrap;overflow:hidden}
+  /* Identifier: a monospace face with a real bold on every platform (Menlo on iPhone/Mac, Consolas on
+     Windows), weight 700 so no synthetic bold, line-height 1.3 so the underscores sit inside the box,
+     never clipped, wrapped, spaced or transformed. */
+  .tl .number{flex:none;align-self:flex-start;max-width:100%;background:#fff;color:var(--panel);font-family:Menlo,Consolas,'DejaVu Sans Mono','Liberation Mono','Courier New',monospace;font-weight:700;font-synthesis:none;font-variant-ligatures:none;font-variant-numeric:tabular-nums;letter-spacing:0;word-spacing:0;text-transform:none;line-height:1.3;padding:.04in .14in;border-radius:3px;white-space:nowrap;word-break:keep-all;overflow:visible;-webkit-text-size-adjust:none;text-size-adjust:none}
   .tl .scan{font-size:9pt;font-weight:700;letter-spacing:.8px}
   .tl .write{height:.85in;flex:none;background:#fff;border-top:1.5px solid var(--panel);padding:.04in .18in .1in;display:flex;flex-direction:column;justify-content:space-around}
   .tl .field{display:flex;align-items:flex-end;gap:.1in;font-size:12pt}
@@ -80,7 +93,7 @@ export function paginate(labels) {
 
 export function buildToteLabelDocument(labels) {
   const body = paginate(labels).map(p => `<div class="sheet">${p.map(renderToteLabel).join('')}</div>`).join('');
-  return `<!doctype html><html><head><meta charset="utf-8"><title>AK Tote Labels</title><style>${TOTE_LABEL_CSS}</style></head><body>${body}</body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="format-detection" content="telephone=no"><title>AK Tote Labels</title><style>${TOTE_LABEL_CSS}</style></head><body>${body}</body></html>`;
 }
 
 export function printToteLabels(labels) {
