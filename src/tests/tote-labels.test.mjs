@@ -10,7 +10,9 @@ writeFileSync(entry, `
 export * from '/app/src/components/inventory/labels/toteLabelDocument.js';
 export * from '/app/src/components/inventory/labels/labelColors.js';
 export * from '/app/src/components/inventory/labels/labelDrafts.js';
-export { renderQRSVGString } from '/app/src/components/inventory/QRCodeSVG.jsx';`);
+export { renderQRSVGString } from '/app/src/components/inventory/QRCodeSVG.jsx';
+export * from '/app/src/lib/toteQrUrl.js';
+export { parseQRPayload } from '/app/src/lib/resolveStorageScan.js';`);
 buildSync({ entryPoints: [entry], bundle: true, format: 'esm', platform: 'node', outfile: out, jsx: 'automatic', logLevel: 'silent' });
 const L = await import(out);
 
@@ -99,7 +101,7 @@ test('saved test totes: single and batch print produce identical labels; 3 → 1
   assert.equal(count(batch4, /class="sheet"/g), 2);
   assert.ok(single.includes('STORAGE — ZZ TEST STICKER RENAMED'), 'renamed + inactive category still prints');
   assert.ok(batch4.includes('STORAGE — GENERAL STORAGE'), 'uncategorized tote falls back');
-  for (const t of totes) assert.ok(batch4.includes(L.renderQRSVGString(t.qr_code_value, L.QR_RENDER_SIZE, L.inkFor(L.resolveCategory(liveCats, t.storage_category_id).color, 7))));
+  for (const t of totes) assert.ok(batch4.includes(L.renderQRSVGString(L.toteQrPayload(t.qr_code_value), L.QR_RENDER_SIZE, L.inkFor(L.resolveCategory(liveCats, t.storage_category_id).color, 7))));
 });
 test('inactive category stays on its totes and keeps its current color', () => {
   const withInactive = [...cats, { id: 'old', name: 'Retired', color: '#db2777', active: false }];
@@ -109,16 +111,24 @@ test('inactive category stays on its totes and keeps its current color', () => {
   const recolored = withInactive.map(x => x.id === 'int' ? { ...x, color: '#0d9488' } : x);
   assert.equal(L.resolveCategory(recolored, 'int').color, '#0d9488', 'color edits flow to future prints');
 });
-test('each label keeps its own category color and the QR payload is unchanged', () => {
+test('browser QR link carries the same opaque identity and every scanner reads both forms', () => {
+  const id = '6ada296b1d3a8cb1a0d558ac';
+  assert.equal(L.toteQrPayload(`AK_CTR:${id}`), `https://projects.achtungkraft.com/st/${id}`);
+  assert.equal(L.toteQrPayload('AK_LOCATION:abc'), 'AK_LOCATION:abc', 'non-tote codes untouched');
+  assert.deepEqual(L.parseQRPayload(`https://projects.achtungkraft.com/st/${id}`), { type: 'CONTAINER', id, qr: `AK_CTR:${id}` });
+  assert.deepEqual(L.parseQRPayload(`AK_CTR:${id}`), { type: 'CONTAINER', id, qr: `AK_CTR:${id}` }, 'legacy text label still parses');
+  assert.equal(L.parseQRPayload('https://evil.example/x/' + id), null);
+});
+test('each label keeps its own category color and the QR encodes its existing identity', () => {
   for (const c of cats) {
     const l = { ...label(7, c.id) };
     const html = L.renderToteLabel(l);
     const qrInk = L.inkFor(c.color, L.QR_MIN_CONTRAST);
-    assert.ok(html.includes(L.renderQRSVGString(l.qr_code_value, L.QR_RENDER_SIZE, qrInk)), 'QR encodes the existing payload');
+    assert.ok(html.includes(L.renderQRSVGString(L.toteQrPayload(l.qr_code_value), L.QR_RENDER_SIZE, qrInk)), 'QR encodes the existing identity as a link');
     assert.ok(html.includes(`--panel:${L.inkFor(c.color, L.PANEL_MIN_CONTRAST)}`));
   }
   const ripHtml = L.renderToteLabel(L.toPrintLabel(L.draftFromContainer(rip), cats));
-  assert.ok(ripHtml.includes(L.renderQRSVGString(rip.qr_code_value, L.QR_RENDER_SIZE, L.inkFor('#6b7280', 7))));
+  assert.ok(ripHtml.includes(L.renderQRSVGString(L.toteQrPayload(rip.qr_code_value), L.QR_RENDER_SIZE, L.inkFor('#6b7280', 7))));
 });
 test('contrast: light colors are darkened for QR and white text', () => {
   for (const hex of ['#fde047', '#ffffff', '#ea580c', '#22c55e', '#2563eb']) {

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { renderQRSVGString } from "../QRCodeSVG";
+import { toteQrPayload } from "@/lib/toteQrUrl";
 import { inkFor, normalizeHex, PANEL_MIN_CONTRAST, QR_MIN_CONTRAST } from "./labelColors";
 
 /** Mini label sample using the same color rules as the print renderer. */
@@ -7,7 +8,7 @@ export default function StickerCategoryPreview({ name, color }) {
   const hex = normalizeHex(color) || '#6b7280';
   const panel = inkFor(hex, PANEL_MIN_CONTRAST);
   const qrInk = inkFor(hex, QR_MIN_CONTRAST);
-  const qr = useMemo(() => renderQRSVGString('AK_CTR:000000000000000000000000', 160, qrInk), [qrInk]);
+  const qr = useMemo(() => renderQRSVGString(toteQrPayload('AK_CTR:000000000000000000000000'), 160, qrInk), [qrInk]);
   return (
     <div className="rounded-md overflow-hidden border-2 bg-white text-white" style={{ borderColor: panel }}>
       <div className="px-3 py-1 text-xs font-bold tracking-wider truncate" style={{ backgroundColor: panel }}>

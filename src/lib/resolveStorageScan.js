@@ -9,6 +9,8 @@
  * Returns: { entity_type, entity_id, entity, valid, error }
  */
 
+import { toteIdFromUrl } from "./toteQrUrl";
+
 /**
  * Parse a raw QR string into a structured descriptor (no DB lookup).
  * Returns { type, id, template_key, project_id } or null.
@@ -32,10 +34,14 @@ export function parseQRPayload(raw) {
     }
   }
 
+  // Browser-opening tote link: https://…/st/{id} (same identity as AK_CTR:{id})
+  const urlId = toteIdFromUrl(trimmed);
+  if (urlId) return { type: 'CONTAINER', id: urlId, qr: `AK_CTR:${urlId}` };
+
   // AK_CTR:{container_id}
   if (trimmed.startsWith('AK_CTR:')) {
     const id = trimmed.slice('AK_CTR:'.length);
-    if (id) return { type: 'CONTAINER', id };
+    if (id) return { type: 'CONTAINER', id, qr: trimmed };
   }
 
   return null;
@@ -86,7 +92,7 @@ export function resolveStorageScan(rawQR, { locations = [], containers = [], inv
   if (parsed.type === 'CONTAINER') {
     // Newly printed labels retain their original label QR after a physical container is activated.
     // Legacy labels still encode StorageContainer.id directly.
-    const ctr = containers.find(c => c.id === parsed.id || c.qr_code_value === rawQR.trim());
+    const ctr = containers.find(c => c.id === parsed.id || c.qr_code_value === parsed.qr);
     if (!ctr) {
       return { ...base, entity_type: 'CONTAINER', entity_id: parsed.id, error: 'Container no longer exists' };
     }

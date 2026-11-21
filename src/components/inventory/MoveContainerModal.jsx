@@ -4,14 +4,18 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, ArrowRight, Home, Star, Search } from "lucide-react";
+import { Loader2, ArrowRight, Home, Star, Search, ScanLine } from "lucide-react";
+import QRScanner from "./QRScanner";
+import { resolveStorageScan } from "@/lib/resolveStorageScan";
 import { toast } from "sonner";
 import { getContainerTypeConfig } from "./containerTypeConfig";
 import { cn } from "@/lib/utils";
 import useLocationFavorites from "./useLocationFavorites";
 import { getLocationTypeConfig } from "./locationTypeConfig";
 
-export default function MoveContainerModal({ container, onClose, locations = [], inventoryItems = [], returnHome = false }) {
+export default function MoveContainerModal({ container, onClose, locations = [], inventoryItems = [], returnHome = false, allowScan = false, onMoved }) {
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState('');
   const queryClient = useQueryClient();
   const { favorites, recents } = useLocationFavorites();
   const homeLocation = container.home_location_id ? locations.find(l => l.id === container.home_location_id) : null;
@@ -88,6 +92,7 @@ export default function MoveContainerModal({ container, onClose, locations = [],
       if (result?.custody_recorded === false) {
         toast.warning('Box moved, but the stored-property custody log needs administrator review.');
       }
+      onMoved?.(destLoc, result);
       onClose();
     },
     onError: (e) => toast.error('Move failed: ' + e.message),
@@ -159,6 +164,28 @@ export default function MoveContainerModal({ container, onClose, locations = [],
               </div>
             </div>
           )}
+
+          {/* Scan a location QR (Storage Mobile) */}
+          {allowScan && !returnHome && (scanning ? (
+            <div className="h-[55vh] rounded-lg overflow-hidden bg-black">
+              <QRScanner className="h-full" onClose={() => setScanning(false)} onScan={(text) => {
+                const r = resolveStorageScan(text, { locations });
+                setScanning(false);
+                if (r.entity_type !== 'LOCATION') return setScanError('That is not a location code. Scan the shelf or bin label.');
+                if (!r.valid) return setScanError(r.error || 'Location unavailable');
+                if (r.entity_id === container.location_id) return setScanError('The tote is already at this location.');
+                setScanError('');
+                setDestinationId(r.entity_id);
+              }} />
+            </div>
+          ) : (
+            <div>
+              <Button variant="outline" onClick={() => { setScanError(''); setScanning(true); }} className="w-full h-11 gap-2">
+                <ScanLine className="w-4 h-4" /> Scan location
+              </Button>
+              {scanError && <p className="text-xs text-amber-400 mt-1.5">{scanError}</p>}
+            </div>
+          ))}
 
           {/* Search */}
           {!returnHome && (

@@ -22,6 +22,7 @@ import {
   Image,
   LogOut,
   MessageSquare,
+  Warehouse,
 } from "lucide-react";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { useLogout } from "@/hooks/useLogout";
@@ -248,7 +249,7 @@ const MobileBottomNav = ({ currentPath, isAchtungKraft, onMenuOpen }) => {
   const mobileItems = isAchtungKraft ? [
     { title: "Home", url: createPageUrl("Dashboard"), icon: LayoutDashboard },
     { title: "Workload", url: createPageUrl("PriorityDashboard"), icon: Flame },
-    { title: "Clients", url: createPageUrl("ClientPortalHub"), icon: Building2 },
+    { title: "Storage", url: "/storage", icon: Warehouse, matchPrefix: true },
     { title: "Parts", url: createPageUrl("PartsTracker"), icon: Package },
     { title: "More", icon: Menu, isMenu: true },
   ] : [
@@ -266,7 +267,7 @@ const MobileBottomNav = ({ currentPath, isAchtungKraft, onMenuOpen }) => {
       <div className="flex justify-around items-center h-14 px-2">
         {mobileItems.map((item) => {
           const Icon = item.icon;
-          const isActive = !item.isMenu && currentPath === item.url;
+          const isActive = !item.isMenu && (item.matchPrefix ? currentPath.startsWith(item.url) : currentPath === item.url);
           
           if (item.isMenu) {
             return (

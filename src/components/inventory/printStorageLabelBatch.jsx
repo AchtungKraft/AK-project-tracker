@@ -1,5 +1,6 @@
 import { renderQRSVGString } from "./QRCodeSVG";
 import { renderBarcodeSVGString } from "./Code128SVG";
+import { toteQrPayload } from "@/lib/toteQrUrl";
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => (
@@ -27,7 +28,7 @@ export function printStorageLabelBatch(labels, { format = 'thermal', batchCode =
     return `<section class="label">
       <header>ÄCHTUNG KRAFT &nbsp; | &nbsp; STORAGE</header>
       <div class="main">
-        <div class="qr">${renderQRSVGString(c.qr_code_value, 155)}</div>
+        <div class="qr">${renderQRSVGString(toteQrPayload(c.qr_code_value), 155)}</div>
         <div class="content">
           <div class="number">${code}</div>
           <div class="type">${type.toUpperCase()}</div>

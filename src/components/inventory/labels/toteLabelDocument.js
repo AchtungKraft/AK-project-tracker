@@ -1,11 +1,13 @@
 import { renderQRSVGString } from "../QRCodeSVG";
 import { inkFor, PANEL_MIN_CONTRAST, QR_MIN_CONTRAST } from "./labelColors";
+import { toteQrPayload } from "../../../lib/toteQrUrl";
 
 /**
  * Canonical Tote Label V2 renderer (US Letter, portrait).
  * One 8 × 3.25 in label per row, three per page. Used by single-container and batch printing,
  * and by the on-screen preview (same document), so preview and print are identical.
- * The QR payload is the container's existing qr_code_value, unchanged.
+ * The QR encodes the container's existing identity (qr_code_value) as a browser link
+ * (see lib/toteQrUrl); the stored identity itself is unchanged.
  */
 export const LABELS_PER_PAGE = 3;
 export const QR_RENDER_SIZE = 480;
@@ -29,7 +31,7 @@ export function renderToteLabel(label) {
   return `<section class="tl" style="--panel:${panel}">
     <header>ÄCHTUNG KRAFT &nbsp;|&nbsp; STORAGE — ${esc(label.category.name.toUpperCase())}</header>
     <div class="body">
-      <div class="qr">${renderQRSVGString(label.qr_code_value, QR_RENDER_SIZE, qrInk)}</div>
+      <div class="qr">${renderQRSVGString(toteQrPayload(label.qr_code_value), QR_RENDER_SIZE, qrInk)}</div>
       <div class="ident">
         ${headline}
         <div class="number">${esc(label.short_code)}</div>

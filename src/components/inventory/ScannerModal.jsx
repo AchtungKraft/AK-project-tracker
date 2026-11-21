@@ -40,7 +40,7 @@ export default function ScannerModal({
       // Reserved labels are intentionally excluded from the regular active container list.
       setMode('resolving');
       try {
-        const response = await base44.functions.invoke('storageLabels',{action:'lookup',qr_value:decodedText});
+        const response = await base44.functions.invoke('storageLabels',{action:'lookup',qr_value:parsed.qr || decodedText});
         const data = response?.data || response;
         if (data.error || !data.success) throw new Error(data.error || 'Label could not be resolved');
         if (data.reserved) {

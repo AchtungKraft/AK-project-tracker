@@ -4,8 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { 
-  Search, ChevronRight, Package, LayoutGrid, List, X, ArrowLeft, ScanLine, Printer, MapPin, AlertTriangle, Camera, Palette
+  Search, ChevronRight, Package, LayoutGrid, List, X, ArrowLeft, ScanLine, Printer, MapPin, AlertTriangle, Camera, Palette, Smartphone
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig, buildLocationPathString } from "./locationTypeConfig";
 import { getContainerTypeConfig } from "./containerTypeConfig";
@@ -636,6 +637,13 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
 
           {mobileIsHome && !showSearchOverlay && (
             <>
+              <div className="px-3 pt-3">
+                <Link to="/storage" className="flex items-center gap-3 rounded-xl border border-red-800/60 bg-red-950/30 px-3 py-3 text-white active:bg-red-950/60">
+                  <Smartphone className="w-5 h-5 text-red-400 shrink-0" />
+                  <span className="flex-1 min-w-0 text-sm font-semibold">Open Storage Mobile</span>
+                  <ChevronRight className="w-4 h-4 text-gray-500 shrink-0" />
+                </Link>
+              </div>
               {/* Shop-first: placement and scan are the everyday actions. */}
               <div className="px-3 pt-3 pb-1 grid grid-cols-2 gap-2">
                 <Button onClick={() => openAssignLocation()} className="h-12 gap-1 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-sm min-w-0">
@@ -750,6 +758,9 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
               className="h-9 gap-1.5 border-gray-700 text-gray-300 hover:border-red-700 shrink-0">
               <Palette className="w-4 h-4" /> Sticker Categories
             </Button>}
+            <Button asChild size="sm" variant="outline" className="h-9 gap-1.5 border-gray-700 text-gray-300 hover:border-red-700 shrink-0">
+              <Link to="/storage"><Smartphone className="w-4 h-4" /> Storage Mobile</Link>
+            </Button>
             {/* Scan + View toggle */}
             <Button size="sm" variant="outline" onClick={() => {setScanIntent("browse");setScannerOpen(true)}}
               className="h-9 gap-1.5 border-gray-700 text-gray-300 hover:text-red-400 hover:border-red-700 shrink-0">
