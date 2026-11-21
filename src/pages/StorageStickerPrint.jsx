@@ -1,38 +1,25 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft, Loader2, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ToteLabelPreview from "@/components/inventory/labels/ToteLabelPreview";
 import PrintStatusPanel from "@/components/storageMobile/print/PrintStatusPanel";
 import { paginate } from "@/components/inventory/labels/toteLabelDocument";
-import { loadPrintJob, labelSheetsHtml, printOnlyCss, PRINT_ROOT_ID, mobilePreviewScale } from "@/lib/mobileLabelPrint";
-import { buildStickerPdf, shareOrDownloadPdf } from "@/lib/stickerPdf";
+import { loadPrintJob, mobilePreviewScale } from "@/lib/mobileLabelPrint";
+import { buildStickerPdf, printStickerPdf, shareOrDownloadPdf } from "@/lib/stickerPdf";
 
 /**
- * Full-page sticker print screen for Storage Mobile (no dialog, no pop-up window). Print is a direct
- * tap on window.print() of this top-level page; the canonical label sheets are the only thing on paper.
- * If the print menu does not open within 2 s, the page says so and offers the PDF route.
+ * Full-page sticker print screen for Storage Mobile. Both Print and Share/Print PDF use the same
+ * canonical vector PDF (built from the stored labels on load), so paper never depends on the
+ * browser keeping CSS backgrounds. Printing never creates or changes records.
  */
 export default function StorageStickerPrint() {
   const navigate = useNavigate();
   const [job] = useState(loadPrintJob);
-  const [status, setStatus] = useState('idle'); // idle | opening | opened | failed
   const [pdf, setPdf] = useState({ loading: true });
-  const [pdfResult, setPdfResult] = useState(null);
-  const printing = useRef(false);
+  const [result, setResult] = useState(null);
   const labels = job?.labels || [];
-  const sheets = useMemo(() => labelSheetsHtml(labels), [labels]);
   const pages = paginate(labels).length;
-
-  useEffect(() => {
-    const opened = () => { if (printing.current) setStatus('opened'); };
-    const media = window.matchMedia('print');
-    const onMedia = (e) => e.matches && opened();
-    window.addEventListener('beforeprint', opened);
-    media.addEventListener?.('change', onMedia);
-    return () => { window.removeEventListener('beforeprint', opened); media.removeEventListener?.('change', onMedia); };
-  }, []);
 
   useEffect(() => {
     if (!labels.length) return;
@@ -41,13 +28,8 @@ export default function StorageStickerPrint() {
       .catch((e) => setPdf({ error: e.message }));
   }, [labels]);
 
-  const print = () => {
-    printing.current = true;
-    setStatus('opening');
-    try { window.print(); } catch { setStatus('failed'); return; }
-    setTimeout(() => setStatus((s) => (s === 'opening' ? 'failed' : s)), 2000);
-  };
-  const sharePdf = async () => setPdfResult(await shareOrDownloadPdf(pdf.file));
+  const print = async () => setResult(await printStickerPdf(pdf.file));
+  const sharePdf = async () => setResult(await shareOrDownloadPdf(pdf.file));
   const back = () => navigate(job?.returnTo || '/storage');
 
   return (
@@ -66,16 +48,13 @@ export default function StorageStickerPrint() {
       ) : (
         <div className="mx-auto max-w-xl space-y-3 p-4" style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}>
           <p className="text-sm text-gray-400">{labels.length} sticker{labels.length === 1 ? '' : 's'} · {pages} US Letter page{pages === 1 ? '' : 's'} · <span className="font-mono">{labels.map((l) => l.short_code).join(', ')}</span></p>
-          <Button onClick={print} disabled={status === 'opening'} className="w-full h-14 gap-2 text-lg">
-            <Printer className="w-5 h-5" /> {status === 'opening' ? 'Opening print menu…' : 'Print'}
+          <Button onClick={print} disabled={!pdf.file} className="w-full h-14 gap-2 text-lg">
+            {pdf.loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Printer className="w-5 h-5" />}
+            {pdf.loading ? 'Preparing stickers…' : 'Print'}
           </Button>
-          <PrintStatusPanel status={status} pdf={pdf} onPdf={sharePdf} pdfResult={pdfResult} />
+          <PrintStatusPanel pdf={pdf} onPdf={sharePdf} result={result} />
           <ToteLabelPreview labels={labels} scale={mobilePreviewScale()} />
         </div>
-      )}
-      {labels.length > 0 && createPortal(
-        <><style>{printOnlyCss()}</style><div id={PRINT_ROOT_ID} dangerouslySetInnerHTML={{ __html: sheets }} /></>,
-        document.body,
       )}
     </div>
   );
