@@ -87,6 +87,48 @@ Deno.serve(async(req)=>{
       }))});
     }
 
+    if(action==='list_categories'||action==='save_category'){
+      // Sticker categories: visual identification only. Admin-managed, never hard-deleted.
+      if(!isAdmin) return reply({error:'Admin permission required'},403);
+      const DEFAULTS=[['interior','Interior','#2563eb'],['exterior','Exterior','#7c3aed'],['mechanical','Mechanical','#16a34a'],
+        ['electrical','Electrical','#dc2626'],['hardware','Hardware','#ea580c'],['general','General Storage','#6b7280']];
+      const norm=(s)=>String(s||'').trim().toLowerCase();
+      let cats=await db.entities.StorageLabelCategory.list('sort_order',200);
+      // Idempotent defaults: skip any default whose key or name (case-insensitive) already exists.
+      const missing=DEFAULTS.filter(([k,n])=>!cats.some(c=>c.key===k||norm(c.name)===norm(n)));
+      if(missing.length){
+        const start=Math.max(0,...cats.map(c=>c.sort_order||0))+1;
+        await db.entities.StorageLabelCategory.bulkCreate(missing.map(([k,n,col],i)=>({key:k,name:n,color:col,sort_order:start+i,active:true})));
+        cats=await db.entities.StorageLabelCategory.list('sort_order',200);
+      }
+
+      if(action==='save_category'){
+        const c=input.category||{};
+        const name=typeof c.name==='string'?c.name.trim().slice(0,60):'';
+        const m=/^#?([0-9a-fA-F]{6})$/.exec(String(c.color||'').trim());
+        if(!name) return reply({error:'Category name is required'},400);
+        if(!m) return reply({error:'Color must be a 6-digit HEX value like #2563eb'},400);
+        const existing=c.id?cats.find(x=>x.id===c.id):null;
+        if(c.id&&!existing) return reply({error:'Category not found'},404);
+        if(cats.some(x=>x.id!==c.id&&norm(x.name)===norm(name))) return reply({error:`A category named "${name}" already exists`},409);
+        const active=c.active!==false;
+        if(existing?.key==='general'&&!active) return reply({error:'General Storage is the fallback category and cannot be deactivated'},400);
+        const patch={name,color:'#'+m[1].toLowerCase(),active};
+        const saved=existing
+          ? await db.entities.StorageLabelCategory.update(existing.id,patch)
+          : await db.entities.StorageLabelCategory.create({...patch,sort_order:Math.max(0,...cats.map(x=>x.sort_order||0))+1});
+        return reply({success:true,category:saved});
+      }
+
+      const usage={};
+      for(const c of cats){
+        const rows=await db.entities.StorageContainer.filter({storage_category_id:c.id},'-created_date',5000);
+        usage[c.id]=rows.filter(r=>r.active!==false&&r.status!=='archived').length;
+      }
+      return reply({success:true,categories:cats.map(c=>({id:c.id,key:c.key||null,name:c.name,color:c.color,
+        active:c.active!==false,sort_order:c.sort_order||0,usage:usage[c.id]||0}))});
+    }
+
     if(action==='save_label_settings'){
       // Explicit save from the tote label print dialog: name and storage category only.
       // Never touches contents, inventory, location or QR identity.

@@ -67,7 +67,7 @@ export default function ToteLabelStudio({ drafts, onChange, categories, onTherma
         <Select value={format} onValueChange={setFormat}>
           <SelectTrigger className="h-9 bg-gray-950 border-gray-700"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="letter">US Letter: 8 × 3 in color labels, 2 per page</SelectItem>
+            <SelectItem value="letter">US Letter: 8 × 3.25 in color labels, 3 per page</SelectItem>
             <SelectItem value="thermal">4 × 3 in thermal (existing black-and-white format)</SelectItem>
           </SelectContent>
         </Select>

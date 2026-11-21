@@ -4,7 +4,7 @@
   "properties": {
     "name": {
       "type": "string",
-      "description": "Storage identification category shown on tote labels (not a parts or purchasing category)"
+      "description": "Sticker category shown on tote labels (visual identification only; not a parts, inventory, project, location or purchasing category). Unique, case-insensitive."
     },
     "color": {
       "type": "string",
@@ -12,7 +12,7 @@
     },
     "key": {
       "type": "string",
-      "description": "Stable system key. 'general' is the fallback for containers without a category."
+      "description": "Stable system key for defaults. 'general' is the fallback for containers without a category."
     },
     "sort_order": {
       "type": "number",
@@ -20,7 +20,8 @@
     },
     "active": {
       "type": "boolean",
-      "default": true
+      "default": true,
+      "description": "Inactive categories stay on existing totes but cannot be newly assigned. Categories are never hard-deleted."
     }
   },
   "required": [
@@ -44,17 +45,17 @@
     },
     "create": {
       "user_condition": {
-        "role": "admin"
+        "role": "sticker_category_service_only"
       }
     },
     "update": {
       "user_condition": {
-        "role": "admin"
+        "role": "sticker_category_service_only"
       }
     },
     "delete": {
       "user_condition": {
-        "role": "admin"
+        "role": "sticker_category_service_only"
       }
     }
   }

@@ -3,11 +3,11 @@ import { inkFor, PANEL_MIN_CONTRAST, QR_MIN_CONTRAST } from "./labelColors";
 
 /**
  * Canonical Tote Label V2 renderer (US Letter, portrait).
- * One 8 × 3 in label per row, two per page. Used by single-container and batch printing,
+ * One 8 × 3.25 in label per row, three per page. Used by single-container and batch printing,
  * and by the on-screen preview (same document), so preview and print are identical.
  * The QR payload is the container's existing qr_code_value, unchanged.
  */
-export const LABELS_PER_PAGE = 2;
+export const LABELS_PER_PAGE = 3;
 export const QR_RENDER_SIZE = 480;
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, ch =>
@@ -16,7 +16,7 @@ const esc = (v) => String(v ?? '').replace(/[&<>"']/g, ch =>
 // Uppercase headline sized so long names wrap to at most two/three lines inside the panel.
 export function nameFontPt(name) {
   const n = name.length;
-  return n <= 14 ? 40 : n <= 17 ? 34 : n <= 21 ? 28 : n <= 42 ? 26 : n <= 54 ? 22 : 17;
+  return n <= 14 ? 42 : n <= 17 ? 36 : n <= 21 ? 30 : n <= 42 ? 27 : n <= 54 ? 22 : 17;
 }
 
 export function renderToteLabel(label) {
@@ -49,16 +49,16 @@ export const TOTE_LABEL_CSS = `
   html,body{margin:0;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .sheet{width:8in;display:flex;flex-direction:column;gap:.3in;break-after:page;page-break-after:always}
   .sheet:last-child{break-after:auto;page-break-after:auto}
-  .tl{width:8in;height:3in;flex:none;display:flex;flex-direction:column;border:1.5px solid var(--panel);overflow:hidden;break-inside:avoid;page-break-inside:avoid}
+  .tl{width:8in;height:3.25in;flex:none;display:flex;flex-direction:column;border:1.5px solid var(--panel);overflow:hidden;break-inside:avoid;page-break-inside:avoid}
   .tl header{height:.36in;flex:none;background:var(--panel);color:#fff;font-weight:700;font-size:12pt;letter-spacing:1px;display:flex;align-items:center;padding:0 .16in;white-space:nowrap;overflow:hidden}
   .tl .body{flex:1;min-height:0;display:flex}
-  .tl .qr{width:1.74in;flex:none;background:#fff;padding:.04in;display:flex;align-items:center;justify-content:center}
-  .tl .qr svg{width:1.66in;height:1.66in;display:block}
+  .tl .qr{width:2in;flex:none;background:#fff;padding:.04in;display:flex;align-items:center;justify-content:center}
+  .tl .qr svg{width:1.88in;height:1.88in;display:block}
   .tl .ident{flex:1;min-width:0;background:var(--panel);color:#fff;padding:.08in .18in;display:flex;flex-direction:column;justify-content:center;gap:.06in;overflow:hidden}
   .tl .name{font-weight:900;line-height:1.05;text-transform:uppercase;overflow-wrap:anywhere}
   .tl .name-blank{display:flex;align-items:flex-end;gap:.1in;font-size:14pt}
   .tl .name-blank span{flex:1;height:.36in;border-bottom:2px solid #fff}
-  .tl .number{align-self:flex-start;max-width:100%;background:#fff;color:var(--panel);font-family:'Courier New',monospace;font-weight:900;font-size:24pt;line-height:1;padding:.05in .12in;border-radius:3px;white-space:nowrap;overflow:hidden}
+  .tl .number{align-self:flex-start;max-width:100%;background:#fff;color:var(--panel);font-family:'Courier New',monospace;font-weight:900;font-size:26pt;line-height:1;padding:.05in .12in;border-radius:3px;white-space:nowrap;overflow:hidden}
   .tl .scan{font-size:9pt;font-weight:700;letter-spacing:.8px}
   .tl .write{height:.9in;flex:none;background:#fff;border-top:1.5px solid var(--panel);padding:.04in .18in .1in;display:flex;flex-direction:column;justify-content:space-around}
   .tl .field{display:flex;align-items:flex-end;gap:.1in;font-size:12pt}

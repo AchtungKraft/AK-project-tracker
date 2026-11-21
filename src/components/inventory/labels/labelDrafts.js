@@ -3,9 +3,10 @@
 
 export const GENERAL_FALLBACK = { id: null, key: 'general', name: 'General Storage', color: '#6b7280' };
 
+/** A tote keeps its saved category (and current color) even if that category is now inactive. */
 export function resolveCategory(categories, id) {
-  const active = (categories || []).filter(c => c.active !== false);
-  return active.find(c => c.id === id) || active.find(c => c.key === 'general') || GENERAL_FALLBACK;
+  const all = categories || [];
+  return (id && all.find(c => c.id === id)) || all.find(c => c.key === 'general') || GENERAL_FALLBACK;
 }
 
 export function draftFromContainer(c) {
