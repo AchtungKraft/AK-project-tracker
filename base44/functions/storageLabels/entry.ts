@@ -134,8 +134,13 @@ Deno.serve(async(req)=>{
       // Never touches contents, inventory, location or QR identity.
       const items=input.items;
       if(!Array.isArray(items)||items.length<1||items.length>50) return reply({error:'1 to 50 containers required'},400);
-      const cats=await db.entities.StorageLabelCategory.list('sort_order',200);
-      const activeCats=new Set(cats.filter(c=>c.active!==false).map(c=>c.id));
+      // New assignments must target an active category (read by id so a just-deactivated one is seen).
+      const wanted=[...new Set(items.map(i=>i?.storage_category_id).filter(v=>typeof v==='string'))];
+      const activeCats=new Set();
+      for(const id of wanted){
+        const [c]=await db.entities.StorageLabelCategory.filter({id});
+        if(c&&c.active!==false) activeCats.add(c.id);
+      }
       const plan=[];
       for(const it of items){
         if(typeof it?.container_id!=='string') return reply({error:'container_id required'},400);
@@ -146,7 +151,7 @@ Deno.serve(async(req)=>{
           patch.name=n;
         }
         if(it.storage_category_id!==undefined){
-          if(it.storage_category_id!==null&&!activeCats.has(it.storage_category_id)) return reply({error:'Unknown storage category'},400);
+          if(it.storage_category_id!==null&&!activeCats.has(it.storage_category_id)) return reply({error:'That sticker category is inactive or no longer exists'},400);
           patch.storage_category_id=it.storage_category_id;
         }
         if(!Object.keys(patch).length) continue;

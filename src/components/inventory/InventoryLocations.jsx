@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { 
-  Search, ChevronRight, Package, LayoutGrid, List, X, ArrowLeft, ScanLine, Printer, MapPin, AlertTriangle, Camera
+  Search, ChevronRight, Package, LayoutGrid, List, X, ArrowLeft, ScanLine, Printer, MapPin, AlertTriangle, Camera, Palette
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getLocationTypeConfig, buildLocationPathString } from "./locationTypeConfig";
@@ -33,6 +33,7 @@ import EmptyContainerModal from "./EmptyContainerModal";
 import ScannerModal from "./ScannerModal";
 import StorageDocumentBoxPicker from "./StorageDocumentBoxPicker";
 import BatchStorageLabelsModal from "./BatchStorageLabelsModal";
+import StickerCategoriesModal from "./labels/StickerCategoriesModal";
 import { useIsAdmin } from "@/lib/clientAccounts";
 import InventoryMoveWorkflow from "./move/InventoryMoveWorkflow";
 import MobileMoveWorkflow from "./mobile/MobileMoveWorkflow";
@@ -121,6 +122,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
   };
   const startBoxScan = () => { setScanIntent('document'); setScannerOpen(true); };
   const [batchLabelsOpen, setBatchLabelsOpen] = useState(false);
+  const [stickerCategoriesOpen, setStickerCategoriesOpen] = useState(false);
   const [moveWorkflowSource, setMoveWorkflowSource] = useState(null); // { type, id, entity }
   const [mobileMoveOpen, setMobileMoveOpen] = useState(false);
   const [putAwayOpen, setPutAwayOpen] = useState(false);
@@ -552,6 +554,7 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
         onChooseBox={chooseBoxToDocument} onScan={scanBoxFromPicker}
         onPrintLabels={labelsFromPicker} onClose={() => setDocumentBoxPickerOpen(false)} />}
       {isAdmin && batchLabelsOpen && <BatchStorageLabelsModal containers={containers} onClose={() => setBatchLabelsOpen(false)} />}
+      {isAdmin && <StickerCategoriesModal open={stickerCategoriesOpen} onClose={() => setStickerCategoriesOpen(false)} />}
       {assignLocationOpen && <ShopAssignLocation
         locations={locations} inventoryItems={inventoryItems} parts={parts} containers={containers}
         initialPartId={assignPartId} initialSourceId={selectedLocationId} onClose={() => setAssignLocationOpen(false)}
@@ -656,6 +659,10 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
                   className="w-full h-10 gap-2 border-gray-700 text-gray-300 text-sm">
                   <Printer className="w-4 h-4" /> Print Batch Box Labels
                 </Button>
+                <Button variant="outline" onClick={() => setStickerCategoriesOpen(true)}
+                  className="w-full h-10 gap-2 border-gray-700 text-gray-300 text-sm mt-2">
+                  <Palette className="w-4 h-4" /> Sticker Categories
+                </Button>
               </div>}
               <StorageHome favorites={favorites} recents={recents} locations={locations} containers={containers}
                 inventoryItems={inventoryItems} locationPartCounts={locationPartCounts} showEmptyLocations={showEmptyLocations}
@@ -738,6 +745,10 @@ export default function InventoryLocations({ onPartClick, urlLocationId }) {
             {isAdmin && <Button size="sm" variant="outline" onClick={() => setBatchLabelsOpen(true)}
               className="h-9 gap-1.5 border-gray-700 text-gray-300 hover:border-red-700 shrink-0">
               <Printer className="w-4 h-4" /> Labels
+            </Button>}
+            {isAdmin && <Button size="sm" variant="outline" onClick={() => setStickerCategoriesOpen(true)}
+              className="h-9 gap-1.5 border-gray-700 text-gray-300 hover:border-red-700 shrink-0">
+              <Palette className="w-4 h-4" /> Sticker Categories
             </Button>}
             {/* Scan + View toggle */}
             <Button size="sm" variant="outline" onClick={() => {setScanIntent("browse");setScannerOpen(true)}}

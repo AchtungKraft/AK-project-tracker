@@ -50,7 +50,7 @@ export const TOTE_LABEL_CSS = `
   .sheet{width:8in;display:flex;flex-direction:column;gap:.3in;break-after:page;page-break-after:always}
   .sheet:last-child{break-after:auto;page-break-after:auto}
   .tl{width:8in;height:3.25in;flex:none;display:flex;flex-direction:column;border:1.5px solid var(--panel);overflow:hidden;break-inside:avoid;page-break-inside:avoid}
-  .tl header{height:.36in;flex:none;background:var(--panel);color:#fff;font-weight:700;font-size:12pt;letter-spacing:1px;display:flex;align-items:center;padding:0 .16in;white-space:nowrap;overflow:hidden}
+  .tl header{height:.34in;flex:none;background:var(--panel);color:#fff;font-weight:700;font-size:12pt;letter-spacing:1px;display:flex;align-items:center;padding:0 .16in;white-space:nowrap;overflow:hidden}
   .tl .body{flex:1;min-height:0;display:flex}
   .tl .qr{width:2in;flex:none;background:#fff;padding:.04in;display:flex;align-items:center;justify-content:center}
   .tl .qr svg{width:1.88in;height:1.88in;display:block}
@@ -60,7 +60,7 @@ export const TOTE_LABEL_CSS = `
   .tl .name-blank span{flex:1;height:.36in;border-bottom:2px solid #fff}
   .tl .number{align-self:flex-start;max-width:100%;background:#fff;color:var(--panel);font-family:'Courier New',monospace;font-weight:900;font-size:26pt;line-height:1;padding:.05in .12in;border-radius:3px;white-space:nowrap;overflow:hidden}
   .tl .scan{font-size:9pt;font-weight:700;letter-spacing:.8px}
-  .tl .write{height:.9in;flex:none;background:#fff;border-top:1.5px solid var(--panel);padding:.04in .18in .1in;display:flex;flex-direction:column;justify-content:space-around}
+  .tl .write{height:.85in;flex:none;background:#fff;border-top:1.5px solid var(--panel);padding:.04in .18in .1in;display:flex;flex-direction:column;justify-content:space-around}
   .tl .field{display:flex;align-items:flex-end;gap:.1in;font-size:12pt}
   .tl .field b{width:.95in;flex:none}
   .tl .field span{flex:1;height:.3in;border-bottom:1px solid #000}

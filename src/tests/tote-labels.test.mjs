@@ -25,22 +25,63 @@ const rip = { id: '6ada528664c85ceed0da86b5', name: 'Random Interior Parts', sho
 const label = (n, cat) => ({ name: 'Test Tote ' + n, short_code: `TOTE-TEST-00${n}`, qr_code_value: `AK_CTR:${String(n).repeat(24)}`, category: cats.find(c => c.id === cat) });
 const count = (html, re) => (html.match(re) || []).length;
 
-test('single container: one 8 × 3 label on one page, real name and number', () => {
+test('single container: one 8 × 3.25 label on one page, real name and number', () => {
   const html = L.buildToteLabelDocument([L.toPrintLabel(L.draftFromContainer(rip), cats)]);
   assert.equal(count(html, /class="sheet"/g), 1);
   assert.equal(count(html, /class="tl"/g), 1);
   assert.ok(html.includes('Random Interior Parts') && html.includes('TOTE-9419C0F654-001'));
   assert.ok(html.includes('STORAGE — GENERAL STORAGE'), 'no category falls back to General Storage');
-  assert.match(L.TOTE_LABEL_CSS, /\.tl\{width:8in;height:3in;flex:none/);
+  assert.match(L.TOTE_LABEL_CSS, /\.tl\{width:8in;height:3\.25in;flex:none/);
   assert.match(L.TOTE_LABEL_CSS, /size:letter portrait/);
 });
-test('batch: 4 labels → 2 pages × 2; odd batch leaves second slot empty, no duplicates', () => {
+test('batch: three per page; 4 → 3+1, 6 → 3+3, no duplicates', () => {
   const four = L.buildToteLabelDocument(['int', 'ext', 'mech', 'hw'].map((c, i) => label(i + 1, c)));
   assert.equal(count(four, /class="sheet"/g), 2);
   assert.equal(count(four, /class="tl"/g), 4);
   for (const n of [1, 2, 3, 4]) assert.equal(count(four, new RegExp(`TOTE-TEST-00${n}`, 'g')), 1);
-  const pages = L.paginate([1, 2, 3]);
-  assert.deepEqual(pages.map(p => p.length), [2, 1]);
+  const three = L.buildToteLabelDocument(['int', 'ext', 'mech'].map((c, i) => label(i + 1, c)));
+  assert.equal(count(three, /class="sheet"/g), 1);
+  assert.deepEqual(L.paginate([1]).map(p => p.length), [1]);
+  assert.deepEqual(L.paginate([1, 2]).map(p => p.length), [2]);
+  assert.deepEqual(L.paginate([1, 2, 3, 4]).map(p => p.length), [3, 1]);
+  assert.deepEqual(L.paginate([1, 2, 3, 4, 5, 6]).map(p => p.length), [3, 3]);
+});
+test('geometry: 3 × 3.25 in labels + gaps fit inside a 10.5 in printable Letter height', () => {
+  const css = L.TOTE_LABEL_CSS;
+  const num = (re) => parseFloat(css.match(re)[1]);
+  const h = num(/\.tl\{width:8in;height:([\d.]+)in/), gap = num(/\.sheet\{[^}]*gap:([\d.]+)in/);
+  assert.equal(h, 3.25);
+  assert.ok(3 * h + 2 * gap <= 10.5, `${3 * h + 2 * gap}in`);
+  const header = num(/\.tl header\{height:([\d.]+)in/), write = num(/\.tl \.write\{height:([\d.]+)in/);
+  const qr = num(/\.tl \.qr svg\{width:([\d.]+)in/);
+  assert.ok(qr + 0.08 + header + write + 0.05 <= h, 'QR fits the body without clipping');
+});
+test('saved test totes: single and batch print produce identical labels; 3 → 1 page, 4 → 2 pages', () => {
+  // Saved values read back from the isolated V2.2 test totes (category later deactivated).
+  const liveCats = [...cats, { id: 'zz', name: 'ZZ Test Sticker Renamed', color: '#0d9488', active: false }];
+  const totes = [
+    { id: 't1', name: 'ZZ V22 Test Tote 1 Renamed', short_code: 'TOTE-ZZV22-001', qr_code_value: 'AK_CTR:111111111111111111111111', storage_category_id: 'zz' },
+    { id: 't2', name: 'ZZ V22 Test Tote 2', short_code: 'TOTE-ZZV22-002', qr_code_value: 'AK_CTR:222222222222222222222222', storage_category_id: 'zz' },
+    { id: 't3', name: 'ZZ V22 Test Tote 3', short_code: 'TOTE-ZZV22-003', qr_code_value: 'AK_CTR:333333333333333333333333', storage_category_id: 'zz' },
+    { id: 't4', name: 'ZZ V22 Test Tote 4', short_code: 'TOTE-ZZV22-004', qr_code_value: 'AK_CTR:444444444444444444444444', storage_category_id: null },
+  ];
+  const labels = totes.map(t => L.toPrintLabel(L.draftFromContainer(t), liveCats));
+  const single = L.buildToteLabelDocument([labels[0]]);
+  const batch4 = L.buildToteLabelDocument(labels);
+  assert.ok(batch4.includes(L.renderToteLabel(labels[0])) && single.includes(L.renderToteLabel(labels[0])), 'same markup in both');
+  assert.equal(count(L.buildToteLabelDocument(labels.slice(0, 3)), /class="sheet"/g), 1);
+  assert.equal(count(batch4, /class="sheet"/g), 2);
+  assert.ok(single.includes('STORAGE — ZZ TEST STICKER RENAMED'), 'renamed + inactive category still prints');
+  assert.ok(batch4.includes('STORAGE — GENERAL STORAGE'), 'uncategorized tote falls back');
+  for (const t of totes) assert.ok(batch4.includes(L.renderQRSVGString(t.qr_code_value, L.QR_RENDER_SIZE, L.inkFor(L.resolveCategory(liveCats, t.storage_category_id).color, 7))));
+});
+test('inactive category stays on its totes and keeps its current color', () => {
+  const withInactive = [...cats, { id: 'old', name: 'Retired', color: '#db2777', active: false }];
+  const c = L.resolveCategory(withInactive, 'old');
+  assert.equal(c.name, 'Retired');
+  assert.equal(c.color, '#db2777');
+  const recolored = withInactive.map(x => x.id === 'int' ? { ...x, color: '#0d9488' } : x);
+  assert.equal(L.resolveCategory(recolored, 'int').color, '#0d9488', 'color edits flow to future prints');
 });
 test('each label keeps its own category color and the QR payload is unchanged', () => {
   for (const c of cats) {
@@ -64,9 +105,9 @@ test('contrast: light colors are darkened for QR and white text', () => {
 test('no linear barcode; white writing fields; long names fit', () => {
   const html = L.buildToteLabelDocument([label(1, 'int')]);
   assert.ok(!/barcode/i.test(html));
-  assert.match(L.TOTE_LABEL_CSS, /\.tl \.write\{height:\.9in;flex:none;background:#fff/);
+  assert.match(L.TOTE_LABEL_CSS, /\.tl \.write\{height:\.85in;flex:none;background:#fff/);
   assert.ok(html.includes('CLIENT:') && html.includes('PROJECT:'));
-  assert.equal(L.nameFontPt('Random Interior Parts'), 28);
+  assert.equal(L.nameFontPt('Random Interior Parts'), 30);
   assert.ok(L.nameFontPt('x'.repeat(100)) <= 17);
   assert.ok(L.renderToteLabel({ ...label(1, 'int'), name: '' }).includes('name-blank'));
   assert.ok(L.renderToteLabel({ ...label(1, 'int'), name: '<b>' }).includes('&lt;b&gt;'));

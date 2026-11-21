@@ -11,7 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import ToteLabelEditorRow from "./ToteLabelEditorRow";
 import ToteLabelPreview from "./ToteLabelPreview";
 import CategorySelect from "./CategorySelect";
-import StorageCategoryManager from "./StorageCategoryManager";
+import StickerCategoriesModal from "./StickerCategoriesModal";
 
 /** Shared configuration + preview + print for single and batch tote labels. */
 export default function ToteLabelStudio({ drafts, onChange, categories, onThermal }) {
@@ -58,11 +58,11 @@ export default function ToteLabelStudio({ drafts, onChange, categories, onTherma
         {drafts.map(d => <ToteLabelEditorRow key={d.key} draft={d} categories={categories} onChange={p => update(d.key, p)} />)}
       </div>
       {isAdmin && (
-        <button type="button" onClick={() => setManage(m => !m)} className="text-xs text-indigo-300 flex items-center gap-1">
-          <Settings2 className="w-3.5 h-3.5" /> {manage ? 'Hide' : 'Manage'} storage categories
+        <button type="button" onClick={() => setManage(true)} className="text-xs text-indigo-300 flex items-center gap-1">
+          <Settings2 className="w-3.5 h-3.5" /> Manage sticker categories
         </button>
       )}
-      {manage && <StorageCategoryManager categories={categories} />}
+      {isAdmin && <StickerCategoriesModal open={manage} onClose={() => setManage(false)} />}
       {onThermal && (
         <Select value={format} onValueChange={setFormat}>
           <SelectTrigger className="h-9 bg-gray-950 border-gray-700"><SelectValue /></SelectTrigger>
