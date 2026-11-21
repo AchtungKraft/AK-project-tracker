@@ -4,7 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Camera, ChevronDown, ChevronRight, Image as ImageIcon, Link2, Loader2, Package, Pencil, Search } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import PropertyIntakeModal from "./PropertyIntakeModal";
 
 const unwrap = r=>r?.data||r;

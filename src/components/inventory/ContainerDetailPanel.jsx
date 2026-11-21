@@ -15,6 +15,7 @@ import ToteLabelPrintButton from "./labels/ToteLabelPrintButton";
 import LocationBreadcrumb from "./LocationBreadcrumb";
 import StoragePartRow from "./StoragePartRow";
 import ContainerStoredProperty, { fetchStoredPropertyForContainer } from "./ContainerStoredProperty";
+import CapturePhotosAction, { UnsortedPhotoBadge } from "./capture/CapturePhotosAction";
 
 export default function ContainerDetailPanel({
   container, locations, inventoryItems, parts, projects, vendors,
@@ -102,6 +103,7 @@ export default function ContainerDetailPanel({
             {propertyLoading ? <span className="text-gray-400">Loading saved contents…</span> :
               propertyError ? <span className="text-amber-400">Stored property unavailable</span> :
               <span className="rounded bg-indigo-950/50 border border-indigo-800/50 px-2 py-1 text-indigo-200">{activeGroups.length} stored {activeGroups.length === 1 ? 'group' : 'groups'} · {photoCount} photos</span>}
+            <UnsortedPhotoBadge containerId={container.id} />
             <span className="rounded bg-gray-800/60 px-2 py-1 text-gray-400">{containedParts.length} stocked {containedParts.length === 1 ? 'part' : 'parts'} · {totalUnits} units</span>
           </div>
           {/* Project badge — visible in header */}
@@ -125,6 +127,7 @@ export default function ContainerDetailPanel({
 
       {/* Primary actions — the technician's toolbar */}
       <div className="flex items-center flex-wrap gap-2 px-3 sm:px-4 py-3 border-b border-red-900/20 bg-gray-900/10 shrink-0">
+        <CapturePhotosAction container={container} />
         <Button size="sm" variant="outline" onClick={() => onMove(container)} className="gap-1.5 h-9 text-sm border-gray-700 text-gray-300">
           <ArrowRightLeft className="w-4 h-4" /> Move Box
         </Button>

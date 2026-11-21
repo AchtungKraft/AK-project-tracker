@@ -21,7 +21,7 @@ const photoUri=(s)=>{
   if(/^[a-z][a-z\d+.-]*:/i.test(s))return false;
   return /^\/?[a-zA-Z0-9][a-zA-Z0-9_./% +@=-]*$/.test(s);
 };
-const trimPhoto=(p)=>({id:p.id,stored_property_id:p.stored_property_id,sort_order:p.sort_order,caption:p.caption,captured_at:p.captured_at});
+const trimPhoto=(p)=>({id:p.id,stored_property_id:p.stored_property_id??null,container_id:p.container_id,capture_key:p.capture_key||null,has_thumbnail:!!p.thumbnail_uri,sort_order:p.sort_order,caption:p.caption,captured_at:p.captured_at});
 
 Deno.serve(async (req)=>{
   try {
@@ -38,7 +38,7 @@ Deno.serve(async (req)=>{
     if(!staff) return respond({error:'AK staff only'},403);
     const body=await req.json();
     const action=body?.action;
-    if(!['list_container','create_group','add_photo','get_photos','update_group','find_by_part'].includes(action)){
+    if(!['list_container','create_group','add_photo','get_photos','update_group','find_by_part','add_unsorted_photo','unsorted_summary'].includes(action)){
       return respond({error:'Unsupported storage property operation'},400);
     }
 
@@ -93,6 +93,47 @@ Deno.serve(async (req)=>{
     const [container]=await db.entities.StorageContainer.filter({id:containerId});
     if(!container||container.active===false||container.status==='archived'||container.status==='reserved'){
       return respond({error:'Active container not found'},404);
+    }
+
+    if(action==='unsorted_summary'){
+      const rows=await db.entities.StoredPropertyPhoto.filter({container_id:container.id,archived:false},'-created_date',2000);
+      return respond({success:true,container_id:container.id,count:rows.filter(r=>!r.stored_property_id).length});
+    }
+
+    if(action==='add_unsorted_photo'){
+      // Quick capture: one photo saved directly to the box, no content entry, no inventory.
+      const key=body.capture_key;
+      if(!idOk(key)) return respond({error:'Stable capture_key required'},400);
+      const existingKey=await db.entities.StoredPropertyPhoto.filter({container_id:container.id,capture_key:key},'created_date',5);
+      if(existingKey.length) return respond({success:true,idempotent_hit:true,photo:trimPhoto(existingKey[0])});
+      const uri=body.file_uri;
+      if(!photoUri(uri)) return respond({error:'Invalid private file reference format (public URLs are not accepted)'},400);
+      const verified=async(u)=>{
+        try{
+          const s=await db.integrations.Core.CreateFileSignedUrl({file_uri:u,expires_in:60});
+          return typeof s?.signed_url==='string'&&s.signed_url.startsWith('https://');
+        }catch(_){return false}
+      };
+      if(!await verified(uri)) return respond({error:'Private storage could not verify this photo reference',code:'PRIVATE_URI_NOT_VERIFIED'},422);
+      // Preview is optional: an unverifiable thumbnail is dropped, never blocks the original.
+      const thumb=body.thumbnail_uri;
+      const thumbnailUri=(photoUri(thumb)&&thumb!==uri&&await verified(thumb))?thumb:null;
+      const size=Number(body.original_size_bytes);
+      const created=await db.entities.StoredPropertyPhoto.create({
+        stored_property_id:null,container_id:container.id,file_uri:uri,thumbnail_uri:thumbnailUri,
+        capture_key:key,capture_batch_id:safeText(body.capture_batch_id,100)||key,
+        original_file_name:safeText(body.original_file_name,200)||null,
+        original_mime_type:safeText(body.original_mime_type,100)||null,
+        original_size_bytes:Number.isFinite(size)&&size>0?size:null,
+        sort_order:0,captured_by:user.id,captured_at:new Date().toISOString(),archived:false,
+      });
+      // No unique constraint is available: detect a concurrent retry and keep only the oldest record.
+      const same=await db.entities.StoredPropertyPhoto.filter({container_id:container.id,capture_key:key},'created_date',10);
+      if(same.length>1&&same[0].id!==created.id){
+        await db.entities.StoredPropertyPhoto.delete(created.id);
+        return respond({success:true,idempotent_hit:true,photo:trimPhoto(same[0])});
+      }
+      return respond({success:true,photo:trimPhoto(created)});
     }
 
     if(action==='list_container'){
