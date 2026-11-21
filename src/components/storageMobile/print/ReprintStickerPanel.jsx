@@ -21,7 +21,7 @@ export default function ReprintStickerPanel() {
       <button type="button" onClick={() => setTote(null)} className="flex items-center gap-1 text-sm text-gray-300 min-h-[40px]">
         <ArrowLeft className="w-4 h-4" /> Choose another tote
       </button>
-      <TotePrintStudio key={tote.id} tote={tote} />
+      <TotePrintStudio key={tote.id} tote={tote} returnTo="/storage?print=reprint" />
     </div>
   );
   const results = data?.results || [];

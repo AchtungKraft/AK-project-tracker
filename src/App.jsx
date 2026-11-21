@@ -27,6 +27,7 @@ import StorageMobile from './pages/StorageMobile';
 import StorageFind from './pages/StorageFind';
 import StorageTote from './pages/StorageTote';
 import StorageQrRedirect from './pages/StorageQrRedirect';
+import StorageStickerPrint from './pages/StorageStickerPrint';
 
 // VendorPOBuilder page removed — vendor PO creation is now inline in GlobalNeedToOrder
 
@@ -137,6 +138,7 @@ const AuthenticatedApp = () => {
       <Route path="/storage" element={<LayoutWrapper currentPageName="StorageMobile"><StorageMobile /></LayoutWrapper>} />
       <Route path="/storage/find" element={<LayoutWrapper currentPageName="StorageMobile"><StorageFind /></LayoutWrapper>} />
       <Route path="/storage/tote" element={<LayoutWrapper currentPageName="StorageMobile"><StorageTote /></LayoutWrapper>} />
+      <Route path="/storage/print" element={<StorageStickerPrint />} />
       <Route path="/st/:token" element={<LayoutWrapper currentPageName="StorageMobile"><StorageQrRedirect /></LayoutWrapper>} />
 
       <Route path="*" element={<PageNotFound />} />

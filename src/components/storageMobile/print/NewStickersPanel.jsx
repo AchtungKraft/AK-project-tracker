@@ -9,7 +9,8 @@ import LabelQuantitySelector from "@/components/inventory/labels/LabelQuantitySe
 import ToteLabelStudio from "@/components/inventory/labels/ToteLabelStudio";
 import { draftFromReserved } from "@/components/inventory/labels/labelDrafts";
 import { useStorageCategories } from "@/components/inventory/labels/useStorageCategories";
-import { printToteLabelsMobile, mobilePreviewScale } from "@/lib/mobileLabelPrint";
+import { loadPrintJob, mobilePreviewScale } from "@/lib/mobileLabelPrint";
+import { useOpenStickerPrint } from "./useOpenStickerPrint";
 import RecentBatches from "./RecentBatches";
 
 const TYPES = ['box', 'tote', 'bin', 'crate']; // same choices as desktop batch labels
@@ -21,15 +22,18 @@ const unwrap = (r) => r?.data || r;
  * the global counter only when Reserve is tapped. Retrying uses the same request key, so a network
  * retry never reserves twice. Preview, print and cancel never reserve anything.
  */
-export default function NewStickersPanel() {
+export default function NewStickersPanel({ restore = false }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const { data: categories = [] } = useStorageCategories();
   const [type, setType] = useState('tote');
   const [count, setCount] = useState(3);
   const [busy, setBusy] = useState(false);
-  const [drafts, setDrafts] = useState([]);
-  const [batchCode, setBatchCode] = useState('');
+  // Returning from the print page restores the same reserved batch (no new numbers).
+  const [restored] = useState(() => { const j = restore && loadPrintJob(); return j?.source === 'new' ? j : null; });
+  const [drafts, setDrafts] = useState(restored?.drafts || []);
+  const [batchCode, setBatchCode] = useState(restored?.batchCode || '');
+  const openPrint = useOpenStickerPrint({ title: `Stickers ${batchCode}`, returnTo: '/storage?print=new', source: 'new', drafts, batchCode });
   const requestKey = useRef(newKey());
   const show = (labels, code) => { setDrafts(labels.map(draftFromReserved)); setBatchCode(code || ''); };
   const fail = (title, e) => toast({ title, description: e?.message, variant: 'destructive' });
@@ -53,7 +57,7 @@ export default function NewStickersPanel() {
         <p className="text-green-300 text-sm font-semibold">{drafts.length} stickers reserved</p>
         <p className="text-xs font-mono text-gray-400 break-all">{batchCode}</p>
       </div>
-      <ToteLabelStudio drafts={drafts} onChange={setDrafts} categories={categories} printLetter={printToteLabelsMobile} previewScale={mobilePreviewScale()} />
+      <ToteLabelStudio drafts={drafts} onChange={setDrafts} categories={categories} printLetter={openPrint} previewScale={mobilePreviewScale()} />
       <Button variant="outline" onClick={back} className="w-full h-11 gap-2"><RotateCcw className="w-4 h-4" /> Done</Button>
     </div>
   );
