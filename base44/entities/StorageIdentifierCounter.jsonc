@@ -1,0 +1,56 @@
+{
+  "name": "StorageIdentifierCounter",
+  "type": "object",
+  "properties": {
+    "key": {
+      "type": "string",
+      "description": "Counter identity. Exactly one record with key 'global' issues every storage container number (YY_TYPE_NNNNNN). Never reset by year or type."
+    },
+    "last_sequence": {
+      "type": "integer",
+      "default": 0,
+      "description": "Highest sequence ever issued. Only increases, via compare-and-set in storageLabels."
+    },
+    "initialized_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "initialized_by": {
+      "type": "string"
+    },
+    "initial_floor": {
+      "type": "integer",
+      "description": "Highest pre-existing global sequence found by the audit at initialization"
+    },
+    "audit_summary": {
+      "type": "object",
+      "description": "Snapshot of the identifier audit taken at initialization"
+    }
+  },
+  "required": [
+    "key",
+    "last_sequence"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "storage_counter_service_only"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "storage_counter_service_only"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "storage_counter_service_only"
+      }
+    }
+  }
+}

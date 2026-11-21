@@ -20,7 +20,7 @@
         "other"
       ],
       "default": "tote",
-      "description": "Physical container type"
+      "description": "Physical container type. Changing it never changes the issued short_code."
     },
     "location_id": {
       "type": "string",
@@ -60,7 +60,15 @@
     },
     "short_code": {
       "type": "string",
-      "description": "Short identifier for labels and quick reference"
+      "description": "Permanent printed identifier. New containers: YY_TYPE_NNNNNN issued by the global counter. Never regenerated."
+    },
+    "global_sequence": {
+      "type": "integer",
+      "description": "Global container sequence number (the NNNNNN part). Absent on pre-V2.4 containers."
+    },
+    "create_request_key": {
+      "type": "string",
+      "description": "Idempotency key of the server create request that issued this container"
     },
     "photo": {
       "type": "string",

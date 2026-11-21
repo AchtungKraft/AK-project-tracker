@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
-import { getContainerTypeOptions, generateContainerNumber } from "./containerTypeConfig";
+import { getContainerTypeOptions } from "./containerTypeConfig";
 import ToteLabelPrintButton from "./labels/ToteLabelPrintButton";
 
 export default function CreateContainerModal({ onClose, preselectedLocationId, preselectedProjectId, locations = [], projects = [] }) {
@@ -19,7 +19,7 @@ export default function CreateContainerModal({ onClose, preselectedLocationId, p
   const [locationId, setLocationId] = useState(preselectedLocationId || '');
   const [homeLocationId, setHomeLocationId] = useState('');
   const [projectId, setProjectId] = useState(preselectedProjectId || '');
-  const [containerNumber, setContainerNumber] = useState('');
+  const [requestKey] = useState(() => `ctr_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`);
   const [color, setColor] = useState('#6366F1');
   const [notes, setNotes] = useState('');
   const [description, setDescription] = useState('');
@@ -28,51 +28,24 @@ export default function CreateContainerModal({ onClose, preselectedLocationId, p
   const typeOptions = getContainerTypeOptions();
   const sortedLocations = locations.filter(l => l.active !== false).sort((a, b) => (a.location_area || '').localeCompare(b.location_area || ''));
 
-  // Fetch existing containers for auto-numbering
-  const { data: existingContainers = [] } = useQuery({
-    queryKey: ['storageContainers'],
-    queryFn: () => base44.entities.StorageContainer.filter({ active: true }),
-    staleTime: 30000,
-  });
-
-  // Auto-generate container number when type changes
-  const suggestedNumber = useMemo(() =>
-    generateContainerNumber(containerType, existingContainers),
-    [containerType, existingContainers]
-  );
-
-  // Use suggested if user hasn't manually edited
-  const effectiveNumber = containerNumber || suggestedNumber;
-
+  // V2.4: the permanent number (YY_TYPE_NNNNNN) is issued by the server's global counter.
   const createMutation = useMutation({
     mutationFn: async () => {
-      // V2: Stable QR identity — uses entity ID after create, patched immediately
-      const tempQrValue = `AK_CTR:${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-      const data = {
-        name,
-        container_type: containerType,
-        color,
-        short_code: effectiveNumber,
-        qr_code_value: tempQrValue,
-        status: 'active',
-        ...(locationId && { location_id: locationId }),
-        ...(homeLocationId && homeLocationId !== '__none__' && { home_location_id: homeLocationId }),
-        ...(projectId && projectId !== '__none__' && { project_id: projectId }),
-        ...(notes.trim() && { notes: notes.trim() }),
-        ...(description && { description }),
-      };
-      const created = await base44.entities.StorageContainer.create(data);
-      // Patch QR with stable entity-ID-based value
-      const stableQr = `AK_CTR:${created.id}`;
-      await base44.entities.StorageContainer.update(created.id, { qr_code_value: stableQr });
-      return { ...created, qr_code_value: stableQr };
+      const res = await base44.functions.invoke('storageLabels', {
+        action: 'create_container', request_key: requestKey, name, container_type: containerType, color,
+        location_id: locationId || undefined,
+        home_location_id: homeLocationId && homeLocationId !== '__none__' ? homeLocationId : undefined,
+        project_id: projectId && projectId !== '__none__' ? projectId : undefined,
+        notes, description,
+      });
+      return res.data.container;
     },
     onSuccess: (container) => {
       queryClient.invalidateQueries({ queryKey: ['storageContainers'] });
       setCreatedContainer(container);
-      toast.success(`Container "${name}" created · ${effectiveNumber}`);
+      toast.success(`Container "${container.name}" created · ${container.short_code}`);
     },
-    onError: (e) => toast.error('Failed to create container: ' + e.message),
+    onError: (e) => toast.error('Failed to create container: ' + (e?.response?.data?.error || e.message)),
   });
 
   if (createdContainer) {
@@ -116,7 +89,7 @@ export default function CreateContainerModal({ onClose, preselectedLocationId, p
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-gray-400">Type</Label>
-              <Select value={containerType} onValueChange={(v) => { setContainerType(v); setContainerNumber(''); }}>
+              <Select value={containerType} onValueChange={setContainerType}>
                 <SelectTrigger className="bg-gray-800 border-gray-700 text-white mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {typeOptions.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
@@ -125,12 +98,9 @@ export default function CreateContainerModal({ onClose, preselectedLocationId, p
             </div>
             <div>
               <Label className="text-gray-400">Container #</Label>
-              <Input
-                value={containerNumber}
-                onChange={(e) => setContainerNumber(e.target.value)}
-                placeholder={suggestedNumber}
-                className="bg-gray-800 border-gray-700 text-white mt-1 font-mono"
-              />
+              <div className="mt-1 h-9 flex items-center px-3 rounded-md border border-gray-700 bg-gray-800/50 text-xs text-gray-400">
+                Assigned on create
+              </div>
             </div>
           </div>
           <div>

@@ -14,6 +14,57 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.44';
 const TYPES = {box:'BOX',tote:'TOTE',bin:'BIN',tray:'TRAY',organizer:'ORG',crate:'CRT',cart:'CART',kit:'KIT',other:'CTR'};
 const reply = (obj,status=200)=>Response.json(obj,{status});
 
+/**
+ * V2.4 global container numbering: YY_TYPE_NNNNNN.
+ * One counter (StorageIdentifierCounter key 'global') for every type and year. YY is the
+ * allocation year, informational only. The counter only increases (compare-and-set), so a
+ * number is never issued twice; a lost race may leave a harmless gap, never a duplicate.
+ */
+const COUNTER_KEY='global';
+const NEW_ID=/^(\d{2})_([A-Z]+)_(\d{6})$/;
+const fail=(message,status,code)=>Object.assign(new Error(message),{status,code});
+const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
+const yearCode=()=>new Intl.DateTimeFormat('en-US',{timeZone:'America/Chicago',year:'2-digit'}).format(new Date());
+const formatId=(yy,type,seq)=>`${yy}_${TYPES[type]}_${String(seq).padStart(6,'0')}`;
+
+async function allocate(db,count){
+  for(let attempt=0;attempt<12;attempt++){
+    const rows=await db.entities.StorageIdentifierCounter.filter({key:COUNTER_KEY});
+    if(rows.length!==1) throw rows.length
+      ? fail('More than one numbering counter exists. Admin review required.',409,'NUMBERING_COUNTER_CONFLICT')
+      : fail('Container numbering is not initialized yet. An admin must review the identifier audit and approve initialization.',409,'NUMBERING_NOT_INITIALIZED');
+    const cur=rows[0].last_sequence||0;
+    if(cur+count>999999) throw fail('Global container number range exhausted',409,'NUMBERING_EXHAUSTED');
+    const won=(await db.entities.StorageIdentifierCounter.updateMany({key:COUNTER_KEY,last_sequence:cur},{$set:{last_sequence:cur+count}})).updated===1;
+    if(won) return cur+1;
+    await sleep(40+Math.random()*120*(attempt+1));
+  }
+  throw fail('Numbering is busy. Please retry.',503,'NUMBERING_BUSY');
+}
+
+async function auditIdentifiers(db){
+  const [ctrs,labels,batches]=await Promise.all([
+    db.entities.StorageContainer.filter({},'created_date',5000),
+    db.entities.StorageLabel.filter({},'created_date',5000),
+    db.entities.StorageLabelBatch.filter({},'created_date',1000),
+  ]);
+  const seqOf=(r)=>Number.isInteger(r.global_sequence)?r.global_sequence:(NEW_ID.exec(r.short_code||'')?parseInt(NEW_ID.exec(r.short_code)[3],10):0);
+  const dupes=(arr)=>{const m=new Map();arr.filter(Boolean).forEach(v=>m.set(v,(m.get(v)||0)+1));return [...m].filter(([,n])=>n>1).map(([v])=>v);};
+  const codes=[...ctrs.map(c=>c.short_code),...labels.filter(l=>!l.container_id).map(l=>l.short_code)];
+  return {
+    containers:ctrs.length,
+    active_containers:ctrs.filter(c=>c.active!==false&&c.status!=='archived').length,
+    labels:labels.length,
+    reserved_labels:labels.filter(l=>l.status==='reserved'||l.status==='activating').length,
+    activated_labels:labels.filter(l=>l.status==='activated').length,
+    batches:batches.length,
+    new_format_ids:[...ctrs,...labels].filter(r=>NEW_ID.test(r.short_code||'')).length,
+    max_global_sequence:Math.max(0,...ctrs.map(seqOf),...labels.map(seqOf),...batches.map(b=>b.seq_end||0)),
+    duplicate_codes:dupes(codes),
+    duplicate_qr:dupes(ctrs.map(c=>c.qr_code_value)),
+  };
+}
+
 Deno.serve(async(req)=>{
   try {
     if(req.method!=='POST') return reply({error:'Method not allowed'},405);
@@ -44,26 +95,41 @@ Deno.serve(async(req)=>{
       if(batch&&(batch.requested_count!==count||batch.container_type!==type)) {
         return reply({error:'Request key already used for a different batch'},409);
       }
+      if(batch&&batch.seq_start===undefined) return reply({error:'This is a pre-V2.4 batch. Reprint it from Previous batches.'},409);
+      if(!batch&&(await db.entities.StorageIdentifierCounter.filter({key:COUNTER_KEY})).length!==1){
+        return reply({error:'Container numbering is not initialized yet. An admin must review the identifier audit and approve initialization.',code:'NUMBERING_NOT_INITIALIZED'},409);
+      }
       if(!batch) batch=await db.entities.StorageLabelBatch.create({
         request_key:requestKey,requested_count:count,container_type:type,status:'generating',
-        generated_at:new Date().toISOString(),generated_by:user.id,label_ids:[],
+        generated_at:new Date().toISOString(),generated_by:user.id,label_ids:[],seq_start:0,seq_end:0,
       });
 
-      const batchTag=batch.id.slice(-10).toUpperCase();
-      const batchCode=`${TYPES[type]}-${batchTag}`;
+      // Reserve one contiguous global range per batch, exactly once (retries reuse it).
+      if(!batch.seq_start){
+        const start=await allocate(db,count);
+        const yy=yearCode();
+        const code=`${formatId(yy,type,start)}-${String(start+count-1).padStart(6,'0')}`;
+        const won=(await db.entities.StorageLabelBatch.updateMany({id:batch.id,seq_start:0},
+          {$set:{seq_start:start,seq_end:start+count-1,year_code:yy,batch_code:code}})).updated===1;
+        if(!won) console.warn(`Concurrent retry for batch ${batch.id}; range ${start}+${count} left unused`);
+        [batch]=await db.entities.StorageLabelBatch.filter({id:batch.id});
+      }
+
+      const batchCode=batch.batch_code;
       const existing=await db.entities.StorageLabel.filter({batch_id:batch.id});
       const byCode=new Map(existing.map(l=>[l.short_code,l]));
       const labels=[];
       try {
         for(let seq=1;seq<=count;seq++){
-          const shortCode=`${batchCode}-${String(seq).padStart(3,'0')}`;
+          const globalSeq=batch.seq_start+seq-1;
+          const shortCode=formatId(batch.year_code,type,globalSeq);
           let label=byCode.get(shortCode);
           if(!label){
             const conflict=await db.entities.StorageLabel.filter({short_code:shortCode});
             if(conflict.length) throw new Error('Short-code collision: '+shortCode);
             label=await db.entities.StorageLabel.create({
               batch_id:batch.id,short_code:shortCode,container_type:type,
-              sequence:seq,status:'reserved',
+              sequence:seq,global_sequence:globalSeq,status:'reserved',
             });
           }
           const qr=`AK_CTR:${label.id}`;
@@ -76,6 +142,58 @@ Deno.serve(async(req)=>{
         return reply({error:'Partial batch allocation. Retry Generate with the same request to resume safely.',details:e.message,batch_id:batch.id,reserved_count:labels.length},503);
       }
       return reply({success:true,batch_id:batch.id,batch_code:batchCode,labels});
+    }
+
+    if(action==='numbering_status'){
+      if(!isAdmin) return reply({error:'Admin permission required'},403);
+      const counters=await db.entities.StorageIdentifierCounter.filter({key:COUNTER_KEY});
+      return reply({success:true,initialized:counters.length===1,
+        last_sequence:counters[0]?.last_sequence??null,audit:await auditIdentifiers(db)});
+    }
+
+    if(action==='initialize_numbering'){
+      // Non-destructive: creates the counter only. Requires explicit approval phrase.
+      if(!isAdmin) return reply({error:'Admin permission required'},403);
+      if(input.confirm!=='INITIALIZE_GLOBAL_NUMBERING') return reply({error:'Explicit approval required'},400);
+      if((await db.entities.StorageIdentifierCounter.filter({key:COUNTER_KEY})).length) return reply({error:'Numbering is already initialized'},409);
+      const audit=await auditIdentifiers(db);
+      if(audit.duplicate_codes.length||audit.duplicate_qr.length) return reply({error:'Duplicate identifiers found. Resolve before initializing.',audit},409);
+      await db.entities.StorageIdentifierCounter.create({key:COUNTER_KEY,last_sequence:audit.max_global_sequence,
+        initial_floor:audit.max_global_sequence,initialized_at:new Date().toISOString(),initialized_by:user.email,audit_summary:audit});
+      // Two simultaneous initializations: keep the first counter, remove the extra (nothing allocated from it yet).
+      const all=await db.entities.StorageIdentifierCounter.filter({key:COUNTER_KEY},'created_date',10);
+      for(const extra of all.slice(1)) await db.entities.StorageIdentifierCounter.delete(extra.id);
+      return reply({success:true,next_identifier_number:audit.max_global_sequence+1,audit});
+    }
+
+    if(action==='create_container'){
+      // Single new container (New Container dialog). Number issued here, never by the browser.
+      const requestKey=input.request_key;
+      const type=input.container_type||'tote';
+      const name=typeof input.name==='string'?input.name.trim().slice(0,100):'';
+      if(typeof requestKey!=='string'||!/^[a-zA-Z0-9_-]{12,100}$/.test(requestKey)) return reply({error:'Valid request key required'},400);
+      if(!Object.prototype.hasOwnProperty.call(TYPES,type)) return reply({error:'Invalid container type'},400);
+      if(!name) return reply({error:'Container name is required'},400);
+      const [prior]=await db.entities.StorageContainer.filter({create_request_key:requestKey});
+      if(prior) return reply({success:true,container:prior});
+      const str=(v,max)=>typeof v==='string'&&v.trim()?v.trim().slice(0,max):undefined;
+      const ref=async(E,id)=>{ if(!str(id,40)) return undefined; const [r]=await db.entities[E].filter({id}); if(!r) throw fail(E+' not found',404); return r.id; };
+      const color=/^#[0-9a-fA-F]{6}$/.test(input.color||'')?input.color:'#6366F1';
+      const fields={name,container_type:type,color,status:'active',active:true,
+        location_id:await ref('Location',input.location_id),home_location_id:await ref('Location',input.home_location_id),
+        project_id:await ref('Project',input.project_id),notes:str(input.notes,200),description:str(input.description,2000)};
+      Object.keys(fields).forEach(k=>fields[k]===undefined&&delete fields[k]);
+
+      const seq=await allocate(db,1);
+      const shortCode=formatId(yearCode(),type,seq);
+      if((await db.entities.StorageContainer.filter({short_code:shortCode})).length) throw fail('Identifier collision: '+shortCode,409);
+      let created=await db.entities.StorageContainer.create({...fields,short_code:shortCode,global_sequence:seq,
+        create_request_key:requestKey,qr_code_value:`AK_CTR:pending_${requestKey}`});
+      created=await db.entities.StorageContainer.update(created.id,{qr_code_value:`AK_CTR:${created.id}`});
+      // Same request submitted twice at once: keep the first container; the extra one was never printed.
+      const twins=await db.entities.StorageContainer.filter({create_request_key:requestKey},'created_date',10);
+      if(twins.length>1&&twins[0].id!==created.id){ await db.entities.StorageContainer.delete(created.id); return reply({success:true,container:twins[0]}); }
+      return reply({success:true,container:created});
     }
 
     if(action==='list_batches'){
@@ -299,6 +417,6 @@ Deno.serve(async(req)=>{
 
     return reply({error:'Unknown action'},400);
   }catch(e){
-    return reply({error:e?.message||'Storage label failure'},500);
+    return reply({error:e?.message||'Storage label failure',...(e?.code?{code:e.code}:{})},e?.status||500);
   }
 });

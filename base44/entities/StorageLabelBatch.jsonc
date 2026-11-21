@@ -29,6 +29,18 @@
       "type": "integer",
       "description": "Total number of labels requested"
     },
+    "seq_start": {
+      "type": "integer",
+      "description": "First global sequence reserved for this batch. 0 = not yet allocated. Absent on pre-V2.4 batches."
+    },
+    "seq_end": {
+      "type": "integer",
+      "description": "Last global sequence reserved for this batch"
+    },
+    "year_code": {
+      "type": "string",
+      "description": "Two-digit allocation year printed in identifiers (informational only)"
+    },
     "label_ids": {
       "type": "array",
       "items": {

@@ -8,7 +8,11 @@
     },
     "short_code": {
       "type": "string",
-      "description": "Unique human-readable label code derived from batch"
+      "description": "Permanent printed identifier. New labels: YY_TYPE_NNNNNN from the global counter. Never changed after issue."
+    },
+    "global_sequence": {
+      "type": "integer",
+      "description": "Global container sequence number (the NNNNNN part). Absent on pre-V2.4 labels."
     },
     "qr_code_value": {
       "type": "string",
