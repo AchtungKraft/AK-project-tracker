@@ -68,6 +68,20 @@ test('V2.3: 3 / 6 / 9 reserved labels → 1 / 2 / 3 full sheets, unique QR, no d
     assert.ok(html.includes('STORAGE — INTERIOR') && html.includes('STORAGE — EXTERIOR'), 'category names print');
   }
 });
+test('V2.3: 3 / 6 / 9 existing containers → 1 / 2 / 3 full sheets, original codes kept', () => {
+  for (const [n, pages] of [[3, 1], [6, 2], [9, 3]]) {
+    const ctrs = Array.from({ length: n }, (_, i) => ({ id: `c${n}_${i}`, name: `Existing Tote ${n}-${i + 1}`, short_code: `TOTE-ZZEX-${n}-${String(i + 1).padStart(3, '0')}`, qr_code_value: `AK_CTR:e${n}${String(i).padStart(22, '0')}`, container_type: 'tote', storage_category_id: cats[i % cats.length].id }));
+    const labels = ctrs.map(c => L.toPrintLabel(L.draftFromContainer(c), cats));
+    const html = L.buildToteLabelDocument(labels);
+    assert.equal(count(html, /class="sheet"/g), pages, `${n} containers → ${pages} pages`);
+    assert.equal(count(html, /<section class="tl"/g), n, `exactly ${n} labels`);
+    ctrs.forEach((c, i) => {
+      assert.equal(labels[i].qr_code_value, c.qr_code_value, 'original QR kept');
+      assert.equal(count(html, new RegExp(`>${c.short_code}<`, 'g')), 1, 'each label once');
+      assert.ok(html.includes(c.name), 'name prints');
+    });
+  }
+});
 test('saved test totes: single and batch print produce identical labels; 3 → 1 page, 4 → 2 pages', () => {
   // Saved values read back from the isolated V2.2 test totes (category later deactivated).
   const liveCats = [...cats, { id: 'zz', name: 'ZZ Test Sticker Renamed', color: '#0d9488', active: false }];

@@ -25,6 +25,7 @@ export default function ContainerLabelPicker({ containers = [], quantity = 3, on
     return n;
   });
   const go = () => {
+    if (!full) return;
     const byId = new Map(usable.map(c => [c.id, c]));
     onContinue(picked.map(id => byId.get(id)).filter(Boolean));
   };
@@ -57,11 +58,6 @@ export default function ContainerLabelPicker({ containers = [], quantity = 3, on
       <Button disabled={!full} onClick={go} className="w-full gap-2">
         <Printer className="w-4 h-4" /> Label {quantity} selected containers
       </Button>
-      {!full && picked.length > 0 && (
-        <Button variant="outline" onClick={go} className="w-full gap-2 h-8 text-xs">
-          Continue with only {picked.length} (last sheet partly empty)
-        </Button>
-      )}
     </div>
   );
 }
