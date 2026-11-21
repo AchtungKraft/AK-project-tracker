@@ -2,9 +2,10 @@ import { useMemo } from "react";
 import { buildToteLabelDocument, paginate } from "./toteLabelDocument";
 
 // Renders the exact print document in a scaled frame (8.5 × 11 in pages at 96 px/in).
-const PAGE_W = 816, PAGE_H = 1056, PAGE_GAP = 19, PAD = 19, SCALE = 0.62;
+const PAGE_W = 816, PAGE_H = 1056, PAGE_GAP = 19, PAD = 19, DEFAULT_SCALE = 0.62;
 
-export default function ToteLabelPreview({ labels }) {
+export default function ToteLabelPreview({ labels, scale }) {
+  const SCALE = scale || DEFAULT_SCALE;
   const html = useMemo(() => buildToteLabelDocument(labels), [labels]);
   const pages = paginate(labels).length;
   const height = PAD * 2 + pages * (PAGE_H + PAGE_GAP);

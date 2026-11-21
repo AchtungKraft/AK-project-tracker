@@ -14,7 +14,8 @@ import CategorySelect from "./CategorySelect";
 import StickerCategoriesModal from "./StickerCategoriesModal";
 
 /** Shared configuration + preview + print for single and batch tote labels. */
-export default function ToteLabelStudio({ drafts, onChange, categories, onThermal }) {
+// printLetter / previewScale are optional overrides used by Storage Mobile; desktop uses the defaults.
+export default function ToteLabelStudio({ drafts, onChange, categories, onThermal, printLetter = printToteLabels, previewScale }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isAdmin = useIsAdmin();
@@ -30,7 +31,7 @@ export default function ToteLabelStudio({ drafts, onChange, categories, onTherma
   const print = () => {
     try {
       if (format === 'thermal') return onThermal();
-      if (!printToteLabels(labels)) toast({ title: 'Pop-up blocked', description: 'Allow pop-ups to print labels.', variant: 'destructive' });
+      if (!printLetter(labels)) toast({ title: 'Pop-up blocked', description: 'Allow pop-ups to print labels.', variant: 'destructive' });
     } catch (e) { toast({ title: 'Cannot print', description: e.message, variant: 'destructive' }); }
   };
   const save = async () => {
@@ -72,7 +73,7 @@ export default function ToteLabelStudio({ drafts, onChange, categories, onTherma
           </SelectContent>
         </Select>
       )}
-      {format === 'letter' && <ToteLabelPreview labels={labels} />}
+      {format === 'letter' && <ToteLabelPreview labels={labels} scale={previewScale} />}
       <div className="flex flex-col sm:flex-row gap-2">
         <Button onClick={print} disabled={!printable} className="flex-1 gap-2">
           <Printer className="w-4 h-4" /> Print {drafts.length} label{drafts.length === 1 ? '' : 's'}{format === 'letter' ? ` (${pages} page${pages === 1 ? '' : 's'})` : ''}

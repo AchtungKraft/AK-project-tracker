@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRightLeft, Camera, Loader2 } from "lucide-react";
+import { ArrowRightLeft, Camera, Loader2, Printer } from "lucide-react";
+import PrintStickersDialog from "@/components/storageMobile/print/PrintStickersDialog";
 import { Button } from "@/components/ui/button";
 import StorageGate from "@/components/storageMobile/StorageGate";
 import ToteHeader from "@/components/storageMobile/ToteHeader";
@@ -55,9 +56,13 @@ function ToteScreen({ id }) {
           <Button variant="outline" onClick={() => setOpen('move')} className="h-11 px-3 text-sm gap-1.5">
             <ArrowRightLeft className="w-4 h-4" /> Move Tote
           </Button>
+          <Button variant="outline" onClick={() => setOpen('print')} className="h-11 px-3 text-sm" aria-label="Print Label" title="Print Label">
+            <Printer className="w-4 h-4" />
+          </Button>
         </div>
         <ToteContentsSection key={tote.id} tote={tote} />
         {open === 'capture' && <QuickCaptureDialog container={tote} onClose={() => { close(); refetch(); }} />}
+        {open === 'print' && <PrintStickersDialog tote={tote} onClose={() => { close(); refetch(); }} />}
         {open === 'move' && (
           <MoveToteDialog tote={tote} onClose={close}
             onMoved={() => {

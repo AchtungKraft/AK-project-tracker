@@ -54,6 +54,7 @@ async function summarize(db, containers, withCounts = false) {
     const clientId = c.client_account_id || projClient.get(c.project_id) || null;
     const row = {
       id: c.id, name: c.name, short_code: c.short_code || null, container_type: c.container_type, color: c.color || null,
+      qr_code_value: c.qr_code_value || null, storage_category_id: c.storage_category_id || null,
       photo: c.photo || null, location_id: c.location_id || null, home_location_id: c.home_location_id || null,
       location_path: pathOf(c.location_id), location_name: locById.get(c.location_id)?.location_area || null,
       project_id: c.project_id || null, project_name: pName.get(c.project_id) || null,
