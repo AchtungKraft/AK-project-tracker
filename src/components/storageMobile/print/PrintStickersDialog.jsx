@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { clearMobilePrint } from "@/lib/mobileLabelPrint";
 import { Printer } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useIsAdmin } from "@/lib/clientAccounts";
@@ -11,6 +12,7 @@ import { cn } from "@/lib/utils";
 export default function PrintStickersDialog({ tote, onClose }) {
   const isAdmin = useIsAdmin();
   const [mode, setMode] = useState('new');
+  useEffect(() => clearMobilePrint, []); // never leave print-only labels behind
   const tab = (m, label) => (
     <button type="button" onClick={() => setMode(m)}
       className={cn("flex-1 rounded-lg py-2.5 text-sm font-semibold", mode === m ? "bg-red-600 text-white" : "text-gray-300")}>{label}</button>

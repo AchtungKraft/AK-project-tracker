@@ -1,35 +1,45 @@
-import { buildToteLabelDocument } from "@/components/inventory/labels/toteLabelDocument";
+import { buildToteLabelDocument, TOTE_LABEL_CSS } from "@/components/inventory/labels/toteLabelDocument";
 
 /**
  * Storage Mobile printing for the canonical Tote Label V2 document (same labels, same QR, same size).
- * Opens the document in a new tab (synchronously, inside the tap, so iOS Safari allows it),
- * opens the native print sheet (AirPrint), and keeps an on-screen Print / Close bar
- * that is hidden from the printed output. Printing never creates or changes records.
+ * No pop-up window: the labels are placed in a hidden block on the current page and the native print
+ * sheet (AirPrint) prints only that block. Everything else on the page is hidden in print.
+ * Printing never creates or changes records.
  */
-const BAR_CSS = `
-  .ak-bar{position:sticky;top:0;z-index:10;display:flex;gap:12px;justify-content:center;padding:14px;background:#111827}
-  .ak-bar button{font:600 28px Arial,sans-serif;padding:14px 36px;border-radius:12px;border:0;background:#dc2626;color:#fff}
-  .ak-bar button.close{background:#374151}
-  @media print{.ak-bar{display:none !important}}
-`;
-const BAR = `<div class="ak-bar"><button onclick="window.print()">Print</button><button class="close" onclick="window.close()">Close</button></div>`;
+const ROOT_ID = 'ak-print-root';
+const STYLE_ID = 'ak-print-style';
+
+export function clearMobilePrint() {
+  document.getElementById(ROOT_ID)?.remove();
+  document.getElementById(STYLE_ID)?.remove();
+}
 
 export function printToteLabelsMobile(labels) {
   if (!labels.length || labels.some((l) => !l.qr_code_value || !l.short_code)) {
     throw new Error('Every label needs a permanent tote number and QR identity');
   }
-  const w = window.open('', '_blank');
-  if (!w) return false;
-  const html = buildToteLabelDocument(labels)
-    .replace('</head>', `<style>${BAR_CSS}</style></head>`)
-    .replace('<body>', `<body>${BAR}`);
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-  let done = false;
-  const go = () => { if (done) return; done = true; w.focus(); w.print(); };
-  w.onload = go;
-  setTimeout(go, 700); // Safari does not always fire load for written documents
+  clearMobilePrint();
+  const doc = buildToteLabelDocument(labels);
+  const body = doc.slice(doc.indexOf('<body>') + 6, doc.lastIndexOf('</body>'));
+
+  const style = document.createElement('style');
+  style.id = STYLE_ID;
+  style.textContent = `
+    #${ROOT_ID}{display:none}
+    @media print{
+      body > *:not(#${ROOT_ID}){display:none !important}
+      #${ROOT_ID}{display:block !important}
+      html,body{overflow:visible !important;height:auto !important;min-height:0 !important;padding:0 !important;background:#fff !important}
+      ${TOTE_LABEL_CSS}
+    }`;
+  const root = document.createElement('div');
+  root.id = ROOT_ID;
+  root.innerHTML = body;
+  document.head.appendChild(style);
+  document.body.appendChild(root);
+
+  window.addEventListener('afterprint', clearMobilePrint, { once: true });
+  window.print();
   return true;
 }
 
