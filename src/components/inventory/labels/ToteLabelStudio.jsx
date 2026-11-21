@@ -5,7 +5,9 @@ import { Loader2, Printer, Save, Settings2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useIsAdmin } from "@/lib/clientAccounts";
 import { toPrintLabel, pendingChanges, markSaved } from "./labelDrafts";
-import { printToteLabels, paginate } from "./toteLabelDocument";
+import { paginate } from "./toteLabelDocument";
+import { useLocation } from "react-router-dom";
+import { useOpenStickerPrint } from "@/components/storageMobile/print/useOpenStickerPrint";
 import { saveLabelSettings } from "./useStorageCategories";
 import { useQueryClient } from "@tanstack/react-query";
 import ToteLabelEditorRow from "./ToteLabelEditorRow";
@@ -15,8 +17,12 @@ import StickerCategoriesModal from "./StickerCategoriesModal";
 
 /** Shared configuration + preview + print for single and batch tote labels. */
 // printLetter / previewScale are optional overrides used by Storage Mobile; desktop uses the defaults.
-export default function ToteLabelStudio({ drafts, onChange, categories, onThermal, printLetter = printToteLabels, previewScale }) {
+export default function ToteLabelStudio({ drafts, onChange, categories, onThermal, printLetter, previewScale }) {
   const { toast } = useToast();
+  const location = useLocation();
+  // Desktop default: same canonical PDF print page as Storage Mobile (one rendering path).
+  const openPdfPrint = useOpenStickerPrint({ title: 'Tote stickers', returnTo: location.pathname + location.search });
+  const printLetterFn = printLetter || openPdfPrint;
   const queryClient = useQueryClient();
   const isAdmin = useIsAdmin();
   const [format, setFormat] = useState('letter');
@@ -31,7 +37,7 @@ export default function ToteLabelStudio({ drafts, onChange, categories, onTherma
   const print = () => {
     try {
       if (format === 'thermal') return onThermal();
-      if (!printLetter(labels)) toast({ title: 'Pop-up blocked', description: 'Allow pop-ups to print labels.', variant: 'destructive' });
+      if (!printLetterFn(labels)) toast({ title: 'Pop-up blocked', description: 'Allow pop-ups to print labels.', variant: 'destructive' });
     } catch (e) { toast({ title: 'Cannot print', description: e.message, variant: 'destructive' }); }
   };
   const save = async () => {

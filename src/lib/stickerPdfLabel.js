@@ -43,6 +43,9 @@ export function drawLabel(pdf, label, x, y) {
 
   // Body: white QR column + colored identity panel
   const bodyTop = y + HEAD, bodyH = H - HEAD - WRITE;
+  // jsPDF writes text color with the same PDF fill operator, so the header text left the fill
+  // white. Always set the fill color right before each filled shape.
+  pdf.setFillColor(panel);
   pdf.rect(x + QR_COL, bodyTop, W - QR_COL, bodyH, 'F');
   drawQr(pdf, toteQrPayload(label.qr_code_value), x + 0.06, bodyTop + (bodyH - 1.88) / 2, 1.88, qrInk);
 

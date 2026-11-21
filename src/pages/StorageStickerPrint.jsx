@@ -6,7 +6,13 @@ import ToteLabelPreview from "@/components/inventory/labels/ToteLabelPreview";
 import PrintStatusPanel from "@/components/storageMobile/print/PrintStatusPanel";
 import { paginate } from "@/components/inventory/labels/toteLabelDocument";
 import { loadPrintJob, mobilePreviewScale } from "@/lib/mobileLabelPrint";
-import { buildStickerPdf, printStickerPdf, shareOrDownloadPdf } from "@/lib/stickerPdf";
+import { buildStickerPdf, printStickerPdf, shareOrDownloadPdf, downloadPdf, pdfFingerprint, isIOS } from "@/lib/stickerPdf";
+import PrintDiagnostics from "@/components/storageMobile/print/PrintDiagnostics";
+
+const PATH_LABELS = {
+  shared: 'PDF via iOS share sheet', opened: 'PDF via browser print', tab: 'PDF in new tab',
+  downloaded: 'PDF file download', cancelled: 'share sheet closed',
+};
 
 /**
  * Full-page sticker print screen for Storage Mobile. Both Print and Share/Print PDF use the same
@@ -24,12 +30,14 @@ export default function StorageStickerPrint() {
   useEffect(() => {
     if (!labels.length) return;
     buildStickerPdf(labels, `AK-stickers-${labels[0].short_code}.pdf`)
-      .then((file) => setPdf({ file }))
+      .then(async (file) => setPdf({ file, fingerprint: await pdfFingerprint(file) }))
       .catch((e) => setPdf({ error: e.message }));
   }, [labels]);
 
   const print = async () => setResult(await printStickerPdf(pdf.file));
   const sharePdf = async () => setResult(await shareOrDownloadPdf(pdf.file));
+  const savePdf = () => setResult(downloadPdf(pdf.file));
+  const lastPath = result && `${PATH_LABELS[result] || result}${isIOS() ? ' (iOS)' : ''}`;
   const back = () => navigate(job?.returnTo || '/storage');
 
   return (
@@ -54,6 +62,7 @@ export default function StorageStickerPrint() {
           </Button>
           <PrintStatusPanel pdf={pdf} onPdf={sharePdf} result={result} />
           <ToteLabelPreview labels={labels} scale={mobilePreviewScale()} />
+          <PrintDiagnostics pdf={pdf} lastPath={lastPath} onSave={savePdf} />
         </div>
       )}
     </div>

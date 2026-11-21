@@ -96,14 +96,5 @@ export function buildToteLabelDocument(labels) {
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="format-detection" content="telephone=no"><title>AK Tote Labels</title><style>${TOTE_LABEL_CSS}</style></head><body>${body}</body></html>`;
 }
 
-export function printToteLabels(labels) {
-  const missing = labels.filter(l => !l.qr_code_value || !l.short_code);
-  if (!labels.length || missing.length) throw new Error('Every label needs a permanent tote number and QR identity');
-  const w = window.open('', '_blank', 'width=900,height=900');
-  if (!w) return false;
-  w.document.open();
-  w.document.write(buildToteLabelDocument(labels));
-  w.document.close();
-  w.onload = () => { w.focus(); w.print(); };
-  return true;
-}
+// Paper output is never printed from this HTML (iOS AirPrint drops its colored backgrounds).
+// Every US Letter print goes through the canonical vector PDF on /storage/print (lib/stickerPdf).
