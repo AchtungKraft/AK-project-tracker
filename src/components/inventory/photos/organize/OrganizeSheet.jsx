@@ -1,12 +1,13 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 /** Single-level dialog shell shared by organizing actions: title, body, one confirm button. */
-export default function OrganizeSheet({ title, description, busy, confirmLabel, confirmDisabled, onConfirm, onClose, children }) {
+export default function OrganizeSheet({ title, description, busy, confirmLabel, confirmDisabled, onConfirm, onClose, className, children }) {
   return (
     <Dialog open onOpenChange={(o) => { if (!o && !busy) onClose(); }}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto bg-gray-950 border-gray-800 text-gray-100">
+      <DialogContent className={cn("max-w-md max-h-[90vh] overflow-y-auto bg-gray-950 border-gray-800 text-gray-100", className)}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription className="text-gray-400">{description}</DialogDescription>}

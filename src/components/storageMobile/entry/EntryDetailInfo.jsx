@@ -14,7 +14,7 @@ export default function EntryDetailInfo({ entry, item, tote }) {
         <Row label="Part"><span className="inline-flex items-center gap-1 text-amber-300"><PackageCheck className="w-4 h-4" />Tracked inventory</span></Row>
       ) : item.identified ? (
         <Row label="Part"><span className="inline-flex items-center gap-1 text-blue-200"><BadgeCheck className="w-4 h-4 shrink-0" />{item.part_name}</span></Row>
-      ) : null}
+      ) : <Row label="Part"><span className="text-gray-500">Not identified</span></Row>}
       {(entry?.description || item.description) && <Row label="Description">{entry?.description || item.description}</Row>}
       {(entry?.notes || item.notes) && <Row label="Notes">{entry?.notes || item.notes}</Row>}
       <Row label="In tote">

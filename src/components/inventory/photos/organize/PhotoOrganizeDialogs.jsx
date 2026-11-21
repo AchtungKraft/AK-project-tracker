@@ -22,7 +22,7 @@ const DONE = {
 export default function PhotoOrganizeDialogs({ containerId, dialog, photos, onClose, onDone }) {
   const info = useMemo(() => selectionInfo(photos), [photos]);
   const [opKey] = useState(newOpKey);
-  const { busy, run } = useOrganizeRunner(containerId, onDone);
+  const { busy, error, run } = useOrganizeRunner(containerId, onDone);
   const { data: entries = [], isLoading } = useQuery({
     queryKey: ['storedPropertyContainer', containerId], queryFn: () => fetchStoredPropertyForContainer(containerId),
     staleTime: 20_000, refetchOnWindowFocus: false,
@@ -42,7 +42,7 @@ export default function PhotoOrganizeDialogs({ containerId, dialog, photos, onCl
       onSubmit={(patch) => run(() => updateEntry(containerId, entry.id, patch), 'Details saved')} />;
   }
   const group = info.groups[0];
-  return <IdentifyPartDialog entryName={entry.name} linked={!!entry.catalog_part_id} currentPart={group?.part_name} busy={busy} onClose={onClose}
+  return <IdentifyPartDialog entryName={entry.name} linked={!!entry.catalog_part_id} currentPart={group?.part_name} busy={busy} error={error} onClose={onClose}
     onLink={(partId) => run(() => updateEntry(containerId, entry.id, { catalog_part_id: partId }),
       partId ? 'Identified as catalog part (identification only, not inventory)' : 'Part match removed')} />;
 }

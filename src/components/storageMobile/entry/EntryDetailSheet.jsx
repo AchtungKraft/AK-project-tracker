@@ -50,7 +50,10 @@ export default function EntryDetailSheet({ tote, item, onClose }) {
         <button onClick={onClose} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg active:bg-gray-800" aria-label="Back to tote"><ArrowLeft className="w-5 h-5" /></button>
         <div className="flex-1 min-w-0">
           <h2 className="text-base font-bold leading-tight truncate">{entry?.name || item.name}</h2>
-          <p className="text-[11px] text-gray-400">{plural(query.photos.length || item.photo_count, 'photo')}</p>
+          <p className="text-[11px] text-gray-400 truncate">
+            {plural(query.photos.length || item.photo_count, 'photo')} ·{' '}
+            {item.identified ? <span className="font-semibold text-blue-300">Identified: {item.part_name || 'Catalog part'}</span> : 'Not identified'}
+          </p>
         </div>
       </div>
       <div className="mx-auto max-w-3xl space-y-3 p-3">

@@ -7,7 +7,7 @@ export default function EntryDetailActions({ item, onAction }) {
   const actions = [
     { key: 'capture', label: 'Add Photos', icon: Camera, show: !tracked },
     { key: 'details', label: 'Edit Details', icon: Pencil, show: true },
-    { key: 'identify', label: 'Identify as Part', icon: BadgeCheck, show: !tracked },
+    { key: 'identify', label: item.identified ? 'Change Part Match' : 'Identify as Part', icon: BadgeCheck, show: !tracked },
     { key: 'separate', label: 'Separate Photos', icon: Split, show: !tracked && item.photo_count > 1 },
     { key: 'move', label: 'Move to Another Tote', icon: ArrowRightLeft, show: !tracked },
   ].filter((a) => a.show);

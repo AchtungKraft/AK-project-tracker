@@ -2,29 +2,31 @@ import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/lib/notify";
 
-/** Runs one organizing call, shows the outcome, and refreshes this tote's photo views. */
+/** Runs one organizing call, waits for this tote's views to reload, then reports and closes. */
 export function useOrganizeRunner(containerId, onDone) {
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
-  const refresh = useCallback(() => {
-    qc.invalidateQueries({ queryKey: ['storagePhotoGrid', containerId] });
-    qc.invalidateQueries({ queryKey: ['storedPropertyContainer', containerId] });
-    qc.invalidateQueries({ queryKey: ['storageLastOrganize', containerId] });
-  }, [qc, containerId]);
+  const [error, setError] = useState(null);
+  const refresh = useCallback(() => Promise.all([
+    qc.invalidateQueries({ queryKey: ['storagePhotoGrid', containerId] }),
+    qc.invalidateQueries({ queryKey: ['storedPropertyContainer', containerId] }),
+    qc.invalidateQueries({ queryKey: ['storageLastOrganize', containerId] }),
+  ]).catch(() => {}), [qc, containerId]);
   const run = useCallback(async (fn, message) => {
-    setBusy(true);
+    setBusy(true); setError(null);
     try {
       const result = await fn();
+      await refresh();
       toast.success(typeof message === 'function' ? message(result) : message);
-      refresh();
       onDone?.();
       return result;
     } catch (e) {
+      setError(e.message);
       toast.error(e.message);
       return null;
     } finally {
       setBusy(false);
     }
   }, [refresh, onDone]);
-  return { busy, run };
+  return { busy, error, run };
 }

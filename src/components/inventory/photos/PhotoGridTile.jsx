@@ -32,8 +32,9 @@ function PhotoGridTile({ photo, index, selecting, selected, onOpen, onToggle, on
       )}
       {selected && <span className="absolute inset-0 bg-red-600/15 pointer-events-none" />}
       {photo.group_name && (
-        <span className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/85 to-transparent px-1.5 pt-3 pb-1 text-[10px] leading-tight text-white truncate">
-          {photo.group_name}
+        <span className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/85 to-transparent px-1.5 pt-3 pb-1 text-[10px] leading-tight text-white">
+          <span className="block truncate">{photo.group_name}{grouped ? ` · ${photo.group_index} of ${photo.group_size}` : ''}</span>
+          {photo.identified && photo.part_name && <span className="block truncate font-semibold text-blue-300">{photo.part_name}</span>}
         </span>
       )}
     </button>

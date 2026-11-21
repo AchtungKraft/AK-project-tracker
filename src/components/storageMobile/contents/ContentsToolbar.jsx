@@ -11,7 +11,10 @@ export default function ContentsToolbar({ counts, view, onView, selecting, onSel
         {counts ? <>
           <span className="text-sm font-semibold text-gray-100">{plural(counts.items, 'item')}</span>
           <span className="ml-1">· {plural(counts.photos, 'photo')}</span>
-          {counts.unsorted_photos > 0 && <span className="block">{counts.entries} documented · {counts.unsorted_photos} unsorted</span>}
+          <span className="block">
+            {counts.entries} documented · <span className={counts.identified_entries ? "text-blue-300" : ""}>{counts.identified_entries} identified</span>
+            {counts.unsorted_photos > 0 && <> · {counts.unsorted_photos} unsorted</>}
+          </span>
         </> : 'Loading…'}
       </p>
       {!selecting && (

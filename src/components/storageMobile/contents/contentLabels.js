@@ -1,13 +1,19 @@
 export const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
-/** Short secondary line for an item: photos, quantity, identification. */
+/** Short secondary line for an item: photos and quantity. */
 export function itemMeta(item) {
   if (item.kind === 'photo') return 'Unsorted photo';
   return [
     plural(item.photo_count, 'photo'),
     item.quantity != null ? `Qty ${item.quantity}` : null,
-    item.inventory_linked ? 'Tracked inventory' : item.identified ? item.part_name : null,
   ].filter(Boolean).join(' · ');
+}
+
+/** Identification line: tracked inventory, the catalog part name, or not identified. */
+export function itemIdentity(item) {
+  if (item.inventory_linked) return { identified: true, text: 'Tracked inventory' };
+  if (item.identified) return { identified: true, text: item.part_name || 'Catalog part' };
+  return { identified: false, text: 'Not identified' };
 }
 
 /** Pseudo photo so the existing organize dialogs can act on a whole content entry. */
