@@ -1,10 +1,10 @@
 import { AlertTriangle, CheckCircle2, Loader2, X } from "lucide-react";
 
-const LABELS = { pending: 'Ready', uploading: 'Uploading', preview: 'Preview', saving: 'Saving', saved: 'Saved', failed: 'Failed' };
+const LABELS = { pending: 'Ready', uploading: 'Uploading', uploaded: 'Uploaded', saving: 'Saving', saved: 'Saved', failed: 'Failed' };
 
 export default function CaptureThumb({ item, onRemove, disabled }) {
-  const busy = ['uploading', 'preview', 'saving'].includes(item.status);
-  const removable = !disabled && ['pending', 'failed'].includes(item.status);
+  const busy = ['uploading', 'saving'].includes(item.status);
+  const removable = !disabled && ['pending', 'failed', 'uploaded'].includes(item.status);
   return (
     <div className="relative w-24 h-24 shrink-0 rounded-lg overflow-hidden border border-gray-700 bg-gray-900">
       <img src={item.preview} alt="" className="w-full h-full object-cover" />

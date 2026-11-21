@@ -6,9 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import { fetchStoredPropertyForContainer } from "@/components/inventory/ContainerStoredProperty";
 import { useTotePhotos } from "@/components/inventory/photos/useTotePhotos";
 import PhotoViewer from "@/components/inventory/photos/PhotoViewer";
-import { useOrganizeRunner } from "@/components/inventory/photos/organize/useOrganizeRunner";
 import QuickCaptureDialog from "@/components/inventory/capture/QuickCaptureDialog";
-import { newOpKey, organizePhotos } from "@/lib/photoOrganizeApi";
 import SelectionDialogs from "../actions/SelectionDialogs";
 import SelectionToolbar from "../actions/SelectionToolbar";
 import { entryAsPhoto, plural } from "../contents/contentLabels";
@@ -30,7 +28,6 @@ export default function EntryDetailSheet({ tote, itemId, seed, initialAction, on
   const [viewer, setViewer] = useState(null);
   const [selecting, setSelecting] = useState(initialAction === 'separate');
   const [selected, setSelected] = useState(() => new Set());
-  const { run } = useOrganizeRunner(tote.id);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -57,10 +54,6 @@ export default function EntryDetailSheet({ tote, itemId, seed, initialAction, on
   const endSelect = useCallback(() => { setSelecting(false); setSelected(new Set()); setDialog(null); }, []);
   const organizeTarget = dialog === 'separate' ? query.photos.filter((p) => selected.has(p.id)) : (query.photos.length ? query.photos : [entryAsPhoto(item)]);
   const onAction = (key) => (key === 'separate' ? setSelecting(true) : setDialog(key));
-  const addPhotos = (ids) => run(
-    () => organizePhotos(tote.id, { operation: 'group_existing', target_property_id: itemId, op_key: newOpKey(), photo_ids: ids }),
-    `Added ${plural(ids.length, 'photo')} to ${item.name}`,
-  );
 
   return createPortal(
     <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-950 text-white" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
@@ -85,7 +78,7 @@ export default function EntryDetailSheet({ tote, itemId, seed, initialAction, on
         {!selecting && <EntryDetailActions item={item} onAction={onAction} />}
       </div>
       {viewer != null && <PhotoViewer photos={query.photos} index={viewer} total={query.photos.length} hasMore={false} loadMore={() => {}} onIndex={setViewer} onClose={() => setViewer(null)} />}
-      {dialog === 'capture' && <QuickCaptureDialog container={tote} subtitle={`Photos are added to ${item.name}`} onSaved={addPhotos} onClose={() => setDialog(null)} />}
+      {dialog === 'capture' && <QuickCaptureDialog container={tote} target={{ id: itemId, name: item.name }} onClose={() => setDialog(null)} />}
       {dialog !== 'capture' && (
         <SelectionDialogs tote={tote} dialog={dialog} photos={organizeTarget} moveEntries={[item]} movePhotos={[]}
           onClose={() => setDialog(null)} onDone={dialog === 'move' ? onClose : endSelect} />

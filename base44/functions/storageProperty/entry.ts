@@ -259,6 +259,23 @@ const photoUri=(s)=>{
   if(/^[a-z][a-z\d+.-]*:/i.test(s))return false;
   return /^\/?[a-zA-Z0-9][a-zA-Z0-9_./% +@=-]*$/.test(s);
 };
+/** True only when Base44 can sign the reference as a private file of this app. */
+async function verifyPrivate(db,u){
+  try{
+    const s=await db.integrations.Core.CreateFileSignedUrl({file_uri:u,expires_in:60});
+    return typeof s?.signed_url==='string'&&s.signed_url.startsWith('https://');
+  }catch(_){return false}
+}
+/** Verifies many references, six at a time. Returns Map(uri -> ok). */
+async function verifyAll(db,uris){
+  const list=[...new Set(uris)], out=new Map();
+  for(let i=0;i<list.length;i+=6){
+    const part=list.slice(i,i+6);
+    const res=await Promise.all(part.map(u=>verifyPrivate(db,u)));
+    part.forEach((u,j)=>out.set(u,res[j]));
+  }
+  return out;
+}
 const trimPhoto=(p)=>({id:p.id,stored_property_id:p.stored_property_id??null,container_id:p.container_id,capture_key:p.capture_key||null,has_thumbnail:!!p.thumbnail_uri,sort_order:p.sort_order,caption:p.caption,captured_at:p.captured_at});
 
 Deno.serve(async (req)=>{
@@ -276,7 +293,7 @@ Deno.serve(async (req)=>{
     if(!staff) return respond({error:'AK staff only'},403);
     const body=await req.json();
     const action=body?.action;
-    if(!['list_container','create_group','add_photo','get_photos','update_group','find_by_part','add_unsorted_photo','unsorted_summary','list_photos','list_contents','photo_original','make_preview'].includes(action)){
+    if(!['list_container','create_group','add_photo','get_photos','update_group','find_by_part','add_unsorted_photo','unsorted_summary','list_photos','list_contents','photo_original','make_preview','save_item'].includes(action)){
       return respond({error:'Unsupported storage property operation'},400);
     }
 
@@ -358,16 +375,13 @@ Deno.serve(async (req)=>{
       if(existingKey.length) return respond({success:true,idempotent_hit:true,photo:trimPhoto(existingKey[0])});
       const uri=body.file_uri;
       if(!photoUri(uri)) return respond({error:'Invalid private file reference format (public URLs are not accepted)'},400);
-      const verified=async(u)=>{
-        try{
-          const s=await db.integrations.Core.CreateFileSignedUrl({file_uri:u,expires_in:60});
-          return typeof s?.signed_url==='string'&&s.signed_url.startsWith('https://');
-        }catch(_){return false}
-      };
-      if(!await verified(uri)) return respond({error:'Private storage could not verify this photo reference',code:'PRIVATE_URI_NOT_VERIFIED'},422);
-      // Preview is optional: an unverifiable thumbnail is dropped, never blocks the original.
+      // Original and preview are verified at the same time.
       const thumb=body.thumbnail_uri;
-      const thumbnailUri=(photoUri(thumb)&&thumb!==uri&&await verified(thumb))?thumb:null;
+      const checkThumb=photoUri(thumb)&&thumb!==uri;
+      const [okOriginal,okThumb]=await Promise.all([verifyPrivate(db,uri),checkThumb?verifyPrivate(db,thumb):false]);
+      if(!okOriginal) return respond({error:'Private storage could not verify this photo reference',code:'PRIVATE_URI_NOT_VERIFIED'},422);
+      // Preview is optional: an unverifiable thumbnail is dropped, never blocks the original.
+      const thumbnailUri=okThumb?thumb:null;
       const size=Number(body.original_size_bytes);
       const created=await db.entities.StoredPropertyPhoto.create({
         stored_property_id:null,container_id:container.id,file_uri:uri,thumbnail_uri:thumbnailUri,
@@ -384,6 +398,85 @@ Deno.serve(async (req)=>{
         return respond({success:true,idempotent_hit:true,photo:trimPhoto(same[0])});
       }
       return respond({success:true,photo:trimPhoto(created)});
+    }
+
+    if(action==='save_item'){
+      // One step: a documented item and all its photos. Safe to retry with the same keys:
+      // the item is found by item_key, each photo by capture_key, so nothing is duplicated.
+      const photos=Array.isArray(body.photos)?body.photos:[];
+      if(!photos.length||photos.length>30) return respond({error:'Between 1 and 30 photos required'},400);
+      const keys=photos.map(p=>p?.capture_key);
+      if(!keys.every(idOk)||new Set(keys).size!==keys.length) return respond({error:'Each photo needs a unique capture_key'},400);
+      if(!photos.every(p=>photoUri(p.file_uri))) return respond({error:'Invalid private file reference format (public URLs are not accepted)'},400);
+      let item;
+      if(body.property_id!==undefined&&body.property_id!==null){
+        if(!idOk(body.property_id)) return respond({error:'Valid property_id required'},400);
+        [item]=await db.entities.StoredProperty.filter({id:body.property_id,container_id:container.id});
+        if(!item||item.status!=='in_storage') return respond({error:'Item is not in this tote'},409);
+      }else{
+        const itemKey=body.item_key;
+        if(!idOk(itemKey)) return respond({error:'Stable item_key required'},400);
+        const byItemKey=()=>db.entities.StoredProperty.filter({intake_key:itemKey,container_id:container.id},'created_date',5);
+        item=(await byItemKey())[0];
+        if(!item){
+          const created=await db.entities.StoredProperty.create({
+            intake_key:itemKey,name:safeText(body.name,150)||'Unidentified contents',property_type:'unidentified',
+            ownership_type:container.client_account_id?'client':'unknown',
+            client_account_id:container.client_account_id||null,project_id:container.project_id||null,
+            container_id:container.id,location_id:null,quantity_known:false,quantity:null,condition:'unknown',
+            status:'in_storage',created_by:user.id,last_updated_by:user.id,
+          });
+          // No unique constraint: a concurrent retry keeps only the oldest item.
+          const same=await byItemKey();
+          if(same.length>1&&same[0].id!==created.id){
+            await db.entities.StoredProperty.delete(created.id).catch(()=>{});
+            item=same[0];
+          }else{
+            item=created;
+            await db.entities.StorageCustodyEvent.create({
+              action_key:'property_intake_'+item.id,event_type:'intake',stored_property_id:item.id,container_id:container.id,
+              to_location_id:container.location_id||null,client_account_id:container.client_account_id||null,
+              project_id:container.project_id||null,performed_by:user.id,performed_at:new Date().toISOString(),
+              notes:'Item captured with photos (no inventory mutation)',
+            }).catch(()=>{});
+          }
+        }
+      }
+      const existing=await db.entities.StoredPropertyPhoto.filter({container_id:container.id,capture_key:{$in:keys}},'created_date',100);
+      const byKey=new Map();
+      existing.forEach(p=>{ if(!byKey.has(p.capture_key)) byKey.set(p.capture_key,p); });
+      const attach=[...byKey.values()].filter(p=>!p.stored_property_id&&!p.archived);
+      const fresh=photos.filter(p=>!byKey.has(p.capture_key));
+      const current=(await db.entities.StoredPropertyPhoto.filter({stored_property_id:item.id,archived:false},'-created_date',100)).length;
+      if(current+fresh.length+attach.length>100) return respond({error:'100 photo limit for one item'},409);
+      const thumbOf=p=>(photoUri(p.thumbnail_uri)&&p.thumbnail_uri!==p.file_uri)?p.thumbnail_uri:null;
+      const ok=await verifyAll(db,fresh.flatMap(p=>[p.file_uri,thumbOf(p)].filter(Boolean)));
+      const bad=fresh.filter(p=>!ok.get(p.file_uri)).map(p=>p.capture_key);
+      if(bad.length) return respond({error:'Private storage could not verify '+bad.length+' photo(s)',code:'PRIVATE_URI_NOT_VERIFIED',failed_keys:bad,item_id:item.id},422);
+      const now=new Date().toISOString();
+      const batchId=safeText(body.capture_batch_id,100)||item.intake_key||item.id;
+      const rows=fresh.map((p,i)=>{
+        const size=Number(p.original_size_bytes);
+        const t=thumbOf(p);
+        return {
+          stored_property_id:item.id,container_id:container.id,file_uri:p.file_uri,
+          thumbnail_uri:t&&ok.get(t)?t:null,capture_key:p.capture_key,capture_batch_id:batchId,
+          original_file_name:safeText(p.original_file_name,200)||null,original_mime_type:safeText(p.original_mime_type,100)||null,
+          original_size_bytes:Number.isFinite(size)&&size>0?size:null,
+          sort_order:current+attach.length+i,captured_by:user.id,captured_at:now,archived:false,
+        };
+      });
+      if(rows.length) await db.entities.StoredPropertyPhoto.bulkCreate(rows);
+      // An earlier attempt left some of these photos unsorted: attach them to the item.
+      await Promise.all(attach.map((p,i)=>db.entities.StoredPropertyPhoto.update(p.id,{stored_property_id:item.id,sort_order:current+i})));
+      // Concurrent retry protection: keep only the oldest photo per capture key.
+      const saved=await db.entities.StoredPropertyPhoto.filter({container_id:container.id,capture_key:{$in:keys}},'created_date',200);
+      const keep=new Map(), extras=[];
+      saved.forEach(p=>{ if(keep.has(p.capture_key)) extras.push(p.id); else keep.set(p.capture_key,p); });
+      // A simultaneous retry may already have removed the same duplicate.
+      await Promise.all(extras.map(id=>db.entities.StoredPropertyPhoto.delete(id).catch(()=>{})));
+      return respond({success:true,item:{id:item.id,name:item.name},created:rows.length,reused:existing.length,
+        photos:keys.map(k=>({capture_key:k,id:keep.get(k)?.id||null}))});
     }
 
     if(action==='list_container'){
